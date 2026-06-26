@@ -128,14 +128,18 @@ el aislamiento del dominio OOM/kernel sea un beneficio real, no hoy.
 cd /home/ubuntu/keni-social/deploy/woodpecker
 cp .env.example .env
 # Rellena .env:
-#   WOODPECKER_ADMIN        = tu login de GitHub (admin)
+#   WOODPECKER_ADMIN        = logins de GitHub admin (coma-separados)
 #   WOODPECKER_GITHUB_CLIENT/_SECRET = de la OAuth App
 #   WOODPECKER_AGENT_SECRET = openssl rand -hex 32
+#   WOODPECKER_DB_PASSWORD  = openssl rand -hex 24   (Postgres; ver override)
 
 # El volumen de datos lo escribe el server como uid 1000 (imagen v3):
 docker volume create woodpecker_data
 docker run --rm -v woodpecker_data:/data alpine chown -R 1000:1000 /data
 
+# Backend: Postgres (docker-compose.override.yml, que compose fusiona solo). El volumen
+# woodpecker_pg_data lo crea compose. `up -d` levanta Postgres -> healthy -> migra el
+# esquema en limpio -> arranca el server.
 docker compose up -d
 docker compose logs -f woodpecker-server   # comprueba arranque + cert
 ```
@@ -145,6 +149,26 @@ Entra en `https://ci-social.kenitech.io`, autoriza con GitHub y activa el repo
 dispara los pipelines de `.woodpecker/`: 7 de CI/tests (`tests-python`,
 `tests-shell`, `tests-app-metricas`, `tests-app-operacion`, `tests-app-produccion`,
 `frontend-build`, `fronteras`) y el de despliegue (`deploy`).
+
+> ### ⚠ Ajustes de repo que viven en la DB (NO en git) — reaplicar tras activar
+> Al activar el repo, Woodpecker lo crea con valores por DEFECTO. Estos NO estan en
+> ningun fichero versionado: viven en la tabla `repos` de la DB de Woodpecker, asi que
+> hay que fijarlos a mano cada vez que se activa el repo o se reaprovisiona la DB
+> (p. ej. una migracion a DB limpia los pierde):
+>
+> 1. **Trusted -> Volumes (y Network).** El `deploy` monta el `docker.sock`; sin
+>    *Trusted Volumes* el step falla. Settings -> Project settings -> Trusted.
+> 2. **Cancel previous pipeline events SIN `push`.** Por defecto Woodpecker cancela el
+>    pipeline previo al hacer push; con ~7 agentes empujando en paralelo eso mata
+>    pipelines/deploys a medias (`exit 126`). Quita `push` para que cada commit de `main`
+>    corra ENTERO (deja solo `pull_request`). Settings -> "Cancel previous pipelines".
+>
+> Fijarlos por SQL (deterministico) sobre la DB:
+> ```sql
+> UPDATE repos SET trusted='{"network":true,"volumes":true,"security":false}',
+>                  cancel_previous_pipeline_events='["pull_request"]'
+> WHERE full_name='kenitech-io/keni-social';
+> ```
 
 ## Operacion
 

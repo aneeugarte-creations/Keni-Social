@@ -1203,13 +1203,13 @@ services:
       KENI_KEEPER_CI: ${KENI_KEEPER_CI:-0}
       KENI_KEEPER_CI_WATCH: /keeper/ci_watch.py
       KENI_KEEPER_REPO_ID: ${KENI_KEEPER_REPO_ID:-1}
-      # Fuente del estado del CI. Si KENI_WOODPECKER_API está definido, ci_watch.py habla con la API
-      # REST de Woodpecker (desacoplado del backend: vale igual con sqlite o postgres). Si está vacío,
-      # cae al sqlite montado read-only abajo (KENI_WOODPECKER_DB). El token es un PAT de un usuario
-      # de Woodpecker (se genera en su UI) y entra por secret.
-      KENI_WOODPECKER_API: ${KENI_WOODPECKER_API:-}
-      KENI_WOODPECKER_API_TOKEN_FILE: /run/secrets/woodpecker_api_token
-      KENI_WOODPECKER_DB: /woodpecker/woodpecker.sqlite
+      # Fuente del estado del CI: la API REST de Woodpecker (desacoplado del backend; Woodpecker
+      # corre sobre Postgres). ci_watch.py consulta pipelines/steps/logs por HTTP. Para ACTIVAR
+      # la vigilancia basta pegar un PAT de un usuario de Woodpecker (su UI -> Settings -> CLI and
+      # API) en KENI_WOODPECKER_API_TOKEN del .env; sin token, las llamadas dan 401 y el keeper no
+      # ve nada (inocuo: ademas esta DORMIDO por KENI_KEEPER_CI=0).
+      KENI_WOODPECKER_API: ${KENI_WOODPECKER_API:-https://ci-social.kenitech.io}
+      KENI_WOODPECKER_API_TOKEN: ${KENI_WOODPECKER_API_TOKEN:-}
       # Flag de deploy (no actuar durante un deploy) e identidad de los commits del keeper.
       KENI_GUARDIAN_FLAG_DEPLOY: /estado/desplegando
       KENI_GIT_AUTHOR_NAME: ${KENI_GIT_AUTHOR_NAME:-keni incident-keeper}
@@ -1221,9 +1221,6 @@ services:
       - keni-repo:/repo                # clon git (worktrees del fix)
       - ./incident-keeper:/keeper:ro   # ROL.md + keeper.sh + ci_watch.py (bind-mount; sin imagen propia)
       - ./estado:/estado               # rw: lee el trigger del guardian y lo archiva al procesarlo
-      # Datastore de Woodpecker (sqlite) READ-ONLY: el watcher de CI lee el estado de los pipelines.
-      # Bind del path del volumen del CI (mismo host); RO; si faltara, ci_watch.py no hace nada.
-      - /var/lib/docker/volumes/woodpecker_data/_data:/woodpecker:ro
     secrets:
       - anthropic_api_key
       - mcp_bearer

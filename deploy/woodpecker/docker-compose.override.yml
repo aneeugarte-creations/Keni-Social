@@ -1,0 +1,60 @@
+# Backend de datos de Woodpecker: Postgres (no el SQLite por defecto).
+#
+# Por que: SQLite con ~8 escritores concurrentes (7 agentes + el keeper) y journal en
+# modo `delete` con busy_timeout=0 serializa y FALLA al instante bajo contencion — tiraba
+# hasta la autenticacion de la UI ("user not found"/logout). Postgres (MVCC, locks por
+# fila) elimina esa clase de fallo. Detalle: ADR / README de woodpecker.
+#
+# Compose fusiona este override automaticamente con docker-compose.yml.
+# Rollback: borra este fichero + `docker compose up -d` => vuelve a SQLite
+# (el volumen `woodpecker_data` queda intacto; el cambio de backend NO toca el fichero sqlite).
+#
+# RED DEDICADA `wpdb` (internal): el Postgres de METADATOS NO va en `keni-ci_woodpecker`,
+# porque el agente arranca ahi los contenedores de cada pipeline —incluido SU service
+# `postgres` efimero de los tests—. Compartir red colisionaria el alias `postgres` (dos
+# contenedores con el mismo nombre) y los tests autenticarian contra ESTE Postgres. En `wpdb`
+# solo estan server<->postgres.
+services:
+  postgres:
+    image: postgres:16.13
+    container_name: woodpecker-postgres
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      POSTGRES_USER: woodpecker
+      POSTGRES_PASSWORD: ${WOODPECKER_DB_PASSWORD}
+      POSTGRES_DB: woodpecker
+    volumes:
+      - woodpecker_pg_data:/var/lib/postgresql/data
+    networks:
+      - wpdb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U woodpecker -d woodpecker"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    mem_limit: 1g
+    cpus: 1.0
+    cpuset: "3-11"
+
+  woodpecker-server:
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - woodpecker
+      - edge
+      - wpdb
+    environment:
+      WOODPECKER_DATABASE_DRIVER: postgres
+      WOODPECKER_DATABASE_DATASOURCE: "postgres://woodpecker:${WOODPECKER_DB_PASSWORD}@woodpecker-postgres:5432/woodpecker?sslmode=disable"
+
+volumes:
+  woodpecker_pg_data:
+    name: woodpecker_pg_data
+
+networks:
+  wpdb:
+    name: keni-ci_wpdb
+    internal: true
