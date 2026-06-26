@@ -194,6 +194,28 @@ def test_crear_variante_carrusel_idempotente(entorno, monkeypatch):
     assert len(json.loads(carr[0]["carrusel"])) == 2
 
 
+def test_crear_variante_carrusel_respeta_la_variante_publicada(entorno, monkeypatch):
+    # Lo que ya salió no se reescribe: re-hornear cuando la variante de esa red ya está `publicado`
+    # NO la toca (su `carrusel` es campo congelado) y no revienta el post-procesado.
+    monkeypatch.setattr(
+        dom_copy, "_COMPONER_SLIDE",
+        lambda marca, titular, foto: {"objeto": f"media-{titular}", "foto": ""},
+    )
+    pid, _ids = _crear_contenido(["instagram"], "Cuerpo")
+    dom_carrusel.crear_variante_carrusel(pid, ["Uno"])
+    variante = next(
+        f for f in repos.listar_piezas_fila(publicacion_id=pid) if f["variante"] == "carrusel"
+    )
+    carrusel_publicado = variante["carrusel"]
+    repos.actualizar_pieza(variante["id"], {"estado": "publicado"})
+
+    # Re-ejecutar (la captura «Variante carrusel» se relanza) no lanza y deja la variante intacta.
+    assert dom_carrusel.crear_variante_carrusel(pid, ["Uno", "Dos", "Tres"]) != []
+    carr = [f for f in repos.listar_piezas_fila(publicacion_id=pid) if f["variante"] == "carrusel"]
+    assert len(carr) == 1
+    assert carr[0]["carrusel"] == carrusel_publicado
+
+
 def test_lanzar_para_pieza_compone_el_prompt_y_encola(entorno, monkeypatch):
     captura: dict = {}
 

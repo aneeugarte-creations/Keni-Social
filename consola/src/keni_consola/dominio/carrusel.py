@@ -292,7 +292,11 @@ def crear_variante_carrusel(publicacion_id: str, titulares: list[str]) -> list[d
             continue  # la variante carrusel solo va a las redes de su formato (IG/FB)
         ya = existentes.get(red)
         if ya is not None:
-            repos.actualizar_pieza(str(ya.get("id") or ""), {"carrusel": payload})
+            # Idempotente: re-hornea la variante existente de esa red. Pero lo que ya salió no se
+            # reescribe: una variante `programado`/`publicado` queda intacta (`carrusel` es campo
+            # congelado de una pieza publicada), igual que el filtro de `aplicar_carrusel`.
+            if str(ya.get("estado") or "") in ESTADOS_EDITABLES:
+                repos.actualizar_pieza(str(ya.get("id") or ""), {"carrusel": payload})
             continue
         repos.crear_pieza_fila(
             publicacion_id=publicacion_id,
