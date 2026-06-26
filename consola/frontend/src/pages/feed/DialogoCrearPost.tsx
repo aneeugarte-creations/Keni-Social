@@ -24,6 +24,7 @@ import { Link2, Paperclip, Sparkles, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Campo } from "@/components/comunes/Campo";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { SelectorRedMultiple } from "@/components/comunes/SelectorRedMultiple";
 import { Button } from "@/components/ui/button";
@@ -110,6 +111,8 @@ export function DialogoCrearPost({
   // (acotadas a él): ni pisan lo que el usuario toque ni dejan seleccionado lo invisible.
   const [redesInicializadas, setRedesInicializadas] = React.useState(false);
   const archivoRef = React.useRef<HTMLInputElement>(null);
+  // El error solo se muestra tras un intento de crear (no mientras se escribe).
+  const [intentado, setIntentado] = React.useState(false);
 
   // Marca efectiva del alta (la fija activa o la elegida en "Todas") y SUS categorías CON FRANJA:
   // de la taxonomía del plan se ofrecen solo las que tienen horario (si no, la pieza no casaría
@@ -199,6 +202,7 @@ export function DialogoCrearPost({
     setRedes(new Set());
     setRedesInicializadas(false);
     setArrastrando(false);
+    setIntentado(false);
     quitarImagen();
   }, [abierto, marcaActiva, quitarImagen]);
   // Si la categoría elegida no existe para la marca efectiva (cambió de marca en "Todas"), se
@@ -252,10 +256,19 @@ export function DialogoCrearPost({
   });
 
   // Hay algo que aportar si hay texto o una imagen; marca, CATEGORÍA y al menos una red son
-  // obligatorias (la categoría, para que la pieza encuentre franja y se programe sola).
+  // obligatorias (la categoría, para que la pieza encuentre franja y se programe sola). Marca y
+  // categoría enseñan su error en línea al intentar; material y redes gatean el envío.
   const hayPublicacion = texto.trim() !== "" || imagen !== null;
-  const puedeCrear =
-    hayPublicacion && marca !== "" && categoria !== "" && redes.size > 0 && !crear.isPending;
+  const errMarca = marca === "" ? "Elige una marca." : null;
+  const errCategoria =
+    categoria === "" && categoriasMarca.length > 0 ? "Elige una categoría." : null;
+  const hayErrores = marca === "" || categoria === "" || !hayPublicacion || redes.size === 0;
+
+  const onCrear = () => {
+    setIntentado(true);
+    if (hayErrores) return;
+    crear.mutate();
+  };
 
   return (
     <Dialog open={abierto} onOpenChange={(o) => { if (!o) onCerrar(); }}>
@@ -272,8 +285,7 @@ export function DialogoCrearPost({
           {/* Selector de marca SOLO cuando no hay una marca concreta activa (vista "Todas"):
               con una marca activa, el post va a esa marca y no se pregunta de nuevo. */}
           {marcaFija ? null : (
-            <div className="space-y-1.5">
-              <Label htmlFor="crear-post-marca">Marca</Label>
+            <Campo etiqueta="Marca" htmlFor="crear-post-marca" error={intentado ? errMarca : null}>
               <SelectorMarca
                 id="crear-post-marca"
                 marcas={marcas}
@@ -284,14 +296,18 @@ export function DialogoCrearPost({
                 className="w-full"
                 disabled={crear.isPending}
               />
-            </div>
+            </Campo>
           )}
 
           {/* Categoría del plan (OBLIGATORIA): a qué franja va la pieza. Sin ella no encontraría
               hueco y se quedaría sin programar tras aprobarse. Opciones = categorías CON franja
               de la marca efectiva. */}
-          <div className="space-y-1.5">
-            <Label htmlFor="crear-post-categoria">Categoría</Label>
+          <Campo
+            etiqueta="Categoría"
+            htmlFor="crear-post-categoria"
+            ayuda="Define la franja del plan; así la pieza se programa sola al aprobarse."
+            error={intentado ? errCategoria : null}
+          >
             <Select
               value={categoria}
               onValueChange={setCategoria}
@@ -314,10 +330,7 @@ export function DialogoCrearPost({
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              Define la franja del plan; así la pieza se programa sola al aprobarse.
-            </p>
-          </div>
+          </Campo>
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
@@ -430,7 +443,7 @@ export function DialogoCrearPost({
           <Button variant="outline" onClick={onCerrar} disabled={crear.isPending}>
             Cancelar
           </Button>
-          <Button variant="outline" onClick={() => crear.mutate()} disabled={!puedeCrear}>
+          <Button variant="outline" onClick={onCrear} disabled={crear.isPending}>
             {/* La estrellita marca que la acción la redacta la IA (mismo signo que MarcaIA /
                 el resto de acciones de IA de la casa); al lanzar, cede al spinner. */}
             {crear.isPending ? (

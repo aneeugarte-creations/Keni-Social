@@ -663,9 +663,15 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     fireEvent.change(within(dialogo).getByLabelText("Material"), {
       target: { value: "Una nota cruda del equipo desde la grada" },
     });
-    // Sin categoría el alta está BLOQUEADA: la categoría es obligatoria (para que la pieza
-    // encuentre franja y se programe sola).
-    expect(within(dialogo).getByRole("button", { name: "Crear post" })).toBeDisabled();
+    // Sin categoría el alta NO sale: al pulsar Crear post salta el error EN LÍNEA y no se llama
+    // a /aportar (la categoría es obligatoria para que la pieza encuentre franja y se programe).
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Crear post" }));
+    expect(await within(dialogo).findByText("Elige una categoría.")).toBeInTheDocument();
+    expect(
+      vi
+        .mocked(globalThis.fetch)
+        .mock.calls.some((c) => String(c[0]).includes("/api/publicaciones/aportar")),
+    ).toBe(false);
     // Elegir categoría (Radix Select): abrir con clic en el trigger y clicar la opción.
     fireEvent.click(within(dialogo).getByLabelText("Categoría"));
     fireEvent.click(screen.getByRole("option", { name: "Nacional" }));

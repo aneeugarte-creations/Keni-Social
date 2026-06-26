@@ -29,6 +29,7 @@ import { toast } from "sonner";
 
 import { MedidorPassword } from "@/components/auth/MedidorPassword";
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { Campo } from "@/components/comunes/Campo";
 import { confirmar } from "@/components/comunes/confirmar";
 import { TituloPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
@@ -151,8 +152,11 @@ function SeccionTuCuenta() {
           />
         ) : (
           <>
-            <div className="space-y-1.5">
-              <Label htmlFor="cuenta-nombre">Nombre</Label>
+            <Campo
+              etiqueta="Nombre"
+              htmlFor="cuenta-nombre"
+              ayuda="Tu nombre visible en el equipo."
+            >
               <Input
                 id="cuenta-nombre"
                 value={nombre}
@@ -165,8 +169,7 @@ function SeccionTuCuenta() {
                 }}
                 disabled={guardarNombre.isPending}
               />
-              <p className="text-xs text-muted-foreground">Tu nombre visible en el equipo.</p>
-            </div>
+            </Campo>
             <dl className="divide-y">
               <FilaDato etiqueta="Usuario" valor={data.usuario.usuario} />
               <FilaDato etiqueta="Rol" valor={ROL_LABEL[data.usuario.rol] ?? data.usuario.rol} />
@@ -305,44 +308,45 @@ function SeccionZonaHoraria() {
       </CardHeader>
       <CardContent>
         <form
-          className="space-y-1.5"
           onSubmit={(e) => {
             e.preventDefault();
             if (puedeGuardar) guardar.mutate(zona);
           }}
           noValidate
         >
-          <Label htmlFor="cuenta-zona">Tu zona horaria</Label>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <Select value={zona} onValueChange={setZona} disabled={guardar.isPending}>
-              <SelectTrigger id="cuenta-zona" className="sm:flex-1">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {grupos.map((g) => (
-                  <SelectGroup key={g.grupo}>
-                    <SelectLabel>{g.grupo}</SelectLabel>
-                    {g.zonas.map((z) => (
-                      <SelectItem key={z.id} value={z.id}>
-                        {z.ciudad} · {offsetZona(z.id)}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button type="submit" disabled={!puedeGuardar} className="shrink-0">
-              {guardar.isPending ? (
-                <Spinner className="h-4 w-4" />
-              ) : (
-                <Clock className="h-4 w-4" />
-              )}
-              Guardar zona
-            </Button>
-          </div>
-          {preview && (
-            <p className="text-xs text-muted-foreground">Ahora mismo ahí: {preview}</p>
-          )}
+          <Campo
+            etiqueta="Tu zona horaria"
+            htmlFor="cuenta-zona"
+            ayuda={preview ? `Ahora mismo ahí: ${preview}` : undefined}
+          >
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Select value={zona} onValueChange={setZona} disabled={guardar.isPending}>
+                <SelectTrigger id="cuenta-zona" className="sm:flex-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {grupos.map((g) => (
+                    <SelectGroup key={g.grupo}>
+                      <SelectLabel>{g.grupo}</SelectLabel>
+                      {g.zonas.map((z) => (
+                        <SelectItem key={z.id} value={z.id}>
+                          {z.ciudad} · {offsetZona(z.id)}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button type="submit" disabled={!puedeGuardar} className="shrink-0">
+                {guardar.isPending ? (
+                  <Spinner className="h-4 w-4" />
+                ) : (
+                  <Clock className="h-4 w-4" />
+                )}
+                Guardar zona
+              </Button>
+            </div>
+          </Campo>
         </form>
       </CardContent>
     </Card>
@@ -662,8 +666,7 @@ function SeccionLlavesAcceso() {
           }}
           noValidate
         >
-          <div className="flex-1 space-y-1.5">
-            <Label htmlFor="nombre-llave">Nombre de la llave</Label>
+          <Campo etiqueta="Nombre de la llave" htmlFor="nombre-llave" className="flex-1">
             <Input
               id="nombre-llave"
               placeholder="Opcional: iPhone, laptop…"
@@ -672,7 +675,7 @@ function SeccionLlavesAcceso() {
               onChange={(e) => setNombre(e.target.value)}
               disabled={anadir.isPending}
             />
-          </div>
+          </Campo>
           <Button type="submit" disabled={anadir.isPending}>
             {anadir.isPending ? (
               <Spinner className="h-4 w-4" />
@@ -818,6 +821,8 @@ function SeccionTokensMcp() {
   const [caducidad, setCaducidad] = React.useState("90d");
   // Secreto recién emitido: se enseña UNA vez en el diálogo y luego se descarta.
   const [secreto, setSecreto] = React.useState<string | null>(null);
+  // El error solo se muestra tras un intento de crear (no mientras se escribe).
+  const [intentado, setIntentado] = React.useState(false);
 
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
     queryKey: CLAVE_TOKENS_MCP,
@@ -839,6 +844,7 @@ function SeccionTokensMcp() {
     onSuccess: async (resp) => {
       setSecreto(resp.token);
       setEtiqueta("");
+      setIntentado(false);
       await recargar();
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -854,7 +860,8 @@ function SeccionTokensMcp() {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const puedeCrear = etiqueta.trim().length > 0 && !crear.isPending;
+  const errEtiqueta = etiqueta.trim() === "" ? "La etiqueta es obligatoria." : null;
+  const hayErrores = Boolean(errEtiqueta);
 
   return (
     <Card>
@@ -901,12 +908,18 @@ function SeccionTokensMcp() {
           className="flex flex-col gap-2 sm:flex-row sm:items-end"
           onSubmit={(e) => {
             e.preventDefault();
-            if (puedeCrear) crear.mutate();
+            setIntentado(true);
+            if (hayErrores) return;
+            crear.mutate();
           }}
           noValidate
         >
-          <div className="flex-1 space-y-1.5">
-            <Label htmlFor="token-etiqueta">Etiqueta</Label>
+          <Campo
+            etiqueta="Etiqueta"
+            htmlFor="token-etiqueta"
+            className="flex-1"
+            error={intentado ? errEtiqueta : null}
+          >
             <Input
               id="token-etiqueta"
               placeholder="Claude Code de mi laptop…"
@@ -914,10 +927,10 @@ function SeccionTokensMcp() {
               maxLength={120}
               onChange={(e) => setEtiqueta(e.target.value)}
               disabled={crear.isPending}
+              aria-invalid={(intentado && Boolean(errEtiqueta)) || undefined}
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="token-caducidad">Caducidad</Label>
+          </Campo>
+          <Campo etiqueta="Caducidad" htmlFor="token-caducidad">
             <Select value={caducidad} onValueChange={setCaducidad} disabled={crear.isPending}>
               <SelectTrigger id="token-caducidad" className="sm:w-44">
                 <SelectValue />
@@ -930,8 +943,8 @@ function SeccionTokensMcp() {
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <Button type="submit" disabled={!puedeCrear}>
+          </Campo>
+          <Button type="submit" disabled={crear.isPending}>
             {crear.isPending ? (
               <Spinner className="h-4 w-4" />
             ) : (

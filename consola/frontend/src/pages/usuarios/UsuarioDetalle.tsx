@@ -14,6 +14,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { MedidorPassword } from "@/components/auth/MedidorPassword";
+import { Campo } from "@/components/comunes/Campo";
 import { confirmar } from "@/components/comunes/confirmar";
 import { EstadoVacio, EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { TituloPagina } from "@/components/layout/encabezado";
@@ -412,8 +413,7 @@ export default function UsuarioDetalle() {
           </CardHeader>
           <CardContent>
             <div className="grid gap-6 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="d-nombre">Nombre</Label>
+              <Campo etiqueta="Nombre" htmlFor="d-nombre">
                 <Input
                   id="d-nombre"
                   value={nombre}
@@ -425,9 +425,8 @@ export default function UsuarioDetalle() {
                     if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                   }}
                 />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="d-usuario">Usuario</Label>
+              </Campo>
+              <Campo etiqueta="Usuario" htmlFor="d-usuario">
                 <Input
                   id="d-usuario"
                   value={login}
@@ -441,9 +440,8 @@ export default function UsuarioDetalle() {
                     if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                   }}
                 />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Cargo</Label>
+              </Campo>
+              <Campo etiqueta="Cargo">
                 <Select
                   value={cargoActual === "" ? SIN_CARGO : cargoActual}
                   onValueChange={(v) =>
@@ -462,7 +460,7 @@ export default function UsuarioDetalle() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </Campo>
             </div>
           </CardContent>
         </Card>
@@ -475,8 +473,7 @@ export default function UsuarioDetalle() {
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid gap-6 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>Reporta a</Label>
+              <Campo etiqueta="Reporta a">
                 <Select
                   value={superiorActual}
                   onValueChange={(v) =>
@@ -496,9 +493,8 @@ export default function UsuarioDetalle() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Marcas</Label>
+              </Campo>
+              <Campo etiqueta="Marcas">
                 <div>
                   <SelectorMarcas
                     marcas={usuario.marcas ?? []}
@@ -506,7 +502,7 @@ export default function UsuarioDetalle() {
                     onChange={(marcas) => guardar.mutate({ marcas })}
                   />
                 </div>
-              </div>
+              </Campo>
             </div>
 
             <div className="flex flex-wrap gap-x-8 gap-y-3">

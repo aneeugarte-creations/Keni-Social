@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { MedidorPassword } from "@/components/auth/MedidorPassword";
+import { Campo } from "@/components/comunes/Campo";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { TituloPagina } from "@/components/layout/encabezado";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,8 @@ export default function UsuarioNuevo() {
   const [nombre, setNombre] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [rol, setRol] = React.useState<RolUsuario>("editor");
+  // El error solo se muestra tras un intento de crear (no mientras se escribe).
+  const [intentado, setIntentado] = React.useState(false);
 
   // Mínimo de contraseña efectivo (config global). Cae a MIN_PASSWORD si aún no llegó.
   const configQuery = useQuery({
@@ -95,8 +98,8 @@ export default function UsuarioNuevo() {
     },
   });
 
-  const puedeEnviar =
-    usuario.trim().length > 0 && password.length >= minPassword && !crear.isPending;
+  const errUsuario = !usuario.trim() ? "El usuario es obligatorio." : null;
+  const hayErrores = Boolean(errUsuario) || password.length < minPassword;
 
   if (!cargando && !esSuperadmin) {
     return (
@@ -125,12 +128,13 @@ export default function UsuarioNuevo() {
               className="space-y-4"
               onSubmit={(e) => {
                 e.preventDefault();
-                if (puedeEnviar) crear.mutate();
+                setIntentado(true);
+                if (hayErrores) return;
+                crear.mutate();
               }}
               noValidate
             >
-              <div className="space-y-1.5">
-                <Label htmlFor="nuevo-nombre">Nombre</Label>
+              <Campo etiqueta="Nombre" htmlFor="nuevo-nombre">
                 <Input
                   id="nuevo-nombre"
                   value={nombre}
@@ -139,17 +143,21 @@ export default function UsuarioNuevo() {
                   maxLength={120}
                   placeholder="Opcional: Diana Ramos"
                 />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="nuevo-usuario">Usuario</Label>
+              </Campo>
+              <Campo
+                etiqueta="Usuario"
+                htmlFor="nuevo-usuario"
+                error={intentado ? errUsuario : null}
+              >
                 <Input
                   id="nuevo-usuario"
                   value={usuario}
                   onChange={(e) => setUsuario(e.target.value)}
                   autoComplete="off"
                   maxLength={120}
+                  aria-invalid={(intentado && Boolean(errUsuario)) || undefined}
                 />
-              </div>
+              </Campo>
               <div className="space-y-1.5">
                 <Label htmlFor="nuevo-password">Contraseña inicial</Label>
                 <Input
@@ -162,8 +170,7 @@ export default function UsuarioNuevo() {
                 <p className="text-xs text-muted-foreground">Mínimo {minPassword} caracteres.</p>
                 <MedidorPassword password={password} />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="nuevo-rol">Rol</Label>
+              <Campo etiqueta="Rol" htmlFor="nuevo-rol">
                 <Select value={rol} onValueChange={(v) => setRol(v as RolUsuario)}>
                   <SelectTrigger id="nuevo-rol">
                     <SelectValue />
@@ -176,12 +183,12 @@ export default function UsuarioNuevo() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </Campo>
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={volver}>
                   Cancelar
                 </Button>
-                <Button type="submit" disabled={!puedeEnviar}>
+                <Button type="submit" disabled={crear.isPending}>
                   {crear.isPending ? (
                     <Spinner className="h-4 w-4" />
                   ) : (
