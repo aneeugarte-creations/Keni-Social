@@ -431,14 +431,20 @@ def _guardar_contenido(datos: bytes, *, ext: str, categoria: str, mime: str) -> 
     return clave
 
 
+def _tiene_alfa(img) -> bool:  # noqa: ANN001 -- PIL.Image
+    """True si la imagen lleva canal de transparencia (RGBA/LA o paleta con `transparency`)."""
+    return img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info)
+
+
 def _recomprimir_a_objetivo(datos: bytes, ext: str, objetivo: int) -> tuple[bytes, str]:
-    """Recomprime una imagen pesada a <= `objetivo` bytes como JPEG; devuelve `(bytes, ext)`.
+    """Recomprime una imagen pesada a <= `objetivo` bytes; devuelve `(bytes, ext_nueva)`.
 
     Mejor esfuerzo, sin rechazar nunca: baja primero la CALIDAD y, si no basta, el TAMAÑO (lado
-    largo) en pasos, con un piso de 1080 px (lado largo de las redes). Aplana la transparencia
-    sobre blanco (JPEG no la soporta). Devuelve `(bytes, "jpg")` con la mejor versión lograda.
-    Si la imagen ya cabe, está animada (GIF/WEBP) o PIL no la puede abrir, devuelve los bytes y
-    la extensión SIN tocar: una subida nunca falla por no poder comprimirla.
+    largo) en pasos, con un piso de 1080 px (lado largo de las redes). CONSERVA la transparencia:
+    una imagen con alfa va a WEBP con pérdida (mantiene el canal alfa); una opaca va a JPEG (más
+    ligero para fotos). Devuelve la mejor versión lograda con su extensión (`webp`/`jpg`). Si la
+    imagen ya cabe, está animada (GIF/WEBP), PIL no la puede abrir o el codec falla al guardar,
+    devuelve los bytes y la extensión SIN tocar: una subida nunca falla por no poder comprimirla.
     """
     if len(datos) <= objetivo:
         return datos, ext
@@ -447,39 +453,47 @@ def _recomprimir_a_objetivo(datos: bytes, ext: str, objetivo: int) -> tuple[byte
     try:
         img = Image.open(io.BytesIO(datos))
         if getattr(img, "is_animated", False):
-            return datos, ext  # no aplanamos una animación a un JPEG estático
+            return datos, ext  # no re-codificamos una animación a un fotograma estático
         img = ImageOps.exif_transpose(img)  # respeta la orientación EXIF antes de re-codificar
         img.load()
     except Exception:  # noqa: BLE001 -- ilegible para PIL: se guarda tal cual, no rompemos la subida
         return datos, ext
 
-    if img.mode in ("RGBA", "LA", "P"):
-        rgba = img.convert("RGBA")
-        fondo = Image.new("RGB", rgba.size, (255, 255, 255))
-        fondo.paste(rgba, mask=rgba.split()[-1])
-        img = fondo
-    else:
-        img = img.convert("RGB")
+    if _tiene_alfa(img):
+        # WEBP con pérdida conserva el canal alfa (a diferencia de JPEG): los PNG con
+        # transparencia que sube el equipo mantienen el recorte tras comprimirse.
+        img, ext_nueva, fmt = img.convert("RGBA"), "webp", "WEBP"
 
-    def _codificar(im, calidad: int) -> bytes:
-        buf = io.BytesIO()
-        im.save(buf, format="JPEG", quality=calidad, optimize=True, progressive=True)
-        return buf.getvalue()
+        def _codificar(im, calidad: int) -> bytes:
+            buf = io.BytesIO()
+            im.save(buf, format=fmt, quality=calidad, method=4)
+            return buf.getvalue()
+    else:
+        img, ext_nueva, fmt = img.convert("RGB"), "jpg", "JPEG"
+
+        def _codificar(im, calidad: int) -> bytes:
+            buf = io.BytesIO()
+            im.save(buf, format=fmt, quality=calidad, optimize=True, progressive=True)
+            return buf.getvalue()
 
     piso = 1080
-    mejor = _codificar(img, 85)
-    while True:
-        for calidad in range(85, 39, -5):
-            data = _codificar(img, calidad)
-            if len(data) < len(mejor):
-                mejor = data
-            if len(data) <= objetivo:
-                return data, "jpg"
-        if max(img.size) <= piso:
-            return mejor, "jpg"  # ya en el piso: la mejor versión lograda
-        img = img.resize(
-            (max(1, round(img.size[0] * 0.85)), max(1, round(img.size[1] * 0.85))), Image.LANCZOS
-        )
+    try:
+        mejor = _codificar(img, 85)
+        while True:
+            for calidad in range(85, 39, -5):
+                data = _codificar(img, calidad)
+                if len(data) < len(mejor):
+                    mejor = data
+                if len(data) <= objetivo:
+                    return data, ext_nueva
+            if max(img.size) <= piso:
+                return mejor, ext_nueva  # ya en el piso: la mejor versión lograda
+            img = img.resize(
+                (max(1, round(img.size[0] * 0.85)), max(1, round(img.size[1] * 0.85))),
+                Image.LANCZOS,
+            )
+    except Exception:  # noqa: BLE001 -- fallo del codec: guardamos el original, nunca rechazamos
+        return datos, ext
 
 
 async def guardar_subida(
@@ -526,8 +540,8 @@ async def guardar_subida(
         raise MediaError("La imagen está vacía.")
     datos = b"".join(trozos)
     # Subidas pesadas (fotos de agencia ~20 MB): no se rechazan, se recomprimen a un objetivo
-    # razonable antes de ir al almacen. Una imagen que ya cabe (o que PIL no puede recomprimir)
-    # pasa intacta.
+    # razonable antes de ir al almacen (JPEG si son opacas, WEBP si llevan alfa). Una imagen que
+    # ya cabe (o que PIL no puede recomprimir) pasa intacta.
     datos, ext = _recomprimir_a_objetivo(datos, ext, OBJETIVO_COMPRESION_IMAGEN)
     try:
         return _guardar_contenido(datos, ext=ext, categoria=categoria, mime=_EXT_A_MIME[ext])

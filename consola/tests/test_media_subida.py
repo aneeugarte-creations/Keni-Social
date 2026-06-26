@@ -62,6 +62,19 @@ def _jpeg_grande(lado: int = 2400) -> bytes:
     return buf.getvalue()
 
 
+def _png_alfa_grande(lado: int = 2000) -> bytes:
+    """Un PNG con canal alfa (transparencia variable) grande, para forzar la recompresión."""
+    img = Image.new("RGBA", (lado, lado))
+    pix = img.load()
+    for y in range(lado):
+        v = (y * 255) // lado
+        for x in range(lado):
+            pix[x, y] = (v, (v * 7) // 10, 255 - v, (x * 255) // lado)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
 def test_subida_pequena_se_guarda_intacta(disco):
     """Una imagen por debajo del objetivo NO se recomprime: conserva su extensión y sus bytes."""
     img = Image.new("RGB", (32, 32), (10, 20, 30))
@@ -87,6 +100,21 @@ def test_subida_pesada_se_recomprime_a_jpeg(disco, monkeypatch):
     assert guardado is not None
     assert len(guardado) <= objetivo
     assert len(guardado) < len(crudo)
+
+
+def test_subida_pesada_con_alfa_se_recomprime_a_webp_y_conserva_la_transparencia(disco, monkeypatch):
+    """Un PNG con alfa pesado NO se aplana: va a WEBP con pérdida y CONSERVA la transparencia."""
+    crudo = _png_alfa_grande()
+    objetivo = 16 * 1024
+    monkeypatch.setattr(media, "OBJETIVO_COMPRESION_IMAGEN", objetivo)
+    assert len(crudo) > objetivo
+    up = _FakeUpload(crudo, filename="logo.png", content_type="image/png")
+    clave = _correr(media.guardar_subida(up))
+    assert clave.endswith(".webp")
+    guardado = almacen_media.leer_objeto(clave)
+    assert guardado is not None and len(guardado) <= objetivo
+    recargada = Image.open(io.BytesIO(guardado))
+    assert recargada.mode in ("RGBA", "LA")  # el canal alfa sobrevive a la recompresión
 
 
 def test_subida_grande_no_se_rechaza_por_peso(disco):
