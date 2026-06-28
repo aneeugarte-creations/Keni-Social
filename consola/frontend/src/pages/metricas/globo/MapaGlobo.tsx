@@ -14,8 +14,6 @@ import * as React from "react";
 
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { porcentaje } from "@/lib/formato";
-
 import { construirBarras, type PuntoGlobo } from "./barras";
 import { ESTILOS, type FormatoMapa } from "./basemaps";
 
@@ -49,60 +47,55 @@ function sincronizarBarras(map: maplibregl.Map, puntos: PuntoGlobo[]): void {
   map.addLayer(CAPA_TORRES);
 }
 
-/** Tooltip al pasar por una torre: nombre + % de audiencia. Se registra una sola vez. */
-function registrarTooltip(map: maplibregl.Map, popup: maplibregl.Popup): void {
-  map.on("mousemove", CAPA_BARRAS, (e) => {
-    const rasgo = e.features?.[0];
-    if (!rasgo) return;
-    map.getCanvas().style.cursor = "pointer";
-    const props = rasgo.properties as { etiqueta?: string; valor?: number } | null;
-    const etiqueta = String(props?.etiqueta ?? "");
-    const valor = Number(props?.valor ?? 0);
-    popup
-      .setLngLat(e.lngLat)
-      .setHTML(
-        `<div style="background:#ffffff;color:#171717;padding:6px 10px;border-radius:8px;` +
-          `font-size:12px;font-weight:500;box-shadow:0 2px 8px rgba(0,0,0,.25)">` +
-          `${etiqueta} &middot; ${porcentaje(valor)}</div>`,
-      )
-      .addTo(map);
-  });
-  map.on("mouseleave", CAPA_BARRAS, () => {
-    map.getCanvas().style.cursor = "";
-    popup.remove();
-  });
+/** Reconstruye un PuntoGlobo desde las props de un rasgo de la capa de barras. */
+function puntoDeRasgo(rasgo: maplibregl.MapGeoJSONFeature | undefined): PuntoGlobo | null {
+  const props = rasgo?.properties as
+    | { lat: number; lng: number; valor: number; etiqueta: string; nivel: "pais" | "ciudad"; intensidad: number }
+    | null
+    | undefined;
+  if (!props) return null;
+  return {
+    lat: Number(props.lat),
+    lng: Number(props.lng),
+    valor: Number(props.valor),
+    etiqueta: String(props.etiqueta),
+    nivel: props.nivel,
+    intensidad: Number(props.intensidad),
+  };
 }
 
-/** Click en una torre emite su PuntoGlobo (reconstruido desde las props); click en vacio deselecciona. */
+/**
+ * Selecciona la torre bajo el cursor: al pasar el raton (o tocar) emite su PuntoGlobo, que el
+ * padre pinta DIRECTAMENTE como tarjeta de detalle (sin tooltip intermedio). Click en el vacio
+ * (mar/espacio) deselecciona.
+ */
 function registrarSeleccion(
   map: maplibregl.Map,
   onSeleccionRef: React.MutableRefObject<((punto: PuntoGlobo | null) => void) | undefined>,
 ): void {
-  map.on("mouseenter", CAPA_BARRAS, () => {
+  let ultima = ""; // evita re-emitir mientras el cursor sigue sobre la misma torre
+  map.on("mousemove", CAPA_BARRAS, (e) => {
+    const punto = puntoDeRasgo(e.features?.[0]);
+    if (!punto) return;
     map.getCanvas().style.cursor = "pointer";
+    const clave = `${punto.etiqueta}|${punto.lat}|${punto.lng}`;
+    if (clave === ultima) return;
+    ultima = clave;
+    onSeleccionRef.current?.(punto);
   });
   map.on("mouseleave", CAPA_BARRAS, () => {
     map.getCanvas().style.cursor = "";
+    ultima = "";
   });
+  // Tap en movil/tactil (sin hover): selecciona igual.
   map.on("click", CAPA_BARRAS, (e: maplibregl.MapLayerMouseEvent) => {
-    const rasgo = e.features?.[0];
-    if (!rasgo) return;
-    const props = rasgo.properties as
-      | { lat: number; lng: number; valor: number; etiqueta: string; nivel: "pais" | "ciudad"; intensidad: number }
-      | null;
-    if (!props) return;
-    onSeleccionRef.current?.({
-      lat: Number(props.lat),
-      lng: Number(props.lng),
-      valor: Number(props.valor),
-      etiqueta: String(props.etiqueta),
-      nivel: props.nivel,
-      intensidad: Number(props.intensidad),
-    });
+    const punto = puntoDeRasgo(e.features?.[0]);
+    if (punto) onSeleccionRef.current?.(punto);
   });
-  // Click sin torre bajo el cursor (mar/espacio) deselecciona; la query evita pisar la seleccion recien hecha.
+  // Click sin torre bajo el cursor (mar/espacio) deselecciona.
   map.on("click", (e: maplibregl.MapMouseEvent) => {
     if (map.queryRenderedFeatures(e.point, { layers: [CAPA_BARRAS] }).length === 0) {
+      ultima = "";
       onSeleccionRef.current?.(null);
     }
   });
@@ -147,7 +140,6 @@ export default function MapaGlobo({
 }) {
   const contenedorRef = React.useRef<HTMLDivElement | null>(null);
   const mapaRef = React.useRef<maplibregl.Map | null>(null);
-  const popupRef = React.useRef<maplibregl.Popup | null>(null);
   const puntosRef = React.useRef(puntos);
   const centroRef = React.useRef(centro);
   const onSeleccionRef = React.useRef(onSeleccion);
@@ -193,9 +185,6 @@ export default function MapaGlobo({
     // la ubicacion lider (la torre mas alta) quede algo por encima del centro y el panel
     // flotante de abajo-izquierda no la tape.
     map.setPadding({ top: 0, right: 0, bottom: 150, left: 0 });
-    const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
-    popupRef.current = popup;
-    registrarTooltip(map, popup);
     registrarSeleccion(map, onSeleccionRef);
     map.on("load", () => sincronizarBarras(map, puntosRef.current));
 
@@ -204,10 +193,8 @@ export default function MapaGlobo({
 
     return () => {
       ro.disconnect();
-      popup.remove();
       map.remove();
       mapaRef.current = null;
-      popupRef.current = null;
     };
   }, []);
 
