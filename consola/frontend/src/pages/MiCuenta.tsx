@@ -979,7 +979,7 @@ export default function MiCuenta() {
   return (
     <>
       <TituloPagina titulo="Mi cuenta" icono={User} />
-      <div className="w-full space-y-6 pb-12">
+      <div className="w-full space-y-6">
         {/* Preferencia PERSONAL (tema claro/oscuro): vive con la cuenta. */}
         <SeccionApariencia />
         <div className="grid items-start gap-6 lg:grid-cols-2">

@@ -289,7 +289,7 @@ export default function AgenteDetalle() {
     return (
       <>
         <TituloPagina titulo="Agente" onAtras={atras} />
-        <div className="space-y-4 p-4">
+        <div className="space-y-4">
           <Skeleton className="h-24 w-full rounded-xl" />
           <Skeleton className="h-48 w-full rounded-xl" />
         </div>
@@ -300,7 +300,7 @@ export default function AgenteDetalle() {
     return (
       <>
         <TituloPagina titulo="Agente" onAtras={atras} />
-        <div className="space-y-4 p-4">
+        <div className="space-y-4">
           <BloqueError
             titulo="No se pudo leer el estado de los agentes"
             mensaje={mensajeError(query.error)}
@@ -319,7 +319,7 @@ export default function AgenteDetalle() {
     return (
       <>
         <TituloPagina titulo="Agente" onAtras={atras} />
-        <div className="space-y-4 p-4">
+        <div className="space-y-4">
           <BloqueError
             titulo="Agente no encontrado"
             mensaje={`No hay ningún agente registrado con el nombre «${agente}». Puede haber sido renombrado o retirado.`}
@@ -340,7 +340,7 @@ export default function AgenteDetalle() {
       {/* Cabecera (← volver + nombre legible) en la BARRA SUPERIOR del shell, no como fila del
           cuerpo. El nombre no se repite en la tarjeta de abajo (que conserva id, badges y métricas). */}
       <TituloPagina titulo={latido.etiqueta} onAtras={atras} />
-      <div className="space-y-4 p-4">
+      <div className="space-y-4">
       {/* Cabecera: id + badges (clase, motor, estado) + último barrido e intervalo. */}
       <Card>
         <CardHeader className="p-4 pb-2">

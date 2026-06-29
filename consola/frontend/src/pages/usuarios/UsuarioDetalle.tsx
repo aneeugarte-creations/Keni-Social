@@ -404,7 +404,7 @@ export default function UsuarioDetalle() {
     <>
       <TituloPagina titulo={nombreVisible(usuario)} icono={UserCog} onAtras={volver} />
 
-      <div className="w-full space-y-6 pb-12">
+      <div className="w-full space-y-6">
         {/* Perfil */}
         <Card>
           <CardHeader>

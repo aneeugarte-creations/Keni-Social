@@ -550,7 +550,7 @@ export default function Fotos() {
         </Button>
       </AccionesPagina>
 
-      <div className="w-full space-y-4 py-6 pb-12">
+      <div className="w-full space-y-4">
         <Tabs defaultValue="buscar">
           <div className="flex items-center justify-between gap-3">
             <TabsList>
