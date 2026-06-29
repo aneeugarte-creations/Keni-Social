@@ -39,6 +39,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
+import { useUsoCuenta } from "@/hooks/use-uso-cuenta";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFechaHoraCorta, haceSegundos } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
@@ -440,21 +442,50 @@ function TarjetaCuenta({
   );
 }
 
+/** Textos de cada tarjeta de cuenta, indexados por su selector. */
+const TARJETAS: Record<Cuenta, { titulo: string; descripcion: string }> = {
+  a: {
+    titulo: "Cuenta de Claude del servidor (A)",
+    descripcion:
+      "Cuenta principal: marcas de Claro Sports y la Fundación, y todo lo que no esté repartido a la cuenta B.",
+  },
+  b: {
+    titulo: "Cuenta de Claude del servidor (B)",
+    descripcion:
+      "Segunda cuenta para el reparto por marcas: UnoTV, Nación Gamer y UnoTV US (informativo).",
+  },
+};
+
 /** Sección de las cuentas de Claude del servidor: la cuenta A (histórica) y la cuenta B
- *  (segunda cuenta para el split por marcas). Cada una con su estado/uso y login/logout. */
+ *  (segunda cuenta para el split por marcas). Cada una con su estado/uso y login/logout.
+ *
+ *  Respeta el SELECTOR DE MARCA global (`useMarcaActiva`), igual que el indicador del sidebar:
+ *  en "Todas" (`marcaActiva === null`, admin) muestra AMBAS tarjetas; con una marca concreta,
+ *  solo la tarjeta de la cuenta que sirve esa marca. El mapeo marca→cuenta se REUTILIZA del
+ *  endpoint de uso (`useUsoCuenta` → `/api/sistema/uso`): la cuenta cuyo `marcas` incluye la
+ *  marca activa. Si el mapeo no es resoluble (uso aún sin cargar, o marca fuera de toda cuenta)
+ *  se muestran AMBAS, para no dejar este panel admin vacío. */
 export function SeccionCuentaClaude() {
+  const { marcaActiva } = useMarcaActiva();
+  const { data } = useUsoCuenta();
+
+  const cuentas = React.useMemo<Cuenta[]>(() => {
+    if (marcaActiva === null) return ["a", "b"];
+    const cuenta = data?.cuentas.find((c) => c.marcas.includes(marcaActiva))?.cuenta;
+    if (cuenta === "a" || cuenta === "b") return [cuenta];
+    return ["a", "b"];
+  }, [marcaActiva, data]);
+
   return (
     <div className="space-y-4">
-      <TarjetaCuenta
-        cuenta="a"
-        titulo="Cuenta de Claude del servidor (A)"
-        descripcion="Cuenta principal: marcas de Claro Sports y la Fundación, y todo lo que no esté repartido a la cuenta B."
-      />
-      <TarjetaCuenta
-        cuenta="b"
-        titulo="Cuenta de Claude del servidor (B)"
-        descripcion="Segunda cuenta para el reparto por marcas: UnoTV, Nación Gamer y UnoTV US (informativo)."
-      />
+      {cuentas.map((cuenta) => (
+        <TarjetaCuenta
+          key={cuenta}
+          cuenta={cuenta}
+          titulo={TARJETAS[cuenta].titulo}
+          descripcion={TARJETAS[cuenta].descripcion}
+        />
+      ))}
     </div>
   );
 }
