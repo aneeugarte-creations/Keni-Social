@@ -1,9 +1,9 @@
 {
-  "version": "0.1.9",
-  "notes": "La app detecta tu sesión de Claude automáticamente: si Claude Code está iniciado en este Mac, ya no pide volver a entrar.",
+  "version": "0.1.10",
+  "notes": "Puedes volver a pulsar «Buscar actualizaciones» aunque ya estés en la última versión.",
   "pub_date": "2026-06-29T00:00:00Z",
   "darwin-aarch64": {
-    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcFlmOHBXcFYxNVJtNGVSQ05QcVBGZzZvWEFDN2UwRjFBeE5JanJUaHVwakcvZVpCVVNzK2o2bHZETEtpdzB3TnlTaWlkL0V5QjRYK3kzbmZLUU1RRWdFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzc2NDUxCWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6CmZpQ1pST0hlejFRMVNodk9HTUVCTDVKRExaVU8rTHlTWGw1ZTc4YVdFZno0NEpUUlJnT1d4bytLN2g5NFo2MXJUNnBzcXcxR3dzZlI2MHFEd2x2bENnPT0K",
+    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcGZKbmdtS1pQRExrSEtjSGlPMFhKZVNvdmdLdzRPVWFCeVY0NTV1R0Z6NjJ1RytMK1ZiRjhGUXcwS1pDbnh4WkZJUmRrT1doMW5LalltOTBsWXFDZndVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzc2NzU5CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6ClZEMWJQNGQybERFbVRMTXZHWUtNQ3YvdjdCZlhlRTA5SUxYelVGd05Pd1VXeFpjUUZub1EvSE5TQ084bHBXZTlsT2h6WmRqYVR6K2dBNDcwOVFJSEJRPT0K",
     "url": "https://social.kenitech.io/api/fotos/updater"
   }
 }
