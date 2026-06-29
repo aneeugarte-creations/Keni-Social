@@ -63,6 +63,12 @@ steps:
       # servicios (ver docker-compose.yml) con el worker recién construido. Es lo ÚNICO que mueve
       # `:keeper`, así que un deploy de la app (que mueve `:latest`/`:${VERSION}` pero no `:keeper`) ya
       # no los recrea a media sesión. La recreación de abajo los lleva al worker nuevo + código nuevo.
+      # RECREACIÓN DETERMINISTA (stop -t 35 -> rm -> up), NO `up --force-recreate`: el keeper tiene
+      # stop_grace_period 30s (cierra con gracia su sesión al recibir SIGTERM), y `--force-recreate`
+      # de los DOS servicios a la vez intentaba BORRAR el contenedor viejo antes de que terminara de
+      # pararse -> «container is running» / conflicto de nombre, y dejaba al OTRO servicio en «Created»
+      # (Traefik sin backend -> guardian.kenitech.io caía al front). `stop -t 35` espera la parada
+      # limpia (>30s), `rm` quita los parados y `up` crea de cero: sin carrera ni nombres colgados.
       - >-
         flock -x -w 1800 /home/ubuntu/keni-social/.deploy.lock sh -c "
         rsync -a --delete ./deploy/guardian-ui/ /home/ubuntu/keni-social/deploy/guardian-ui/
@@ -71,4 +77,6 @@ steps:
         && cd /home/ubuntu/keni-social/deploy
         && mkdir -p estado && chmod 0777 estado 2>/dev/null || true
         && : > estado/desplegando && trap 'rm -f estado/desplegando' EXIT
-        && docker compose --env-file .env up -d --no-deps --force-recreate guardian-ui incident-keeper"
+        && docker compose --env-file .env stop -t 35 guardian-ui incident-keeper
+        && docker compose --env-file .env rm -f guardian-ui incident-keeper
+        && docker compose --env-file .env up -d --no-deps guardian-ui incident-keeper"
