@@ -1,0 +1,22 @@
+# Woodpecker: tests de los helpers del GUARDIÁN / incident-keeper (deploy/).
+#
+# El keeper (`deploy/incident-keeper/`) y su UI (`deploy/guardian-ui/`) viven fuera del
+# paquete `keni_consola`, así que ninguna suite de `consola/` los cubre. Son helpers stdlib
+# (parseo del stream-json de `claude -p`, meta para la UI, transcript): BARATOS, sin Postgres.
+# Este pipeline los testea cuando cambian. NO gatea el deploy (igual que hoy el keeper no está
+# en el gate `deploy.depends_on`); deja veredicto en paralelo.
+when:
+  - event: [push, pull_request, manual]
+    path:
+      include:
+        - "deploy/incident-keeper/**"
+        - "deploy/guardian-ui/**"
+        - ".woodpecker/tests-guardian.yml"
+
+steps:
+  - name: pytest-guardian
+    image: python:3.11
+    commands:
+      - python -m pip install --upgrade pip
+      - python -m pip install pytest starlette  # app.py importa starlette; lo demás es stdlib
+      - python -m pytest deploy/incident-keeper/test_sesion.py deploy/guardian-ui/test_app.py deploy/guardian-ui/test_cuenta.py -q

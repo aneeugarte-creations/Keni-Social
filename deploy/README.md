@@ -99,6 +99,20 @@ cuenta**: abre la URL, inicia sesión y pega el código. Las credenciales se esc
 > `claude auth logout` desde el panel deja al servidor SIN cuenta hasta el siguiente login (la
 > generación para): úsalo solo para cambiar de cuenta.
 
+### Cuenta del GUARDIÁN (separada)
+
+El `incident-keeper` usa una cuenta de Claude **INDEPENDIENTE** de la de generación: vive en su
+propio volumen `guardian-claude-cfg` (`CLAUDE_CONFIG_DIR=/claude-cfg`), no en `/data/claude-cfg`.
+Así el carril de incidentes y la máquina de contenido no comparten cuota: un límite de uso (o un
+logout) de una no afecta a la otra. Es deliberado que el guardián use **nuestra** cuenta de Keni,
+no la del piloto.
+
+Se gestiona desde el **panel `/guardian`** (no desde Sistema): el botón **cuenta** muestra el
+estado de auth y el uso, y permite login (URL → pegar código) y logout, tras el basicauth propio
+del panel (`KENI_GUARDIAN_HTPASSWD`). Lo sirve `guardian-ui` (reusa la imagen del worker, que trae
+`claude`), escribiendo en el mismo `/claude-cfg` que el keeper lee. Tras un deploy nuevo el volumen
+arranca **vacío**: hasta el primer login el keeper no tiene cuenta y sus sesiones quedan en error.
+
 ---
 
 ## Ingress (estado actual: Traefik único, Caddy retirado)

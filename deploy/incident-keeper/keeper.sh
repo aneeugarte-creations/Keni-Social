@@ -1,8 +1,9 @@
 #!/bin/sh
 # INCIDENT-KEEPER: agente claude -p que mantiene `main` SANO en la nube, automático. Clon del
 # "green keeper" (que el humano lanzaba a mano con "arregla el ci NNNN"). Corre en la imagen del
-# worker (trae claude+git+gh), hereda la cuenta de Claude (/data/claude-cfg) y la credencial de
-# GitHub (/data/gh), y promueve el fix a `main` con scripts/promover-main.sh.
+# worker (trae claude+git+gh), usa la cuenta de Claude PROPIA del guardián ($CLAUDE_CONFIG_DIR =
+# /claude-cfg, volumen aparte; la fija guardian-ui) y la credencial de GitHub (/data/gh), y
+# promueve el fix a `main` con scripts/promover-main.sh.
 #
 # DOS DISPAROS, mismo motor (un claude -p por incidente, un solo keeper a la vez por el lock):
 #   1) CI ROJO (el principal, réplica de ci-verde): vigila el datastore de Woodpecker; si el

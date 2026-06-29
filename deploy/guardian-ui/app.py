@@ -1,23 +1,32 @@
 #!/usr/bin/env python3
 """guardian-ui: UI INDEPENDIENTE de observación del incident-keeper.
 
-NO depende del back, db ni front de la consola: importa SÓLO starlette + stdlib, y lee el rastro
-que el keeper deja en /data/keeper (volumen compartido, montado read-only). Así, cuando la app
-está caída y el keeper la está arreglando, esta UI SIGUE sirviendo (Traefik la enruta directa).
+NO depende del back, db ni front de la consola: importa SÓLO starlette + stdlib (+ el helper local
+`cuenta.py`, también stdlib), y lee el rastro que el keeper deja en /data/keeper (volumen
+compartido, montado read-only). Así, cuando la app está caída y el keeper la está arreglando, esta
+UI SIGUE sirviendo (Traefik la enruta directa).
 
 Sirve:
   GET /                 -> index.html (página autocontenida que sondea la API)
   GET /api/sesiones     -> {vigilancia, sesiones:[meta...]}  (lista de detecciones)
   GET /api/sesiones/{id}-> {meta, transcript:[...]}          (razonamiento + acciones, streaming)
+  GET /api/cuenta       -> {auth, uso}                       (cuenta de Claude del guardián)
+  POST /api/cuenta/login/{iniciar,codigo,cancelar}, /api/cuenta/logout  (cambiar de cuenta)
+
+La gestión de cuenta corre el CLI `claude` (vive en `cuenta.py`, autocontenido). Va tras el
+basicauth propio del panel (Traefik `KENI_GUARDIAN_HTPASSWD`), así que no añade su propio gate.
 """
 import json
 import os
 from pathlib import Path
 
 from starlette.applications import Starlette
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse
 from starlette.routing import Route
+
+import cuenta
 
 DATA = Path(os.environ.get("KENI_KEEPER_DATA", "/data/keeper"))
 AQUI = Path(__file__).resolve().parent
@@ -50,6 +59,23 @@ def _metas() -> list[dict]:
     return metas
 
 
+def _texto_evento(ev: dict) -> str | None:
+    """Texto legible de un evento NO-stream (`assistant` o `result`): el motivo de una sesión que
+    no llegó a razonar (p.ej. el mensaje sintético de un límite de uso). None si no lo trae."""
+    tipo = ev.get("type")
+    if tipo == "assistant":
+        for bloque in (ev.get("message") or {}).get("content") or []:
+            if isinstance(bloque, dict) and bloque.get("type") == "text":
+                t = (bloque.get("text") or "").strip()
+                if t:
+                    return t
+    elif tipo == "result":
+        t = (ev.get("result") or "").strip()
+        if t:
+            return t
+    return None
+
+
 def _transcript(jsonl: Path) -> list[dict]:
     """Reconstruye el transcript (razonamiento + texto + acciones) de los deltas del stream-json.
 
@@ -58,6 +84,7 @@ def _transcript(jsonl: Path) -> list[dict]:
     """
     items: list[dict] = []
     actual: dict | None = None
+    respaldo: str | None = None  # texto de cierre por si NO hay ningún stream_event (p.ej. un 429)
     try:
         with jsonl.open(encoding="utf-8", errors="replace") as fh:
             for linea in fh:
@@ -68,7 +95,12 @@ def _transcript(jsonl: Path) -> list[dict]:
                     ev = json.loads(linea)
                 except ValueError:
                     continue
-                if not isinstance(ev, dict) or ev.get("type") != "stream_event":
+                if not isinstance(ev, dict):
+                    continue
+                if ev.get("type") != "stream_event":
+                    # Sesiones que mueren sin razonar (límite de uso, error de arranque) traen el
+                    # motivo solo en un mensaje `assistant`/`result`. Lo guardamos como respaldo.
+                    respaldo = _texto_evento(ev) or respaldo
                     continue
                 e = ev.get("event") or {}
                 tipo_ev = e.get("type")
@@ -95,6 +127,8 @@ def _transcript(jsonl: Path) -> list[dict]:
     if actual and actual["texto"].strip():
         actual["vivo"] = True
         items.append(actual)
+    if not items and respaldo:
+        items.append({"tipo": "texto", "texto": respaldo})
     return items
 
 
@@ -142,6 +176,57 @@ async def token(request: Request) -> JSONResponse:
     return JSONResponse({"set": _token_puesto()})
 
 
+async def _cuerpo(request: Request) -> dict:
+    """Body JSON de un POST -> dict (vacío si no es un objeto o no parsea)."""
+    try:
+        datos = await request.json()
+    except (ValueError, TypeError):
+        return {}
+    return datos if isinstance(datos, dict) else {}
+
+
+async def cuenta_estado(_request: Request) -> JSONResponse:
+    """Estado de auth + medidor de uso de la cuenta de Claude del GUARDIÁN.
+
+    Las dos lecturas corren `claude` (bloqueante) en el threadpool; el `/usage` es lento, así que
+    la página lo pide en su propio ciclo, no en el sondeo rápido de la lista.
+    """
+    auth = await run_in_threadpool(cuenta.estado)
+    uso = await run_in_threadpool(cuenta.uso)
+    return JSONResponse({"auth": auth, "uso": uso})
+
+
+async def cuenta_login_iniciar(request: Request) -> JSONResponse:
+    c = await _cuerpo(request)
+    res = await run_in_threadpool(
+        cuenta.iniciar_login,
+        console=bool(c.get("console")),
+        email=(c.get("email") or None),
+        sso=bool(c.get("sso")),
+    )
+    return JSONResponse(res, status_code=200 if res.get("sesion") else 502)
+
+
+async def cuenta_login_codigo(request: Request) -> JSONResponse:
+    c = await _cuerpo(request)
+    sid, codigo = (c.get("sesion") or ""), (c.get("codigo") or "")
+    if not sid or not codigo:
+        return JSONResponse({"ok": False, "error": "faltan sesion/codigo"}, status_code=400)
+    res = await run_in_threadpool(cuenta.enviar_codigo, sid, codigo)
+    return JSONResponse(res, status_code=200 if res.get("ok") else 502)
+
+
+async def cuenta_login_cancelar(request: Request) -> JSONResponse:
+    c = await _cuerpo(request)
+    res = await run_in_threadpool(cuenta.cancelar_login, c.get("sesion") or "")
+    return JSONResponse(res)
+
+
+async def cuenta_logout(_request: Request) -> JSONResponse:
+    res = await run_in_threadpool(cuenta.logout)
+    return JSONResponse(res, status_code=200 if res.get("ok") else 502)
+
+
 async def indice(_request: Request) -> FileResponse:
     return FileResponse(AQUI / "index.html")
 
@@ -155,5 +240,11 @@ app = Starlette(
         Route("/guardian/api/sesiones", sesiones),
         Route("/guardian/api/sesiones/{id}", sesion),
         Route("/guardian/api/token", token, methods=["GET", "POST"]),
+        # Cuenta de Claude del guardián (rutas específicas antes que la genérica del login).
+        Route("/guardian/api/cuenta", cuenta_estado),
+        Route("/guardian/api/cuenta/login/iniciar", cuenta_login_iniciar, methods=["POST"]),
+        Route("/guardian/api/cuenta/login/codigo", cuenta_login_codigo, methods=["POST"]),
+        Route("/guardian/api/cuenta/login/cancelar", cuenta_login_cancelar, methods=["POST"]),
+        Route("/guardian/api/cuenta/logout", cuenta_logout, methods=["POST"]),
     ]
 )
