@@ -1,6 +1,6 @@
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useUsoCuenta, type UsoCuenta } from "@/hooks/use-uso-cuenta";
-import { Tooltip } from "@/components/ui/tooltip";
+import { TooltipFlotante } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 /**
@@ -139,7 +139,7 @@ function BloqueCuenta({ uso, etiquetada }: { uso: UsoCuenta; etiquetada: boolean
   const rojo = uso.alerta_roja;
   const alerta = mensajeRojo(uso);
   return (
-    <Tooltip label={etiquetaReset(uso) ?? tooltipCompleto(uso)} side="top">
+    <TooltipFlotante label={etiquetaReset(uso) ?? tooltipCompleto(uso)} side="top">
       <div className="w-full space-y-1" aria-label={tooltipCompleto(uso)}>
         {etiquetada ? (
           <p className="truncate px-0.5 text-[10px] font-medium text-muted-foreground/80">
@@ -150,7 +150,7 @@ function BloqueCuenta({ uso, etiquetada }: { uso: UsoCuenta; etiquetada: boolean
         <MiniMedidor etiqueta="Semana" pct={uso.semana_pct} rojo={rojo} />
         <MiniMedidor etiqueta="5h" pct={uso.sesion_5h_pct} rojo={rojo} />
       </div>
-    </Tooltip>
+    </TooltipFlotante>
   );
 }
 
@@ -158,11 +158,11 @@ function BloqueCuenta({ uso, etiquetada }: { uso: UsoCuenta; etiquetada: boolean
 function CirculoCuenta({ uso }: { uso: UsoCuenta }) {
   const etiqueta = tooltipCompleto(uso);
   return (
-    <Tooltip label={etiqueta} side="right">
+    <TooltipFlotante label={etiqueta} side="right">
       <div aria-label={etiqueta} className="flex items-center justify-center">
         <CirculoUso semana={uso.semana_pct} rojo={uso.alerta_roja} />
       </div>
-    </Tooltip>
+    </TooltipFlotante>
   );
 }
 
@@ -182,11 +182,11 @@ function IndicadorUsoContenido({ colapsado }: { colapsado: boolean }) {
   if (!cuentasRecibidas) {
     if (colapsado) {
       return (
-        <Tooltip label="Uso de la cuenta" side="right">
+        <TooltipFlotante label="Uso de la cuenta" side="right">
           <div aria-label="Uso de la cuenta" className="flex items-center justify-center">
             <CirculoUso semana={null} rojo={false} />
           </div>
-        </Tooltip>
+        </TooltipFlotante>
       );
     }
     return (

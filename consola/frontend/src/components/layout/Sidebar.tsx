@@ -8,7 +8,7 @@ import { rutaVisibleParaMarca } from "@/components/layout/gating-marca";
 import { subPestanasDe } from "@/components/layout/hub-tabs";
 import { iconoDe } from "@/components/layout/navegacion";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
-import { Tooltip } from "@/components/ui/tooltip";
+import { TooltipFlotante } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -110,7 +110,7 @@ export function Sidebar({
               {bloque.items.map((item) => {
                 const Icono = iconoDe(item.icono);
                 return (
-                  <Tooltip key={item.ruta} label={item.etiqueta} side="right">
+                  <TooltipFlotante key={item.ruta} label={item.etiqueta} side="right">
                     <NavLink
                       to={item.ruta}
                       onClick={onNavegar}
@@ -121,7 +121,7 @@ export function Sidebar({
                     >
                       <Icono className="h-4 w-4" aria-hidden="true" />
                     </NavLink>
-                  </Tooltip>
+                  </TooltipFlotante>
                 );
               })}
             </div>
@@ -130,7 +130,7 @@ export function Sidebar({
 
         <div className="flex flex-col items-center gap-2 border-t border-border py-3">
           <IndicadorUso colapsado />
-          <Tooltip label="Expandir barra" side="right">
+          <TooltipFlotante label="Expandir barra" side="right">
             <button
               type="button"
               aria-label="Expandir barra"
@@ -139,7 +139,7 @@ export function Sidebar({
             >
               <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
             </button>
-          </Tooltip>
+          </TooltipFlotante>
         </div>
       </nav>
     );
