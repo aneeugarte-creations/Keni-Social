@@ -46,6 +46,17 @@ CI_INTENTOS=/tmp/keni-keeper.ci-intentos  # marcas de tiempo de intentos recient
 # `corriendo`. El trap cierra la sesión limpia dentro del stop_grace_period (30s).
 PARAR=""; cl_pid=""; abort_flag=""
 
+# Identidad git de los commits del keeper. El clon `/repo` trae un `user.name` LOCAL (p. ej. "Keni",
+# compartido con los demás carriles) que PISA al global que fija el entrypoint; sin esto los commits
+# del keeper se firmarían con ESA identidad y la detección por autor (`git log --author`) no los
+# reconocería -> los marcaba «escalado» aunque sí hubiese arreglado y pusheado. `GIT_AUTHOR_*` /
+# `GIT_COMMITTER_*` tienen PRECEDENCIA sobre cualquier config (local incluido) y se heredan al
+# `claude -p`, así que sus commits SIEMPRE llevan esta identidad — la misma que busca la detección.
+export GIT_AUTHOR_NAME="${KENI_GIT_AUTHOR_NAME:-keni incident-keeper}"
+export GIT_AUTHOR_EMAIL="${KENI_GIT_AUTHOR_EMAIL:-incident-keeper@kenitech.io}"
+export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
+export GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
+
 log() { echo "incident-keeper: $*"; }
 
 # SIGTERM/SIGINT (parada o deploy): mata el claude en curso marcando la razón `shutdown` (la sesión
