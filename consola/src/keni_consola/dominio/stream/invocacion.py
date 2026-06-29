@@ -190,6 +190,19 @@ def arg_tools_restringidas() -> list[str]:
     return ["--disallowed-tools", *tools]
 
 
+def arg_sin_tools() -> list[str]:
+    """`['--tools', '']`: deshabilita TODAS las herramientas para el run.
+
+    El CLI documenta `--tools` con valor `""` como "disable all tools": con cero tools `claude`
+    NO expone NINGUN esquema de herramienta en el system prompt, lo que ahorra ~17k tokens por
+    llamada. Es para etapas JSON-in/JSON-out que no usan tool alguna (clustering/fusion,
+    traduccion, decisor de formato, hashtags) y que corren a RAFAGAS (la cache se enfria y, sin
+    esto, re-escriben esos 17k repetidamente). Con `--tools ""` NO tiene sentido añadir
+    `--disallowed-tools` (no hay tools que vetar) ni `--add-dir` (no hay filesystem que abrir).
+    """
+    return ["--tools", ""]
+
+
 def arg_excluir_secciones_dinamicas() -> list[str]:
     """`['--exclude-dynamic-system-prompt-sections']` si esta activo (def ON); si no, `[]`.
 

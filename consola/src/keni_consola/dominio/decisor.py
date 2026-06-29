@@ -51,9 +51,15 @@ _TOOLS_VETADAS: tuple[str, ...] = (
 
 
 def _endurecer() -> dict[str, Any]:
-    """Run READ-ONLY y barato: veta escritura/red, acota turnos y coste, y va con `decisor_modelo`
-    (haiku por defecto: una decisión binaria sobre señales ligeras no necesita el modelo grande)."""
+    """Run READ-ONLY y barato: cero tools, acota turnos y coste, y va con `decisor_modelo`
+    (haiku por defecto: una decisión binaria sobre señales ligeras no necesita el modelo grande).
+
+    `sin_tools=True` hace que el run vaya con `--tools ""` (no expone esquema de herramienta
+    alguno → ahorro de contexto); el Decisor solo razona sobre señales y devuelve un camino.
+    `disallowed_tools` se conserva como veto explícito de respaldo si se desactivara `sin_tools`.
+    """
     return {
+        "sin_tools": True,
         "disallowed_tools": list(_TOOLS_VETADAS),
         "max_turns": 4,
         "max_budget_usd": 0.5,

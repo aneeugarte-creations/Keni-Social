@@ -439,17 +439,34 @@ def _capturar_argv(monkeypatch):
     return capturado
 
 
-def test_ejecutar_claude_json_no_agentico_limita_turnos_y_omite_add_dir(monkeypatch):
-    """`max_turns`/`sin_tools` acotan la llamada: `--max-turns 1` y SIN `--add-dir` (sin filesystem)."""
+def test_ejecutar_claude_json_no_agentico_limita_turnos_y_cero_tools(monkeypatch):
+    """`max_turns`/`sin_tools`: `--max-turns 1`, `--tools ""` (cero tools) y SIN `--add-dir`."""
     capturado = _capturar_argv(monkeypatch)
     salida = traducir._ejecutar_claude_json(
         "P", "/tmp/x", modelo="sonnet", max_turns=1, sin_tools=True
     )
     argv = capturado["argv"]
     assert "--max-turns" in argv and argv[argv.index("--max-turns") + 1] == "1"
+    # Cero tools: emite `--tools ""` y NO abre filesystem (`--add-dir`).
+    assert "--tools" in argv and argv[argv.index("--tools") + 1] == ""
     assert "--add-dir" not in argv
     assert "/tmp/x" not in argv
     assert salida == "ok"
+
+
+def test_construir_argv_sin_tools_emite_tools_vacio_y_omite_add_dir():
+    """`construir_argv_claude_json(sin_tools=True)` emite `--tools ""` en vez de `--add-dir`."""
+    argv = traducir.construir_argv_claude_json("P", "/tmp/x", "haiku", sin_tools=True)
+    assert "--tools" in argv and argv[argv.index("--tools") + 1] == ""
+    assert "--add-dir" not in argv
+    assert "/tmp/x" not in argv
+
+
+def test_construir_argv_con_tools_conserva_add_dir():
+    """Sin `sin_tools` el argv conserva `--add-dir` y NO añade `--tools` (comportamiento de siempre)."""
+    argv = traducir.construir_argv_claude_json("P", "/tmp/x", "haiku")
+    assert "--add-dir" in argv and argv[argv.index("--add-dir") + 1] == "/tmp/x"
+    assert "--tools" not in argv
 
 
 def test_ejecutar_claude_json_por_defecto_conserva_add_dir_y_sin_tope_de_turnos(monkeypatch):

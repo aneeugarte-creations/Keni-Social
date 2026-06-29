@@ -171,21 +171,34 @@ def _argv_claude(
         insumos / investigacion (Haiku via `config.insumos_modelo()`). "" / ausente = default.
     Los overrides de seguridad solo pueden ENDURECER (vetar mas, topar mas bajo); `modelo`
     solo SELECCIONA el modelo del run (no relaja nada).
+
+      - `sin_tools`: True para una etapa JSON-in/JSON-out que NO usa herramienta alguna
+        (Decisor de formato, Sugerir-hashtags, Traducir). Emite `--tools ""` (cero tools) en
+        vez de `--disallowed-tools`: no se expone NINGUN esquema de tool en el system prompt
+        (ahorro ~17k tokens/llamada). Con cero tools no hay nada que vetar ni filesystem que
+        abrir, así que `--disallowed-tools` y `--add-dir` quedan fuera de ESE run.
     """
     endurecer = endurecer or {}
+    sin_tools = bool(endurecer.get("sin_tools"))
     extra: list[str] = []
-    for d in dirs_permitidos or []:
-        extra += ["--add-dir", str(d)]
+    if not sin_tools:
+        for d in dirs_permitidos or []:
+            extra += ["--add-dir", str(d)]
 
-    # Herramientas vetadas: global (config) UNIDA a las extra del job (orden estable, sin dups).
-    vetadas_global = stream.arg_tools_restringidas()
-    tools_global = vetadas_global[1:] if vetadas_global else []
-    extra_tools = [str(t) for t in (endurecer.get("disallowed_tools") or []) if str(t)]
-    todas_tools: list[str] = []
-    for t in (*tools_global, *extra_tools):
-        if t not in todas_tools:
-            todas_tools.append(t)
-    arg_tools = ["--disallowed-tools", *todas_tools] if todas_tools else []
+    if sin_tools:
+        # Cero tools: ni veto (`--disallowed-tools`) ni `--add-dir` tienen sentido (no hay tools
+        # ni filesystem). `--tools ""` ya impide cualquier herramienta para este run.
+        arg_tools = stream.arg_sin_tools()
+    else:
+        # Herramientas vetadas: global (config) UNIDA a las extra del job (orden estable, sin dups).
+        vetadas_global = stream.arg_tools_restringidas()
+        tools_global = vetadas_global[1:] if vetadas_global else []
+        extra_tools = [str(t) for t in (endurecer.get("disallowed_tools") or []) if str(t)]
+        todas_tools: list[str] = []
+        for t in (*tools_global, *extra_tools):
+            if t not in todas_tools:
+                todas_tools.append(t)
+        arg_tools = ["--disallowed-tools", *todas_tools] if todas_tools else []
 
     # Topes: override del job si viene; si no, el global del dominio.
     if "max_turns" in endurecer and endurecer["max_turns"]:

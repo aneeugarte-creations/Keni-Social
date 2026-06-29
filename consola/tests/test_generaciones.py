@@ -156,6 +156,21 @@ def test_argv_un_endurecer_de_red_seguiria_uniendose_a_lo_global(entorno, monkey
     assert {"Bash", "Write", "Edit", "WebFetch", "WebSearch"} <= vetadas
 
 
+def test_argv_sin_tools_emite_tools_vacio_y_sin_disallowed(entorno, monkeypatch):
+    # Una etapa JSON-in/JSON-out sin herramientas (Decisor/Hashtags/Traducir) pasa
+    # `endurecer["sin_tools"]=True`: el run va con `--tools ""` (cero tools, no expone esquema
+    # alguno) y NO emite `--disallowed-tools` (no hay nada que vetar) ni `--add-dir`.
+    monkeypatch.delenv("KENI_CLAUDE_DISALLOWED_TOOLS", raising=False)
+    argv = generaciones._argv_claude(
+        "hola",
+        [Path("/tmp/x")],
+        endurecer={"sin_tools": True, "disallowed_tools": ["WebFetch"]},
+    )
+    assert "--tools" in argv and argv[argv.index("--tools") + 1] == ""
+    assert "--disallowed-tools" not in argv
+    assert "--add-dir" not in argv
+
+
 def test_argv_flujos_de_generacion_conservan_la_web(entorno, monkeypatch):
     # Los flujos de generación (copy/verificación/hashtags/evergreen/sugerencias) NO pasan ya `endurecer`:
     # comparten este constructor de argv SIN veto de red, así que la web sigue disponible

@@ -176,6 +176,10 @@ def construir_argv_claude_json(
     `claude` valida su salida estructurada contra el esquema y la entrega en `structured_output`
     a nivel raíz del envelope. Validar la salida estructurada cuesta un turno extra (tool_use
     interno), así que con schema el tope de turnos sube a `>=2` salvo que el llamante pida más.
+
+    `sin_tools=True`: la etapa no usa NINGUNA herramienta, así que emite `--tools ""` (cero
+    tools) en vez de `--add-dir`. Sin esquemas de tool en el system prompt se ahorran ~17k
+    tokens por llamada (clave en las etapas inline a ráfagas, donde la caché se enfría).
     """
     from . import stream  # import perezoso: evita ciclo importador<->dominio
 
@@ -186,7 +190,9 @@ def construir_argv_claude_json(
         "--output-format",
         "json",
     ]
-    if not sin_tools:
+    if sin_tools:
+        argv += stream.arg_sin_tools()
+    else:
         argv += ["--add-dir", dir_permitido]
     argv += [*stream.arg_skip_permisos(), *stream.arg_excluir_secciones_dinamicas()]
     if json_schema is not None:
@@ -245,7 +251,8 @@ def _ejecutar_claude_json_estructurado(
 
     Para clasificaciones INLINE que no necesitan herramientas, el llamante acota la llamada:
         - `max_turns`: tope de turnos de agente (p. ej. `1` fuerza una sola respuesta, sin bucle).
-        - `sin_tools=True`: omite `--add-dir`, así `claude` no recibe acceso al filesystem.
+        - `sin_tools=True`: emite `--tools ""` (cero tools) en vez de `--add-dir`, así `claude`
+          no recibe acceso al filesystem ni esquema de herramienta alguno (ahorro de contexto).
     Por defecto (sin esquema y ambos sin fijar) el comportamiento es el de siempre: `--add-dir`
     y sin tope de turnos.
     """

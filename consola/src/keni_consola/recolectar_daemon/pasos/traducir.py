@@ -132,7 +132,9 @@ def _encolar_traduccion(marca: str, clusters: list[dict[str, Any]]) -> bool:
             carril=ruteo_cuentas.carril_de_marca(marca),
             # Haiku (config.insumos_modelo()): traducir+tropicalizar es mecánico, no necesita un modelo
             # grande (mismo modelo que usaba el traducir inline y que usa el parseo de insumos).
-            endurecer={"modelo": config.insumos_modelo()},
+            # `sin_tools`: es JSON-in/JSON-out, no usa herramienta alguna → `--tools ""` (ahorro
+            # ~17k tokens/llamada; el traducir corre por marca a ráfagas con la caché fría).
+            endurecer={"modelo": config.insumos_modelo(), "sin_tools": True},
             # Fondo del pipeline: cede el paso a los lanzamientos manuales del equipo.
             prioridad=jobspec.PRIORIDAD_PIPELINE,
         )

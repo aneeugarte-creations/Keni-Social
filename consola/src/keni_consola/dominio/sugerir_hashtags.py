@@ -68,9 +68,15 @@ _TOOLS_VETADAS: tuple[str, ...] = (
 
 
 def _endurecer() -> dict[str, Any]:
-    """Run READ-ONLY y barato: veta escritura/red, acota turnos y coste, y va con `hashtags_modelo`
-    (haiku por defecto: elegir de una lista fija no necesita el modelo grande)."""
+    """Run READ-ONLY y barato: cero tools, acota turnos y coste, y va con `hashtags_modelo`
+    (haiku por defecto: elegir de una lista fija no necesita el modelo grande).
+
+    `sin_tools=True` hace que el run vaya con `--tools ""` (no expone esquema de herramienta
+    alguno → ahorro de contexto); la etapa solo razona sobre texto y propone hashtags.
+    `disallowed_tools` se conserva como veto explícito de respaldo si se desactivara `sin_tools`.
+    """
     return {
+        "sin_tools": True,
         "disallowed_tools": list(_TOOLS_VETADAS),
         "max_turns": 8,
         "max_budget_usd": 2.0,
