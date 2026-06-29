@@ -48,8 +48,6 @@ def test_catalogo_expone_toggles_por_marca():
     assert config.clave_por_marca(config.ENV_PIPELINE_REDACTAR, "unotv") in claves
     assert config.clave_por_marca(config.ENV_PIPELINE_RECOLECTAR, "unotv") in claves
     assert config.clave_por_marca(config.ENV_CRITICA_IA, "unotv") in claves
-    # Clasificar (pre-marca) NO: no se gatea por una marca que aún no existe.
-    assert config.clave_por_marca(config.ENV_CLASIFICAR_MARCA_IA, "unotv") not in claves
     por_marca = [a for a in ajustes_catalogo.catalogo() if config.SEP_MARCA in a.clave]
     # Las excepciones de máquina por marca van REPARTIDAS por proceso (ADR 0011, C4):
     # Investigación en su grupo, Producción/Arte en el suyo.

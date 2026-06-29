@@ -169,7 +169,6 @@ _SENTINELA_DESCRIPCIONES = ".descripciones-v1"
 # deja intacto. One-shot por SENTINELA. El contenido viejo es recuperable (git del store). El sha256 es
 # del CUERPO (sin frontmatter), tal como lo devuelve `_leer(...).cuerpo` (con `strip("\n")`).
 _REFORMATO_PROMPTS_V1: tuple[tuple[str, str], ...] = (
-    ("prompt/clasificar-marca", "4cfd577a327cecb8425167d9c0fce9b036768851f8f5b81afeec60316b31202b"),
     ("prompt/fusionar-verificar", "363f9f50a4d3290e0d934b2523ffafbfa0f4113eb7306e5a83e072f3cb687686"),
     ("prompt/fusionar", "b62024530cc5b7fe5028f39523e19e063f2b5bab688acdf397495fcc980b670d"),
     ("prompt/importar/calendario", "4754721ac3c55d0e776fc50fdf96fb49c596e6add74972c138aab895cb041fd6"),
@@ -205,7 +204,6 @@ _SENTINELA_IDEAS_AUDIO = ".ideas-audio-v2"
 # EXACTO con el viejo conocido (una edición del equipo deja de casar y se respeta) y RE-PUBLICA el doc
 # para no dejarlo "sin publicar". `(id, titulo_viejo, titulo_nuevo)`. One-shot por sentinela.
 _TITULOS_UNA_PALABRA: tuple[tuple[str, str, str], ...] = (
-    ("prompt/clasificar-marca", "Clasificar marca", "Clasificar"),
     ("prompt/critica", "Crítica IA (pre-publicación)", "Crítica"),
     ("prompt/envoltorios/carrusel", "Envoltorio: decisión de carrusel", "Carrusel"),
     ("prompt/envoltorios/copy-unico", "Envoltorio: copy unificado", "Unificado"),

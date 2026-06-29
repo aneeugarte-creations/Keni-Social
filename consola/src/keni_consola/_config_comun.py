@@ -242,14 +242,6 @@ ENV_TRENDS_GEOS = "KENI_TRENDS_GEOS"
 # publica nada. Def OFF para CI/tests; se ACTIVA en producción (deploy: KENI_PIPELINE_RECOLECTAR=1). `BATCH`
 # = feeds por barrido; `WORKERS` = descargas en paralelo; `MAX_ITEMS` = artículos por feed.
 ENV_PIPELINE_RECOLECTAR = "KENI_PIPELINE_RECOLECTAR"
-# Encaje de MARCA con IA (Haiku) para historias sin marca (Trends/agencias). Cuando el
-# vocabulario no las encaja quedan con marca='' e invisibles/no-promovibles; con este flag ON
-# un breaking sin marca se clasifica en una marca activa (o cae a `KENI_MARCA_NOTICIAS` como
-# catch-all). Def OFF: gasta tokens, se activa a propósito. Las marcas activas (candidatas) son
-# por defecto las de `tipo='noticias'` del catálogo (el flag de la página Marcas);
-# `KENI_MARCAS_ACTIVAS` (CSV de ids) es solo un override explícito. `MARCA_NOTICIAS` = la de
-# noticias generales (fallback ante duda/fallo).
-ENV_CLASIFICAR_MARCA_IA = "KENI_CLASIFICAR_MARCA_IA"
 ENV_MARCAS_ACTIVAS = "KENI_MARCAS_ACTIVAS"
 ENV_MARCA_NOTICIAS = "KENI_MARCA_NOTICIAS"
 MARCA_NOTICIAS_DEF = "unotv"

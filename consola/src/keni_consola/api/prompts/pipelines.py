@@ -104,7 +104,6 @@ _MAQUINAS: tuple[tuple[str, str, str, tuple[_Etapa, ...]], ...] = (
         ("prompt", "fusionar-verificar", "Fusionar · verificar", "prompt/fusionar-verificar", None),
         ("prompt", "fusionar", "Fusionar", "prompt/fusionar", None),
         ("prompt", "traducir", "Traducir", "prompt/traducir", None),
-        ("prompt", "clasificar", "Clasificar", "prompt/clasificar-marca", None),
         ("prompt", "priorizar", "Priorizar", "prompt/priorizar", None),
         ("mecanica", "admitir", "Admitir", None, None),
         ("prompt", "verificar", "Verificar", None, None),  # prompt_base_de("verificar")

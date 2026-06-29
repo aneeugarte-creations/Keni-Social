@@ -45,7 +45,7 @@ _CLAUDE_TIMEOUT_S = 90
 # Protección contra prompts enormes (feeds con artículos larguísimos).
 _MAX_CHARS_ITEM = 600
 
-# Ejecutor de la llamada a `claude`. Misma firma que en recibir_parse/clasificador_marca
+# Ejecutor de la llamada a `claude`. Misma firma que en recibir_parse
 # (`(prompt, dir_permitido) -> salida`), pero puede devolver dos formas:
 #   - `str`: solo el texto `result` (se parsea con `_extraer_traducciones`, camino histórico).
 #   - `tuple[str, dict | None]`: `(texto_result, structured_output)`, cuando el run usó

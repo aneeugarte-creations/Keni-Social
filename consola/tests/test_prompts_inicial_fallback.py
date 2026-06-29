@@ -11,7 +11,6 @@ import pytest
 
 from keni_consola import importador_calendario, libprompts
 from keni_consola.dominio import (
-    clasificador_marca,
     fusionar_semantica,
     generar,
     recibir_parse,
@@ -49,7 +48,6 @@ _CASOS = [
     (perfil_editorial._plantilla, "prompt/priorizar"),
     (parrilla_import_job._plantilla, "prompt/importar/parrilla"),
     (importador_calendario._plantilla, "prompt/importar/calendario"),
-    (clasificador_marca._plantilla, "prompt/clasificar-marca"),
 ]
 
 # Ids de prompt que el CÓDIGO espera encontrar en la inicial (la inicial es la única fuente).
@@ -59,7 +57,6 @@ _IDS_INICIAL_OBLIGATORIA = [
     generar.PROMPT_ENVOLTORIO_REDES,
     generar.PROMPT_ENVOLTORIO_CARRUSEL,
     generar.PROMPT_ENVOLTORIO_COPY_UNICO,
-    clasificador_marca._PROMPT_ID,
 ]
 
 

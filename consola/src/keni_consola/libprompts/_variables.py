@@ -16,7 +16,6 @@ en un modulo, se anade aqui su entrada. Origen = el proceso/modulo que la sustit
   - `importador_calendario.py`     -> {{RUTA}} {{MARCAS}} {{REDES}}
   - `dominio/parrilla_import_job.py` -> {{FUENTE}} {{MIEMBROS}} {{SLOTS}} {{REGLA_FUENTE}}
                                         {{ESQUEMA_JSON}} {{COLA_FUENTE}}
-  - `dominio/clasificador_marca.py` -> {{MARCAS}} {{MARCA_FALLBACK}} {{NOTICIA}}
   - `dominio/generar.py`             -> {{ETIQUETAS}} {{LIMITES}} {{IDS_JSON}} (envoltorio
                                         de redes); {{N_NOTAS}} {{MAX_SLIDES}}
                                         {{CATALOGO_FOTOS}} (decisión de carrusel);
@@ -61,19 +60,6 @@ _CATALOGO: tuple[dict[str, str], ...] = (
         "ejemplo": '[{"id": "c41", "texto": "Sheinbaum anuncia plan hídrico…"}]',
         "origen": "Recolectar noticias · fusionar historias y comprobación previa (prompt/fusionar, prompt/fusionar-verificar)",
     },
-    # --- Recolectar: clasificar marca (prompt/clasificar-marca) ---
-    {
-        "nombre": "MARCA_FALLBACK",
-        "descripcion": "Id de la marca de noticias generales a la que cae una noticia sin encaje temático claro.",
-        "ejemplo": "unotv",
-        "origen": "Clasificar marca (prompt/clasificar-marca)",
-    },
-    {
-        "nombre": "NOTICIA",
-        "descripcion": "JSON con el título y el resumen de la noticia a clasificar entre las marcas.",
-        "ejemplo": '{"titulo": "Sismo de 5.8 en CDMX", "resumen": "…"}',
-        "origen": "Clasificar marca (prompt/clasificar-marca)",
-    },
     # --- Recolectar: traducir/localizar (prompt/traducir) ---
     {
         "nombre": "ITEMS",
@@ -90,9 +76,9 @@ _CATALOGO: tuple[dict[str, str], ...] = (
     },
     {
         "nombre": "MARCAS",
-        "descripcion": "Catálogo de marcas válidas: las asignables a cada fila importada o las candidatas (id — nombre) entre las que clasificar una noticia.",
+        "descripcion": "Catálogo de marcas válidas asignables a cada fila importada.",
         "ejemplo": "UnoTV, Claro Sports",
-        "origen": "Importar calendario de contenido (prompt/importar/calendario) y clasificar marca (prompt/clasificar-marca)",
+        "origen": "Importar calendario de contenido (prompt/importar/calendario)",
     },
     {
         "nombre": "REDES",

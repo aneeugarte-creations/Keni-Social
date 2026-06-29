@@ -13,7 +13,6 @@ from ._config_comun import (
     ENV_AFP_CLIENT_ID,
     ENV_AFP_CLIENT_SECRET,
     ENV_CRITICA_IA,
-    ENV_CLASIFICAR_MARCA_IA,
     ENV_MARCAS_ACTIVAS,
     ENV_MARCA_NOTICIAS,
     MARCA_NOTICIAS_DEF,
@@ -122,16 +121,6 @@ def recolectar_activo() -> bool:
     SOLO LEE feeds públicos y persiste artículos; no genera ni publica nada.
     """
     return _crudo(ENV_PIPELINE_RECOLECTAR).lower() in _VERDADEROS
-
-
-def clasificar_marca_ia() -> bool:
-    """True si un BREAKING sin marca se clasifica con Haiku (`KENI_CLASIFICAR_MARCA_IA`).
-
-    Def OFF: la clasificación por IA gasta tokens, así que se activa a propósito. Con OFF el
-    comportamiento es el de siempre (solo encaje por vocabulario); los breakings que no casen
-    siguen sin marca hasta encenderlo.
-    """
-    return _crudo(ENV_CLASIFICAR_MARCA_IA).lower() in _VERDADEROS
 
 
 def marcas_activas() -> list[str]:

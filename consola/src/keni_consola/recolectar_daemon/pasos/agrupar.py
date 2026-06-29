@@ -221,38 +221,22 @@ def paso_agrupar() -> dict[str, Any]:
                 ahora=ahora,
             )
             marca_c = recalc.get("marca") or ""
-            marca_por_ia = False  # ¿la marca la asignó el clasificador IA en este tick?
             if not marca_c:
-                # Encaje por VOCABULARIO: una historia formada SOLO por items sin marca
-                # (Trends/agencias) queda con marca='' e INVISIBLE para la promoción por
-                # marca. Se le asigna la marca cuyo vocabulario mejor casa (sobre umbral);
-                # si ninguna pasa, queda sin marca (honesto).
+                # Encaje por VOCABULARIO (determinista): una historia formada SOLO por items sin
+                # marca (Trends/agencias) queda con marca='' e INVISIBLE para la promoción por
+                # marca. Se le asigna la marca cuyo vocabulario mejor casa (sobre umbral); si
+                # ninguna pasa, queda SIN marca (honesto: no se infiere a ciegas).
                 if vocabularios is None:
-                    # Solo marcas de NOTICIAS: el contenido propio (p. ej. piso-15/fundación) se
-                    # salta la investigación, así que su vocabulario no compite por estas historias.
+                    # Solo marcas de NOTICIAS: el contenido propio (p. ej. piso-15) se salta la
+                    # investigación, así que su vocabulario no compite por estas historias.
                     vocabularios = {
                         m: _palabras_relevancia(m, perfil_activo) for m in marcas.noticias()
                     }
                 marca_c = agrupar.marca_por_vocabulario(recalc, vocabularios)
                 if not marca_c:
-                    # Ya clasificada en un tick anterior (vocabulario o IA): preserva la
-                    # asignación en vez de re-derivarla (evita reclasificar y perder marca).
+                    # Ya clasificada en un tick anterior (vocabulario): preserva la asignación en
+                    # vez de re-derivarla (evita reclasificar y perder marca).
                     marca_c = str(base.get("marca") or "")
-                corroborada = int(recalc.get("n_fuentes") or 0) >= 2
-                if (
-                    not marca_c
-                    and (bool(int(recalc.get("breaking") or 0)) or corroborada)
-                    and config.clasificar_marca_ia()
-                ):
-                    # SIN marca pero con peso real (última hora, o corroborada por 2+ fuentes):
-                    # encaje por IA (Haiku) en una de las marcas activas; cae a la de noticias si
-                    # la IA duda. Sin esto, una historia que el vocabulario no casa (jerga/entidad
-                    # nueva) pero que varios medios cubren quedaba sin clasificar e invisible en los
-                    # paneles por marca. Se limita a corroboradas (2+ fuentes) para no clasificar
-                    # contenido irrelevante de fuente única.
-                    marca_c = _pkg._clasificar_marca_ia(recalc)
-                    if marca_c:
-                        marca_por_ia = True
                 if marca_c:
                     recalc["marca"] = marca_c
             # Relevancia desde la LÍNEA EDITORIAL (perfil Haiku) si está activa (maestro + por-marca:
@@ -293,13 +277,6 @@ def paso_agrupar() -> dict[str, Any]:
             recalc["score_razon"] = razon
             recalc["score_desglose"] = desglose
             indice[cid] = repos.upsert_noticia_cluster(recalc)
-            # Sella el encaje de marca por IA aparte del upsert (la columna está en `_NO_PISAR`):
-            # así un recalc posterior sin el flag no lo borra (mismo patrón que Traducir).
-            if marca_por_ia:
-                try:
-                    repos.marcar_cluster_marca_ia(cid)
-                except Exception:  # noqa: BLE001 -- observabilidad; nunca rompe el barrido
-                    _log.warning("recolectar_daemon: no se pudo sellar marca_clasificada_por_ia (%s)", cid)
         except Exception:  # noqa: BLE001 -- recalcular un cluster no aborta el paso
             _log.exception("recolectar_daemon: fallo al recalcular el cluster %s.", cid)
 

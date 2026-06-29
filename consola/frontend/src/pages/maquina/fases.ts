@@ -84,14 +84,6 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
     doc: "prompt/traducir",
   },
   {
-    nombre: "Clasificar",
-    es_ia: true,
-    claves: ["KENI_CLASIFICAR_MARCA_IA", MAESTRO_INVESTIGACION],
-    ayuda: "Asigna marca a las notas de últimas horas",
-    doc: "prompt/clasificar-marca",
-    contextoMarca: true,
-  },
-  {
     nombre: "Priorizar",
     es_ia: true,
     claves: ["KENI_PRIORIZAR_PERFIL_IA", MAESTRO_INVESTIGACION],

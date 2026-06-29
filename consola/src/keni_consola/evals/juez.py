@@ -34,8 +34,8 @@ from .modelo import FALLA, PASA, CasoEval
 # `claude -p`, del crítico de producción, o un fake en tests.
 Juez = Callable[[CasoEval], str]
 
-# Ejecutor de generación live: (prompt, dir_permitido) -> salida. MISMA firma que los
-# ejecutores de `dominio.traducir` / `clasificador_marca`, para reusar el subproceso real.
+# Ejecutor de generación live: (prompt, dir_permitido) -> salida. MISMA firma que el
+# ejecutor de `dominio.traducir`, para reusar el subproceso real.
 EjecutorLLM = Callable[[str, str], str]
 
 

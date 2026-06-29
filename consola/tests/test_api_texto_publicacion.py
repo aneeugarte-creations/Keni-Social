@@ -528,13 +528,10 @@ def test_maquina_tres_maquinas(entorno_sin_pg):
     assert por_id["priorizar"]["doc_id"] == "prompt/priorizar"
     assert por_id["priorizar"]["titulo"] == "Priorizar"
     assert por_id["fusionar"]["titulo"] == "Fusionar"
-    # El clasificador de marca ya es un prompt de la Prompts (migrado del hardcodeado).
-    assert por_id["clasificar"]["doc_id"] == "prompt/clasificar-marca"
     # Etapas mecánicas: SOLO contexto (sin doc_id ni estado de publicación).
     for eid in ("recolectar", "agrupar", "admitir"):
         assert set(por_id[eid]) == {"tipo", "id", "titulo"}
     assert por_id["recolectar"]["titulo"] == "Recolectar"
-    assert por_id["clasificar"]["titulo"] == "Clasificar"
     # Etapas prompt: doc + estado de publicación (degradado sin BD: sin puntero).
     for m in maquinas:
         for e in m["etapas"]:

@@ -10,7 +10,7 @@ Aquí viven, en UN SOLO sitio para no duplicar estado:
     por IA y fusionar un grupo de historias, que comparten varios pasos.
 
 Las funciones que un test parchea sobre el FACADE (`recolectar_daemon._registrar_actividad_ia`,
-`_clasificar_marca_ia`, `_fusionar_grupo`) y que se invocan desde OTRO módulo del paquete se
+`_fusionar_grupo`) y que se invocan desde OTRO módulo del paquete se
 resuelven al vuelo a través del paquete (`_pkg.<nombre>`), para que el parcheo del facade
 siga surtiendo efecto tras el troceado.
 """
@@ -198,49 +198,6 @@ def ia_fondo_bloqueada() -> bool:
     except Exception:  # noqa: BLE001 -- un blip leyendo el gate no debe parar la recolección
         _log.warning("recolectar_daemon: fallo el gate de presupuesto; sigo sin corte", exc_info=True)
         return False
-
-
-def _clasificar_marca_ia(cluster: dict[str, Any]) -> str:
-    """Asigna marca a un BREAKING sin marca con Haiku. '' si no hay candidatas válidas.
-
-    Las candidatas son `config.marcas_activas()` restringidas a marcas de NOTICIAS
-    (`marcas.es_noticias`: el contenido propio nunca recibe clasificación automática); el
-    fallback es `config.marca_noticias()` (o la primera candidata). Best-effort: cualquier
-    fallo del clasificador devuelve el fallback. Sella la actividad IA (coste visible en Producción).
-
-    Corta ante la parada de emergencia / presupuesto agotado (`ia_fondo_bloqueada`): es un paso
-    Haiku INLINE que gasta tokens fuera de la cola; sin marca = el breaking queda sin clasificar
-    hasta el próximo barrido (se reintenta solo al reanudar).
-    """
-    if ia_fondo_bloqueada():
-        return ""
-    from ..dominio import clasificador_marca
-
-    activas = [m for m in config.marcas_activas() if marcas.es_noticias(m)]
-    if not activas:
-        return ""
-    fallback = config.marca_noticias()
-    if fallback not in activas:
-        fallback = activas[0]
-    candidatas = [(m, marcas.etiqueta_de(m)) for m in activas]
-    try:
-        marca = clasificador_marca.clasificar_marca(
-            str(cluster.get("titulo") or ""),
-            str(cluster.get("resumen") or ""),
-            candidatas,
-            fallback=fallback,
-        )
-    except Exception:  # noqa: BLE001 -- best-effort: nunca rompe el barrido de recolección
-        _log.warning("recolectar_daemon: fallo el clasificador de marca IA.", exc_info=True)
-        return ""
-    _pkg._registrar_actividad_ia(
-        marca,
-        f"Encaje de marca — breaking → {marcas.etiqueta_de(marca)}",
-        f'{{"marca": "{marca}"}}',
-        prompt=str(cluster.get("titulo") or "")[:300],
-        etapa="Clasificar",
-    )
-    return marca
 
 
 # `_fusionar_grupo` (mutación anti-TOCTOU: reasigna items a la canónica, borra absorbidas, recalcula

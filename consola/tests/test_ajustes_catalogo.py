@@ -57,8 +57,6 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_PIPELINE_REVISAR,
         # Google Trends: fuente de ingesta del pool (con Investigación, no con los automatismos).
         config.ENV_TRENDS,
-        # Clasificar marca con IA: modo IA (Haiku) del paso Clasificar (global, no per-marca).
-        config.ENV_CLASIFICAR_MARCA_IA,
         config.ENV_PIPELINE_REDACTAR, config.ENV_PIPELINE_ILUSTRAR,
         # Stock: baja una foto de AYUDA (atenuada, sin licencia) a los temas con copy y sin imagen.
         config.ENV_PIPELINE_STOCK,
@@ -124,8 +122,6 @@ _MAESTROS_ENV = {
     config.ENV_PIPELINE_REVISAR,
     # Google Trends: fuente de ingesta del pool, paso del flujo de Investigación (no automatismo).
     config.ENV_TRENDS,
-    # Clasificar marca con IA: modo IA del paso Clasificar (grupo `maestros_investigacion`).
-    config.ENV_CLASIFICAR_MARCA_IA,
     config.ENV_PIPELINE_REDACTAR, config.ENV_PIPELINE_ILUSTRAR,
     # Stock: etapa física que baja una foto de ayuda a los temas con copy y sin imagen.
     config.ENV_PIPELINE_STOCK,
@@ -236,8 +232,6 @@ def test_toggles_por_marca_por_fase(store):
     }
     # El grupo viejo unificado ya no existe.
     assert _bases("automatizacion_marca") == set()
-    # Clasificar (pre-marca) NO tiene toggle por marca.
-    assert config.ENV_CLASIFICAR_MARCA_IA not in (investigacion | produccion)
 
 
 def test_maquina_global_kill_switch(store):
@@ -500,20 +494,6 @@ def test_patrones_auto_es_toggle_de_automatismos(store, monkeypatch):
     assert config.patrones_auto_activo() is True
     ajustes.guardar(config.ENV_PATRONES_AUTO, "0")  # el store (UI) gana al env
     assert config.patrones_auto_activo() is False
-
-
-def test_clasificar_marca_ia_es_toggle_de_investigacion(store, monkeypatch):
-    """`KENI_CLASIFICAR_MARCA_IA` (modo IA del paso Clasificar, para Trends/agencias) es un bool del
-    grupo `maestros_investigacion`, defecto False, editable desde la UI (store > env)."""
-    a = ajustes_catalogo.por_clave(config.ENV_CLASIFICAR_MARCA_IA)
-    assert a is not None, "falta el toggle KENI_CLASIFICAR_MARCA_IA en el catálogo (UI)"
-    assert a.tipo == "bool"
-    assert a.grupo == "maestros_investigacion"
-    assert a.defecto is False
-    monkeypatch.delenv(config.ENV_CLASIFICAR_MARCA_IA, raising=False)
-    assert config.clasificar_marca_ia() is False
-    ajustes.guardar(config.ENV_CLASIFICAR_MARCA_IA, "1")  # el store (UI) gana al env
-    assert config.clasificar_marca_ia() is True
 
 
 def test_publicar_real_es_peligroso(store):

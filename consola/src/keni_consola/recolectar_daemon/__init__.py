@@ -75,9 +75,8 @@ from ._bucle import (  # noqa: F401
 )
 
 # Helpers/estado compartidos (parcheables sobre el facade: `_registrar_actividad_ia`,
-# `_clasificar_marca_ia`, `_fusionar_grupo`).
+# `_fusionar_grupo`).
 from ._comun import (  # noqa: F401
-    _clasificar_marca_ia,
     _fusionar_grupo,
     _log,
     _palabras_relevancia,

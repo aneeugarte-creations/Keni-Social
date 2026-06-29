@@ -36,7 +36,6 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
         "Recolectar noticias · Partir un macro-evento en subtemas coherentes (un carrusel por faceta)",
     ],
     "prompt/priorizar": ["Investigación · Priorizar (perfil de keywords por marca)"],
-    "prompt/clasificar-marca": ["Investigación · Clasificar marca"],
     # Importación de documentos
     "prompt/importar/calendario": ["Importar calendario de contenido (documento → parrilla)"],
     "prompt/importar/parrilla": ["Importar rota/parrilla (documento → operaciones)"],

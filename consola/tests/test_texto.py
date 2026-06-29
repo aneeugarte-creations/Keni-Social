@@ -244,7 +244,7 @@ def test_inicial_trae_los_prompts_migrados_del_codigo():
     # Los prompts son inicial EDITABLE con sus variables {{...}} en el cuerpo (las sustituye
     # el módulo que los inyecta).
     casos = {
-        "prompt/clasificar-marca": ("{{MARCAS}}", "{{MARCA_FALLBACK}}", "{{NOTICIA}}"),
+        "prompt/traducir": ("{{ITEMS}}",),
         "prompt/priorizar": ("{{MARCA}}", "{{MAX_KEYWORDS}}", "{{EDITORIAL}}"),
     }
     for doc_id, marcadores in casos.items():
@@ -262,11 +262,11 @@ def test_importar_inicial_materializa_docs_nuevos_en_store_existente():
 
     assert libprompts.importar_inicial() > 0
     # Simula el store viejo: aún no tenía uno de los docs nuevos, y otro está editado.
-    (raiz() / "prompt" / "clasificar-marca.md").unlink()
+    (raiz() / "prompt" / "traducir.md").unlink()
     libprompts.guardar("prompt/priorizar", cuerpo="EDITADO POR EL EQUIPO")
     assert libprompts.importar_inicial() == 1  # solo el que faltaba
-    cuerpo = libprompts.cuerpo_efectivo("prompt/clasificar-marca")
-    assert cuerpo and "{{MARCAS}}" in cuerpo
+    cuerpo = libprompts.cuerpo_efectivo("prompt/traducir")
+    assert cuerpo and "{{ITEMS}}" in cuerpo
     assert libprompts.obtener("prompt/priorizar").cuerpo.strip() == "EDITADO POR EL EQUIPO"
 
 
