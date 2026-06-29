@@ -7,6 +7,11 @@
  *
  * No usamos Radix Tooltip para no añadir otra dependencia pesada; este patrón
  * cubre el caso (etiqueta corta sobre un icono) con foco/hover y modo oscuro.
+ *
+ * El rótulo se pinta en un PORTAL sobre `<body>` con `position: fixed`, así NO
+ * lo recortan los contenedores con overflow (rail del sidebar, barras con
+ * scroll del lienzo…) ni queda atrapado en contextos de apilamiento. La
+ * posición se calcula respecto al ancla en el momento de mostrarse.
  */
 import * as React from "react";
 import { createPortal } from "react-dom";
@@ -15,18 +20,18 @@ import { cn } from "@/lib/utils";
 
 type Lado = "top" | "bottom" | "left" | "right";
 
-const POSICION: Record<Lado, string> = {
-  top: "bottom-full left-1/2 mb-1.5 -translate-x-1/2",
-  bottom: "top-full left-1/2 mt-1.5 -translate-x-1/2",
-  left: "right-full top-1/2 mr-1.5 -translate-y-1/2",
-  right: "left-full top-1/2 ml-1.5 -translate-y-1/2",
+// Desplazamiento del rótulo respecto al ancla, por lado.
+const TRANSFORM: Record<Lado, string> = {
+  top: "translate(-50%, -100%)",
+  bottom: "translate(-50%, 0)",
+  left: "translate(-100%, -50%)",
+  right: "translate(0, -50%)",
 };
 
 // ── Temporización ÚNICA de todos los tooltips (patrón Canva / Radix 500/150) ──────────────────
 // Reposar ~500 ms muestra el rótulo; al saltar entre disparadores hermanos (si el anterior se
-// cerró hace <150 ms) el siguiente aparece al instante, sin re-esperar. La marca de cierre es
-// COMPARTIDA entre `Tooltip` y `TooltipFlotante` para que el salto funcione también entre mezcla
-// de variantes. El foco con teclado muestra SIEMPRE al instante.
+// cerró hace <150 ms) el siguiente aparece al instante, sin re-esperar. El foco con teclado
+// muestra SIEMPRE al instante.
 const RETARDO_MS = 500;
 const VENTANA_SALTO_MS = 150;
 let ultimoCierre = 0;
@@ -70,67 +75,12 @@ export interface TooltipProps {
 
 /**
  * Envuelve un único elemento (normalmente un Button de icono) y le añade un
- * tooltip accesible. El hijo recibe `aria-label` si no tiene uno.
- * Misma temporización que `TooltipFlotante`: ~500 ms de reposo, instantáneo
- * entre hermanos y al enfocar con teclado.
+ * tooltip accesible. El hijo recibe `aria-label` si no tiene uno. El rótulo se
+ * pinta en un portal sobre `<body>` (fixed), inmune a overflow y a contextos de
+ * apilamiento. Temporización: ~500 ms de reposo, instantáneo entre hermanos y
+ * al enfocar con teclado.
  */
 export function Tooltip({ label, side = "top", children, className }: TooltipProps) {
-  const { visible, mostrar, ocultar } = useTemporizadorTooltip();
-
-  if (!label) return children;
-
-  const hijo = React.isValidElement<{ "aria-label"?: string }>(children)
-    ? React.cloneElement(children, {
-        "aria-label": children.props["aria-label"] ?? label,
-      })
-    : children;
-
-  return (
-    <span
-      className={cn("relative inline-flex", className)}
-      onMouseEnter={() => mostrar()}
-      onMouseLeave={ocultar}
-      onFocus={() => mostrar(true)}
-      onBlur={ocultar}
-      // WCAG 1.4.13: el rótulo se puede descartar con Escape SIN abandonar el disparador.
-      // Sin stopPropagation: el Escape sigue subiendo (no se come el de diálogos abiertos).
-      onKeyDown={(e) => {
-        if (e.key === "Escape") ocultar();
-      }}
-    >
-      {hijo}
-      {/* `aria-hidden`: el nombre accesible ya viaja por el aria-label clonado al hijo; el
-          rótulo (siempre montado, solo opacity-0) duplicaba el texto en el árbol de
-          accesibilidad de CADA botón del feed. */}
-      <span
-        aria-hidden="true"
-        className={cn(
-          "pointer-events-none absolute z-50 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-xs font-medium text-popover-foreground shadow-md transition-opacity duration-150",
-          visible ? "opacity-100" : "opacity-0",
-          POSICION[side],
-        )}
-      >
-        {label}
-      </span>
-    </span>
-  );
-}
-
-// Desplazamiento del rótulo flotante respecto al ancla, por lado.
-const TRANSFORM_FLOTANTE: Record<Lado, string> = {
-  top: "translate(-50%, -100%)",
-  bottom: "translate(-50%, 0)",
-  left: "translate(-100%, -50%)",
-  right: "translate(0, -50%)",
-};
-
-/**
- * Variante FLOTANTE del tooltip: se pinta en un portal sobre `<body>` con `position: fixed`,
- * así NO lo recortan los contenedores con overflow (barras con scroll horizontal como la barra
- * de acciones del lienzo). Mismo estilo visual y misma temporización que `Tooltip`: ~500 ms de
- * hover (instantáneo al saltar entre hermanos) y al enfocar con teclado.
- */
-export function TooltipFlotante({ label, side = "top", children, className }: TooltipProps) {
   const { visible, mostrar, ocultar } = useTemporizadorTooltip();
   const anclaRef = React.useRef<HTMLSpanElement | null>(null);
 
@@ -176,7 +126,7 @@ export function TooltipFlotante({ label, side = "top", children, className }: To
           // `aria-hidden`: el nombre accesible ya viaja por el aria-label clonado al hijo.
           <span
             aria-hidden="true"
-            style={{ left: pos.x, top: pos.y, transform: TRANSFORM_FLOTANTE[side] }}
+            style={{ left: pos.x, top: pos.y, transform: TRANSFORM[side] }}
             className="pointer-events-none fixed z-[100] whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-xs font-medium text-popover-foreground shadow-md"
           >
             {label}

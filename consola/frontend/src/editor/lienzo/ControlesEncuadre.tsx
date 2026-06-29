@@ -13,7 +13,7 @@ import { Check, Frame, Grid3x3, Magnet, Maximize, Minus, MoreHorizontal, Plus, S
 import type { Dispatch, SetStateAction } from "react";
 import { useState } from "react";
 
-import { TooltipFlotante } from "@/components/ui/tooltip";
+import { Tooltip } from "@/components/ui/tooltip";
 
 import { useCerrarConEscape } from "../Telon";
 import { CELDAS, ESCALA_MAX, ESCALA_MIN, PASOS_ZOOM } from "./lib";
@@ -88,7 +88,7 @@ export function ControlesEncuadre({
   // pinta o bien en la barra (sm+) o bien dentro del menú "⋯" (pantallas estrechas).
   const toggles = (
     <>
-      <TooltipFlotante label="Imán: ajustar a objetos, bordes y márgenes" side="top">
+      <Tooltip label="Imán: ajustar a objetos, bordes y márgenes" side="top">
         <button
           onClick={() => setIman((v) => !v)}
           aria-pressed={iman}
@@ -96,8 +96,8 @@ export function ControlesEncuadre({
         >
           <Magnet className="h-3.5 w-3.5" />
         </button>
-      </TooltipFlotante>
-      <TooltipFlotante label="Rejilla y ajuste a rejilla" side="top">
+      </Tooltip>
+      <Tooltip label="Rejilla y ajuste a rejilla" side="top">
         <button
           onClick={() => setGrid((g) => !g)}
           aria-pressed={grid}
@@ -105,7 +105,7 @@ export function ControlesEncuadre({
         >
           <Grid3x3 className="h-3.5 w-3.5" />
         </button>
-      </TooltipFlotante>
+      </Tooltip>
       {grid && (
         <select
           title="Tamaño de celda de la rejilla (px)"
@@ -119,7 +119,7 @@ export function ControlesEncuadre({
           ))}
         </select>
       )}
-      <TooltipFlotante label="Mantener las capas dentro del marco" side="top">
+      <Tooltip label="Mantener las capas dentro del marco" side="top">
         <button
           onClick={() => setDentroMarco((v) => !v)}
           aria-pressed={dentroMarco}
@@ -127,8 +127,8 @@ export function ControlesEncuadre({
         >
           <Frame className="h-3.5 w-3.5" />
         </button>
-      </TooltipFlotante>
-      <TooltipFlotante label="Zonas seguras: la interfaz de la red puede tapar lo sombreado" side="top">
+      </Tooltip>
+      <Tooltip label="Zonas seguras: la interfaz de la red puede tapar lo sombreado" side="top">
         <button
           onClick={() => setZonas((v) => !v)}
           aria-pressed={zonas}
@@ -136,7 +136,7 @@ export function ControlesEncuadre({
         >
           <Shield className="h-3.5 w-3.5" />
         </button>
-      </TooltipFlotante>
+      </Tooltip>
     </>
   );
 
@@ -147,7 +147,7 @@ export function ControlesEncuadre({
 
       {/* IZQUIERDA compacta (sm-): los toggles se pliegan en un menú "⋯". */}
       <div className="relative sm:hidden">
-        <TooltipFlotante label="Opciones de encuadre" side="top">
+        <Tooltip label="Opciones de encuadre" side="top">
           <button
             onClick={() => setMenuMas((v) => !v)}
             aria-haspopup="menu"
@@ -156,7 +156,7 @@ export function ControlesEncuadre({
           >
             <MoreHorizontal className="h-3.5 w-3.5" />
           </button>
-        </TooltipFlotante>
+        </Tooltip>
         {menuMas && (
           <>
             {/* Telón transparente: clic fuera cierra el menú. */}
@@ -187,12 +187,12 @@ export function ControlesEncuadre({
           onChange={(e) => fijarEscala(Number(e.target.value) / 100)}
           className="mr-1 hidden h-1 w-24 cursor-pointer accent-primary md:block"
         />
-        <TooltipFlotante label="Alejar (⌘−)" side="top">
+        <Tooltip label="Alejar (⌘−)" side="top">
           <button onClick={alejar} className="rounded p-1 hover:bg-accent">
             <Minus className="h-3.5 w-3.5" />
           </button>
-        </TooltipFlotante>
-        <TooltipFlotante label="Nivel de zoom" side="top">
+        </Tooltip>
+        <Tooltip label="Nivel de zoom" side="top">
           <button
             onClick={() => setMenuZoom((v) => !v)}
             aria-haspopup="menu"
@@ -201,17 +201,17 @@ export function ControlesEncuadre({
           >
             {pctActual}%
           </button>
-        </TooltipFlotante>
-        <TooltipFlotante label="Acercar (⌘+)" side="top">
+        </Tooltip>
+        <Tooltip label="Acercar (⌘+)" side="top">
           <button onClick={acercar} className="rounded p-1 hover:bg-accent">
             <Plus className="h-3.5 w-3.5" />
           </button>
-        </TooltipFlotante>
-        <TooltipFlotante label="Ajustar a la pantalla (⌘0 · ⌥⌘0)" side="top">
+        </Tooltip>
+        <Tooltip label="Ajustar a la pantalla (⌘0 · ⌥⌘0)" side="top">
           <button onClick={ajustarPantalla} className="rounded p-1 hover:bg-accent">
             <Maximize className="h-3.5 w-3.5" />
           </button>
-        </TooltipFlotante>
+        </Tooltip>
 
         {menuZoom && (
           <>

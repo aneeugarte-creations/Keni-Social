@@ -13,7 +13,7 @@ const ANCHO_PANEL = 240; // px (= w-60); se usa para alinear el panel por su bor
  * panel, un checklist del catálogo. Se usa igual en la tabla del panel y en la subpágina de
  * detalle; al marcar/desmarcar llama `onChange` con el conjunto nuevo.
  *
- * El panel se PORTALIZA a `<body>` con posición fija (mismo patrón que `TooltipFlotante`): así no
+ * El panel se PORTALIZA a `<body>` con posición fija (mismo patrón que `Tooltip`): así no
  * lo recorta el `overflow-auto` de la tabla. Se cierra al pulsar fuera, con Escape, o al hacer
  * scroll/resize (la posición quedaría obsoleta). En la tabla, el disparador frena la propagación
  * del clic para que abrir el selector no navegue a la fila.
