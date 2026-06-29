@@ -30,8 +30,8 @@ steps:
   - name: evals-deterministas
     image: python:3.11
     commands:
-      - python -m pip install --upgrade pip
-      - python -m pip install -e './keni-shared[dev]' -e './mcp-metricas[dev]' -e './consola[dev]'
+      - python -m pip install -q uv
+      - uv pip install --system -e './keni-shared[dev]' -e './mcp-metricas[dev]' -e './consola[dev]'
       # Red de regresión (autoridad): los casos inicial deben mantener su veredicto. Sin Postgres.
       - python -m pytest consola/tests/test_evals_inicial.py -q
       # Reporte legible en el log + gate redundante (--estricto: exit!=0 si algún caso ya no cuadra).

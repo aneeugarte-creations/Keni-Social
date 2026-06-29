@@ -31,8 +31,8 @@ steps:
     environment:
       KENI_TEST_DATABASE_URL: postgresql://keni:keni@postgres:5432/keni_test
     commands:
-      - python -m pip install --upgrade pip
-      - python -m pip install -e './keni-shared[dev]' -e './mcp-metricas[dev]' -e './consola[dev]'
+      - python -m pip install -q uv
+      - uv pip install --system -e './keni-shared[dev]' -e './mcp-metricas[dev]' -e './consola[dev]'
       - for i in $(seq 1 30); do python -c "import os,psycopg; psycopg.connect(os.environ['KENI_TEST_DATABASE_URL']).close()" 2>/dev/null && break; echo "esperando postgres ($i)"; sleep 1; done
       - python -m pytest keni-shared/tests -q
       # Tests por MARCADOR (no por fichero): el marcado vive en conftest._APP_POR_STEM.
