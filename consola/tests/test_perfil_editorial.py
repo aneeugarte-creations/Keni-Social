@@ -120,3 +120,102 @@ def test_construir_prompt_inserta_marca_editorial_y_contrato():
     assert "Cubrimos política y deportes." in p
     assert "{{" not in p
     assert "keywords" in p
+
+
+# --------------------------------------------------------------------------- #
+# Camino ENCOLADO (job del worker): gate, marcador en vuelo y post-procesado    #
+# --------------------------------------------------------------------------- #
+
+
+def test_necesita_refresco_sin_cache_y_fresco(monkeypatch, tmp_path):
+    _preparar(monkeypatch, tmp_path)
+    # Sin cache: hace falta refrescar.
+    assert pe.necesita_refresco("unotv", ttl_horas=24) is True
+    # Tras refrescar (cache fresco, mismo hash, dentro de TTL): ya NO hace falta.
+    pe.refrescar_si_corresponde("unotv", ttl_horas=24, ejecutor=_ejecutor(["mexico"]))
+    assert pe.necesita_refresco("unotv", ttl_horas=24) is False
+
+
+def test_necesita_refresco_ttl_caducado_y_editorial_cambiada(monkeypatch, tmp_path):
+    _preparar(monkeypatch, tmp_path, texto="v1")
+    ayer = datetime.now(UTC) - timedelta(hours=48)
+    pe.refrescar_si_corresponde("unotv", ttl_horas=24, ahora=ayer, ejecutor=_ejecutor(["viejo"]))
+    # TTL caducado (48h > 24h): hace falta.
+    assert pe.necesita_refresco("unotv", ttl_horas=24) is True
+    # Editorial distinta (hash cambia): hace falta aunque estuviera dentro del TTL.
+    monkeypatch.setattr(pe, "_texto_editorial", lambda _m: "v2 distinta")
+    assert pe.necesita_refresco("unotv", ttl_horas=24) is True
+
+
+def test_necesita_refresco_sin_editorial_es_falso(monkeypatch, tmp_path):
+    _preparar(monkeypatch, tmp_path, texto="")
+    assert pe.necesita_refresco("x", ttl_horas=24) is False
+
+
+def test_marcador_en_vuelo_bloquea_y_se_reabre_por_ttl(monkeypatch, tmp_path):
+    _preparar(monkeypatch, tmp_path)
+    ahora = datetime.now(UTC)
+    assert pe.refresco_en_curso("unotv", ahora=ahora, ttl_min=30) is False
+    pe.marcar_refresco_encolado("unotv", ahora=ahora)
+    # Recién marcado: en vuelo (no re-encolar).
+    assert pe.refresco_en_curso("unotv", ahora=ahora, ttl_min=30) is True
+    # Marcador más viejo que el TTL: ATASCADO -> se re-abre (no bloquea).
+    tarde = ahora + timedelta(minutes=31)
+    assert pe.refresco_en_curso("unotv", ahora=tarde, ttl_min=30) is False
+    # Limpieza explícita (encolado rechazado): vuelve a estar libre.
+    pe.marcar_refresco_encolado("unotv", ahora=tarde)
+    pe.limpiar_refresco_encolado("unotv")
+    assert pe.refresco_en_curso("unotv", ahora=tarde, ttl_min=30) is False
+
+
+def test_marcar_en_vuelo_no_pisa_keywords(monkeypatch, tmp_path):
+    """Marcar el refresco en curso NO borra el perfil cacheado (las lecturas siguen vigentes)."""
+    _preparar(monkeypatch, tmp_path)
+    pe.refrescar_si_corresponde("unotv", ttl_horas=24, ejecutor=_ejecutor(["mexico"]))
+    pe.marcar_refresco_encolado("unotv")
+    assert pe.palabras("unotv") == frozenset({"mexico"})  # marcador convive con keywords
+
+
+def test_construir_prompt_perfil_vacio_sin_editorial(monkeypatch, tmp_path):
+    _preparar(monkeypatch, tmp_path, texto="")
+    assert pe.construir_prompt_perfil("x") == ""
+    _preparar(monkeypatch, tmp_path, texto="Cubrimos deportes.")
+    assert "deportes" in pe.construir_prompt_perfil("unotv")
+
+
+def test_construir_procesar_perfil_escribe_cache_y_limpia_marcador(monkeypatch, tmp_path):
+    """El post-procesado del JOB parsea la salida, ESCRIBE el cache y limpia el marcador en vuelo."""
+    _preparar(monkeypatch, tmp_path)
+    pe.marcar_refresco_encolado("unotv")  # job en vuelo
+    procesar = pe.construir_procesar_perfil("unotv")
+    res = procesar(json.dumps({"keywords": ["Liga MX", "Boxeo"]}), None)
+    assert res == {"keywords": 2, "marca": "unotv"}
+    assert pe.palabras("unotv") == frozenset({"liga mx", "boxeo"})  # normalizado
+    # La entrada se reemplaza entera: el marcador en vuelo desaparece (el siguiente barrido lo ve fresco).
+    assert pe.refresco_en_curso("unotv", ttl_min=30) is False
+    assert pe.necesita_refresco("unotv", ttl_horas=24) is False
+
+
+def test_jobspec_reconstruye_el_procesar_de_perfil(monkeypatch, tmp_path):
+    """El worker reconstruye el post-procesado desde el spec (`construir_perfil`)."""
+    from keni_consola.dominio import jobspec
+
+    _preparar(monkeypatch, tmp_path)
+    spec = jobspec.construir_perfil(marca="unotv")
+    assert spec == {"kind": jobspec.PROC_PERFIL, "marca": "unotv"}
+    procesar = jobspec.reconstruir_procesar({"procesar": spec})
+    procesar(json.dumps({"keywords": ["mexico"]}), None)
+    assert pe.palabras("unotv") == frozenset({"mexico"})
+
+
+def test_construir_procesar_perfil_sin_keywords_no_toca_cache(monkeypatch, tmp_path):
+    """Salida sin keywords usables: NO escribe el cache (el marcador queda -> reintento por TTL)."""
+    _preparar(monkeypatch, tmp_path)
+    pe.refrescar_si_corresponde("unotv", ttl_horas=24, ahora=datetime.now(UTC) - timedelta(hours=48),
+                                ejecutor=_ejecutor(["viejo"]))
+    pe.marcar_refresco_encolado("unotv")
+    procesar = pe.construir_procesar_perfil("unotv")
+    res = procesar("sin json util", None)
+    assert res == {"keywords": 0, "marca": "unotv"}
+    assert pe.palabras("unotv") == frozenset({"viejo"})  # conserva el perfil previo
+    assert pe.refresco_en_curso("unotv", ttl_min=30) is True  # marcador intacto (reintento por TTL)

@@ -85,6 +85,13 @@ PROC_INSUMOS = "insumos"
 # INVESTIGACION: gasta tokens (no es un kind de proceso exento). `originales` ([{id, titulo}]) viaja
 # en el spec para sellar `titulo_original` y mapear la respuesta por id.
 PROC_TRADUCIR = "traducir"
+# Refresco del PERFIL EDITORIAL de UNA marca (Haiku): el paso de Recolección (agrupar) ENCOLA un job
+# por marca (ruteado al carril de su cuenta) en vez de correr el Haiku INLINE. El worker corre
+# `claude -p` con el prompt de extracción de temas/keywords de la línea editorial; el post-procesado
+# parsea las keywords y ESCRIBE el cache `perfiles_editoriales.json` (bajo /data, volumen compartido).
+# Es INVESTIGACION: gasta tokens. Solo viaja la `marca` en el spec (la editorial se recompone en el
+# worker para sellar el hash del cache). Idempotencia "refresco en curso" por marcador en el cache.
+PROC_PERFIL = "perfil"
 # Importacion de CALENDARIO desde un archivo NO tabular (PDF/Word/imagen/captura): parsea el
 # JSON `{"filas":[...]}` de claude (Haiku) e IMPORTA al tablero (`importar_a_tablero`). El camino
 # tabular (.xlsx/.csv) sigue siendo SINCRONO en el back (no usa claude); solo el camino IA se
@@ -508,6 +515,17 @@ def construir_traducir(
     }
 
 
+def construir_perfil(*, marca: str) -> dict[str, Any]:
+    """Spec del post-procesado del JOB de perfil editorial por marca: ESCRIBE el cache de keywords.
+
+    `marca` es la marca cuyo perfil se refresca (traza/economía y recomposición de la editorial en el
+    worker para sellar el hash). El worker corre `claude -p` (Haiku) con el prompt de extracción;
+    `dominio.perfil_editorial.construir_procesar_perfil` parsea las keywords y escribe el cache
+    (`perfiles_editoriales.json`), limpiando el marcador de refresco en curso.
+    """
+    return {"kind": PROC_PERFIL, "marca": marca or ""}
+
+
 def construir_import_calendario(
     *, marca_defecto: str = "", autor: dict[str, str] | None = None
 ) -> dict[str, Any]:
@@ -794,6 +812,11 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         return dom_traducir.construir_procesar_traducir(
             [o for o in (p.get("originales") or []) if isinstance(o, dict)]
         )
+
+    if kind == PROC_PERFIL:
+        from . import perfil_editorial as dom_perfil
+
+        return dom_perfil.construir_procesar_perfil(p.get("marca", "") or "")
 
     if kind == PROC_IMPORT_CALENDARIO:
         # Import perezoso: el factory toca BD (`repos`); `importador_calendario` vive en el

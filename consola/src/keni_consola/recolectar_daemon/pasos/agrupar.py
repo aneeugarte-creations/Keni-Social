@@ -24,6 +24,75 @@ from .._comun import (
 # en la ventana). Evita un barrido caro tras un arranque en frío con miles de items pendientes.
 _CLUSTER_BATCH = 500
 
+# TTL del marcador "refresco en curso" del perfil editorial: si el job no completa en este margen
+# (deploy/OOM/error de claude), la marca se RE-ABRE para re-encolarse en un barrido posterior.
+# Generoso: el Haiku es rápido, así que esto cubre un cuelgue real, no un job sano esperando en cola.
+_PERFIL_ENCOLADO_TTL_MIN = 30
+
+
+def _encolar_perfil(marca: str, *, ttl_horas: int, ahora: datetime) -> None:
+    """ENCOLA el refresco del perfil editorial de `marca` como job Haiku (carril de su cuenta).
+
+    Solo encola si el perfil NECESITA refresco (cache ausente/caducado/editorial cambiada) y NO hay
+    ya un refresco EN VUELO para la marca (marcador `refresco_encolado_en` dentro del TTL). Marca el
+    refresco en curso ANTES de encolar (idempotencia entre barridos: un barrido posterior no lo
+    re-encola mientras el job sigue en vuelo) y lo RE-ABRE si la admisión rechaza el encolado
+    (presupuesto/pausa). El worker corre `claude -p` y su post-procesado escribe el cache. La
+    actividad IA («Priorizar») queda registrada por el registro de generación que crea aquí (el
+    worker la completa al terminar). Best-effort: cualquier fallo se loguea y no aborta el barrido.
+    """
+    from ... import cola, generaciones, ruteo_cuentas  # noqa: PLC0415 -- import perezoso (paquete raíz)
+    from ...dominio import jobspec  # noqa: PLC0415 -- import perezoso (evita ciclo dominio<->daemon)
+
+    if not perfil_editorial.necesita_refresco(marca, ttl_horas=ttl_horas, ahora=ahora):
+        return
+    if perfil_editorial.refresco_en_curso(marca, ahora=ahora, ttl_min=_PERFIL_ENCOLADO_TTL_MIN):
+        return
+    prompt = perfil_editorial.construir_prompt_perfil(marca)
+    if not prompt:
+        return  # sin editorial: nada que refrescar
+
+    # IDEMPOTENCIA: marca el refresco en curso ANTES de encolar; si la admisión lo rechaza más abajo,
+    # se re-abre. Mismo orden que el paso de Traducir (marcar -> encolar -> limpiar si se rechaza).
+    perfil_editorial.marcar_refresco_encolado(marca, ahora=ahora)
+    etiqueta_marca = marcas.etiqueta_de(marca) if marca else "sin marca"
+    gen_id = ""
+    try:
+        gen = generaciones.crear({
+            "tipo": "pipeline",
+            # Priorizar (perfil editorial) es INVESTIGACION (motor de noticias): gasta tokens y cuenta
+            # para el presupuesto de investigación, ruteado al carril de la cuenta de la marca.
+            "proceso": generaciones.PROCESO_INVESTIGACION,
+            "etapa": "Priorizar",
+            "marca": marca,
+            "etiqueta": f"Priorizar historias — {etiqueta_marca}: perfil editorial",
+            "prompt": prompt,
+        })
+        gen_id = gen["id"]
+        spec = jobspec.construir(
+            prompt=prompt,
+            procesar=jobspec.construir_perfil(marca=marca),
+            # Carril de la CUENTA de la marca: el worker que monta esa cuenta reclama el job.
+            carril=ruteo_cuentas.carril_de_marca(marca),
+            # Haiku (config.insumos_modelo()): extraer temas/keywords es mecánico, mismo modelo que
+            # usaba el refresco inline y que usan Traducir/insumos.
+            endurecer={"modelo": config.insumos_modelo()},
+            # Fondo del pipeline: cede el paso a los lanzamientos manuales del equipo.
+            prioridad=jobspec.PRIORIDAD_PIPELINE,
+        )
+        cola.encolar(gen_id, spec, proceso=generaciones.PROCESO_INVESTIGACION, marca=marca)
+    except generaciones.ColaLlenaError:
+        # Admisión rechazada (presupuesto/pausa): borra el registro recién creado y RE-ABRE la marca
+        # (no es un fallo real) para que un barrido posterior la reintente sin esperar al TTL.
+        if gen_id:
+            generaciones.borrar_registro(gen_id)
+        perfil_editorial.limpiar_refresco_encolado(marca)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo aborta el barrido
+        _log.exception("recolectar_daemon: fallo al encolar el perfil de %r.", marca)
+        if gen_id:
+            generaciones.borrar_registro(gen_id)
+        perfil_editorial.limpiar_refresco_encolado(marca)
+
 
 def paso_agrupar() -> dict[str, Any]:
     """Agrupa en HISTORIAS los items recientes SIN cluster. Best-effort, ACOTADO a la ventana.
@@ -53,7 +122,7 @@ def paso_agrupar() -> dict[str, Any]:
     fuentes_baja = config.fuentes_baja_confianza()
     perfil_activo = config.priorizar_perfil_activo()  # relevancia desde la línea editorial (Haiku)
     perfil_ttl = config.perfil_editorial_ttl_horas()
-    perfil_refrescadas: set[str] = set()  # 1 refresco por marca por barrido (Haiku acotado)
+    perfil_refrescadas: set[str] = set()  # 1 intento de encolado de perfil por marca por barrido
     # Pesos del score y agenda POR MARCA (modelo v2): perfil distinto por marca y señal de evento
     # contra SU `rota_eventos`. Perezosos (1 lectura por marca y barrido), como el rendimiento.
     pesos_cache: dict[str, Any] = {}
@@ -187,24 +256,18 @@ def paso_agrupar() -> dict[str, Any]:
                 if marca_c:
                     recalc["marca"] = marca_c
             # Relevancia desde la LÍNEA EDITORIAL (perfil Haiku) si está activa (maestro + por-marca:
-            # el toggle "Priorizar"); si no, la base inicial. El refresco es un paso Haiku INLINE:
-            # lo corta la parada de emergencia / presupuesto (`ia_fondo_bloqueada`) como al resto.
+            # el toggle "Priorizar"); si no, la base inicial. El refresco se ENCOLA como job `claude`
+            # por marca (ruteado al carril de su cuenta); el worker corre el Haiku y escribe el cache.
+            # Los gates se conservan: lo corta la parada de emergencia / presupuesto
+            # (`ia_fondo_bloqueada`) y el toggle por-marca, como al resto del fondo. Las lecturas de
+            # `palabras(marca)` (abajo) usan el cache vigente (posiblemente algo viejo: aceptable).
             if (
                 perfil_activo and marca_c and marca_c not in perfil_refrescadas
                 and not config.marca_apagada(config.ENV_PRIORIZAR_PERFIL_IA, marca_c)
                 and not _pkg.ia_fondo_bloqueada()
             ):
                 perfil_refrescadas.add(marca_c)
-                perfil_editorial.refrescar_si_corresponde(
-                    marca_c, ttl_horas=perfil_ttl, ahora=ahora,
-                    al_refrescar=lambda m, kws, prompt, salida: _pkg._registrar_actividad_ia(
-                        m,
-                        f"Priorizar historias — {marcas.etiqueta_de(m)}: {len(kws)} temas clave",
-                        salida,  # la respuesta REAL de Haiku (keywords del perfil)
-                        prompt=prompt,
-                        etapa="Priorizar",
-                    ),
-                )
+                _encolar_perfil(marca_c, ttl_horas=perfil_ttl, ahora=ahora)
             palabras = _palabras_relevancia(marca_c, perfil_activo)
             if marca_c not in pesos_cache:
                 pesos_cache[marca_c] = config.score_pesos(marca_c)
