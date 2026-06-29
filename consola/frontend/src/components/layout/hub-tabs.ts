@@ -11,6 +11,7 @@ import {
   Megaphone,
   Newspaper,
   Rss,
+  Settings2,
   Sparkles,
   Tags,
   Target,
@@ -97,6 +98,7 @@ export const TABS_MAQUINA: ItemTabHub[] = [
   { ruta: "/maquina/computo", etiqueta: "Cómputo", icono: Cpu },
   { ruta: "/maquina/economia", etiqueta: "Economía", icono: Coins },
   { ruta: "/maquina/actividad", etiqueta: "Actividad", icono: Activity },
+  { ruta: "/maquina/controles", etiqueta: "Controles", icono: Settings2 },
 ];
 
 /**

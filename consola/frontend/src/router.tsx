@@ -71,6 +71,9 @@ const Economia = lazy(() => import("@/pages/maquina/Economia"));
 // «Actividad» (`/maquina/actividad`): la TRAZA unificada de la máquina (runs del pipeline +
 // trabajos sueltos), antes embebida en Agentes. Es el feed de Producción como página propia.
 const Actividad = lazy(() => import("@/pages/Produccion"));
+// «Controles» (`/maquina/controles`): mando único de la máquina — maestro, pausa, cuentas
+// y todos los switches del pipeline en un solo lugar (solo admin).
+const Controles = lazy(() => import("@/pages/maquina/Controles"));
 
 // Feed móvil para revisores (#verificación-movil-feed): superficie tipo red social, una
 // columna, SIN sidebar. Vive FUERA del AppShell (layout propio) y se llega por
@@ -449,6 +452,8 @@ export const router = createBrowserRouter([
           // Economía (contabilidad) y Actividad (traza): pestañas hermanas del hub de la máquina.
           { path: "economia", element: <Economia /> },
           { path: "actividad", element: <Actividad /> },
+          // Controles: mando único de la máquina (solo admin).
+          { path: "controles", element: <Controles /> },
           // Detalle desde la traza: una run del pipeline y un trabajo suelto (generación). Viven
           // bajo Actividad (la traza), no en «datos»; las tarjetas del feed enlazan aquí.
           { path: "actividad/pipelines/:id", element: <PipelineDetalle /> },

@@ -340,12 +340,13 @@ describe("apps-scope · helpers", () => {
       "/publicaciones/texto/documentos",
       "/publicaciones/texto/estrategia",
       // Bloque «Máquina»: los cockpits Investigación/Producción son páginas planas; Cómputo es la
-      // entrada del hub «sala de máquinas» → se aplana a sus pestañas (Cómputo/Economía/Actividad).
+      // entrada del hub «sala de máquinas» → se aplana a sus pestañas (Cómputo/Economía/Actividad/Controles).
       "/maquina/investigacion",
       "/maquina/produccion",
       "/maquina/computo",
       "/maquina/economia",
       "/maquina/actividad",
+      "/maquina/controles",
     ]);
   });
 
