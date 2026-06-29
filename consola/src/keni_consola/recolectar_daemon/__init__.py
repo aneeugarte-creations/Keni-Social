@@ -84,6 +84,7 @@ from ._comun import (  # noqa: F401
     _registrar_actividad_ia,
     _rendimiento_bonus,
     _rendimiento_top_lineas,
+    ia_fondo_bloqueada,
 )
 
 # Pasos (parcheables sobre el facade: el orquestador los invoca vía `_pkg.paso_*`).
@@ -98,6 +99,7 @@ from .pasos.traducir import paso_traducir  # noqa: F401
 __all__ = [
     "ejecutar_barrido",
     "iniciar_ingesta",
+    "ia_fondo_bloqueada",
     "planificar_proximo",
     "paso_agencias",
     "paso_caducidad",

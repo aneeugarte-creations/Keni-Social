@@ -202,4 +202,28 @@ def test_migrar_idempotente_y_sin_store(store):
     ajustes.guardar("KENI_INGESTA", "1")
     assert ajustes.migrar_claves_legado() == 1
     assert ajustes.migrar_claves_legado() == 0  # segunda pasada: nada legado
+
+
+def test_purgar_claves_obsoletas_borra_global_y_por_marca(store):
+    """Una clave ELIMINADA (no renombrada) que quedo suelta en el store se purga; el resto intacto.
+
+    Bug real de prod: `KENI_PRESUPUESTO_TOKENS_DIA` (tope global unico de tokens) se sustituyo por
+    los topes por motor; su valor seguia en el store sin que ningun accesor lo leyera."""
+    ajustes.guardar("KENI_PRESUPUESTO_TOKENS_DIA", "1500000")
+    ajustes.guardar("KENI_PRESUPUESTO_TOKENS_DIA::unotv", "500000")
+    # Topes vigentes por motor: NO se tocan (no son obsoletos).
+    ajustes.guardar("KENI_PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA", "100000")
+    ajustes.guardar("KENI_GENERACION_PAUSADA", "1")
+    assert ajustes.purgar_claves_obsoletas() == 2
+    assert ajustes.obtener("KENI_PRESUPUESTO_TOKENS_DIA") is None
+    assert ajustes.obtener("KENI_PRESUPUESTO_TOKENS_DIA::unotv") is None
+    assert ajustes.obtener("KENI_PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA") == "100000"
+    assert ajustes.obtener("KENI_GENERACION_PAUSADA") == "1"
+
+
+def test_purgar_claves_obsoletas_idempotente_y_sin_store(store):
+    assert ajustes.purgar_claves_obsoletas() == 0  # store vacio: no-op
+    ajustes.guardar("KENI_PRESUPUESTO_TOKENS_DIA", "1500000")
+    assert ajustes.purgar_claves_obsoletas() == 1
+    assert ajustes.purgar_claves_obsoletas() == 0  # segunda pasada: nada obsoleto
     assert ajustes.obtener("KENI_PIPELINE_RECOLECTAR") == "1"

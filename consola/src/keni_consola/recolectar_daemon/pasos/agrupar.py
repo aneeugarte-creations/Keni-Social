@@ -187,10 +187,12 @@ def paso_agrupar() -> dict[str, Any]:
                 if marca_c:
                     recalc["marca"] = marca_c
             # Relevancia desde la LÍNEA EDITORIAL (perfil Haiku) si está activa (maestro + por-marca:
-            # el toggle "Priorizar"); si no, la base inicial.
+            # el toggle "Priorizar"); si no, la base inicial. El refresco es un paso Haiku INLINE:
+            # lo corta la parada de emergencia / presupuesto (`ia_fondo_bloqueada`) como al resto.
             if (
                 perfil_activo and marca_c and marca_c not in perfil_refrescadas
                 and not config.marca_apagada(config.ENV_PRIORIZAR_PERFIL_IA, marca_c)
+                and not _pkg.ia_fondo_bloqueada()
             ):
                 perfil_refrescadas.add(marca_c)
                 perfil_editorial.refrescar_si_corresponde(

@@ -244,3 +244,39 @@ def migrar_claves_legado() -> int:
     if cambiado:
         _escribir(datos)
     return movidas
+
+
+# --------------------------------------------------------------------------- #
+# Purga de claves OBSOLETAS (eliminadas, no renombradas)                       #
+# --------------------------------------------------------------------------- #
+#
+# A diferencia de CLAVES_LEGADO (rename viejo->nuevo, que MIGRA el valor), estas claves se
+# ELIMINARON: su accesor ya no existe, así que el valor guardado no lo lee nadie. Quedan como
+# dato huérfano en el store (visibles/editables en la UI de ajustes sin efecto). Se purgan al
+# arrancar para no confundir. Cubre también las variantes por marca (`CLAVE::marca`).
+CLAVES_OBSOLETAS: tuple[str, ...] = (
+    # Tope GLOBAL único de tokens/día: sustituido por los topes POR MOTOR (investigación/
+    # producción, IN/OUT, ADR 0011) + el cap de USD. Su accesor se eliminó; el valor guardado
+    # (p. ej. `KENI_PRESUPUESTO_TOKENS_DIA=1500000`) no corta nada.
+    "KENI_PRESUPUESTO_TOKENS_DIA",
+)
+
+
+def purgar_claves_obsoletas() -> int:
+    """Borra del store las claves de `CLAVES_OBSOLETAS` (y sus variantes `::marca`).
+
+    Idempotente (la segunda pasada no encuentra nada). Devuelve cuántas borró. La llama el
+    arranque junto a `migrar_claves_legado`, sobre el mismo volumen compartido.
+    """
+    datos = leer()
+    if not datos:
+        return 0
+    borradas = 0
+    for obsoleta in CLAVES_OBSOLETAS:
+        for clave in list(datos):
+            if clave == obsoleta or clave.startswith(obsoleta + _SEP_MARCA):
+                datos.pop(clave, None)
+                borradas += 1
+    if borradas:
+        _escribir(datos)
+    return borradas

@@ -203,6 +203,29 @@ def test_barrido_sin_feeds_vencidos_corre_los_pasos_post_rss(monkeypatch):
     assert llamados == ["agencias", "agrupar", "rescore", "fusion", "traducir"]
 
 
+def test_barrido_con_ia_bloqueada_salta_los_pasos_haiku_no_los_de_io(monkeypatch):
+    """Parada de emergencia / presupuesto: los pasos Haiku INLINE (fusión, traducir) NO corren;
+    los de I/O (agencias, agrupar, re-score) SÍ (no gastan tokens)."""
+    _parchear_comun(monkeypatch, feeds=[], fetcher=lambda _u: _FEED_OK)
+    monkeypatch.setattr(recolectar_daemon, "ia_fondo_bloqueada", lambda: True)
+    llamados: list[str] = []
+    monkeypatch.setattr(recolectar_daemon, "paso_agencias",
+                        lambda: llamados.append("agencias") or {"items": 0})
+    monkeypatch.setattr(recolectar_daemon, "paso_agrupar",
+                        lambda: llamados.append("agrupar") or {"items": 0, "clusters_nuevos": 0})
+    monkeypatch.setattr(recolectar_daemon, "paso_rescore",
+                        lambda *a, **k: llamados.append("rescore") or {"revisados": 0, "actualizados": 0})
+    monkeypatch.setattr(recolectar_daemon, "paso_fusionar_semantica",
+                        lambda **k: llamados.append("fusion") or {"grupos": 0, "fusionadas": 0})
+    monkeypatch.setattr(recolectar_daemon, "paso_traducir",
+                        lambda: llamados.append("traducir") or {"traducidos": 0, "candidatos": 0})
+
+    recolectar_daemon.ejecutar_barrido()
+    # Los Haiku inline NO corren; el resto sí.
+    assert "fusion" not in llamados and "traducir" not in llamados
+    assert llamados == ["agencias", "agrupar", "rescore"]
+
+
 def test_barrido_respeta_single_flight(monkeypatch):
     @contextlib.contextmanager
     def _ocupado(_n):

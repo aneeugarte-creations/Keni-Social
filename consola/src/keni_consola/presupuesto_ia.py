@@ -382,6 +382,27 @@ def bloqueo_admision(
     return None
 
 
+def bloqueo_inline(proceso: str = "", marca: str = "", *, es_fondo: bool = True) -> str | None:
+    """El nivel que BLOQUEA una generacion INLINE (sincrona, FUERA de la cola), o None si pasa.
+
+    Mismo gate que la admision de la cola (`bloqueo_admision`), pero para los caminos que
+    ejecutan `claude -p` SIN encolar y por tanto NO pasan por `cola.encolar` ni por el reclamo
+    del worker: los pasos Haiku del pool de noticias (fusionar, clasificar, priorizar, traducir).
+    Sin este gate esos pasos ignorarian la parada de emergencia y los caps de presupuesto.
+
+    `proceso`/`marca` afinan el corte (tope del motor / control de la marca, el mas restrictivo);
+    `es_fondo` distingue el trabajo automatico (cede en SOLO_MANUAL) del manual. Calcula `nivel`
+    una vez con la marca ya ponderada, igual que hacen los call sites de la cola.
+    """
+    return bloqueo_admision(
+        nivel(marca),
+        gasta_tokens=True,
+        es_fondo=es_fondo,
+        proceso=proceso or None,
+        marca=marca or None,
+    )
+
+
 # Severidad creciente de los niveles (para distinguir endurecer de relajar al loguear).
 _SEVERIDAD = {NIVEL_NORMAL: 0, NIVEL_SOLO_MANUAL: 1, NIVEL_AGOTADO: 2, NIVEL_PAUSADO: 3}
 

@@ -265,6 +265,33 @@ def test_nivel_pausado_manda(entorno, monkeypatch):
     assert presupuesto_ia.estado()["pausada"] is True
 
 
+def test_bloqueo_inline_aplica_el_mismo_gate_que_la_cola(entorno, monkeypatch):
+    """`bloqueo_inline` es el gate de los caminos que corren `claude -p` SIN encolar (pasos Haiku
+    del pool). Mismo criterio que la admision de la cola: PAUSADO corta todo; AGOTADO corta todo
+    lo que gasta tokens; SOLO_MANUAL solo el FONDO; NORMAL pasa."""
+    # NORMAL: nada bloquea.
+    assert presupuesto_ia.bloqueo_inline(presupuesto_ia.PROCESO_INVESTIGACION) is None
+
+    # SOLO_MANUAL (gasto == cap USD): el FONDO cede, lo manual sigue.
+    monkeypatch.setenv("KENI_PRESUPUESTO_USD_DIA", "10")
+    monkeypatch.setenv("KENI_PRESUPUESTO_MARGEN_MANUAL", "20")
+    repos.registrar_gasto_ia("g1", dia=_hoy(), tokens_in=1, tokens_out=1, coste_usd=10.0)
+    presupuesto_ia.invalidar_cache()
+    assert presupuesto_ia.bloqueo_inline("", es_fondo=True) == presupuesto_ia.NIVEL_SOLO_MANUAL
+    assert presupuesto_ia.bloqueo_inline("", es_fondo=False) is None
+
+    # AGOTADO (supera el margen): corta tambien lo manual.
+    repos.registrar_gasto_ia("g2", dia=_hoy(), tokens_in=1, tokens_out=1, coste_usd=2.0)
+    presupuesto_ia.invalidar_cache()
+    assert presupuesto_ia.bloqueo_inline("", es_fondo=True) == presupuesto_ia.NIVEL_AGOTADO
+    assert presupuesto_ia.bloqueo_inline("", es_fondo=False) == presupuesto_ia.NIVEL_AGOTADO
+
+    # PAUSADO manda sobre todo.
+    monkeypatch.setenv("KENI_GENERACION_PAUSADA", "1")
+    presupuesto_ia.invalidar_cache()
+    assert presupuesto_ia.bloqueo_inline("", es_fondo=False) == presupuesto_ia.NIVEL_PAUSADO
+
+
 # --------------------------------------------------------------------------- #
 # Presupuesto + parada de emergencia POR MARCA (enforced)                       #
 # --------------------------------------------------------------------------- #

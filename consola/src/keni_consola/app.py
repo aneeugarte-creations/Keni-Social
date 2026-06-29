@@ -236,8 +236,11 @@ def crear_app(
         movidas = ajustes.migrar_claves_legado()
         if movidas:
             _logger.info("Ajustes: %d clave(s) legada(s) migradas al nombre nuevo.", movidas)
+        purgadas = ajustes.purgar_claves_obsoletas()
+        if purgadas:
+            _logger.info("Ajustes: %d clave(s) obsoleta(s) purgadas del store.", purgadas)
     except OSError:
-        _logger.warning("No se pudieron migrar las claves legadas de ajustes.", exc_info=True)
+        _logger.warning("No se pudieron migrar/purgar las claves de ajustes.", exc_info=True)
 
     # Crea el esquema y, en hosted (Postgres), REHUSA arrancar
     # si el Postgres esta vacio pero hay un SQLite local CON datos (evita orfanar datos

@@ -181,6 +181,25 @@ def _registrar_actividad_ia(
         _log.warning("recolectar_daemon: no se pudo registrar actividad IA (%s).", etiqueta, exc_info=True)
 
 
+def ia_fondo_bloqueada() -> bool:
+    """True si la parada de emergencia o el presupuesto cortan AHORA la IA de fondo del pool.
+
+    Gate de los pasos Haiku INLINE de investigación (fusionar, clasificar, priorizar, traducir):
+    corren `claude -p` SIN encolar, así que no pasan por el gate de la cola y, sin esto, ignorarían
+    la parada de emergencia y los caps. Es trabajo de FONDO del motor de investigación. Best-effort:
+    ante un fallo de lectura NO bloquea (preferimos no parar la recolección por un blip de la BD).
+    """
+    from .. import presupuesto_ia
+
+    try:
+        return (
+            presupuesto_ia.bloqueo_inline(presupuesto_ia.PROCESO_INVESTIGACION) is not None
+        )
+    except Exception:  # noqa: BLE001 -- un blip leyendo el gate no debe parar la recolección
+        _log.warning("recolectar_daemon: fallo el gate de presupuesto; sigo sin corte", exc_info=True)
+        return False
+
+
 def _clasificar_marca_ia(cluster: dict[str, Any]) -> str:
     """Asigna marca a un BREAKING sin marca con Haiku. '' si no hay candidatas válidas.
 
@@ -188,7 +207,13 @@ def _clasificar_marca_ia(cluster: dict[str, Any]) -> str:
     (`marcas.es_noticias`: el contenido propio nunca recibe clasificación automática); el
     fallback es `config.marca_noticias()` (o la primera candidata). Best-effort: cualquier
     fallo del clasificador devuelve el fallback. Sella la actividad IA (coste visible en Producción).
+
+    Corta ante la parada de emergencia / presupuesto agotado (`ia_fondo_bloqueada`): es un paso
+    Haiku INLINE que gasta tokens fuera de la cola; sin marca = el breaking queda sin clasificar
+    hasta el próximo barrido (se reintenta solo al reanudar).
     """
+    if ia_fondo_bloqueada():
+        return ""
     from ..dominio import clasificador_marca
 
     activas = [m for m in config.marcas_activas() if marcas.es_noticias(m)]
