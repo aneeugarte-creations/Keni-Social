@@ -70,11 +70,49 @@ _FKS: tuple[tuple[str, str, str, str, str], ...] = (
     ("documento_versiones", "publicacion_id", "publicacion", "id", "CASCADE"),
     ("video_subtitulos", "composicion_id", "video_composiciones", "id", "CASCADE"),
     ("insumos_item", "lote_id", "insumos_lote", "id", "CASCADE"),
+    # Puente N:M `publicacion_etiquetas`: ambas columnas SIEMPRE apuntan a un padre real (una
+    # fila del puente sin su publicacion o sin su etiqueta no tiene sentido). CASCADE: la fila
+    # del puente muere con cualquiera de sus dos extremos.
+    ("publicacion_etiquetas", "publicacion_id", "publicacion", "id", "CASCADE"),
+    ("publicacion_etiquetas", "etiqueta_id", "etiquetas", "id", "CASCADE"),
 )
 
 
 def _nombre_fk(tabla: str, columna: str) -> str:
     return f"fk_{tabla}_{columna}"
+
+
+# Nombres VIEJOS de tabla por tabla ACTUAL. El renombre de entidades (alineación con el lenguaje
+# del producto) cambió `contenido`/`contenido_plataforma`/… a `publicacion`/`pieza`/…; al renombrar
+# una tabla, Postgres conserva el nombre VIEJO en el identificador de sus constraints
+# (`ck_<tabla>_<col>` / `fk_<tabla>_<col>`). Esos fósiles mantienen la allowlist / la referencia
+# de la era anterior, así que se dropean antes de recrear el constraint canónico.
+_TABLAS_RENOMBRADAS: dict[str, tuple[str, ...]] = {
+    "publicacion": ("contenido",),
+    "pieza": ("contenido_plataforma",),
+    "publicacion_comentarios": ("contenido_comentarios",),
+    "pieza_copy_versiones": ("contenido_copy_versiones",),
+    "pieza_aprobaciones": ("contenido_aprobaciones",),
+    "publicacion_etiquetas": ("contenido_etiquetas",),
+}
+# Nombres VIEJOS de columna FK (mismo renombre): el sufijo del fósil lleva el nombre viejo.
+_COLUMNAS_RENOMBRADAS: dict[str, tuple[str, ...]] = {
+    "publicacion_id": ("contenido_id",),
+    "pieza_id": ("plataforma_id",),
+}
+
+
+def _drop_constraints_fosiles(
+    con: Any, tabla: str, columna: str, prefijo: str, canonico: str
+) -> None:
+    """DROP de los constraints FÓSILES (`{prefijo}_<tabla>_<columna>` con el nombre viejo de
+    tabla y/o columna tras un renombre) sobre `tabla`, preservando el canónico y cualquier
+    constraint ajeno. `prefijo` es 'fk' o 'ck'. Idempotente (`DROP CONSTRAINT IF EXISTS`)."""
+    tablas = (tabla, *_TABLAS_RENOMBRADAS.get(tabla, ()))
+    columnas = (columna, *_COLUMNAS_RENOMBRADAS.get(columna, ()))
+    fosiles = {f"{prefijo}_{t}_{c}" for t in tablas for c in columnas} - {canonico}
+    for nombre in fosiles:
+        con.execute(f"ALTER TABLE {tabla} DROP CONSTRAINT IF EXISTS {nombre}")  # noqa: S608
 
 
 def _migrar_fks_hub(con: Any) -> None:
@@ -96,6 +134,9 @@ def _migrar_fks_hub(con: Any) -> None:
                 "FK %s: %d fila(s) suelta(s) de %s borradas antes de crear la FK.",
                 nombre, borradas, tabla,
             )
+        # Dropea el canónico (para recrearlo) Y los fósiles del renombrado, que de otro modo
+        # quedarían duplicando la FK con el nombre viejo de tabla/columna.
+        _drop_constraints_fosiles(con, tabla, columna, "fk", nombre)
         con.execute(f"ALTER TABLE {tabla} DROP CONSTRAINT IF EXISTS {nombre}")  # noqa: S608
         con.execute(
             f"ALTER TABLE {tabla} ADD CONSTRAINT {nombre} "  # noqa: S608
@@ -156,13 +197,10 @@ def _migrar_checks_dominio(con: Any) -> None:
         # valor de normalizacion (un valor NUEVO en la allowlist que el CHECK aun en la tabla
         # rechaza, abortando con CheckViolation el UPDATE que lo escribe). Sin
         # constraint, la normalizacion SIEMPRE entra; luego se re-aplica el CHECK nuevo.
-        # FÓSIL DE NOMBRE: `publicacion` se llamó `contenido`; al renombrar la tabla, Postgres
-        # conserva el NOMBRE viejo de sus CHECK (`ck_contenido_<col>`), que `ck_{tabla}_{columna}`
-        # no captura. Ese fósil mantiene la allowlist vieja y rechazaría los valores renombrados
-        # (p. ej. `requiere_humano`), así que hay que dropearlo también, no solo `ck_publicacion_*`.
-        legados = (f"ck_contenido_{columna}",) if tabla == "publicacion" else ()
-        for cn in (nombre, *legados):
-            con.execute(f"ALTER TABLE {tabla} DROP CONSTRAINT IF EXISTS {cn}")  # noqa: S608
+        # Se dropea el canónico Y los fósiles del renombrado (`ck_<nombre_viejo>_<col>`), que
+        # mantienen la allowlist vieja y rechazarían los valores renombrados.
+        _drop_constraints_fosiles(con, tabla, columna, "ck", nombre)
+        con.execute(f"ALTER TABLE {tabla} DROP CONSTRAINT IF EXISTS {nombre}")  # noqa: S608
         # Renombra los valores legados (idempotente: WHERE = viejo) ANTES de normalizar, ya sin el
         # CHECK viejo que los prohibiría.
         for viejo, nuevo in renombres.items():
@@ -447,3 +485,146 @@ def _migrar_tipos_fecha(con: Any) -> None:
         if nullable:
             con.execute(f"ALTER TABLE {tabla} ALTER COLUMN {columna} DROP NOT NULL")  # noqa: S608
         _log.info("Tipo: %s.%s convertida a %s.", tabla, columna, tipo)
+
+
+# --------------------------------------------------------------------------- #
+# Bloque 7: LIMPIEZA de índices redundantes y fósiles de renombrado            #
+# --------------------------------------------------------------------------- #
+
+
+def _drop_indice_snapshots_pieza_redundante(con: Any) -> None:
+    """Elimina `idx_metricas_pieza_snapshots_pieza` (one-shot).
+
+    Es PREFIJO del UNIQUE `idx_metricas_pieza_snapshots_pieza_ts (pieza_id, ts)`, que sirve
+    igual el lookup por `pieza_id`. El DDL declarativo ya no lo crea. Idempotente
+    (`DROP INDEX IF EXISTS`)."""
+    con.execute("DROP INDEX IF EXISTS idx_metricas_pieza_snapshots_pieza")
+
+
+# FKs, CHECK e índices fósiles dejados por el renombre de entidades (Postgres conserva el nombre
+# viejo de tabla/columna en los identificadores). El constraint/índice CANÓNICO ya existe en
+# paralelo; estos fósiles son su duplicado exacto con el nombre antiguo.
+_FKS_FOSILES: tuple[tuple[str, str], ...] = (
+    ("pieza", "fk_contenido_plataforma_contenido_id"),
+    ("publicacion_comentarios", "fk_contenido_comentarios_contenido_id"),
+    ("pieza_copy_versiones", "fk_contenido_copy_versiones_plataforma_id"),
+    ("pieza_aprobaciones", "fk_contenido_aprobaciones_plataforma_id"),
+    ("documento_versiones", "fk_documento_versiones_contenido_id"),
+)
+_CHECKS_FOSILES: tuple[tuple[str, str], ...] = (
+    ("pieza", "ck_contenido_plataforma_estado"),
+    ("pieza_aprobaciones", "ck_contenido_aprobaciones_decision"),
+)
+# Índices DUPLICADOS (misma tabla y columnas que uno canónico que se conserva).
+_INDICES_DUPLICADOS: tuple[str, ...] = (
+    "idx_contenido_plataforma_marca",  # == idx_publicacion_plataforma_marca, pieza (marca)
+    "idx_contenido_etiquetas_etiqueta",  # == idx_publicacion_etiquetas_etiqueta
+    "idx_documento_versiones_pieza",  # no-único, == UNIQUE idx_documento_versiones_uniq
+    "idx_enlaces_publicos_campania_token",  # == UNIQUE enlaces_publicos_campania_token_key
+)
+
+
+def _drop_fosiles_renombrado(con: Any) -> None:
+    """Elimina los FK/CHECK/índices FÓSILES y DUPLICADOS del renombre de entidades (one-shot).
+
+    El canónico de cada uno ya existe en paralelo, así que solo se descarta el duplicado con el
+    nombre antiguo. Idempotente (`DROP CONSTRAINT/INDEX IF EXISTS`)."""
+    for tabla, nombre in (*_FKS_FOSILES, *_CHECKS_FOSILES):
+        con.execute(f"ALTER TABLE {tabla} DROP CONSTRAINT IF EXISTS {nombre}")  # noqa: S608
+    for nombre in _INDICES_DUPLICADOS:
+        con.execute(f"DROP INDEX IF EXISTS {nombre}")  # noqa: S608
+
+
+# --------------------------------------------------------------------------- #
+# Bloque 8: NORMALIZACIÓN de referencias huérfanas en noticias_*               #
+# --------------------------------------------------------------------------- #
+#
+# `noticias_items.cluster_id`, `noticias_items.publicacion_id` y `noticias_clusters.publicacion_id`
+# son referencias OPCIONALES con sentinel '' (no caben en FK real; ver la nota de `_FKS`). La purga
+# por retención borra clusters/publicaciones sin normalizar estas columnas, dejando refs colgadas.
+# Esta migración las devuelve a '' (= "sin referencia").
+
+# Cada tupla: (tabla_hija, columna, tabla_padre). La columna se normaliza a '' donde apunta a un
+# padre inexistente (excluyendo el propio sentinel '').
+_REFS_HUERFANAS_NOTICIAS: tuple[tuple[str, str, str], ...] = (
+    ("noticias_items", "cluster_id", "noticias_clusters"),
+    ("noticias_items", "publicacion_id", "publicacion"),
+    ("noticias_clusters", "publicacion_id", "publicacion"),
+)
+
+
+def _normalizar_huerfanas_noticias(con: Any) -> None:
+    """Devuelve a '' las referencias colgadas en `noticias_*` (one-shot).
+
+    Idempotente: solo toca filas cuya columna (no vacía) no apunta a un padre existente."""
+    for tabla, columna, padre in _REFS_HUERFANAS_NOTICIAS:
+        tocadas = con.execute(
+            f"UPDATE {tabla} SET {columna} = '' "  # noqa: S608 -- tabla/columna constantes
+            f"WHERE {columna} <> '' "
+            f"AND NOT EXISTS (SELECT 1 FROM {padre} p WHERE p.id = {tabla}.{columna})"
+        ).rowcount
+        if tocadas:
+            _log.info(
+                "Refs huérfanas: %d fila(s) de %s.%s normalizadas a '' (padre %s inexistente).",
+                tocadas, tabla, columna, padre,
+            )
+
+
+# --------------------------------------------------------------------------- #
+# Bloque 9: AUTOVACUUM/ANALYZE per-table en las tablas de alta rotación         #
+# --------------------------------------------------------------------------- #
+#
+# Las tablas de inserción/actualización intensiva (snapshots de métricas, caché, cola de jobs)
+# necesitan vacuum/analyze más AGRESIVO que el global para no acumular bloat ni estadísticas
+# rancias. Se fija con reloptions per-table.
+
+# Cada tupla: (tabla, {reloption: valor}). El SET es idempotente (fija el mismo valor).
+_RELOPTIONS: tuple[tuple[str, dict[str, str]], ...] = (
+    (
+        "metricas_pieza_snapshots",
+        {
+            "autovacuum_analyze_scale_factor": "0.02",
+            "autovacuum_vacuum_scale_factor": "0.05",
+            "autovacuum_vacuum_insert_scale_factor": "0.05",
+        },
+    ),
+    (
+        "metricas_cache",
+        {
+            "autovacuum_vacuum_scale_factor": "0.01",
+            "toast.autovacuum_vacuum_scale_factor": "0.01",
+        },
+    ),
+    (
+        "jobs",
+        {
+            "autovacuum_vacuum_scale_factor": "0.02",
+            "toast.autovacuum_vacuum_scale_factor": "0.02",
+        },
+    ),
+)
+
+
+def _aplicar_reloptions_autovacuum(con: Any) -> None:
+    """Fija las reloptions de autovacuum/analyze per-table (one-shot).
+
+    Idempotente (`ALTER TABLE ... SET (...)` fija el mismo valor sin error)."""
+    for tabla, opciones in _RELOPTIONS:
+        sets = ", ".join(f"{clave} = {valor}" for clave, valor in opciones.items())
+        con.execute(f"ALTER TABLE {tabla} SET ({sets})")  # noqa: S608 -- constantes
+
+
+# --------------------------------------------------------------------------- #
+# Bloque 10: COMMENT aclaratorio sobre `metricas_pieza_snapshots.pieza_id`      #
+# --------------------------------------------------------------------------- #
+
+
+def _comentar_pieza_id_snapshots(con: Any) -> None:
+    """Documenta que `metricas_pieza_snapshots.pieza_id` NO referencia `pieza.id` (one-shot).
+
+    Guarda el `id_post_metricool` (id del post en Metricool), no un `pieza.id`; por eso no lleva
+    FK (ver la nota de `_FKS`). Idempotente (`COMMENT ON COLUMN`)."""
+    con.execute(
+        "COMMENT ON COLUMN metricas_pieza_snapshots.pieza_id IS "
+        "'id externo de Metricool (id_post_metricool), NO referencia pieza.id'"
+    )

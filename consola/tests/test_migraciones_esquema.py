@@ -44,6 +44,24 @@ def _migracion_contadora(nombre: str, llamadas: list, **kwargs) -> _db_core.Migr
 
 
 # --------------------------------------------------------------------------- #
+# Unicidad de slugs del registro                                               #
+# --------------------------------------------------------------------------- #
+
+
+def test_slugs_de_migracion_unicos():
+    """El NOMBRE COMPLETO (slug) de cada migración es único en `MIGRACIONES`.
+
+    Dos slugs iguales registrarían bajo el MISMO id en el journal: el segundo se daría por
+    aplicado sin correr. La unicidad es del slug ENTERO, no del número: hay duplicados
+    históricos de número con sufijo distinto (p.ej. `0039-renombre-columnas-veredicto` vs
+    `0039-drop-comercial-snapshots`) que son nombres DISTINTOS y válidos.
+    """
+    nombres = [m.nombre for m in _db_core.MIGRACIONES]
+    duplicados = sorted({n for n in nombres if nombres.count(n) > 1})
+    assert not duplicados, f"slugs duplicados en MIGRACIONES: {duplicados}"
+
+
+# --------------------------------------------------------------------------- #
 # Journal: primer arranque y "solo pendientes"                                 #
 # --------------------------------------------------------------------------- #
 
@@ -404,3 +422,89 @@ def test_columna_fuente_se_anade_antes_del_indice_ddl(pg):
         con.close()
     assert "fuente" in cols
     assert "grupo" in cols
+
+
+def test_drop_fosiles_renombrado_quita_fosiles_y_conserva_canonicos(pg):
+    """0061: dropea un FK/CHECK/índice fósil del renombre conservando el canónico paralelo."""
+    from keni_consola._db_core.migraciones_integridad import _drop_fosiles_renombrado
+
+    db.listar_swaps_turno()  # asegura el esquema (crea los canónicos)
+    con = motor_db.conectar_cruda()
+    try:
+        # Recrea un fósil de cada tipo (su canónico ya existe tras asegurar el esquema).
+        con.execute(
+            "ALTER TABLE pieza ADD CONSTRAINT fk_contenido_plataforma_contenido_id "
+            "FOREIGN KEY (publicacion_id) REFERENCES publicacion(id) ON DELETE CASCADE"
+        )
+        con.execute(
+            "ALTER TABLE pieza_aprobaciones ADD CONSTRAINT ck_contenido_aprobaciones_decision "
+            "CHECK (decision IN ('pendiente', 'aprobado', 'rechazado'))"
+        )
+        con.execute("CREATE INDEX idx_contenido_plataforma_marca ON pieza (marca)")
+        con.commit()
+
+        _drop_fosiles_renombrado(con)
+        con.commit()
+
+        constraints = {
+            f["conname"]
+            for f in con.execute(
+                "SELECT conname FROM pg_constraint WHERE contype IN ('f', 'c')"
+            ).fetchall()
+        }
+        indices = {
+            f["indexname"]
+            for f in con.execute(
+                "SELECT indexname FROM pg_indexes WHERE schemaname = current_schema()"
+            ).fetchall()
+        }
+        assert "fk_contenido_plataforma_contenido_id" not in constraints  # fósil dropeado
+        assert "ck_contenido_aprobaciones_decision" not in constraints
+        assert "idx_contenido_plataforma_marca" not in indices
+        assert "fk_pieza_publicacion_id" in constraints  # canónico intacto
+        assert "ck_pieza_aprobaciones_decision" in constraints
+    finally:
+        con.execute(
+            "ALTER TABLE pieza DROP CONSTRAINT IF EXISTS fk_contenido_plataforma_contenido_id"
+        )
+        con.execute(
+            "ALTER TABLE pieza_aprobaciones "
+            "DROP CONSTRAINT IF EXISTS ck_contenido_aprobaciones_decision"
+        )
+        con.execute("DROP INDEX IF EXISTS idx_contenido_plataforma_marca")
+        con.commit()
+        con.close()
+
+
+def test_normalizar_huerfanas_noticias(pg):
+    """0062: devuelve a '' las refs colgadas en `noticias_*`, sin tocar las válidas ni los ''."""
+    from keni_consola._db_core.migraciones_integridad import _normalizar_huerfanas_noticias
+
+    db.listar_swaps_turno()  # asegura el esquema
+    con = motor_db.conectar_cruda()
+    try:
+        con.execute("INSERT INTO noticias_clusters (id) VALUES ('c-real')")
+        con.execute("INSERT INTO noticias_items (id, cluster_id) VALUES ('i-ok', 'c-real')")
+        con.execute("INSERT INTO noticias_items (id, cluster_id) VALUES ('i-huerf', 'c-fantasma')")
+        con.execute("INSERT INTO noticias_items (id, cluster_id) VALUES ('i-sin', '')")
+        con.execute("INSERT INTO noticias_items (id, publicacion_id) VALUES ('i-pub', 'p-fantasma')")
+        con.execute(
+            "INSERT INTO noticias_clusters (id, publicacion_id) VALUES ('c-pub', 'p-fantasma')"
+        )
+        con.commit()
+
+        _normalizar_huerfanas_noticias(con)
+        con.commit()
+
+        def _campo(tabla, columna, iid):
+            return con.execute(
+                f"SELECT {columna} FROM {tabla} WHERE id = ?", (iid,)  # noqa: S608 -- constantes
+            ).fetchone()[columna]
+
+        assert _campo("noticias_items", "cluster_id", "i-ok") == "c-real"  # válida intacta
+        assert _campo("noticias_items", "cluster_id", "i-huerf") == ""  # colgada normalizada
+        assert _campo("noticias_items", "cluster_id", "i-sin") == ""  # ya vacía, intacta
+        assert _campo("noticias_items", "publicacion_id", "i-pub") == ""
+        assert _campo("noticias_clusters", "publicacion_id", "c-pub") == ""
+    finally:
+        con.close()

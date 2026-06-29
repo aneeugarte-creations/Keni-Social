@@ -83,8 +83,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         desactivado   INTEGER NOT NULL DEFAULT 0
     )
     """,
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_enlaces_publicos_campania_token "
-    "ON enlaces_publicos_campania (token)",
+    # La unicidad de `token` la garantiza el UNIQUE inline de la columna
+    # (`enlaces_publicos_campania_token_key`), que sirve también el lookup por token.
     "CREATE INDEX IF NOT EXISTS idx_enlaces_publicos_campania_campania "
     "ON enlaces_publicos_campania (campania_id)",
     # Vistas guardadas del dashboard de Analíticas: presets nombrados que congelan la
@@ -134,12 +134,12 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         seguidores_netos_atribuidos    INTEGER NOT NULL DEFAULT 0
     )
     """,
+    # UNIQUE (pieza_id, ts): garantiza un snapshot por pieza×ts y, por ser prefijo (pieza_id),
+    # sirve también el lookup por pieza sola (histórico de una pieza).
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_metricas_pieza_snapshots_pieza_ts "
     "ON metricas_pieza_snapshots (pieza_id, ts)",
     "CREATE INDEX IF NOT EXISTS idx_metricas_pieza_snapshots_marca_red_ts "
     "ON metricas_pieza_snapshots (marca, red, ts)",
-    "CREATE INDEX IF NOT EXISTS idx_metricas_pieza_snapshots_pieza "
-    "ON metricas_pieza_snapshots (pieza_id)",
     """
     CREATE TABLE IF NOT EXISTS usuarios (
         id                     TEXT PRIMARY KEY,
@@ -1101,8 +1101,9 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         creado        TEXT NOT NULL DEFAULT ''
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_documento_versiones_pieza "
-    "ON documento_versiones (publicacion_id, pieza_id, version)",
+    # La clave lógica (publicacion_id, pieza_id, version) la cubre el UNIQUE
+    # `idx_documento_versiones_uniq` (ver `_INDICES_UNICOS_IDEMPOTENCIA`), que sirve también
+    # las búsquedas por esas columnas.
     # Webhooks SALIENTES (eventos internos del tablero): una fila por suscripcion. Cada
     # webhook escucha N tipos de evento (`eventos`, lista JSON; ""/[] = todos) y, al
     # dispararse, recibe un POST JSON a `url`. `secreto` (opcional) firma cada entrega con

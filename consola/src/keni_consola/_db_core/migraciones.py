@@ -85,6 +85,10 @@ from .migraciones_integridad import (
     _COLUMNAS_FECHA_NATIVA,
     _COLUMNAS_JSONB,
     _FKS,
+    _aplicar_reloptions_autovacuum,
+    _comentar_pieza_id_snapshots,
+    _drop_fosiles_renombrado,
+    _drop_indice_snapshots_pieza_redundante,
     _drop_tabla_sugerencias_editoriales,
     _drop_tablas_comercial_snapshots,
     _migrar_checks_dominio,
@@ -96,6 +100,7 @@ from .migraciones_integridad import (
     _migrar_tipos_fecha,
     _migrar_tipos_jsonb,
     _migrar_version_optimista,
+    _normalizar_huerfanas_noticias,
 )
 from .migraciones_modelo import _migrar_modelo_franjas, _migrar_modelo_turnos
 
@@ -551,6 +556,24 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # artículo EXTERNAS, ya fuera de `fuente='portal'`) a `fotos/`. Así `originales/` desaparece del
     # almacén. Copia, reapunta catálogo + piezas, verifica y borra. Corre DESPUÉS de `0057`. Idempotente.
     Migracion("0059-reorg-externas-originales-a-fotos", _migrar_reorg_externas_a_fotos),
+    # LIMPIEZA: índice `idx_metricas_pieza_snapshots_pieza` redundante (prefijo del UNIQUE
+    # `idx_metricas_pieza_snapshots_pieza_ts`, que sirve igual el lookup por pieza). One-shot e
+    # idempotente (`DROP INDEX IF EXISTS`). El DDL declarativo ya no lo crea.
+    Migracion("0060-drop-indice-snapshots-pieza", _drop_indice_snapshots_pieza_redundante),
+    # LIMPIEZA: FK/CHECK/índices FÓSILES y DUPLICADOS del renombre de entidades (Postgres conservó
+    # el nombre viejo de tabla/columna; el canónico ya existe en paralelo). One-shot e idempotente
+    # (`DROP CONSTRAINT/INDEX IF EXISTS`). El drop generalizado en `_migrar_fks_hub`/
+    # `_migrar_checks_dominio` evita que reaparezcan. Ver `_drop_fosiles_renombrado`.
+    Migracion("0061-drop-fosiles-renombrado", _drop_fosiles_renombrado),
+    # SANEO: refs colgadas en `noticias_*` (cluster_id/publicacion_id sin padre, sentinel '').
+    # Las normaliza a '' = "sin referencia". One-shot e idempotente. Ver `_normalizar_huerfanas_noticias`.
+    Migracion("0062-normalizar-huerfanas-noticias", _normalizar_huerfanas_noticias),
+    # OPERACIÓN: reloptions de autovacuum/analyze per-table en las tablas de alta rotación
+    # (snapshots, caché, jobs). One-shot e idempotente (`ALTER TABLE ... SET`). Ver `_aplicar_reloptions_autovacuum`.
+    Migracion("0063-reloptions-autovacuum", _aplicar_reloptions_autovacuum),
+    # DOCUMENTACIÓN: `COMMENT` aclarando que `metricas_pieza_snapshots.pieza_id` guarda el id de
+    # Metricool, NO un `pieza.id` (por eso no lleva FK). One-shot e idempotente. Ver `_comentar_pieza_id_snapshots`.
+    Migracion("0064-comment-pieza-id-snapshots", _comentar_pieza_id_snapshots),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.
