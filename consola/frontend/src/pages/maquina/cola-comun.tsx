@@ -544,9 +544,13 @@ export function PanelPresupuesto({
           <p className="text-sm">
             Hoy:{" "}
             <span className="font-medium tabular-nums">
-              {numeroCompacto(presupuesto.gastado.tokens)}
+              {numeroCompacto(presupuesto.gastado.tokens_in)}
             </span>{" "}
-            tok · {costeUsd(presupuesto.gastado.coste_usd)} · {presupuesto.gastado.generaciones} gen
+            in /{" "}
+            <span className="font-medium tabular-nums">
+              {numeroCompacto(presupuesto.gastado.tokens_out)}
+            </span>{" "}
+            out tok · {costeUsd(presupuesto.gastado.coste_usd)} · {presupuesto.gastado.generaciones} gen
           </p>
           {esAdmin && (
             <Label className="flex items-center gap-2 text-sm">

@@ -780,11 +780,13 @@ def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, d
     presupuesto. `marca` vacía = AGREGADO de todas las marcas; una marca concreta acota el
     desglose a sus filas. Cada fila se reclasifica con `pestana_economia(proceso, tipo)`. Por cada
     pestaña devuelve:
-      - `total`:    `{items, tokens, coste_usd}` (items=COUNT, tokens=SUM(in+out), coste=SUM).
+    Cada celda lleva `tokens_in` y `tokens_out` SEPARADOS (su coste es distinto: el output cuesta
+    ~5x el input) más `tokens` (=in+out) por compatibilidad con consumidores que ya lo suman.
+      - `total`:    `{items, tokens_in, tokens_out, tokens, coste_usd}` (items=COUNT, sumas=SUM).
       - `por_dia`:  EXACTAMENTE `dias` entradas, antiguo→reciente, ZERO-FILLED; cada una
-                    `{dia, items, tokens, coste_usd, por_etapa:[{etapa, items, tokens, coste_usd}]}`
+                    `{dia, items, tokens_in, tokens_out, tokens, coste_usd, por_etapa:[<celda+etapa>]}`
                     (el desglose por ETAPA/fase de ESE día, ordenado por coste desc).
-      - `por_etapa`:`[{etapa, items, tokens, coste_usd, por_dia:[{dia, items, tokens, coste_usd}]}]`
+      - `por_etapa`:`[{etapa, items, tokens_in, tokens_out, tokens, coste_usd, por_dia:[<celda+dia>]}]`
                     ordenado por coste desc; el `por_dia` interno va zero-filled (longitud `dias`).
     La ETAPA es la fase del pipeline (Redactar/Verificar/Ilustrar…), derivada con `etapa_economia`
     (varios tipos colapsan en una fase); NO es el `tipo` crudo del job.
@@ -802,11 +804,16 @@ def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, d
     def _acc_nuevo() -> dict[str, Any]:
         return {
             "items": 0,
+            "tokens_in": 0,
+            "tokens_out": 0,
             "tokens": 0,
             "coste_usd": 0.0,
-            # dia -> {items, tokens, coste_usd, _etapas: {tipo -> {items, tokens, coste_usd}}}
+            # dia -> {items, tokens_in, tokens_out, tokens, coste_usd, _etapas: {tipo -> celda}}
             "_por_dia": {
-                d: {"items": 0, "tokens": 0, "coste_usd": 0.0, "_etapas": {}}
+                d: {
+                    "items": 0, "tokens_in": 0, "tokens_out": 0, "tokens": 0,
+                    "coste_usd": 0.0, "_etapas": {},
+                }
                 for d in dias_esperados
             },
             # tipo(etapa) -> {items, tokens, coste_usd, _dias: {dia -> {items, tokens, coste_usd}}}
@@ -823,7 +830,8 @@ def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, d
     try:
         filas = con.execute(
             "SELECT proceso, tipo, etapa, dia, COUNT(*) AS items, "
-            "COALESCE(SUM(tokens_in + tokens_out), 0) AS tokens, "
+            "COALESCE(SUM(tokens_in), 0) AS tokens_in, "
+            "COALESCE(SUM(tokens_out), 0) AS tokens_out, "
             "COALESCE(SUM(coste_usd), 0) AS coste "
             f"FROM gasto_ia {where} GROUP BY proceso, tipo, etapa, dia",
             params,
@@ -831,14 +839,22 @@ def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, d
     finally:
         con.close()
 
-    def _bump(celda: dict[str, Any], items: int, tokens: int, coste: float) -> None:
+    def _bump(celda: dict[str, Any], items: int, tin: int, tout: int, coste: float) -> None:
         celda["items"] += items
-        celda["tokens"] += tokens
+        celda["tokens_in"] += tin
+        celda["tokens_out"] += tout
+        celda["tokens"] += tin + tout
         celda["coste_usd"] += coste
+
+    # Plantilla de celda HOJA (sin desglose interno): entrada/salida separadas (coste distinto:
+    # el output cuesta ~5x el input) + el combinado para los consumidores que ya suman `tokens`.
+    def _celda_cero() -> dict[str, Any]:
+        return {"items": 0, "tokens_in": 0, "tokens_out": 0, "tokens": 0, "coste_usd": 0.0}
 
     for f in filas:
         items = int(f["items"])
-        tokens = int(f["tokens"])
+        tin = int(f["tokens_in"])
+        tout = int(f["tokens_out"])
         coste = float(f["coste"])
         proceso = str(f["proceso"] or "")
         tipo = str(f["tipo"] or "")
@@ -847,25 +863,23 @@ def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, d
         # colapsan en una fase (copy/autogen -> Redactar). Si la fila trae una etapa EXPLICITA (las
         # fases inline del pool, que comparten tipo='pipeline'), manda; si no, se deriva del tipo.
         etapa_nom = str(f["etapa"] or "") or etapa_economia(proceso, tipo)
-        _bump(acc, items, tokens, coste)
+        _bump(acc, items, tin, tout, coste)
         dia = iso_o_vacio(f["dia"])
         celda_dia = acc["_por_dia"].get(dia)
         if celda_dia is not None:
-            _bump(celda_dia, items, tokens, coste)
+            _bump(celda_dia, items, tin, tout, coste)
             _bump(
-                celda_dia["_etapas"].setdefault(
-                    etapa_nom, {"items": 0, "tokens": 0, "coste_usd": 0.0}
-                ),
-                items, tokens, coste,
+                celda_dia["_etapas"].setdefault(etapa_nom, _celda_cero()),
+                items, tin, tout, coste,
             )
         etapa = acc["_por_etapa"].setdefault(
-            etapa_nom, {"items": 0, "tokens": 0, "coste_usd": 0.0, "_dias": {}}
+            etapa_nom, {**_celda_cero(), "_dias": {}}
         )
-        _bump(etapa, items, tokens, coste)
+        _bump(etapa, items, tin, tout, coste)
         if dia in acc["_por_dia"]:
             _bump(
-                etapa["_dias"].setdefault(dia, {"items": 0, "tokens": 0, "coste_usd": 0.0}),
-                items, tokens, coste,
+                etapa["_dias"].setdefault(dia, _celda_cero()),
+                items, tin, tout, coste,
             )
 
     def _orden_etapa(r: dict[str, Any]) -> tuple[float, str]:
@@ -879,6 +893,8 @@ def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, d
             por_dia.append({
                 "dia": d,
                 "items": celda["items"],
+                "tokens_in": celda["tokens_in"],
+                "tokens_out": celda["tokens_out"],
                 "tokens": celda["tokens"],
                 "coste_usd": celda["coste_usd"],
                 "por_etapa": sorted(
@@ -890,10 +906,12 @@ def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, d
                 {
                     "etapa": etapa_nom,
                     "items": v["items"],
+                    "tokens_in": v["tokens_in"],
+                    "tokens_out": v["tokens_out"],
                     "tokens": v["tokens"],
                     "coste_usd": v["coste_usd"],
                     "por_dia": [
-                        {"dia": d, **v["_dias"].get(d, {"items": 0, "tokens": 0, "coste_usd": 0.0})}
+                        {"dia": d, **v["_dias"].get(d, _celda_cero())}
                         for d in dias_esperados
                     ],
                 }
@@ -904,6 +922,8 @@ def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, d
         resultado[pestana] = {
             "total": {
                 "items": acc["items"],
+                "tokens_in": acc["tokens_in"],
+                "tokens_out": acc["tokens_out"],
                 "tokens": acc["tokens"],
                 "coste_usd": acc["coste_usd"],
             },

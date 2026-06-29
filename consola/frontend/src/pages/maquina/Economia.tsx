@@ -79,7 +79,7 @@ const VENTANAS: readonly { dias: number; etiqueta: string }[] = [
 ];
 const VENTANA_DEFECTO = 7;
 
-const CELDA_CERO: EconomiaCelda = { items: 0, tokens: 0, coste_usd: 0 };
+const CELDA_CERO: EconomiaCelda = { items: 0, tokens_in: 0, tokens_out: 0, tokens: 0, coste_usd: 0 };
 
 /** Línea discreta de "sin datos": una sola fila, no una tarjeta enorme con hueco. */
 function LineaVacia({ texto }: { texto: string }) {
@@ -95,6 +95,7 @@ function CeldasGasto({ celda }: { celda: EconomiaCelda }) {
       <>
         <TableCell className="text-right text-muted-foreground">—</TableCell>
         <TableCell className="text-right text-muted-foreground">—</TableCell>
+        <TableCell className="text-right text-muted-foreground">—</TableCell>
         <TableCell className="pr-6 text-right text-muted-foreground">—</TableCell>
       </>
     );
@@ -102,8 +103,11 @@ function CeldasGasto({ celda }: { celda: EconomiaCelda }) {
   return (
     <>
       <TableCell className="text-right tabular-nums">{numeroCompleto(celda.items)}</TableCell>
-      <TableCell className="text-right tabular-nums" title={numeroCompleto(celda.tokens)}>
-        {numeroCompacto(celda.tokens)}
+      <TableCell className="text-right tabular-nums" title={numeroCompleto(celda.tokens_in)}>
+        {numeroCompacto(celda.tokens_in)}
+      </TableCell>
+      <TableCell className="text-right tabular-nums" title={numeroCompleto(celda.tokens_out)}>
+        {numeroCompacto(celda.tokens_out)}
       </TableCell>
       <TableCell className="pr-6 text-right tabular-nums">{costeUsd(celda.coste_usd)}</TableCell>
     </>
@@ -117,7 +121,8 @@ function CabeceraGasto({ primera }: { primera: string }) {
       <TableRow>
         <TableHead className="pl-6">{primera}</TableHead>
         <TableHead className="text-right">Items</TableHead>
-        <TableHead className="text-right">Tokens</TableHead>
+        <TableHead className="text-right">Tokens in</TableHead>
+        <TableHead className="text-right">Tokens out</TableHead>
         <TableHead className="pr-6 text-right">Coste</TableHead>
       </TableRow>
     </TableHeader>
@@ -184,7 +189,9 @@ function CeldaSimple({ etiqueta, sangria = "pl-9" }: { etiqueta: string; sangria
 function TablaPorDia({ filas, diasVisibles }: { filas: EconomiaDia[]; diasVisibles: string[] }) {
   const porDia = React.useMemo(() => new Map(filas.map((f) => [f.dia, f])), [filas]);
   const { abierto, toggle } = useDesplegables();
-  const CELDA_DIA_CERO: EconomiaDia = { dia: "", items: 0, tokens: 0, coste_usd: 0, por_etapa: [] };
+  const CELDA_DIA_CERO: EconomiaDia = {
+    dia: "", items: 0, tokens_in: 0, tokens_out: 0, tokens: 0, coste_usd: 0, por_etapa: [],
+  };
   return (
     <Card className="h-full">
       <CardHeader className="pb-3">
@@ -313,13 +320,19 @@ function ColumnaPestana({
         {cargando ? (
           <Skeleton className="h-24 w-full rounded-xl" />
         ) : (
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <TarjetaKpi variante="borde" etiqueta="Trabajos IA" valor={numeroCompleto(total.items)} />
             <TarjetaKpi
               variante="borde"
-              etiqueta="Tokens"
-              valor={numeroCompacto(total.tokens)}
-              titulo={numeroCompleto(total.tokens)}
+              etiqueta="Tokens in"
+              valor={numeroCompacto(total.tokens_in)}
+              titulo={numeroCompleto(total.tokens_in)}
+            />
+            <TarjetaKpi
+              variante="borde"
+              etiqueta="Tokens out"
+              valor={numeroCompacto(total.tokens_out)}
+              titulo={numeroCompleto(total.tokens_out)}
             />
             <TarjetaKpi variante="borde" etiqueta="Coste" valor={costeUsd(total.coste_usd)} />
           </div>
@@ -380,12 +393,14 @@ export default function Economia() {
         const t = pp[p]?.total;
         if (t) {
           acc.items += t.items;
+          acc.tokens_in += t.tokens_in;
+          acc.tokens_out += t.tokens_out;
           acc.tokens += t.tokens;
           acc.coste_usd += t.coste_usd;
         }
         return acc;
       },
-      { items: 0, tokens: 0, coste_usd: 0 },
+      { items: 0, tokens_in: 0, tokens_out: 0, tokens: 0, coste_usd: 0 },
     );
   }, [economia.data]);
 
@@ -462,13 +477,19 @@ export default function Economia() {
             </SelectContent>
           </Select>
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-4 gap-4">
           <TarjetaKpi variante="borde" etiqueta="Trabajos IA" valor={numeroCompleto(agregado.items)} />
           <TarjetaKpi
             variante="borde"
-            etiqueta="Tokens"
-            valor={numeroCompacto(agregado.tokens)}
-            titulo={numeroCompleto(agregado.tokens)}
+            etiqueta="Tokens in"
+            valor={numeroCompacto(agregado.tokens_in)}
+            titulo={numeroCompleto(agregado.tokens_in)}
+          />
+          <TarjetaKpi
+            variante="borde"
+            etiqueta="Tokens out"
+            valor={numeroCompacto(agregado.tokens_out)}
+            titulo={numeroCompleto(agregado.tokens_out)}
           />
           <TarjetaKpi variante="borde" etiqueta="Coste" valor={costeUsd(agregado.coste_usd)} />
         </div>

@@ -484,7 +484,9 @@ def test_gasto_ia_economia_garantiza_las_4_pestanas_y_zero_fill(pg):
     assert set(eco) == {"investigacion", "produccion", "herramientas", "desarrollo"}
     for pestana in eco:
         bloque = eco[pestana]
-        assert bloque["total"] == {"items": 0, "tokens": 0, "coste_usd": 0.0}
+        assert bloque["total"] == {
+            "items": 0, "tokens_in": 0, "tokens_out": 0, "tokens": 0, "coste_usd": 0.0,
+        }
         assert bloque["por_etapa"] == []
         assert len(bloque["por_dia"]) == 5
         assert all(d["items"] == 0 and d["tokens"] == 0 and d["coste_usd"] == 0.0
@@ -518,11 +520,16 @@ def test_gasto_ia_economia_agrega_por_pestana_dia_y_etapa(pg):
     eco = db.gasto_ia_economia_por_proceso(3)
 
     prod = eco["produccion"]
-    assert prod["total"] == {"items": 3, "tokens": 155, "coste_usd": pytest.approx(0.062)}
+    # tokens SEPARADOS in/out (coste distinto): copy p1(100/40)+p2(10/5) -> 110/45; imagen 0/0.
+    assert prod["total"] == {
+        "items": 3, "tokens_in": 110, "tokens_out": 45, "tokens": 155,
+        "coste_usd": pytest.approx(0.062),
+    }
     # por_etapa = fases del pipeline: imagen->Ilustrar (0.05) antes que copy->Redactar (0.012).
     assert [t["etapa"] for t in prod["por_etapa"]] == ["Ilustrar", "Redactar"]
     etapa_redactar = next(t for t in prod["por_etapa"] if t["etapa"] == "Redactar")
     assert etapa_redactar["items"] == 2 and etapa_redactar["tokens"] == 155
+    assert (etapa_redactar["tokens_in"], etapa_redactar["tokens_out"]) == (110, 45)
     assert etapa_redactar["coste_usd"] == pytest.approx(0.012)
     # Cruce por_etapa[].por_dia: la etapa Redactar tiene su serie de 3 dias (zero-filled), con sus
     # 2 items en HOY.

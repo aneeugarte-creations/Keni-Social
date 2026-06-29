@@ -82,9 +82,13 @@ export interface ActividadAgregados {
 // página Economía sustituye al cruce de `actividad/agregados` (por marca) + `cola/series`
 // (global) que no casaban entre sí.
 
-/** Celda de gasto (items · tokens · coste) compartida por días y etapas. */
+/** Celda de gasto (items · tokens · coste) compartida por días y etapas. Los tokens van
+ *  SEPARADOS en entrada (`tokens_in`) y salida (`tokens_out`) porque su coste es distinto (el
+ *  output cuesta ~5x el input); `tokens` (=in+out) se mantiene para los consumidores que lo suman. */
 export interface EconomiaCelda {
   items: number;
+  tokens_in: number;
+  tokens_out: number;
   tokens: number;
   coste_usd: number;
 }

@@ -193,6 +193,8 @@ def test_economia_contrato_global_desde_ledger(entorno):
     assert set(por_proceso) == {"investigacion", "produccion", "herramientas", "desarrollo"}
     prod = por_proceso["produccion"]
     assert prod["total"]["items"] == 2 and prod["total"]["tokens"] == 155
+    # La API expone tokens in/out SEPARADOS (coste distinto): copy 100/40 + 10/5 -> 110/45.
+    assert prod["total"]["tokens_in"] == 110 and prod["total"]["tokens_out"] == 45
     assert len(prod["por_dia"]) == 7  # zero-filled a la ventana pedida
     assert prod["por_etapa"][0]["etapa"] == "Redactar"  # tipo copy -> fase Redactar
     assert por_proceso["investigacion"]["total"]["items"] == 1
