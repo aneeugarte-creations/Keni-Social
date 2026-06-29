@@ -23,8 +23,8 @@ afterEach(() => {
 function cuenta(parcial: Partial<UsoCuenta>): UsoCuenta {
   return {
     cuenta: "a",
-    etiqueta: "Claro Sports · Fundación",
-    marcas: ["claro-sports", "fundacion"],
+    etiqueta: "Claro Sports",
+    marcas: ["claro-sports"],
     conectada: true,
     semana_pct: 42,
     sesion_5h_pct: 18,
@@ -40,8 +40,8 @@ function cuenta(parcial: Partial<UsoCuenta>): UsoCuenta {
 
 const CUENTA_B = cuenta({
   cuenta: "b",
-  etiqueta: "UnoTV · Nación Gamer",
-  marcas: ["unotv", "nacion-gamer"],
+  etiqueta: "UnoTV · Nación Gamer · Fundación",
+  marcas: ["unotv", "nacion-gamer", "fundacion"],
   semana_pct: 70,
   sesion_5h_pct: 30,
 });
@@ -71,13 +71,13 @@ describe("IndicadorUso", () => {
     expect(screen.getByText("42%")).toBeInTheDocument();
     expect(screen.getByText("18%")).toBeInTheDocument();
     // Con UNA cuenta no se rotula la etiqueta de marca (igual que antes).
-    expect(screen.queryByText("Claro Sports · Fundación")).not.toBeInTheDocument();
+    expect(screen.queryByText("Claro Sports")).not.toBeInTheDocument();
   });
 
   it("dos cuentas (Todas): pinta AMBAS, cada una etiquetada por sus marcas", () => {
     renderIndicador({ data: { cuentas: [cuenta({}), CUENTA_B] } }, null);
-    expect(screen.getByText("Claro Sports · Fundación")).toBeInTheDocument();
-    expect(screen.getByText("UnoTV · Nación Gamer")).toBeInTheDocument();
+    expect(screen.getByText("Claro Sports")).toBeInTheDocument();
+    expect(screen.getByText("UnoTV · Nación Gamer · Fundación")).toBeInTheDocument();
     expect(screen.getByText("42%")).toBeInTheDocument();
     expect(screen.getByText("70%")).toBeInTheDocument();
   });
@@ -89,7 +89,7 @@ describe("IndicadorUso", () => {
     expect(screen.getByText("30%")).toBeInTheDocument();
     expect(screen.queryByText("42%")).not.toBeInTheDocument();
     // Una sola cuenta tras el filtro: no se rotula la etiqueta de marca (igual que antes).
-    expect(screen.queryByText("UnoTV · Nación Gamer")).not.toBeInTheDocument();
+    expect(screen.queryByText("UnoTV · Nación Gamer · Fundación")).not.toBeInTheDocument();
   });
 
   it("sin cuentas (editor sin marcas): no renderiza nada", () => {

@@ -55,8 +55,8 @@ vi.mock("@/hooks/use-uso-cuenta", () => ({
 function cuentaUso(parcial: Partial<UsoCuenta>): UsoCuenta {
   return {
     cuenta: "a",
-    etiqueta: "Claro Sports · Fundación",
-    marcas: ["claro-sports", "fundacion"],
+    etiqueta: "Claro Sports",
+    marcas: ["claro-sports"],
     conectada: true,
     semana_pct: null,
     sesion_5h_pct: null,
@@ -71,8 +71,8 @@ function cuentaUso(parcial: Partial<UsoCuenta>): UsoCuenta {
 }
 
 const CUENTAS_USO: UsoCuenta[] = [
-  cuentaUso({ cuenta: "a", marcas: ["claro-sports", "fundacion"] }),
-  cuentaUso({ cuenta: "b", marcas: ["unotv", "nacion-gamer", "unotv-us"] }),
+  cuentaUso({ cuenta: "a", marcas: ["claro-sports"] }),
+  cuentaUso({ cuenta: "b", marcas: ["unotv", "nacion-gamer", "unotv-us", "fundacion"] }),
 ];
 
 beforeEach(() => {
@@ -108,8 +108,8 @@ describe("SeccionCuentaClaude", () => {
       await screen.findByText(/No hay ninguna cuenta de Claude conectada/),
     ).toBeInTheDocument();
 
-    // La B se etiqueta con las marcas que usa.
-    expect(screen.getByText(/UnoTV, Nación Gamer y UnoTV US/)).toBeInTheDocument();
+    // La B se etiqueta con las marcas que usa (incluida la Fundación).
+    expect(screen.getByText(/UnoTV, Nación Gamer, UnoTV US .* y la Fundación/)).toBeInTheDocument();
 
     // Cada tarjeta pidió su cuenta por separado.
     expect(sistemaCuenta).toHaveBeenCalledWith("a");

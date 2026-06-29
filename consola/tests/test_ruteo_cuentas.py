@@ -22,9 +22,9 @@ def _sin_overrides(monkeypatch):
 
 
 def test_reparto_por_defecto():
-    # Cuenta A: deportes + fundacion; Cuenta B: unotv + gamer (+ unotv-us).
+    # Cuenta A: deportes; Cuenta B: unotv + gamer (+ unotv-us) + fundacion.
     assert rc.cuenta_de_marca("claro-sports") == jobspec.CUENTA_A
-    assert rc.cuenta_de_marca("fundacion") == jobspec.CUENTA_A
+    assert rc.cuenta_de_marca("fundacion") == jobspec.CUENTA_B
     assert rc.cuenta_de_marca("unotv") == jobspec.CUENTA_B
     assert rc.cuenta_de_marca("nacion-gamer") == jobspec.CUENTA_B
     assert rc.cuenta_de_marca("unotv-us") == jobspec.CUENTA_B

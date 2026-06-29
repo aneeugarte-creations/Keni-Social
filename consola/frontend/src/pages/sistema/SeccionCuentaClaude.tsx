@@ -447,12 +447,12 @@ const TARJETAS: Record<Cuenta, { titulo: string; descripcion: string }> = {
   a: {
     titulo: "Cuenta de Claude del servidor (A)",
     descripcion:
-      "Cuenta principal: marcas de Claro Sports y la Fundación, y todo lo que no esté repartido a la cuenta B.",
+      "Cuenta principal: marca de Claro Sports, y todo lo que no esté repartido a la cuenta B.",
   },
   b: {
     titulo: "Cuenta de Claude del servidor (B)",
     descripcion:
-      "Segunda cuenta para el reparto por marcas: UnoTV, Nación Gamer y UnoTV US (informativo).",
+      "Segunda cuenta para el reparto por marcas: UnoTV, Nación Gamer, UnoTV US (informativo) y la Fundación.",
   },
 };
 

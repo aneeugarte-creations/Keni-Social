@@ -6,8 +6,8 @@ la POLITICA (que marca va a que cuenta) y la derivacion del CARRIL de cola por c
 encolado de un job de INVESTIGACION lo rute al worker de la cuenta de su marca.
 
 Reparto por DEFECTO (piloto AMX):
-  - Cuenta A: claro-sports, fundacion
-  - Cuenta B: unotv, nacion-gamer, unotv-us
+  - Cuenta A: claro-sports
+  - Cuenta B: unotv, nacion-gamer, unotv-us, fundacion
   - Marcas sin reparto (p.ej. piso-15) y los jobs SIN marca / cross-marca -> cuenta POR DEFECTO.
 
 Configurable como el resto de overrides por-marca (STORE > ENV):
@@ -30,10 +30,10 @@ ENV_CUENTA_CLAUDE_DEFECTO = "KENI_CUENTA_CLAUDE_DEFECTO"
 # Reparto por defecto del piloto. Las marcas ausentes caen a la cuenta por defecto.
 _REPARTO_DEFECTO: dict[str, str] = {
     "claro-sports": jobspec.CUENTA_A,
-    "fundacion": jobspec.CUENTA_A,
     "unotv": jobspec.CUENTA_B,
     "nacion-gamer": jobspec.CUENTA_B,
     "unotv-us": jobspec.CUENTA_B,
+    "fundacion": jobspec.CUENTA_B,
 }
 
 
