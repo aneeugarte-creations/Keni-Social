@@ -255,32 +255,31 @@ describe("Fuentes — Catálogo (Ola 4)", () => {
     expect(screen.getAllByRole("tab")).toHaveLength(4);
   });
 
-  it("la pestaña por defecto es Internas (el flujo diario del equipo)", async () => {
+  it("la pestaña por defecto es la PRIMERA (Externas)", async () => {
     stubFetch();
     renderFuentes();
 
-    // Sin ?tab= abre INTERNAS: ahí viven los cajones y clips que el coordinador de redes vuelca a diario
-    // ("Externas" son ajustes de RSS, no el flujo del día).
-    const tabInternas = await screen.findByRole("tab", { name: "Internas" });
-    expect(tabInternas).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tab", { name: "Externas" })).toHaveAttribute(
+    // Sin ?tab= abre la primera pestaña (Externas); un deep-link `?tab=` abre cualquier otra.
+    const tabExternas = await screen.findByRole("tab", { name: "Externas" });
+    expect(tabExternas).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Internas" })).toHaveAttribute(
       "aria-selected",
       "false",
     );
-    // El contenido interno (cajones del día) está montado.
+    // El contenido de Externas (catálogo de feeds) está montado.
+    expect(await screen.findByText("Reuters — World")).toBeInTheDocument();
+  });
+
+  it("el deep-link ?tab=internas abre Internas (no la pestaña por defecto)", async () => {
+    stubFetch();
+    renderFuentes("/fuentes?tab=internas");
+
+    const tabInternas = await screen.findByRole("tab", { name: "Internas" });
+    expect(tabInternas).toHaveAttribute("aria-selected", "true");
+    // El contenido interno (cajones del día) está montado sin ningún clic.
     expect(
       await screen.findByRole("heading", { name: "Cajones del día" }),
     ).toBeInTheDocument();
-  });
-
-  it("el deep-link ?tab=externas sigue abriendo Externas", async () => {
-    stubFetch();
-    renderFuentes("/fuentes?tab=externas");
-
-    const tabExternas = await screen.findByRole("tab", { name: "Externas" });
-    expect(tabExternas).toHaveAttribute("aria-selected", "true");
-    // El catálogo (contenido de Externas) está montado sin ningún clic.
-    expect(await screen.findByText("Reuters — World")).toBeInTheDocument();
   });
 
   it("el preset ya activo muestra badge 'Activo' y su checkbox está deshabilitado", async () => {

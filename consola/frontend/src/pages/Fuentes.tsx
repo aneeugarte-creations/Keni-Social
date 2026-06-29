@@ -60,11 +60,10 @@ export default function Fuentes() {
   // redirigen aquí con `?tab=` para abrir directamente su canal.
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
-  // Por defecto INTERNAS: el flujo DIARIO del equipo (volcar cajones y clips) vive ahí;
-  // "Externas" son ajustes de RSS que se tocan de pascuas a ramos (deep-link ?tab=externas).
+  // Por defecto, la PRIMERA pestaña; un deep-link `?tab=` abre directamente otro canal.
   const tabInicial = PESTANAS_TIPO.some((p) => p.valor === tabParam)
     ? (tabParam as string)
-    : "internas";
+    : PESTANAS_TIPO[0].valor;
 
   return (
     <>
