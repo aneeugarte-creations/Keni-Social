@@ -66,10 +66,15 @@ export const apiSistema = {
     }),
 
   // --- Cuenta de Claude del servidor (proxy admin al control del daemons) ---
-  sistemaCuenta: (signal?: AbortSignal) =>
-    peticion<RespuestaCuenta>("/sistema/cuenta", { signal }),
-  cuentaLoginIniciar: (opts: { console?: boolean; email?: string; sso?: boolean }) =>
-    peticion<RespuestaLoginIniciar>("/sistema/cuenta/login/iniciar", {
+  // Soporta DOS cuentas (`cuenta`: "a"|"b"; def "a"). `cuenta=b` se mapea al config-dir de B
+  // (`/data/claude-cfg-b`) en el servidor; "a" deja la ruta intacta (cuenta histórica).
+  sistemaCuenta: (cuenta?: "a" | "b", signal?: AbortSignal) =>
+    peticion<RespuestaCuenta>(`/sistema/cuenta${query({ cuenta })}`, { signal }),
+  cuentaLoginIniciar: (
+    opts: { console?: boolean; email?: string; sso?: boolean },
+    cuenta?: "a" | "b",
+  ) =>
+    peticion<RespuestaLoginIniciar>(`/sistema/cuenta/login/iniciar${query({ cuenta })}`, {
       metodo: "POST",
       json: opts,
       // El back lanza `claude auth login` y espera a que imprima la URL: techo amplio
@@ -88,8 +93,10 @@ export const apiSistema = {
       metodo: "POST",
       json: { sesion },
     }),
-  cuentaLogout: () =>
-    peticion<RespuestaCuentaAccion>("/sistema/cuenta/logout", { metodo: "POST" }),
+  cuentaLogout: (cuenta?: "a" | "b") =>
+    peticion<RespuestaCuentaAccion>(`/sistema/cuenta/logout${query({ cuenta })}`, {
+      metodo: "POST",
+    }),
 
   // --- Proveedor GitHub del servidor (gh, proxy admin al control del daemons) ---
   githubEstado: (signal?: AbortSignal) =>

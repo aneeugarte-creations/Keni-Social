@@ -101,3 +101,33 @@ def test_admin_login_iniciar_proxia(entorno, monkeypatch):
     assert r.json()["url"].startswith("https://")
     assert capturado["ruta"] == "/control/cuenta/login/iniciar"
     assert capturado["json"] == {"console": True}
+
+
+# --- Selector de cuenta (?cuenta=a|b) -------------------------------------- #
+
+
+def test_admin_cuenta_b_anota_ruta(entorno, monkeypatch):
+    # `?cuenta=b` reenvia al control con `?cuenta=b`; sin query (cuenta A) la ruta NO cambia.
+    rutas: list[str] = []
+
+    def _fake(metodo, ruta, json=None):
+        rutas.append(ruta)
+        return 200, {"auth": {"logueado": True}, "uso": {"disponible": True}}
+
+    monkeypatch.setattr(api_sistema.cuenta, "_llamar_control", _fake)
+    c = _cli_como("admin")
+    assert c.get("/api/sistema/cuenta").status_code == 200
+    assert c.get("/api/sistema/cuenta?cuenta=b").status_code == 200
+    assert rutas == ["/control/cuenta/estado", "/control/cuenta/estado?cuenta=b"]
+
+
+def test_admin_logout_b_anota_ruta(entorno, monkeypatch):
+    capturado: dict = {}
+    monkeypatch.setattr(
+        api_sistema.cuenta,
+        "_llamar_control",
+        lambda metodo, ruta, json=None: capturado.setdefault("ruta", ruta) or (200, {"ok": True}),
+    )
+    r = _cli_como("admin").post("/api/sistema/cuenta/logout?cuenta=b", headers=_ORIGIN)
+    assert r.status_code == 200
+    assert capturado["ruta"] == "/control/cuenta/logout?cuenta=b"

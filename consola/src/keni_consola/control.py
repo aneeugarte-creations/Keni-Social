@@ -12,12 +12,17 @@ configurado, el listener NO se monta (apagado por defecto). El `back` lo proxea 
 enviando ese bearer. Las operaciones son BLOQUEANTES (subprocess `claude`): se corren en el
 threadpool para no bloquear el bucle asincrono.
 
+Las rutas de cuenta aceptan `?cuenta=a|b` (def 'a'): mapea al `CLAUDE_CONFIG_DIR` de esa
+cuenta (A = el heredado del contenedor; B = `/data/claude-cfg-b`), para loguear y ver el
+estado de una segunda cuenta sin tocar la A. `login/codigo` y `login/cancelar` operan sobre
+la sesion de login ya viva (no llevan selector).
+
 Rutas (bajo `/control/cuenta`, contrato con el proxy del back en `api/sistema/cuenta.py`):
-  - GET  /control/cuenta/estado        -> {auth:{...}, uso:{...}}
-  - POST /control/cuenta/login/iniciar -> {sesion, url, salida}  (lanza login, devuelve URL)
+  - GET  /control/cuenta/estado        -> {auth:{...}, uso:{...}}  (?cuenta=a|b)
+  - POST /control/cuenta/login/iniciar -> {sesion, url, salida}  (lanza login, devuelve URL; ?cuenta=a|b)
   - POST /control/cuenta/login/codigo  -> {ok, mensaje, salida}  (pega el codigo)
   - POST /control/cuenta/login/cancelar-> {ok}
-  - POST /control/cuenta/logout        -> {ok, mensaje}
+  - POST /control/cuenta/logout        -> {ok, mensaje}  (?cuenta=a|b)
   - GET  /control/healthz              -> {ok:true}  (sonda, sin bearer)
 
 Rutas GitHub (bajo `/control/github`, contrato con `api/sistema/github.py`), gemelas de las
@@ -71,6 +76,11 @@ async def _cuerpo(request: Request) -> dict:
     return datos if isinstance(datos, dict) else {}
 
 
+def _cuenta(request: Request) -> str:
+    """Selector de cuenta de la query (`?cuenta=a|b`, def 'a'). `cuenta_claude` lo valida."""
+    return request.query_params.get("cuenta") or "a"
+
+
 async def healthz(request: Request) -> Response:
     return JSONResponse({"ok": True})
 
@@ -78,8 +88,9 @@ async def healthz(request: Request) -> Response:
 async def estado(request: Request) -> Response:
     if not _autorizado(request):
         return _rechazo()
-    auth = await run_in_threadpool(cuenta_claude.estado)
-    uso = await run_in_threadpool(cuenta_claude.uso)
+    cuenta = _cuenta(request)
+    auth = await run_in_threadpool(cuenta_claude.estado, cuenta)
+    uso = await run_in_threadpool(cuenta_claude.uso, cuenta)
     return JSONResponse({"auth": auth, "uso": uso})
 
 
@@ -91,7 +102,7 @@ async def login_iniciar(request: Request) -> Response:
     email = cuerpo.get("email") or None
     sso = bool(cuerpo.get("sso"))
     res = await run_in_threadpool(
-        cuenta_claude.iniciar_login, console=consola, email=email, sso=sso
+        cuenta_claude.iniciar_login, console=consola, email=email, sso=sso, cuenta=_cuenta(request)
     )
     status = 200 if res.get("url") else 502
     return JSONResponse(res, status_code=status)
@@ -122,7 +133,7 @@ async def login_cancelar(request: Request) -> Response:
 async def logout(request: Request) -> Response:
     if not _autorizado(request):
         return _rechazo()
-    res = await run_in_threadpool(cuenta_claude.logout)
+    res = await run_in_threadpool(cuenta_claude.logout, _cuenta(request))
     return JSONResponse(res, status_code=200 if res.get("ok") else 502)
 
 

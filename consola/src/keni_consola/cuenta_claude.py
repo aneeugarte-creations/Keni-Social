@@ -48,6 +48,36 @@ _log = logging.getLogger("keni_consola.cuenta_claude")
 # Binario del CLI (mismo nombre que usa el runner de generacion). PATH del contenedor.
 _CLAUDE = "claude"
 
+# SELECTOR de cuenta (`a`|`b`) -> `CLAUDE_CONFIG_DIR`. La cuenta A (def) opera sobre el
+# config-dir HEREDADO del contenedor (`/data/claude-cfg`): no se toca el entorno, asi su
+# comportamiento es identico al de siempre. La cuenta B fija `CLAUDE_CONFIG_DIR` al dir de B
+# por llamada (`KENI_CLAUDE_CFG_DIR_B`, def `/data/claude-cfg-b`; mismo volumen compartido
+# /data). Habilita loguear y ver el estado de una segunda cuenta sin tocar la cuenta A.
+_ENV_CFG_DIR_B = "KENI_CLAUDE_CFG_DIR_B"
+_CFG_DIR_B_DEF = "/data/claude-cfg-b"
+
+
+def _normalizar_cuenta(cuenta: str | None) -> str:
+    """Selector de cuenta -> 'a'|'b' validado (def 'a'). Contrato `jobspec.CUENTAS`."""
+    from .dominio import jobspec
+
+    c = (cuenta or jobspec.CUENTA_A).strip().lower()
+    return c if c in jobspec.CUENTAS else jobspec.CUENTA_A
+
+
+def _config_dir_de(cuenta: str | None) -> str | None:
+    """`CLAUDE_CONFIG_DIR` a forzar para la cuenta, o None para la cuenta A.
+
+    None => no se toca el entorno: `claude` usa el config-dir heredado del contenedor
+    (cuenta A, comportamiento IDENTICO). Para la cuenta B devuelve `KENI_CLAUDE_CFG_DIR_B`
+    (def `/data/claude-cfg-b`).
+    """
+    from .dominio import jobspec
+
+    if _normalizar_cuenta(cuenta) == jobspec.CUENTA_B:
+        return (os.environ.get(_ENV_CFG_DIR_B) or _CFG_DIR_B_DEF).strip() or _CFG_DIR_B_DEF
+    return None
+
 # Nombre del fichero donde se persiste el bearer del control (en el volumen COMPARTIDO /data,
 # bajo `rutas.dir_config()`): back y daemons lo leen/crean ahi, asi que comparten el secreto
 # sin que el operador configure nada. La gestion de cuenta esta ACTIVA por defecto.
@@ -294,13 +324,15 @@ def _cwd_neutro() -> str:
     return tempfile.gettempdir()
 
 
-def _ejecutar(argv: list[str], *, timeout: int) -> subprocess.CompletedProcess:
-    """Corre `claude ...` heredando el entorno (CLAUDE_CONFIG_DIR, etc.), sin shell.
+def _ejecutar(argv: list[str], *, timeout: int, config_dir: str | None = None) -> subprocess.CompletedProcess:
+    """Corre `claude ...` sin shell. Hereda el entorno; si se da `config_dir`, fuerza
+    `CLAUDE_CONFIG_DIR` (cuenta B) para esa llamada sin afectar al proceso.
 
     No interactivo: stdin cerrado. Devuelve el CompletedProcess (rc/stdout/stderr). Un
     `claude` ausente (p.ej. en una imagen sin Node) sube FileNotFoundError, que el llamante
     traduce a un error legible.
     """
+    env = {**os.environ, "CLAUDE_CONFIG_DIR": config_dir} if config_dir else None
     return subprocess.run(  # noqa: S603 -- argv lista, sin shell
         argv,
         cwd=_cwd_neutro(),
@@ -308,13 +340,23 @@ def _ejecutar(argv: list[str], *, timeout: int) -> subprocess.CompletedProcess:
         capture_output=True,
         text=True,
         timeout=timeout,
+        env=env,
     )
 
 
-def estado() -> dict:
-    """Estado de autenticacion (`claude auth status --json`) parseado."""
+def _correr(argv: list[str], *, timeout: int, cuenta: str | None) -> subprocess.CompletedProcess:
+    """`_ejecutar` con el `config_dir` de la cuenta. Para la cuenta A NO pasa `config_dir`
+    (hereda el entorno, comportamiento IDENTICO); para la B fuerza su `CLAUDE_CONFIG_DIR`."""
+    cd = _config_dir_de(cuenta)
+    if cd:
+        return _ejecutar(argv, timeout=timeout, config_dir=cd)
+    return _ejecutar(argv, timeout=timeout)
+
+
+def estado(cuenta: str | None = None) -> dict:
+    """Estado de autenticacion (`claude auth status --json`) parseado, de la cuenta `a`|`b`."""
     try:
-        cp = _ejecutar([_CLAUDE, "auth", "status", "--json"], timeout=_TIMEOUT_ESTADO)
+        cp = _correr([_CLAUDE, "auth", "status", "--json"], timeout=_TIMEOUT_ESTADO, cuenta=cuenta)
     except FileNotFoundError:
         return {"logueado": None, "metodo": None, "proveedor": None, "crudo": "", "error": "claude no disponible"}
     except subprocess.TimeoutExpired:
@@ -325,18 +367,19 @@ def estado() -> dict:
     return parsed
 
 
-def uso() -> dict:
-    """Medidor de uso de la suscripcion (`claude -p /usage`) con CACHE del ultimo bueno.
+def uso(cuenta: str | None = None) -> dict:
+    """Medidor de uso de la suscripcion (`claude -p /usage`) con CACHE del ultimo bueno, de `a`|`b`.
 
     `claude -p /usage` a veces devuelve SOLO la frase generica (sin medidor): le pasa cuando
     se le aporrea (rate-limit del propio comando) o ante un bache puntual. Para no mostrar
-    NUNCA esa frase pelada, persistimos el ultimo medidor bueno en `/data` y, cuando una
-    lectura no trae medidor (o falla/timeout), devolvemos el ULTIMO bueno con `cacheado:true`
-    y `actualizado` (epoch). El front pinta "actualizado hace X". Solo si NUNCA hubo un buen
-    medidor cae a `disponible:false`.
+    NUNCA esa frase pelada, persistimos el ultimo medidor bueno en `/data` (un fichero de cache
+    POR CUENTA, asi B no pisa el de A) y, cuando una lectura no trae medidor (o falla/timeout),
+    devolvemos el ULTIMO bueno con `cacheado:true` y `actualizado` (epoch). El front pinta
+    "actualizado hace X". Solo si NUNCA hubo un buen medidor cae a `disponible:false`.
     """
+    cuenta = _normalizar_cuenta(cuenta)
     try:
-        cp = _ejecutar([_CLAUDE, "-p", "/usage"], timeout=_TIMEOUT_USO)
+        cp = _correr([_CLAUDE, "-p", "/usage"], timeout=_TIMEOUT_USO, cuenta=cuenta)
         parsed = parsear_uso(cp.stdout)
         if cp.returncode != 0 and not parsed["disponible"]:
             parsed["error"] = (_limpiar(cp.stderr).strip() or "uso no disponible")
@@ -347,13 +390,13 @@ def uso() -> dict:
 
     if parsed["disponible"]:
         ts = time.time()
-        _guardar_cache_uso({"medidores": parsed["medidores"], "mensaje": parsed["mensaje"], "ts": ts})
+        _guardar_cache_uso({"medidores": parsed["medidores"], "mensaje": parsed["mensaje"], "ts": ts}, cuenta=cuenta)
         parsed["actualizado"] = ts
         parsed["cacheado"] = False
         return parsed
 
     # Lectura sin medidor: NO mostramos la frase pelada; servimos el ultimo bueno si lo hay.
-    cache = _cargar_cache_uso()
+    cache = _cargar_cache_uso(cuenta=cuenta)
     if cache and cache.get("medidores"):
         return {
             "disponible": True,
@@ -373,38 +416,51 @@ def _dir_cache():
     return rutas.dir_config()
 
 
-def _guardar_cache_uso(datos: dict) -> None:
-    """Persiste el ultimo medidor bueno (escritura atomica; best-effort, nunca propaga)."""
+def _fichero_cache_uso(cuenta: str | None) -> str:
+    """Nombre del cache de uso POR CUENTA. La cuenta A conserva el nombre historico
+    (`usage-cache.json`); la B usa un sufijo (`usage-cache-b.json`) para no pisar el de A."""
+    from .dominio import jobspec
+
+    c = _normalizar_cuenta(cuenta)
+    if c == jobspec.CUENTA_A:
+        return _FICHERO_USO_CACHE
+    nombre, _, ext = _FICHERO_USO_CACHE.rpartition(".")
+    return f"{nombre}-{c}.{ext}"
+
+
+def _guardar_cache_uso(datos: dict, *, cuenta: str | None = None) -> None:
+    """Persiste el ultimo medidor bueno de la cuenta (escritura atomica; best-effort, nunca propaga)."""
     import json
     from pathlib import Path
 
+    fichero = _fichero_cache_uso(cuenta)
     try:
         base = Path(_dir_cache())
         base.mkdir(parents=True, exist_ok=True)
-        ruta = base / _FICHERO_USO_CACHE
-        tmp = base / f".{_FICHERO_USO_CACHE}.{os.getpid()}.tmp"
+        ruta = base / fichero
+        tmp = base / f".{fichero}.{os.getpid()}.tmp"
         tmp.write_text(json.dumps(datos), encoding="utf-8")
         os.replace(tmp, ruta)
     except (OSError, ValueError, TypeError):
         pass
 
 
-def _cargar_cache_uso() -> dict | None:
-    """Lee el ultimo medidor bueno cacheado (None si no hay/ilegible)."""
+def _cargar_cache_uso(*, cuenta: str | None = None) -> dict | None:
+    """Lee el ultimo medidor bueno cacheado de la cuenta (None si no hay/ilegible)."""
     import json
     from pathlib import Path
 
     try:
-        datos = json.loads((Path(_dir_cache()) / _FICHERO_USO_CACHE).read_text(encoding="utf-8"))
+        datos = json.loads((Path(_dir_cache()) / _fichero_cache_uso(cuenta)).read_text(encoding="utf-8"))
         return datos if isinstance(datos, dict) else None
     except (OSError, ValueError):
         return None
 
 
-def logout() -> dict:
-    """Cierra la sesion de Claude (`claude auth logout`). {ok, mensaje}."""
+def logout(cuenta: str | None = None) -> dict:
+    """Cierra la sesion de Claude (`claude auth logout`) de la cuenta `a`|`b`. {ok, mensaje}."""
     try:
-        cp = _ejecutar([_CLAUDE, "auth", "logout"], timeout=_TIMEOUT_LOGOUT)
+        cp = _correr([_CLAUDE, "auth", "logout"], timeout=_TIMEOUT_LOGOUT, cuenta=cuenta)
     except FileNotFoundError:
         return {"ok": False, "mensaje": "claude no disponible"}
     except subprocess.TimeoutExpired:
@@ -489,16 +545,22 @@ def _gc_sesiones() -> None:
         _matar(s)
 
 
-def iniciar_login(*, console: bool = False, email: str | None = None, sso: bool = False) -> dict:
-    """Lanza `claude auth login` en un PTY y devuelve {sesion, url, salida}.
+def iniciar_login(
+    *, console: bool = False, email: str | None = None, sso: bool = False, cuenta: str | None = None
+) -> dict:
+    """Lanza `claude auth login` en un PTY (para la cuenta `a`|`b`) y devuelve {sesion, url, salida}.
 
     Lee del PTY hasta ver la URL de autorizacion (o agotar `_TIMEOUT_URL`). La sesion queda
     VIVA esperando el codigo (`enviar_codigo`). Si no aparece URL, mata el proceso y reporta
-    la salida capturada (para diagnosticar, p.ej. un `claude` que pide otra cosa).
+    la salida capturada (para diagnosticar, p.ej. un `claude` que pide otra cosa). La cuenta B
+    fija `CLAUDE_CONFIG_DIR` al dir de B para que el login persista ahi sin tocar la cuenta A;
+    `enviar_codigo`/`cancelar_login` operan sobre el proceso ya lanzado (no necesitan la cuenta).
     """
     import pty
 
     _gc_sesiones()
+    cfg_dir = _config_dir_de(cuenta)
+    env = {**os.environ, "CLAUDE_CONFIG_DIR": cfg_dir} if cfg_dir else None
     master_fd, slave_fd = pty.openpty()
     try:
         proc = subprocess.Popen(  # noqa: S603 -- argv lista, sin shell
@@ -509,6 +571,7 @@ def iniciar_login(*, console: bool = False, email: str | None = None, sso: bool 
             stderr=slave_fd,
             text=False,
             start_new_session=True,  # grupo propio: matar_arbol al cancelar/timeout
+            env=env,
         )
     except FileNotFoundError:
         os.close(master_fd)

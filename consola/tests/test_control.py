@@ -38,14 +38,24 @@ def test_estado_bearer_malo_401(monkeypatch):
 
 
 def test_estado_ok(monkeypatch):
-    monkeypatch.setattr(control.cuenta_claude, "estado", lambda: {"logueado": True, "metodo": "claudeai"})
-    monkeypatch.setattr(control.cuenta_claude, "uso", lambda: {"disponible": True, "medidores": []})
+    monkeypatch.setattr(control.cuenta_claude, "estado", lambda cuenta="a": {"logueado": True, "metodo": "claudeai"})
+    monkeypatch.setattr(control.cuenta_claude, "uso", lambda cuenta="a": {"disponible": True, "medidores": []})
     c = _cli(monkeypatch)
     r = c.get("/control/cuenta/estado", headers=_auth())
     assert r.status_code == 200
     cuerpo = r.json()
     assert cuerpo["auth"]["metodo"] == "claudeai"
     assert cuerpo["uso"]["disponible"] is True
+
+
+def test_estado_propaga_cuenta_b(monkeypatch):
+    # `?cuenta=b` se reenvia a estado()/uso() como selector; sin query, default 'a'.
+    visto: dict = {}
+    monkeypatch.setattr(control.cuenta_claude, "estado", lambda cuenta="a": visto.setdefault("estado", cuenta) or {})
+    monkeypatch.setattr(control.cuenta_claude, "uso", lambda cuenta="a": visto.setdefault("uso", cuenta) or {})
+    c = _cli(monkeypatch)
+    assert c.get("/control/cuenta/estado?cuenta=b", headers=_auth()).status_code == 200
+    assert visto == {"estado": "b", "uso": "b"}
 
 
 def test_login_iniciar_devuelve_url(monkeypatch):
@@ -67,6 +77,22 @@ def test_login_iniciar_sin_url_502(monkeypatch):
     assert r.status_code == 502
 
 
+def test_login_iniciar_propaga_cuenta_b(monkeypatch):
+    # El selector `?cuenta=b` llega a iniciar_login para apuntar al config-dir de B.
+    visto: dict = {}
+
+    def _fake(**kw):
+        visto.update(kw)
+        return {"sesion": "s1", "url": "https://claude.ai/oauth?x=1"}
+
+    monkeypatch.setattr(control.cuenta_claude, "iniciar_login", _fake)
+    c = _cli(monkeypatch)
+    r = c.post("/control/cuenta/login/iniciar?cuenta=b", headers=_auth(), json={"console": True})
+    assert r.status_code == 200
+    assert visto["cuenta"] == "b"
+    assert visto["console"] is True
+
+
 def test_login_codigo_valida_campos(monkeypatch):
     c = _cli(monkeypatch)
     # Falta el codigo -> 400 sin tocar dominio.
@@ -83,8 +109,16 @@ def test_login_codigo_ok(monkeypatch):
 
 
 def test_logout_ok(monkeypatch):
-    monkeypatch.setattr(control.cuenta_claude, "logout", lambda: {"ok": True, "mensaje": "cerrada"})
+    monkeypatch.setattr(control.cuenta_claude, "logout", lambda cuenta="a": {"ok": True, "mensaje": "cerrada"})
     c = _cli(monkeypatch)
     r = c.post("/control/cuenta/logout", headers=_auth())
     assert r.status_code == 200
     assert r.json()["ok"] is True
+
+
+def test_logout_propaga_cuenta_b(monkeypatch):
+    visto: dict = {}
+    monkeypatch.setattr(control.cuenta_claude, "logout", lambda cuenta="a": visto.setdefault("c", cuenta) or {"ok": True})
+    c = _cli(monkeypatch)
+    assert c.post("/control/cuenta/logout?cuenta=b", headers=_auth()).status_code == 200
+    assert visto["c"] == "b"

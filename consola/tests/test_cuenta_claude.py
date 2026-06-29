@@ -191,3 +191,66 @@ def test_uso_sin_cache_cae_a_no_disponible(monkeypatch, tmp_path):
     )
     r = cc.uso()
     assert r["disponible"] is False and r["medidores"] == []
+
+
+# --- Selector de cuenta (a|b) -> CLAUDE_CONFIG_DIR ------------------------- #
+
+
+def test_config_dir_selector_a_es_none(monkeypatch):
+    # La cuenta A (def, None, o valor desconocido) NO fuerza config-dir: hereda el del
+    # contenedor -> comportamiento IDENTICO al de siempre.
+    monkeypatch.setenv("KENI_CLAUDE_CFG_DIR_B", "/data/claude-cfg-b")
+    assert cc._config_dir_de("a") is None
+    assert cc._config_dir_de(None) is None
+    assert cc._config_dir_de("zzz") is None
+
+
+def test_config_dir_selector_b(monkeypatch):
+    # La cuenta B mapea a su config-dir (def /data/claude-cfg-b; env-configurable).
+    monkeypatch.delenv("KENI_CLAUDE_CFG_DIR_B", raising=False)
+    assert cc._config_dir_de("b") == "/data/claude-cfg-b"
+    monkeypatch.setenv("KENI_CLAUDE_CFG_DIR_B", "/data/otro-b")
+    assert cc._config_dir_de("B") == "/data/otro-b"  # selector case-insensitive
+
+
+def test_correr_cuenta_b_inyecta_config_dir(monkeypatch):
+    # estado(cuenta="b") corre `claude` con el config-dir de B; la cuenta A NO pasa config_dir.
+    import subprocess
+
+    capturado: list[tuple] = []
+
+    def _fake(argv, *, timeout, config_dir=None):
+        capturado.append((argv, config_dir))
+        return subprocess.CompletedProcess(argv, 0, '{"loggedIn": true}', "")
+
+    monkeypatch.setattr(cc, "_ejecutar", _fake)
+    monkeypatch.setenv("KENI_CLAUDE_CFG_DIR_B", "/data/claude-cfg-b")
+
+    cc.estado("a")
+    cc.estado("b")
+    assert capturado[0][1] is None  # cuenta A: hereda el entorno (idéntico)
+    assert capturado[1][1] == "/data/claude-cfg-b"  # cuenta B: su config-dir
+
+
+def test_fichero_cache_uso_por_cuenta():
+    # La cuenta A conserva el nombre histórico; la B usa un sufijo (no pisa el de A).
+    assert cc._fichero_cache_uso("a") == "usage-cache.json"
+    assert cc._fichero_cache_uso(None) == "usage-cache.json"
+    assert cc._fichero_cache_uso("b") == "usage-cache-b.json"
+
+
+def test_uso_cuenta_b_cachea_aparte(monkeypatch, tmp_path):
+    # uso(cuenta="b") persiste su cache en el fichero de B sin tocar el de A.
+    import subprocess
+
+    monkeypatch.setattr(cc, "_dir_cache", lambda: tmp_path)
+    monkeypatch.setattr(
+        cc, "_ejecutar",
+        lambda argv, *, timeout, config_dir=None: subprocess.CompletedProcess(
+            argv, 0, _USAGE_COMPLETO, ""
+        ),
+    )
+    r = cc.uso(cuenta="b")
+    assert r["disponible"] is True
+    assert (tmp_path / "usage-cache-b.json").exists()
+    assert not (tmp_path / "usage-cache.json").exists()

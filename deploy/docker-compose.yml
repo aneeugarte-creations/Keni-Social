@@ -488,6 +488,11 @@ services:
       # fija con `claude auth login` desde el panel (lo corre el daemons) y vive aquí, así que
       # worker+daemons la usan y un cambio de cuenta aplica EN CALIENTE, sin reiniciar.
       CLAUDE_CONFIG_DIR: /data/claude-cfg
+      # Config-dir de la SEGUNDA cuenta de Claude (cuenta B) en el MISMO volumen /data: el panel
+      # Sistema→Cuenta puede loguear y ver su estado aquí sin tocar la cuenta A (habilita el split
+      # por marcas; el worker-b la usará). El daemons (que corre el login) lo escribe; no hace
+      # falta montaje extra (es el mismo /data ya montado).
+      KENI_CLAUDE_CFG_DIR_B: /data/claude-cfg-b
       # Listener de CONTROL (gestion de la cuenta de Claude): el daemons (instancia unica) lo
       # levanta SIEMPRE; el bearer que comparte con el back se auto-persiste en /data.
       # Store EDITABLE de ajustes compartido con back/worker (mismo volumen keni-data): los

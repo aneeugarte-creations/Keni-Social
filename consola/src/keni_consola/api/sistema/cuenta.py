@@ -7,12 +7,17 @@ cuenta son sensibles) y REENVIAN por la red interna a `KENI_CONTROL_URL` con el 
 efectivo (auto-persistido en /data; sin configurar nada). ACTIVO por defecto: si el control no
 responde (daemons caido), `disponible:false` con el error, en vez de 500.
 
+Soporta DOS cuentas (`?cuenta=a|b`, def 'a'): A es la cuenta historica (config-dir heredado);
+B vive en `/data/claude-cfg-b` (split por marcas). El selector se reenvia al control tal cual;
+la cuenta A queda IDENTICA (no se anade query). `login/codigo` y `login/cancelar` van por id de
+sesion (no llevan selector).
+
 Endpoints (bajo `/api/sistema/cuenta`, CONTRATO con el frontend):
-  - GET  /api/sistema/cuenta              -> {disponible, auth:{...}, uso:{...}}
-  - POST /api/sistema/cuenta/login/iniciar-> {sesion, url, salida} | {error}
+  - GET  /api/sistema/cuenta              -> {disponible, auth:{...}, uso:{...}}  (?cuenta=a|b)
+  - POST /api/sistema/cuenta/login/iniciar-> {sesion, url, salida} | {error}  (?cuenta=a|b)
   - POST /api/sistema/cuenta/login/codigo -> {ok, mensaje, salida}
   - POST /api/sistema/cuenta/login/cancelar-> {ok}
-  - POST /api/sistema/cuenta/logout       -> {ok, mensaje}
+  - POST /api/sistema/cuenta/logout       -> {ok, mensaje}  (?cuenta=a|b)
 """
 
 from __future__ import annotations
@@ -56,10 +61,20 @@ def _llamar_control(metodo: str, ruta: str, json: dict | None = None) -> tuple[i
         return 502, {"error": "no se pudo contactar el control del servidor"}
 
 
+def _con_cuenta(request: Request, ruta: str) -> str:
+    """Anade `?cuenta=b` a la ruta del control si la peticion selecciona la cuenta B.
+
+    La cuenta A (def) deja la ruta INTACTA: su contrato con el control no cambia. Solo se
+    aceptan 'a'|'b'; cualquier otro valor cae a 'a' (la ruta queda intacta)."""
+    cuenta = (request.query_params.get("cuenta") or "a").strip().lower()
+    return f"{ruta}?cuenta=b" if cuenta == "b" else ruta
+
+
 async def _proxy(request: Request, metodo: str, ruta: str, *, leer_cuerpo: bool) -> Response:
-    """Patron comun: admin-gated + reenvio al control del daemons."""
+    """Patron comun: admin-gated + reenvio al control del daemons (con selector de cuenta)."""
     if not _es_admin(request):
         return _rechazo_no_admin()
+    ruta = _con_cuenta(request, ruta)
     cuerpo: dict | None = None
     if leer_cuerpo:
         try:
@@ -75,7 +90,8 @@ async def cuenta(request: Request) -> Response:
     """GET /api/sistema/cuenta: estado de auth + medidor de uso (admin)."""
     if not _es_admin(request):
         return _rechazo_no_admin()
-    status, payload = await run_in_threadpool(_llamar_control, "GET", "/control/cuenta/estado")
+    ruta = _con_cuenta(request, "/control/cuenta/estado")
+    status, payload = await run_in_threadpool(_llamar_control, "GET", ruta)
     payload["disponible"] = status == 200
     return JSONResponse(payload, status_code=200 if status == 200 else status)
 

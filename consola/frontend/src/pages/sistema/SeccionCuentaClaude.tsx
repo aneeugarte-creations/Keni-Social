@@ -122,11 +122,17 @@ function BloqueUso({ uso }: { uso: CuentaUso | undefined }) {
   );
 }
 
+/** Selector de cuenta de Claude del servidor. "a" = cuenta histórica; "b" = segunda cuenta
+ *  (split por marcas: unotv / nacion-gamer / unotv-us). */
+type Cuenta = "a" | "b";
+
 /** Flujo de conectar/cambiar cuenta: obtener URL → abrir/copiar → pegar código → confirmar. */
 function DialogoCambiarCuenta({
+  cuenta,
   conectado,
   onCambiada,
 }: {
+  cuenta: Cuenta;
   conectado: boolean;
   onCambiada: () => void;
 }) {
@@ -145,7 +151,7 @@ function DialogoCambiarCuenta({
   }, []);
 
   const iniciar = useMutation({
-    mutationFn: () => api.cuentaLoginIniciar({ console: usarConsola }),
+    mutationFn: () => api.cuentaLoginIniciar({ console: usarConsola }, cuenta),
     onSuccess: (r) => {
       if (r.url && r.sesion) {
         setSesion(r.sesion);
@@ -279,9 +285,9 @@ function DialogoCambiarCuenta({
 }
 
 /** Botón de cerrar sesión con confirmación (deja al servidor sin cuenta hasta re-login). */
-function BotonLogout({ onHecho }: { onHecho: () => void }) {
+function BotonLogout({ cuenta, onHecho }: { cuenta: Cuenta; onHecho: () => void }) {
   const logout = useMutation({
-    mutationFn: () => api.cuentaLogout(),
+    mutationFn: () => api.cuentaLogout(cuenta),
     onSuccess: (r) => {
       if (r.ok) {
         toast.success("Sesión de Claude cerrada en el servidor.");
@@ -320,11 +326,19 @@ function BotonLogout({ onHecho }: { onHecho: () => void }) {
   );
 }
 
-/** Sección de la cuenta de Claude del servidor: estado de auth, uso y cambio de cuenta. */
-export function SeccionCuentaClaude() {
+/** Tarjeta de UNA cuenta de Claude del servidor: estado de auth, uso y cambio de cuenta. */
+function TarjetaCuenta({
+  cuenta,
+  titulo,
+  descripcion,
+}: {
+  cuenta: Cuenta;
+  titulo: string;
+  descripcion?: string;
+}) {
   const query = useQuery({
-    queryKey: ["sistema", "cuenta"],
-    queryFn: ({ signal }) => api.sistemaCuenta(signal),
+    queryKey: ["sistema", "cuenta", cuenta],
+    queryFn: ({ signal }) => api.sistemaCuenta(cuenta, signal),
     // Cada hora, y NO al reenfocar la ventana: leerlo es caro (`claude -p /usage`). Para
     // verlo al instante, el botón de refresco de la cabecera.
     refetchInterval: INTERVALO_CUENTA_MS,
@@ -337,7 +351,7 @@ export function SeccionCuentaClaude() {
   if (query.isError) {
     return (
       <BloqueError
-        titulo="No se pudo leer la cuenta de Claude"
+        titulo={`No se pudo leer ${titulo}`}
         mensaje={mensajeError(query.error)}
         onReintentar={() => void query.refetch()}
         cargando={query.isFetching}
@@ -355,7 +369,7 @@ export function SeccionCuentaClaude() {
         <CardTitle className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
           <span className="flex items-center gap-2">
             <KeyRound className="h-4 w-4" aria-hidden="true" />
-            Cuenta de Claude del servidor
+            {titulo}
           </span>
           <span className="flex items-center gap-2">
             {data.disponible && <BadgeAuth auth={data.auth} />}
@@ -374,6 +388,9 @@ export function SeccionCuentaClaude() {
             </Button>
           </span>
         </CardTitle>
+        {descripcion && (
+          <p className="pt-1 text-xs text-muted-foreground">{descripcion}</p>
+        )}
       </CardHeader>
       <CardContent className="space-y-4 p-4 pt-0">
         {!data.disponible ? (
@@ -393,7 +410,7 @@ export function SeccionCuentaClaude() {
             {data.auth?.error && (
               <p className="text-xs text-muted-foreground">{data.auth.error}</p>
             )}
-            <DialogoCambiarCuenta conectado={false} onCambiada={refrescar} />
+            <DialogoCambiarCuenta cuenta={cuenta} conectado={false} onCambiada={refrescar} />
           </div>
         ) : (
           <>
@@ -413,12 +430,31 @@ export function SeccionCuentaClaude() {
             <BloqueUso uso={data.uso} />
 
             <div className="flex items-center gap-2 pt-1">
-              <DialogoCambiarCuenta conectado onCambiada={refrescar} />
-              <BotonLogout onHecho={refrescar} />
+              <DialogoCambiarCuenta cuenta={cuenta} conectado onCambiada={refrescar} />
+              <BotonLogout cuenta={cuenta} onHecho={refrescar} />
             </div>
           </>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/** Sección de las cuentas de Claude del servidor: la cuenta A (histórica) y la cuenta B
+ *  (segunda cuenta para el split por marcas). Cada una con su estado/uso y login/logout. */
+export function SeccionCuentaClaude() {
+  return (
+    <div className="space-y-4">
+      <TarjetaCuenta
+        cuenta="a"
+        titulo="Cuenta de Claude del servidor (A)"
+        descripcion="Cuenta principal: marcas de Claro Sports y la Fundación, y todo lo que no esté repartido a la cuenta B."
+      />
+      <TarjetaCuenta
+        cuenta="b"
+        titulo="Cuenta de Claude del servidor (B)"
+        descripcion="Segunda cuenta para el reparto por marcas: UnoTV, Nación Gamer y UnoTV US (informativo)."
+      />
+    </div>
   );
 }
