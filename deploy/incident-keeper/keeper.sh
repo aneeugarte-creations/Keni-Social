@@ -230,6 +230,20 @@ buscar_resumible() {  # $1=huella  $2=trigger
   return 1
 }
 
+# ¿El rojo $1 (trigger "CI #N") quedó PENDIENTE de re-trabajo? = su sesión MÁS RECIENTE acabó
+# `interrumpido` (un deploy la cortó) o `fallido` (su fix no bastó). Devuelve 0 si sí. Es lo que
+# permite RE-DISPARAR el MISMO nº de pipeline tras una interrupción: sin esto, `CI_ULTIMO` (antiflap)
+# bloqueaba para siempre el rojo ya intentado y el keeper se quedaba mudo aunque main siguiera rojo.
+# Mira solo la sesión más reciente del trigger: si la última fue corriendo/verificando/resuelto/
+# abortado, NO re-disparamos (hay algo en marcha o ya resuelto).
+pendiente_para() {  # $1 = trigger, p. ej. "CI #78"
+  for meta in $(ls -1 "$DATA"/*.meta.json 2>/dev/null | sort -r); do
+    [ "$(meta_get "$meta" trigger)" = "$1" ] || continue
+    case "$(meta_get "$meta" estado)" in interrumpido|fallido) return 0 ;; *) return 1 ;; esac
+  done
+  return 1
+}
+
 # Reconcilia sesiones HUÉRFANAS: una meta en `corriendo` al ARRANCAR significa que un keeper previo
 # se cayó/reinició (p. ej. un deploy recrea el contenedor) y mató el claude sin cerrar la sesión.
 # La marcamos `interrumpido` (para que la UI no la muestre eternamente "corriendo") CAPTURANDO su
@@ -310,7 +324,12 @@ while :; do
       # FIX-AWARE: ya tengo un fix MÍO EN VERIFICACIÓN para ESTOS MISMOS fallos. El rojo nuevo es el
       # lag de propagación de algo que ya estoy esperando: NO re-intento, espero su veredicto.
       log "CI ROJO #$num: mismos fallos que un fix en verificación -> espero su veredicto (no re-intento)"
-    elif [ "$num" != "$(cat "$CI_ULTIMO" 2>/dev/null)" ]; then
+    elif [ "$num" != "$(cat "$CI_ULTIMO" 2>/dev/null)" ] || pendiente_para "CI #$num"; then
+      # Dispara si el rojo es NUEVO (≠ CI_ULTIMO, antiflapping) O si el MISMO rojo quedó pendiente de
+      # re-trabajo (su última sesión fue interrumpida/fallida). Lo segundo rompe el deadlock: un deploy
+      # que cortaba la sesión dejaba CI_ULTIMO=N y el keeper saltaba N para siempre. Las sesiones
+      # corriendo (LOCK, arriba) y verificando (rama de arriba) ya están cubiertas, así que esto no
+      # re-dispara sobre algo en marcha.
       n="$(ci_intentos_recientes)"
       if [ "$n" -ge "$CI_MAX" ]; then
         log "CI sigue rojo tras $n intentos en ${CI_VENTANA_MIN}min: pauso el auto-fix; requiere humano"

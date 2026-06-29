@@ -1308,7 +1308,13 @@ services:
   # máquina de contenido ni al revés. NO toca docker (la mitigación es del guardian) ni la cola/Postgres. Best-effort:
   # NO gatea el deploy (un keeper caído no tumba prod). Límites duros y escalada-a-humano en el ROL.
   incident-keeper:
-    image: keni-social/worker:${WORKER_VERSION:-latest}
+    # Tag DEDICADO `:keeper` (no `:${WORKER_VERSION}`): así un deploy de la APP —que reconstruye el
+    # worker y mueve `:latest`/`:${VERSION}`— deja este contenedor INTACTO (su tag no cambia) y NO lo
+    # recrea a media sesión (era la causa de la pared de «interrumpido»). Solo el carril del guardián
+    # (deploy-guardian.yml) re-etiqueta `:keeper` desde `:latest` y lo recrea. El código real viene
+    # del bind-mount `./incident-keeper:/keeper`, no de la imagen, así que el tag solo aporta las
+    # herramientas (claude/git/gh), estables entre versiones.
+    image: keni-social/worker:keeper
     restart: unless-stopped
     # Hereda el ENTRYPOINT del worker (hidrata la cuenta de Claude + git author) y corre el bucle.
     command: ["sh", "/keeper/keeper.sh"]
@@ -1386,7 +1392,10 @@ services:
   # sin build propio. Además GESTIONA la cuenta de Claude del guardián (login/logout sobre
   # `guardian-claude-cfg`, el mismo dir que usa el keeper), tras el basicauth propio de Traefik.
   guardian-ui:
-    image: keni-social/worker:${WORKER_VERSION:-latest}
+    # Tag DEDICADO `:keeper` (como incident-keeper): un deploy de la app no recrea este panel (sirve
+    # el índice por bind-mount; el tag solo aporta `claude` para login/uso). Solo el carril del
+    # guardián lo re-etiqueta y recrea.
+    image: keni-social/worker:keeper
     restart: unless-stopped
     command: ["python", "-m", "uvicorn", "--app-dir", "/guardian-ui", "app:app", "--host", "0.0.0.0", "--port", "8080"]
     environment:

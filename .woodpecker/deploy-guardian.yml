@@ -59,10 +59,15 @@ steps:
       # git, así que `--delete` dentro de ellos es seguro. Todo bajo el flock del dir estable
       # (serializa con el deploy general). El flag `estado/desplegando` evita que el `guardian`
       # resucitador pelee con la recreación; se borra SIEMPRE al salir vía trap, así no queda huérfano.
+      # `docker tag worker:latest worker:keeper`: re-sella el tag DEDICADO al que apuntan estos dos
+      # servicios (ver docker-compose.yml) con el worker recién construido. Es lo ÚNICO que mueve
+      # `:keeper`, así que un deploy de la app (que mueve `:latest`/`:${VERSION}` pero no `:keeper`) ya
+      # no los recrea a media sesión. La recreación de abajo los lleva al worker nuevo + código nuevo.
       - >-
         flock -x -w 1800 /home/ubuntu/keni-social/.deploy.lock sh -c "
         rsync -a --delete ./deploy/guardian-ui/ /home/ubuntu/keni-social/deploy/guardian-ui/
         && rsync -a --delete ./deploy/incident-keeper/ /home/ubuntu/keni-social/deploy/incident-keeper/
+        && docker tag keni-social/worker:latest keni-social/worker:keeper
         && cd /home/ubuntu/keni-social/deploy
         && mkdir -p estado && chmod 0777 estado 2>/dev/null || true
         && : > estado/desplegando && trap 'rm -f estado/desplegando' EXIT
