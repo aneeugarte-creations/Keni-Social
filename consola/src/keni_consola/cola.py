@@ -63,7 +63,7 @@ def encolar(
     # `presupuesto_ia.bloqueo_admision` (fuente única, compartida con el gate de reclamo del
     # worker); aquí solo mapeamos el nivel que BLOQUEA a su excepción. Todas son subclase de
     # ColaLlenaError -> 429 claro en API y backpressure normal en el pipeline.
-    gasta_tokens = not jobspec.es_kind_proceso(spec)
+    gasta_tokens = jobspec.gasta_tokens(spec)
     bloqueo = presupuesto_ia.bloqueo_admision(
         presupuesto_ia.nivel(marca or ""),
         gasta_tokens=gasta_tokens,

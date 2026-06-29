@@ -158,6 +158,28 @@ CARRIL_PROCESO = "proceso"
 CARRIL_TRANSCRIPCION = "transcripcion"
 CARRIL_DEV = "dev"
 
+# CUENTAS de Claude (A/B): reparto del gasto/credenciales por marca. El valor "a"/"b" es el
+# CONTRATO con la config (override `KENI_CUENTA_CLAUDE::<marca>`); el reparto marca->cuenta vive
+# en `keni_consola.ruteo_cuentas`. El AISLAMIENTO real de cada cuenta es su `CLAUDE_CONFIG_DIR`
+# (un subdir por cuenta bajo /data), que monta el contenedor del worker que sirve esa cuenta.
+CUENTA_A = "a"
+CUENTA_B = "b"
+CUENTAS = (CUENTA_A, CUENTA_B)
+
+# CARRILES por cuenta de Claude: separan el trabajo de INVESTIGACION de cada cuenta en el pool del
+# worker que monta SU `CLAUDE_CONFIG_DIR`. El worker de la cuenta A (el existente) reclama
+# `cuenta-a` ademas de inferencia/proceso; el worker B reclama `cuenta-b`. A diferencia del carril
+# `proceso` (ffmpeg/whisper, EXENTO del presupuesto), estos carriles llevan trabajo de `claude` que
+# SI gasta tokens: cuentan para el presupuesto igual que `inferencia` (ver `gasta_tokens`).
+CARRIL_CUENTA_A = "cuenta-a"
+CARRIL_CUENTA_B = "cuenta-b"
+_CARRILES_CUENTA = {CUENTA_A: CARRIL_CUENTA_A, CUENTA_B: CARRIL_CUENTA_B}
+
+
+def carril_de_cuenta(cuenta: str) -> str:
+    """Carril de cola de una cuenta de Claude (A|B). Cae al de la cuenta A si no se reconoce."""
+    return _CARRILES_CUENTA.get(cuenta, CARRIL_CUENTA_A)
+
 # Registro de EJECUTORES por kind de proceso. Valor = "modulo:funcion" (path importable),
 # resuelto por import PEREZOSO en `resolver_ejecutor_proceso` (asi `jobspec` no importa los
 # motores al cargar: el back/CI no necesita ffmpeg/whisper para importar este modulo). Cada
@@ -181,6 +203,19 @@ def es_kind_proceso(spec: dict[str, Any]) -> bool:
     (ese es el post-procesado del camino claude). El worker usa esto para elegir el dispatch.
     """
     return isinstance(spec, dict) and spec.get("kind") in KINDS_PROCESO
+
+
+def gasta_tokens(spec: dict[str, Any]) -> bool:
+    """True si el job CONSUME tokens de la suscripcion `claude` (cuenta para el presupuesto).
+
+    Fuente UNICA de la regla de economia de tokens (la usa el gate de admision `cola.encolar`):
+    SOLO los jobs de PROCESO (render ffmpeg / ASR whisper / imagen) quedan EXENTOS, porque su
+    motor no toca la suscripcion. TODO lo demas gasta — incluidos los jobs de INVESTIGACION que
+    viajan por un carril de cuenta (`cuenta-a`/`cuenta-b`): corren `claude` y SI cuentan, a
+    diferencia del carril `proceso`. El gate del worker (por carril/`solo_proceso`) reclama esos
+    carriles de cuenta en hilos de inferencia, que tambien cuentan.
+    """
+    return not es_kind_proceso(spec)
 
 
 def carril(spec: dict[str, Any]) -> str:

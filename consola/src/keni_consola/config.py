@@ -436,6 +436,7 @@ from .config_jobs import (  # noqa: F401
     presupuesto_tokens_produccion_out_dia_marca,
     presupuesto_usd_dia,
     presupuesto_usd_dia_marca,
+    worker_carriles,
     worker_externo,
     worker_sondeo_segundos,
 )

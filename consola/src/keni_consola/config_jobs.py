@@ -14,6 +14,7 @@ from ._config_comun import (
     ENV_PRESUPUESTO_USD_DIA,
     ENV_PROMPT_AVISO_CHARS,
     ENV_PROMPT_MAX_CHARS,
+    ENV_WORKER_CARRILES,
     ENV_WORKER_EXTERNO,
     ENV_WORKER_SONDEO_SEGUNDOS,
     JOBS_MAX_INTENTOS_DEF,
@@ -261,6 +262,26 @@ def worker_externo() -> bool:
     un solo proceso), preservando la UX de una sola maquina sin servicio aparte.
     """
     return _crudo(ENV_WORKER_EXTERNO).lower() in _VERDADEROS
+
+
+def worker_carriles() -> set[str]:
+    """Carriles de cola que ESTE worker reclama (`KENI_WORKER_CARRILES`, lista por comas).
+
+    Reparte el trabajo de las DOS cuentas de Claude entre workers: el worker A monta `cuenta-a`
+    ademas de `inferencia,proceso`; el worker B solo `cuenta-b` (cada uno con su `CLAUDE_CONFIG_DIR`).
+    Vacio/ausente = TODOS los carriles de CONTENIDO (inferencia, proceso, cuenta-a, cuenta-b): el
+    perfil de UNA sola maquina/cuenta no orfana ningun job. NUNCA incluye `dev`/`transcripcion`
+    (esos los reclaman sus servicios dedicados).
+    """
+    from .dominio import jobspec
+
+    crudo = _crudo(ENV_WORKER_CARRILES)
+    if not crudo:
+        return {
+            jobspec.CARRIL_INFERENCIA, jobspec.CARRIL_PROCESO,
+            jobspec.CARRIL_CUENTA_A, jobspec.CARRIL_CUENTA_B,
+        }
+    return {c.strip() for c in crudo.split(",") if c.strip()}
 
 
 def worker_sondeo_segundos() -> float:

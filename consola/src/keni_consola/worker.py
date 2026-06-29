@@ -366,7 +366,13 @@ def _esperar_terminal(gen_id: str) -> None:
         generaciones.descartar_evento_terminal(gen_id)
 
 
-def _bucle(parar: threading.Event, worker_id: str, *, solo_proceso: bool | None = None) -> None:
+def _bucle(
+    parar: threading.Event,
+    worker_id: str,
+    *,
+    solo_proceso: bool | None = None,
+    carriles: set[str] | None = None,
+) -> None:
     """Bucle de UN hilo del pool: clava un job y lo procesa; duerme si la cola esta vacia.
 
     CONCURRENCIA (KENI_MAX_JOBS): este bucle lo corren EN PARALELO los hilos del pool (ver
@@ -380,7 +386,15 @@ def _bucle(parar: threading.Event, worker_id: str, *, solo_proceso: bool | None 
     manual prioritario (head-of-line). `None` = cualquiera (pool unico legado). Los jobs de
     proceso NO gastan tokens de la suscripcion: su carril queda EXENTO del corte por presupuesto
     (solo lo detiene el kill switch PAUSADO), como el gate de encolado (`cola.encolar`).
+
+    POOL DE CARRILES (`carriles`): el conjunto de carriles que este worker reclama. Reparte las DOS
+    cuentas de Claude entre workers: el worker A incluye `cuenta-a` y el worker B solo `cuenta-b`.
+    Los carriles de cuenta llevan `claude` (investigacion) que SI gasta tokens, asi que se reclaman
+    por el camino de inferencia (`gasta_tokens=True`), nunca por el exento de proceso. `None` =
+    `{inferencia, proceso}` (retrocompatible).
     """
+    if carriles is None:
+        carriles = {jobspec.CARRIL_INFERENCIA, jobspec.CARRIL_PROCESO}
     sondeo = config.worker_sondeo_segundos()
     espera = sondeo
     # Un carril CPU-bound (proceso) NO gasta tokens IA: el corte por presupuesto (AGOTADO/
@@ -418,7 +432,7 @@ def _bucle(parar: threading.Event, worker_id: str, *, solo_proceso: bool | None 
                 worker_id,
                 prioridad_minima=prioridad_minima,
                 solo_proceso=solo_proceso,
-                carriles={jobspec.CARRIL_INFERENCIA, jobspec.CARRIL_PROCESO},
+                carriles=carriles,
             )
         except Exception:  # noqa: BLE001 -- un fallo de la cola no debe matar el worker
             _log.exception("worker: fallo al reclamar un job de la cola")
@@ -486,11 +500,27 @@ class _Pool:
     lo activa, cancela TODOS los jobs en curso y hace join con timeout (apagado determinista).
     """
 
-    def __init__(self, n: int, prefijo_id: str, *, n_proceso: int | None = None) -> None:
+    def __init__(
+        self,
+        n: int,
+        prefijo_id: str,
+        *,
+        n_proceso: int | None = None,
+        carriles: set[str] | None = None,
+    ) -> None:
         self._parar = threading.Event()
         self._hilos: list[threading.Thread] = []
         n_inferencia = max(1, n)
         n_proc = _max_jobs_proceso() if n_proceso is None else max(0, n_proceso)
+        # Carriles que este worker reclama (reparto de cuentas A/B entre workers). Por defecto, los
+        # del entorno (`config.worker_carriles()`): el worker A monta `cuenta-a` y el worker B solo
+        # `cuenta-b`. Los hilos de inferencia y proceso comparten el conjunto; la separacion
+        # CPU-bound vs inferencia la hace `solo_proceso` (los carriles de cuenta caen siempre del
+        # lado de inferencia, que gasta tokens).
+        if carriles is None:
+            from . import config
+
+            carriles = config.worker_carriles()
         # SIN carril de proceso dedicado (n_proc == 0): el de inferencia toma TODO (`None`, pool
         # unico legado), para no dejar jobs de proceso sin quien los reclame. Con carril dedicado,
         # el de inferencia EXCLUYE los kinds de proceso (False).
@@ -500,7 +530,7 @@ class _Pool:
             worker_id = f"{prefijo_id}-inf-{uuid.uuid4().hex[:8]}"
             self._hilos.append(threading.Thread(
                 target=_bucle, args=(self._parar, worker_id),
-                kwargs={"solo_proceso": carril_inferencia},
+                kwargs={"solo_proceso": carril_inferencia, "carriles": set(carriles)},
                 name=f"worker-generacion-inf-{i}", daemon=True,
             ))
         # PROCESO (CPU-bound): carril aparte para que no compita por los slots de inferencia.
@@ -508,7 +538,7 @@ class _Pool:
             worker_id = f"{prefijo_id}-proc-{uuid.uuid4().hex[:8]}"
             self._hilos.append(threading.Thread(
                 target=_bucle, args=(self._parar, worker_id),
-                kwargs={"solo_proceso": True},
+                kwargs={"solo_proceso": True, "carriles": set(carriles)},
                 name=f"worker-generacion-proc-{i}", daemon=True,
             ))
 

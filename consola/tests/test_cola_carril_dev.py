@@ -118,3 +118,46 @@ def test_transcripcion_va_al_transcriptor_no_al_worker(entorno):
     # El transcriptor reclama solo el carril `transcripcion`: ve la transcripción.
     job_tr = cola.reclamar("w-trans", carriles={jobspec.CARRIL_TRANSCRIPCION})
     assert job_tr is not None and job_tr["gen_id"] == g_tr
+
+
+# --------------------------------------------------------------------------- #
+# Carriles por CUENTA de Claude (A/B): cada worker monta su CLAUDE_CONFIG_DIR  #
+# --------------------------------------------------------------------------- #
+
+
+def _encolar_investigacion(gen_id: str, carril: str) -> None:
+    """Encola un job de INVESTIGACION (claude) en el carril de una cuenta (A/B)."""
+    cola.encolar(
+        gen_id,
+        jobspec.construir(
+            prompt="p", procesar=jobspec.construir_prompt_lib(), carril=carril
+        ),
+    )
+
+
+def test_worker_b_solo_reclama_carril_cuenta_b(entorno):
+    g_a = _gen("prompt")
+    g_b = _gen("prompt")
+    _encolar_investigacion(g_a, jobspec.CARRIL_CUENTA_A)
+    _encolar_investigacion(g_b, jobspec.CARRIL_CUENTA_B)
+
+    # El worker A (inferencia+proceso+cuenta-a) NUNCA ve el de la cuenta B.
+    carriles_a = {jobspec.CARRIL_INFERENCIA, jobspec.CARRIL_PROCESO, jobspec.CARRIL_CUENTA_A}
+    job_a = cola.reclamar("w-a", carriles=carriles_a)
+    assert job_a is not None and job_a["gen_id"] == g_a
+    assert cola.reclamar("w-a", carriles=carriles_a) is None
+
+    # El worker B reclama solo `cuenta-b`: ve el suyo.
+    job_b = cola.reclamar("w-b", carriles={jobspec.CARRIL_CUENTA_B})
+    assert job_b is not None and job_b["gen_id"] == g_b
+
+
+def test_carril_cuenta_no_lo_roba_el_hilo_de_proceso(entorno):
+    # Un job de cuenta (claude, gasta tokens) NO debe caer en el carril exento de proceso:
+    # el hilo de proceso (solo_proceso=True) lo IGNORA aunque su carril esté en el conjunto.
+    g_b = _gen("prompt")
+    _encolar_investigacion(g_b, jobspec.CARRIL_CUENTA_B)
+    carriles = {jobspec.CARRIL_INFERENCIA, jobspec.CARRIL_PROCESO, jobspec.CARRIL_CUENTA_B}
+    assert cola.reclamar("w-proc", solo_proceso=True, carriles=carriles) is None
+    inf = cola.reclamar("w-inf", solo_proceso=False, carriles=carriles)
+    assert inf is not None and inf["gen_id"] == g_b

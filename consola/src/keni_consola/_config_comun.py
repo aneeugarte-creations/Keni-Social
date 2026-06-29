@@ -114,6 +114,11 @@ ENV_MAX_JOBS = "KENI_MAX_JOBS"
 # Cola + worker de generacion (ADR 0002).
 ENV_WORKER_EXTERNO = "KENI_WORKER_EXTERNO"
 ENV_WORKER_SONDEO_SEGUNDOS = "KENI_WORKER_SONDEO_SEGUNDOS"
+# CARRILES de cola que ESTE worker reclama (lista separada por comas). Reparte el trabajo de
+# las DOS cuentas de Claude: el worker A monta `cuenta-a` ademas de inferencia/proceso y el
+# worker B solo `cuenta-b`. Vacio/ausente = TODOS los carriles de contenido (inferencia, proceso,
+# cuenta-a, cuenta-b): el perfil de UNA sola maquina/cuenta no orfana ningun job.
+ENV_WORKER_CARRILES = "KENI_WORKER_CARRILES"
 
 # Economia de tokens de la generacion (la suscripcion `claude` es COMPARTIDA con el equipo):
 # corte DIARIO por COSTE en USD + kill switch humano (`presupuesto_ia.py`).
@@ -1049,6 +1054,7 @@ __all__ = [
     'ENV_TRENDS_INTERVALO_MIN',
     'ENV_VIDEO_MAX_MB',
     'ENV_VIDEO_RENDER_TIMEOUT',
+    'ENV_WORKER_CARRILES',
     'ENV_WORKER_EXTERNO',
     'ENV_WORKER_SONDEO_SEGUNDOS',
     'FEED_SLA_MIN_DEF',
