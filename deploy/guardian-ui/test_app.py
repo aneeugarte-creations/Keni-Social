@@ -28,6 +28,14 @@ def _body(resp):
     return json.loads(resp.body)
 
 
+def test_favicon_se_sirve():
+    # La marca Keni: el favicon va junto a app.py y la ruta lo entrega como PNG.
+    assert (app.AQUI / "favicon.png").is_file()
+    resp = asyncio.run(app.favicon(_Req()))
+    assert resp.status_code == 200
+    assert resp.media_type == "image/png"
+
+
 def test_transcript_respaldo_cuando_no_hay_stream(tmp_path):
     # Una sesión que muere en un 429 NO emite stream_event: el motivo vive en assistant/result.
     ruta = _jsonl(

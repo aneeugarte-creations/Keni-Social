@@ -309,12 +309,17 @@ async def indice(_request: Request) -> FileResponse:
     return FileResponse(AQUI / "index.html")
 
 
+async def favicon(_request: Request) -> FileResponse:
+    return FileResponse(AQUI / "favicon.png", media_type="image/png")
+
+
 # Servido en RAÍZ de su propio subdominio (guardian.kenitech.io): no comparte host con el back, así
 # que las rutas `/api/...` de la página no chocan con el `/api` del back. Traefik enruta
 # Host(guardian.kenitech.io) aquí (ver labels en docker-compose).
 app = Starlette(
     routes=[
         Route("/", indice),
+        Route("/favicon.png", favicon),
         Route("/api/sesiones", sesiones),
         Route("/api/historial/borrar", historial_borrar, methods=["POST"]),
         Route("/api/sesiones/{id}/borrar", sesion_borrar, methods=["POST"]),
