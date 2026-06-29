@@ -343,8 +343,8 @@ def test_lanzar_copy_adjunta_reglas_de_imagen_y_sin_hardcode_de_emojis(encolado)
     (best-effort, de la inicial si el store no las tiene) y NO inyecta el hardcode de
     emojis (la política vive en el prompt + editorial adjunta).
 
-    Con el gate `KENI_COPY_SYSTEM_PROMPT` (def ON) la línea editorial (incl. las reglas de
-    imagen) viaja como `--system-prompt`; el contrato JSON se queda en el mensaje de usuario."""
+    La línea editorial (incl. las reglas de imagen) viaja como `--system-prompt`; el contrato
+    JSON se queda en el mensaje de usuario."""
     from keni_consola.dominio import generar
 
     generar.lanzar_copy(
@@ -360,21 +360,6 @@ def test_lanzar_copy_adjunta_reglas_de_imagen_y_sin_hardcode_de_emojis(encolado)
     # del límite más estricto de las redes pedidas (X = 25000).
     assert "más estricto" in user and "25000 caracteres" in user
     assert "UN SOLO copy" in user
-
-
-def test_lanzar_copy_sin_gate_compone_un_solo_mensaje(entorno, encolado, monkeypatch):
-    """Gate OFF (`KENI_COPY_SYSTEM_PROMPT=0`): todo en un único mensaje de usuario, sin
-    `--system-prompt` (comportamiento previo)."""
-    from keni_consola.dominio import generar
-
-    monkeypatch.setenv("KENI_COPY_SYSTEM_PROMPT", "0")
-    generar.lanzar_copy(
-        marca=_MARCA, contexto="Nota: gol en el 90'", redes_ids=["x"], titulo="Copy",
-    )
-    final = encolado["prompt"]
-    # Editorial Y contrato JSON conviven en el mismo mensaje; no se fija system_prompt.
-    assert "Reglas de imagen" in final and "UN SOLO copy" in final
-    assert "system_prompt" not in (encolado["spec"]["endurecer"] or {})
 
 
 def test_previsualizar_copy_compone_igual_que_lanzar_copy(encolado):

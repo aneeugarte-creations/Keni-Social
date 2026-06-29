@@ -15,7 +15,6 @@ from ._config_comun import (
     ENV_CLAUDE_SESSION_PERSISTENCE,
     ENV_CLAUDE_SKIP_PERMISSIONS,
     ENV_CLAUDE_TIMEOUT,
-    ENV_COPY_SYSTEM_PROMPT,
     _crudo,
     _entero,
     os,
@@ -78,20 +77,6 @@ def claude_exclude_dynamic_sections() -> bool:
     `KENI_CLAUDE_EXCLUDE_DYNAMIC_SECTIONS` falsy lo apaga.
     """
     crudo = os.environ.get(ENV_CLAUDE_EXCLUDE_DYNAMIC_SECTIONS, "1").strip().lower()
-    return crudo not in _FALSOS
-
-
-def copy_system_prompt_activo() -> bool:
-    """¿Enviar la linea editorial estable del copy como `--system-prompt`? (def ON).
-
-    Con el gate ON, la etapa de copy parte el prompt en dos: el contexto editorial ESTABLE de
-    la marca (cuerpo base + linea editorial + indicaciones) viaja como `--system-prompt`
-    —byte-identico por marca/dia, asi se cachea de verdad— y el mensaje de usuario se queda
-    SOLO con lo dinamico (contrato JSON + el CONTEXTO de la fuente, envuelto en el envelope
-    anti-inyeccion). `KENI_COPY_SYSTEM_PROMPT` falsy vuelve al comportamiento previo (todo en
-    un unico mensaje de usuario).
-    """
-    crudo = os.environ.get(ENV_COPY_SYSTEM_PROMPT, "1").strip().lower()
     return crudo not in _FALSOS
 
 

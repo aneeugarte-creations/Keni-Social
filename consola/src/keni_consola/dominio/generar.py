@@ -485,8 +485,8 @@ def componer(
 
     Une en un solo mensaje las dos partes de `componer_partes` (estable primero, dinámico
     después): el ORDEN ESTABLE-PRIMERO es lo que permite el prompt caching cuando todo viaja
-    en el mismo mensaje de usuario. `lanzar_copy` puede en cambio separar la parte estable a
-    `--system-prompt` (ver el gate `config.copy_system_prompt_activo`).
+    en el mismo mensaje de usuario. `lanzar_copy` separa en cambio la parte estable a
+    `--system-prompt` y deja solo lo dinámico en el mensaje de usuario.
 
     `redes_ids` es ADITIVO y OPT-IN: por defecto NO se añade el bloque de piezas por red,
     para que un prompt cualquiera de la Texto no quede forzado a él. Lo activan las features
@@ -901,24 +901,19 @@ def lanzar_copy(
         if isinstance(f, dict) and str(f.get("imagen") or "").strip()
     ]
     # La política de emojis del copy vive en el prompt + editorial adjunta (única fuente).
-    # GATE `KENI_COPY_SYSTEM_PROMPT` (def ON): mandamos la parte ESTABLE (cuerpo base + línea
-    # editorial + indicaciones) como `--system-prompt` —byte-idéntico por marca/día, así se
-    # cachea de verdad— y dejamos en el mensaje de usuario SOLO lo dinámico (contrato JSON +
-    # CONTEXTO de la fuente, ya envuelto en su envelope anti-inyección). El system es contenido
-    # CONFIABLE (interno); la fuente NO confiable nunca sale del mensaje de usuario. Con el gate
-    # OFF se compone todo en un único mensaje de usuario (comportamiento previo).
-    from .. import config  # noqa: PLC0415 -- perezoso: no acopla config al paquete `dominio`
-
+    # Mandamos la parte ESTABLE (cuerpo base + línea editorial + indicaciones) como
+    # `--system-prompt` —byte-idéntico por marca/día, así se cachea de verdad— y dejamos en el
+    # mensaje de usuario SOLO lo dinámico (contrato JSON + CONTEXTO de la fuente, ya envuelto en
+    # su envelope anti-inyección). El system es contenido CONFIABLE (interno); la fuente NO
+    # confiable nunca sale del mensaje de usuario.
     estable, dinamico = componer_copy_partes(
         cuerpo, marca=marca, contexto=contexto, redes_ids=redes_ids,
         n_notas=max(0, int(n_notas or 0)), fotos_notas=fotos, camino=camino,
     )
-    if config.copy_system_prompt_activo() and estable:
-        prompt = dinamico
+    prompt = dinamico
+    if estable:
         endurecer = dict(endurecer or {})
         endurecer["system_prompt"] = estable
-    else:
-        prompt = "\n\n".join(p for p in (estable, dinamico) if p)
     # Defensivo: solo propagamos fuente_id/clave si AMBOS vienen (un caso parcial no debe
     # marcar el item del feed). Reparamos y enviamos ambos o ninguno.
     fuente = fuente_id.strip() if isinstance(fuente_id, str) and fuente_id.strip() else None
