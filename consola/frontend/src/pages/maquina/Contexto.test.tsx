@@ -1,8 +1,8 @@
 /**
- * Smoke test de la página «Contexto» (`/maquina/contexto`): el pipeline de cada motor como
- * estructura, en cuatro pestañas (Investigación / Producción / Herramientas / Desarrollo). Como
- * editor (no admin) no se piden los ajustes del catálogo, así que basta con mockear la cola:
- * comprobamos que las pestañas y las fases/agentes de cada una se pintan.
+ * Smoke test de la página «Contexto» (`/maquina/contexto`): tres pestañas (Pipeline /
+ * Herramientas / Desarrollo). Pipeline es la vista única FUENTE→FEED con toggles por etapa.
+ * Como editor (no admin) los toggles no se piden, así que la cola está mockeada pero inactiva;
+ * solo comprobamos que las pestañas y el contenido estático de cada una se pintan.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
@@ -16,7 +16,7 @@ import type { UsuarioSesion } from "@/types";
 import Contexto from "./Contexto";
 
 vi.mock("@/lib/api", () => ({
-  api: { cola: vi.fn().mockResolvedValue({ en_curso: [], esperando: [] }) },
+  api: { ajustes: vi.fn().mockResolvedValue({ grupos: [] }) },
   mensajeError: (e: unknown) => String(e),
 }));
 
@@ -70,47 +70,19 @@ function renderContexto(ruta = "/maquina/contexto") {
 }
 
 describe("Contexto · la máquina en una página", () => {
-  it("pinta las cuatro pestañas y el pipeline de Investigación por defecto", () => {
+  it("pinta las tres pestañas y el Pipeline unificado por defecto", () => {
     renderContexto();
-    // La subnav unificada (topbar) son botones de sección con `aria-current`, no un tablist Radix.
-    expect(screen.getByRole("button", { name: "Investigación" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Producción" })).toBeInTheDocument();
+    // Pipeline es la pestaña por defecto
+    expect(screen.getByRole("button", { name: "Pipeline" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Herramientas" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Desarrollo" })).toBeInTheDocument();
-    // Importación dejó de ser una pestaña: sus agentes viven ahora dentro de Herramientas.
-    expect(screen.queryByRole("button", { name: "Importación" })).not.toBeInTheDocument();
-    // Pestaña por defecto = Investigación: sus fases se leen en orden (incl. el nuevo «Cotejar»).
-    // Google Trends es una fuente de ingesta del flujo, junto a Recolectar: ambas paralelas, en la
-    // MISMA fila (mismo `li`), no apiladas.
-    expect(screen.getByText("Google Trends")).toBeInTheDocument();
+    // Investigación y Producción ya no son pestañas independientes: forman el Pipeline unificado.
+    expect(screen.queryByRole("button", { name: "Investigación" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Producción" })).not.toBeInTheDocument();
+    // Pipeline muestra sus fases (contenido estático, sin ajustes de admin)
+    expect(screen.getByText("Ingesta")).toBeInTheDocument();
     expect(screen.getByText("Recolectar")).toBeInTheDocument();
-    expect(screen.getByText("Google Trends").closest("li")).toBe(
-      screen.getByText("Recolectar").closest("li"),
-    );
-    expect(screen.getByText("Cotejar")).toBeInTheDocument();
-    expect(screen.getByText("Verificar")).toBeInTheDocument();
-    // «Agrupar» ya NO es una fila: es un sub-paso determinista dentro de Recolectar.
-    expect(screen.queryByText("Agrupar")).not.toBeInTheDocument();
-  });
-
-  it("en la pestaña Producción muestra sus fases (Redactar/Keywords/Ilustrar/Stock/Crítica), sin Aprobar/Publicar ni Idear", () => {
-    renderContexto("/maquina/contexto?proceso=produccion");
-    expect(screen.getByText("Redactar")).toBeInTheDocument();
-    expect(screen.getByText("Keywords")).toBeInTheDocument();
-    expect(screen.getByText("Ilustrar")).toBeInTheDocument();
-    // «Stock»: respaldo inline de imagen (foto de banco gratuito sin licencia) tras Ilustrar.
-    expect(screen.getByText("Stock")).toBeInTheDocument();
-    // «Crítica» (nivel IA de la cadena de aprobación) vive ahora como fase de Producción, separada
-    // de la secuencia automática por un divisor que deja claro CUÁNDO corre.
-    expect(screen.getByText("Crítica")).toBeInTheDocument();
-    expect(screen.getByText("Cadena de aprobación")).toBeInTheDocument();
-    // «Aprobar» y «Publicar» ya NO son fases del flujo: el OK humano y la salida a redes
-    // viven en la página de programación/feed, no en este mapa de la máquina.
-    expect(screen.queryByText("Aprobar")).not.toBeInTheDocument();
-    expect(screen.queryByText("Publicar")).not.toBeInTheDocument();
-    expect(screen.queryByText("Idear")).not.toBeInTheDocument();
-    // «Revisar» ya NO es una fila: corre dentro de Redactar (sin prompt/logs/toggle propios).
-    expect(screen.queryByText("Revisar")).not.toBeInTheDocument();
+    expect(screen.getByText("FUENTE → FEED")).toBeInTheDocument();
   });
 
   it("la pestaña Herramientas reúne los agentes independientes (material recibido + ideación)", () => {
