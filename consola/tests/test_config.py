@@ -667,3 +667,14 @@ def test_plan_redes_override_por_marca_sustituye_al_global(limpio, store_aislado
     store_aislado.setenv(f"{config.ENV_PLAN_REDES}::unotv", "x,youtube")
     assert config.plan_redes("unotv") == ["x", "youtube"]
     assert config.plan_redes() == ["facebook", "instagram"]
+
+
+def test_copy_modelo_default_override_y_vacio(monkeypatch):
+    """Redactar usa sonnet por defecto (calidad equivalente a opus a ~mitad de coste, medido en
+    A/B); la var lo fija; "" explícito = sin --model (vuelve al default de la cuenta)."""
+    monkeypatch.delenv(config.ENV_COPY_MODELO, raising=False)
+    assert config.copy_modelo() == "sonnet"
+    monkeypatch.setenv(config.ENV_COPY_MODELO, "opus")
+    assert config.copy_modelo() == "opus"
+    monkeypatch.setenv(config.ENV_COPY_MODELO, "")
+    assert config.copy_modelo() == ""

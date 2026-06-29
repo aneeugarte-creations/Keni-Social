@@ -170,6 +170,7 @@ from ._config_comun import (  # noqa: F401
     ENV_INGESTA_MAX_ITEMS,
     ENV_INGESTA_WORKERS,
     ENV_FUSION_MODELO,
+    ENV_COPY_MODELO,
     ENV_INSUMOS_MODELO,
     ENV_LOG_LEVEL,
     ENV_CONTROL_BEARER,
@@ -387,6 +388,7 @@ from .config_auth import (  # noqa: F401
     token,
 )
 from .config_contenido import (  # noqa: F401
+    copy_modelo,
     decisor_modelo,
     fusion_modelo,
     hashtags_modelo,

@@ -468,6 +468,10 @@ ENV_HASHTAGS_MODELO = "KENI_HASHTAGS_MODELO"
 # tarea más acotada del pipeline, así que va con haiku por defecto. Def "haiku"; "" = sin --model.
 # Ver `dominio/decisor.py`.
 ENV_DECISOR_MODELO = "KENI_DECISOR_MODELO"
+# Modelo de Redactar (copy): el copy producía con el modelo por defecto de la cuenta (Opus).
+# Medido sobre generaciones reales, sonnet da copy de calidad equivalente o mejor a ~mitad de
+# coste de salida. Def "sonnet"; "" = sin --model (default de la cuenta). Ver `dominio/generar.py`.
+ENV_COPY_MODELO = "KENI_COPY_MODELO"
 
 # Traducir + tropicalización MX de temas extranjeros en el Radar (Ola 4). Traducir es
 # SIEMPRE ON (no tiene toggle propio: corre dentro de la etapa de Recolectar, gateada por
@@ -963,6 +967,7 @@ __all__ = [
     'ENV_FUSION_MODELO',
     'ENV_HASHTAGS_MODELO',
     'ENV_DECISOR_MODELO',
+    'ENV_COPY_MODELO',
     'ENV_INSUMOS_MODELO',
     'ENV_LOG_LEVEL',
     'ENV_MAQUINA',

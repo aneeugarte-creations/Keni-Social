@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 
 from keni_consola import libprompts, generaciones, marcas
+from keni_consola import config
 from keni_consola.dominio import prompts_lanzar, jobspec
 
 _MARCA = marcas.opciones()[0][0]
@@ -142,6 +143,8 @@ def test_lanzar_prompt_de_texto_compone_y_encola(encolado):
     assert "Convierte la nota en copy." in final
     assert "máx 280 caracteres" in final
     assert "gol en el 90'" in final
+    # El pin de modelo es SOLO para copy: un prompt de texto NO fija modelo (default de la cuenta).
+    assert "modelo" not in (encolado["spec"].get("endurecer") or {})
     # El spec usa el post-procesado IDENTIDAD de la texto.
     assert encolado["spec"]["procesar"]["kind"] == jobspec.PROC_PROMPT
     # Y ese procesar no crea artefactos.
@@ -199,6 +202,8 @@ def test_lanzar_prompt_piezas_con_redes_crea_spec_copy(encolado):
     assert spec["kind"] == jobspec.PROC_COPY
     assert spec["redes_ids"] == redes_ids
     assert spec["prompt_id"] == doc.id.rsplit("/", 1)[-1]
+    # El copy se rutea a sonnet por defecto (`config.copy_modelo()`), no al default opus de la cuenta.
+    assert encolado["spec"]["endurecer"]["modelo"] == config.copy_modelo()
     # El prompt compuesto pide el bloque json de piezas por red, con sus límites técnicos.
     assert "piezas" in encolado["prompt"]
     assert "máx 25000 caracteres" in encolado["prompt"]

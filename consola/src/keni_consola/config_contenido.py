@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from ._config_comun import (
+    ENV_COPY_MODELO,
     ENV_DECISOR_MODELO,
     ENV_FUSION_MODELO,
     ENV_HASHTAGS_MODELO,
@@ -56,6 +57,21 @@ def hashtags_modelo() -> str:
     raw = os.environ.get(ENV_HASHTAGS_MODELO)
     if raw is None:
         return "haiku"
+    return raw.strip()
+
+
+def copy_modelo() -> str:
+    """Modelo de claude para Redactar (copy de producción) (`KENI_COPY_MODELO`, def "sonnet").
+
+    El copy es el mayor consumidor unitario de la máquina: sale con el modelo grande y un copy
+    de ~2.000 caracteres. Medido sobre generaciones reales (A/B con input idéntico), sonnet da
+    copy de calidad equivalente o mejor que opus a ~mitad de coste de salida, así que el copy
+    usa sonnet por defecto en vez del modelo por defecto de la cuenta (opus). Mismas semánticas
+    que `insumos_modelo`: "" explícito = sin `--model` (vuelve al default de la cuenta).
+    """
+    raw = os.environ.get(ENV_COPY_MODELO)
+    if raw is None:
+        return "sonnet"
     return raw.strip()
 
 

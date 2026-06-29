@@ -559,6 +559,16 @@ def lanzar(
     from .. import ruteo_cuentas
 
     carril = ruteo_cuentas.carril_de_marca(marca) if marca else jobspec.CARRIL_INFERENCIA
+    # MODELO DEL COPY: por defecto sonnet (`config.copy_modelo()`). El copy salía con el modelo
+    # por defecto de la cuenta (opus); medido sobre runs reales, sonnet da copy equivalente o
+    # mejor a ~mitad de coste de salida. Solo el copy (`tipo == "copy"`); ambos caminos de copy
+    # (`lanzar_copy` y el MODO PIEZAS de `prompts_lanzar`) pasan por aquí. Un caller que ya fije
+    # `endurecer["modelo"]` (incluido "" para forzar el default de la cuenta) se respeta.
+    if tipo == "copy":
+        from .. import config  # noqa: PLC0415 -- perezoso: no acopla config al paquete `dominio`
+
+        endurecer = dict(endurecer or {})
+        endurecer.setdefault("modelo", config.copy_modelo())
     spec = jobspec.construir(
         prompt=prompt,
         procesar=procesar_spec,
