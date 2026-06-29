@@ -156,6 +156,15 @@ def ultimo_pipeline():
     return pls[0] if pls else None
 
 
+def ultimo_completado(pipelines):
+    """El pipeline más reciente con VEREDICTO real (success/failure/error); None si ninguno. Es la
+    SALUD de `main` AHORA (verde/rojo), a diferencia del 'último' que casi siempre está `running`."""
+    for fila in pipelines:
+        if fila[1] in COMPLETADO:
+            return fila
+    return None
+
+
 def objetivo_rojo(pipelines):
     """El rojo a arreglar = el ÚLTIMO pipeline que CORRIÓ COMPLETO, si falló.
 
@@ -164,11 +173,8 @@ def objetivo_rojo(pipelines):
     completo está verde: nada que arreglar, aunque haya rojos más viejos). Si ninguno corrió
     completo todavía (todos en curso/cancelados) -> None.
     """
-    for fila in pipelines:
-        status = fila[1]
-        if status in COMPLETADO:
-            return fila if status in TERMINAL_FALLO else None
-    return None
+    comp = ultimo_completado(pipelines)
+    return comp if comp is not None and comp[1] in TERMINAL_FALLO else None
 
 
 def hay_verde_despues(pipelines, number: int) -> bool:
@@ -288,12 +294,17 @@ def imprimir_logs(number, cola: int = 200) -> None:
 
 def heartbeat(destino: str, ci_on: str) -> None:
     """Escribe el estado de vigilancia para guardian-ui: si el keeper vigila el CI y qué ve."""
-    ult = ultimo_pipeline() if ci_on == "1" else None
+    pls = pipelines_recientes() if ci_on == "1" else []
+    ult = pls[0] if pls else None          # el más nuevo (suele estar `running`)
+    comp = ultimo_completado(pls)          # el último con VEREDICTO = salud de main (verde/rojo)
     estado = {
         "ci_on": ci_on == "1",
         "ultimo_chequeo": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "ultimo_pipeline": (
             {"number": ult[0], "status": ult[1], "message": ult[2]} if ult else None
+        ),
+        "ultimo_completo": (
+            {"number": comp[0], "status": comp[1]} if comp else None
         ),
     }
     try:

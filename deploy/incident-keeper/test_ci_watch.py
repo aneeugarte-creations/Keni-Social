@@ -39,6 +39,12 @@ def test_lista_vacia_no_dispara():
     assert ci_watch.objetivo_rojo([]) is None
 
 
+def test_ultimo_completado_es_la_salud_de_main():
+    # El #63 corre; el último con VEREDICTO es el #62 (verde) -> esa es la salud de main.
+    assert ci_watch.ultimo_completado([P(63, "running"), P(62, "success"), P(61, "failure")])[0] == 62
+    assert ci_watch.ultimo_completado([P(63, "running"), P(62, "pending")]) is None
+
+
 def test_hay_verde_despues():
     pls = [P(45, "success"), P(44, "running"), P(43, "failure")]
     assert ci_watch.hay_verde_despues(pls, 43) is True   # #45 verde > 43
