@@ -61,7 +61,17 @@ from starlette.routing import Route
 #  2) deja cada submodulo accesible como atributo del paquete (p. ej. `sistema.s3`), que
 #     es lo que los tests parchean: `monkeypatch.setattr(api_sistema.s3, "_cliente_s3", ...)`.
 #     Importar la FUNCION `s3` (homonima del modulo) habria pisado ese atributo.
-from . import backups, cuenta, daemons, github, recursos, rendimiento, s3, uso
+from . import (
+    backups,
+    cuenta,
+    cuenta_marcas,
+    daemons,
+    github,
+    recursos,
+    rendimiento,
+    s3,
+    uso,
+)
 
 # Re-exports planos que leen TERCEROS por su nombre historico de modulo:
 #   - `api.estado` (doctor) consume `_discos`, `UMBRAL_DISCO_*`, `sonda_daemons`,
@@ -82,6 +92,7 @@ __all__ = [
     "rendimiento",
     "s3",
     "cuenta",
+    "cuenta_marcas",
     "uso",
     "github",
     # Sondas compartidas con el doctor (`api.estado`)
@@ -124,6 +135,13 @@ RUTAS = [
     # Uso de la cuenta de Claude: LECTURA del ultimo snapshot persistido (NO ejecuta `claude`),
     # para el indicador siempre-visible de la barra lateral y el gate diario.
     Route("/api/sistema/uso", uso.uso, methods=["GET"]),
+    # Reparto de MARCAS por cuenta de Claude (A/B): lectura del mapa + override por marca.
+    Route("/api/sistema/cuenta-marcas", cuenta_marcas.cuenta_marcas, methods=["GET"]),
+    Route(
+        "/api/sistema/cuenta-marcas",
+        cuenta_marcas.asignar_cuenta_marca,
+        methods=["POST"],
+    ),
     # Cuenta de GitHub del servidor (proxy admin al control del daemons). Las mas
     # especificas (/github/login/...) van ANTES que /github (Starlette casa por orden).
     Route("/api/sistema/github/login/iniciar", github.login_iniciar, methods=["POST"]),

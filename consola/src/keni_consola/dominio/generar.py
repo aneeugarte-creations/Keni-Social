@@ -551,6 +551,13 @@ def lanzar(
         if dir_temporal is not None:
             shutil.rmtree(dir_temporal, ignore_errors=True)
         return gen
+    # CARRIL por CUENTA: el copy corre `claude` y cuenta contra la cuenta de su marca, así que se
+    # rutea al carril de esa cuenta (`cuenta-a`/`cuenta-b`) para que lo reclame el worker que monta
+    # sus credenciales —igual que los pasos de investigación—. Sin marca (cross-marca) cae al carril
+    # genérico de inferencia. Import perezoso: evita el ciclo a nivel de paquete `dominio`.
+    from .. import ruteo_cuentas
+
+    carril = ruteo_cuentas.carril_de_marca(marca) if marca else jobspec.CARRIL_INFERENCIA
     spec = jobspec.construir(
         prompt=prompt,
         procesar=procesar_spec,
@@ -567,6 +574,7 @@ def lanzar(
             if tipo in _TIPOS_FONDO
             else jobspec.PRIORIDAD_MANUAL
         ),
+        carril=carril,
         al_fallar=al_fallar,
     )
     try:

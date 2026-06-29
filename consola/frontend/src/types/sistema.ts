@@ -984,6 +984,42 @@ export interface RespuestaCuentaAccion {
   salida?: string;
 }
 
+// ── Reparto de marcas por cuenta de Claude (panel admin) ─────────────────────────────────
+//
+// Cada marca se sirve desde una de las dos cuentas de Claude del servidor (A/B). Hay un mapeo
+// por defecto; el admin puede fijar un override por marca (moverla a la otra cuenta) o limpiarlo
+// para volver al defecto. `GET`/`POST /api/sistema/cuenta-marcas` (admin); ver `api/sistema/cuenta_marcas.py`.
+
+/** Una cuenta de Claude en el reparto: su selector ('a'|'b') y su etiqueta legible. */
+export interface CuentaMarcaCuenta {
+  /** Selector de la cuenta ('a' | 'b'). */
+  cuenta: string;
+  /** Nombre legible de la cuenta (p. ej. "Claro Sports", "UnoTV · …"). */
+  etiqueta: string;
+}
+
+/** Asignación efectiva de UNA marca a una cuenta. */
+export interface CuentaMarcaAsignacion {
+  /** Id canónico de la marca. */
+  id: string;
+  /** Nombre legible de la marca. */
+  nombre: string;
+  /** Cuenta efectiva actual de la marca ('a' | 'b'). */
+  cuenta: string;
+  /** `true` si usa el mapeo por defecto (sin override explícito). */
+  por_defecto: boolean;
+}
+
+/** Respuesta de `GET`/`POST /api/sistema/cuenta-marcas`: el reparto marca→cuenta. */
+export interface RespuestaCuentaMarcas {
+  /** Las cuentas disponibles, con su etiqueta. */
+  cuentas: CuentaMarcaCuenta[];
+  /** Cuenta por defecto (la que sirve lo no repartido). */
+  defecto: string;
+  /** Asignación efectiva de cada marca. */
+  marcas: CuentaMarcaAsignacion[];
+}
+
 // ── Proveedor GitHub (panel admin: auth de `gh` del servidor, gemelo de la cuenta de Claude) ──
 //
 // El motor de auto-desarrollo empuja a GitHub con la credencial `gh` del servidor (volumen

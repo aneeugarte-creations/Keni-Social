@@ -7,11 +7,11 @@
  * Mockeamos `api.sistemaCuenta`, el selector (`useMarcaActiva`) y el uso (`useUsoCuenta`).
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UsoCuenta } from "@/hooks/use-uso-cuenta";
-import type { RespuestaCuenta } from "@/types";
+import type { RespuestaCuenta, RespuestaCuentaMarcas } from "@/types";
 
 import { SeccionCuentaClaude } from "./SeccionCuentaClaude";
 
@@ -37,8 +37,32 @@ const sistemaCuenta = vi.fn((cuenta?: "a" | "b") =>
   Promise.resolve(cuenta === "b" ? SIN_CUENTA : CONECTADA),
 );
 
+const CUENTA_MARCAS: RespuestaCuentaMarcas = {
+  cuentas: [
+    { cuenta: "a", etiqueta: "Claro Sports" },
+    { cuenta: "b", etiqueta: "UnoTV · Nación Gamer" },
+  ],
+  defecto: "a",
+  marcas: [
+    { id: "claro-sports", nombre: "Claro Sports", cuenta: "a", por_defecto: true },
+    { id: "unotv", nombre: "UnoTV", cuenta: "b", por_defecto: true },
+    { id: "fundacion", nombre: "Fundación", cuenta: "b", por_defecto: false },
+  ],
+};
+
+const cuentaMarcas = vi.fn(() => Promise.resolve(CUENTA_MARCAS));
+const asignarCuentaMarca = vi.fn((datos: { marca: string; cuenta: string }) => {
+  void datos;
+  return Promise.resolve(CUENTA_MARCAS);
+});
+
 vi.mock("@/lib/api", () => ({
-  api: { sistemaCuenta: (cuenta?: "a" | "b") => sistemaCuenta(cuenta) },
+  api: {
+    sistemaCuenta: (cuenta?: "a" | "b") => sistemaCuenta(cuenta),
+    cuentaMarcas: () => cuentaMarcas(),
+    asignarCuentaMarca: (datos: { marca: string; cuenta: string }) =>
+      asignarCuentaMarca(datos),
+  },
   mensajeError: (e: unknown) => String(e),
 }));
 
@@ -49,6 +73,7 @@ vi.mock("@/hooks/marca-activa-contexto", () => ({
 }));
 vi.mock("@/hooks/use-uso-cuenta", () => ({
   useUsoCuenta: () => usoMock(),
+  CLAVE_USO_CUENTA: ["uso-cuenta"],
 }));
 
 /** Cuentas del endpoint de uso con su mapeo marca→cuenta (lo que el componente reutiliza). */
@@ -134,5 +159,30 @@ describe("SeccionCuentaClaude", () => {
     expect(screen.queryByText("Cuenta de Claude del servidor (A)")).not.toBeInTheDocument();
     expect(sistemaCuenta).toHaveBeenCalledWith("b");
     expect(sistemaCuenta).not.toHaveBeenCalledWith("a");
+  });
+
+  it("lista las marcas por cuenta, marca el defecto vs override y mueve una marca a la otra cuenta", async () => {
+    renderSeccion();
+
+    // El bloque "Marcas por cuenta" se pinta con las marcas de cada cuenta.
+    expect(await screen.findByText("Marcas por cuenta")).toBeInTheDocument();
+
+    // Una marca por defecto lleva el tag "(defecto)"; la personalizada, el badge.
+    const filaUnotv = (await screen.findByText("UnoTV")).closest("li") as HTMLElement;
+    expect(within(filaUnotv).getByText("(defecto)")).toBeInTheDocument();
+    const filaFundacion = (await screen.findByText("Fundación")).closest("li") as HTMLElement;
+    expect(within(filaFundacion).getByText("personalizado")).toBeInTheDocument();
+
+    // "Mover a {otra cuenta}": la Fundación está en B, su botón la manda a la cuenta A.
+    fireEvent.click(within(filaFundacion).getByRole("button", { name: /Mover a Claro Sports/ }));
+    await waitFor(() =>
+      expect(asignarCuentaMarca).toHaveBeenCalledWith({ marca: "fundacion", cuenta: "a" }),
+    );
+
+    // La personalizada ofrece además volver al defecto (limpia el override con cuenta vacía).
+    fireEvent.click(within(filaFundacion).getByRole("button", { name: /Defecto/ }));
+    await waitFor(() =>
+      expect(asignarCuentaMarca).toHaveBeenCalledWith({ marca: "fundacion", cuenta: "" }),
+    );
   });
 });

@@ -93,6 +93,20 @@ def test_marcas_y_etiqueta_de_cuenta():
     assert "claro-sports" in rc.marcas_de_cuenta(jobspec.CUENTA_A)
 
 
+def test_override_de_marca_distingue_asignada_de_heredada(monkeypatch):
+    # Sin override -> None (usa el reparto); con override válido -> esa cuenta; inválido -> None.
+    assert rc.override_de_marca("unotv") is None
+    monkeypatch.setenv(f"{rc.ENV_CUENTA_CLAUDE}::unotv", "a")
+    assert rc.override_de_marca("unotv") == jobspec.CUENTA_A
+    monkeypatch.setenv(f"{rc.ENV_CUENTA_CLAUDE}::unotv", "zzz")
+    assert rc.override_de_marca("unotv") is None
+
+
+def test_asignar_marca_valida_la_cuenta():
+    with pytest.raises(ValueError):
+        rc.asignar_marca("unotv", "zzz")
+
+
 def test_carril_de_marca_mapea_a_carril_de_cuenta():
     assert rc.carril_de_marca("claro-sports") == jobspec.CARRIL_CUENTA_A
     assert rc.carril_de_marca("unotv") == jobspec.CARRIL_CUENTA_B

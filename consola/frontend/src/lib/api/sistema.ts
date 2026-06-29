@@ -9,6 +9,7 @@ import type {
   RespuestaBorrarS3,
   RespuestaCuenta,
   RespuestaCuentaAccion,
+  RespuestaCuentaMarcas,
   RespuestaDaemons,
   RespuestaDoctor,
   RespuestaGithub,
@@ -96,6 +97,16 @@ export const apiSistema = {
   cuentaLogout: (cuenta?: "a" | "b") =>
     peticion<RespuestaCuentaAccion>(`/sistema/cuenta/logout${query({ cuenta })}`, {
       metodo: "POST",
+    }),
+
+  // --- Reparto de marcas por cuenta (admin: qué marca sirve cada cuenta A/B) ---
+  cuentaMarcas: (signal?: AbortSignal) =>
+    peticion<RespuestaCuentaMarcas>("/sistema/cuenta-marcas", { signal }),
+  // `cuenta: ""` limpia el override (vuelve al defecto); 'a'|'b' lo fija.
+  asignarCuentaMarca: (datos: { marca: string; cuenta: string }) =>
+    peticion<RespuestaCuentaMarcas>("/sistema/cuenta-marcas", {
+      metodo: "POST",
+      json: datos,
     }),
 
   // --- Proveedor GitHub del servidor (gh, proxy admin al control del daemons) ---

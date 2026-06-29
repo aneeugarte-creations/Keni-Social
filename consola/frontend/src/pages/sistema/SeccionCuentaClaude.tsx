@@ -1,11 +1,13 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowRightLeft,
   BadgeCheck,
   Copy,
   ExternalLink,
   KeyRound,
   LogOut,
   RefreshCw,
+  RotateCcw,
   UserCog,
 } from "lucide-react";
 import * as React from "react";
@@ -40,7 +42,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
-import { useUsoCuenta } from "@/hooks/use-uso-cuenta";
+import { CLAVE_USO_CUENTA, useUsoCuenta } from "@/hooks/use-uso-cuenta";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFechaHoraCorta, haceSegundos } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
@@ -456,6 +458,135 @@ const TARJETAS: Record<Cuenta, { titulo: string; descripcion: string }> = {
   },
 };
 
+/** Clave de caché del reparto marca→cuenta. */
+const CLAVE_CUENTA_MARCAS = ["sistema", "cuenta-marcas"] as const;
+
+/** Reparto de marcas por cuenta (admin): para cada cuenta A/B, sus marcas, con un control para
+ *  mover cada marca a la OTRA cuenta y, si tiene override, restablecerla al defecto. Se oculta
+ *  sola si el endpoint responde 403 (no admin) o falla. Al asignar, refresca este reparto y el
+ *  uso (`/sistema/uso`) para que las tarjetas y etiquetas de cuenta reflejen el cambio. */
+function SeccionMarcasPorCuenta() {
+  const qc = useQueryClient();
+  const query = useQuery({
+    queryKey: CLAVE_CUENTA_MARCAS,
+    queryFn: ({ signal }) => api.cuentaMarcas(signal),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+
+  const asignar = useMutation({
+    mutationFn: (datos: { marca: string; cuenta: string }) => api.asignarCuentaMarca(datos),
+    onSuccess: (data) => {
+      qc.setQueryData(CLAVE_CUENTA_MARCAS, data);
+      void qc.invalidateQueries({ queryKey: CLAVE_USO_CUENTA });
+      toast.success("Reparto de marcas actualizado.");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  // 403 (no admin) o cualquier fallo: no pintamos la sección (es un panel admin opcional).
+  if (query.isError || (!query.data && !query.isPending)) return null;
+  if (query.isPending || !query.data) {
+    return <Skeleton className="h-40 w-full rounded-xl" />;
+  }
+
+  const { cuentas, marcas } = query.data;
+  const etiquetaCuenta = (c: string) =>
+    cuentas.find((x) => x.cuenta === c)?.etiqueta ?? c.toUpperCase();
+  const otraCuenta = (c: string) => cuentas.find((x) => x.cuenta !== c)?.cuenta;
+  const marcaPendiente = asignar.isPending ? asignar.variables?.marca : undefined;
+
+  return (
+    <Card>
+      <CardHeader className="p-4 pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground">
+          <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />
+          Marcas por cuenta
+        </CardTitle>
+        <p className="pt-1 text-xs text-muted-foreground">
+          Qué cuenta de Claude sirve cada marca. Muévela a la otra cuenta para repartir la carga;
+          «defecto» es el reparto base sin personalizar.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4 p-4 pt-0">
+        {cuentas.map((c) => {
+          const suyas = marcas.filter((m) => m.cuenta === c.cuenta);
+          const destino = otraCuenta(c.cuenta);
+          return (
+            <div key={c.cuenta} className="space-y-1.5">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {c.etiqueta}
+              </p>
+              {suyas.length === 0 ? (
+                <p className="text-sm text-muted-foreground/70">Sin marcas en esta cuenta.</p>
+              ) : (
+                <ul className="divide-y divide-border/50">
+                  {suyas.map((m) => {
+                    const ocupada = marcaPendiente === m.id;
+                    return (
+                      <li
+                        key={m.id}
+                        className="flex items-center justify-between gap-3 py-1.5 text-sm"
+                      >
+                        <span className="flex items-center gap-2">
+                          <span className="font-medium">{m.nombre}</span>
+                          {m.por_defecto ? (
+                            <span className="text-xs text-muted-foreground/70">(defecto)</span>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px]">
+                              personalizado
+                            </Badge>
+                          )}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          {!m.por_defecto && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-muted-foreground"
+                              disabled={asignar.isPending}
+                              onClick={() => asignar.mutate({ marca: m.id, cuenta: "" })}
+                              title="Volver al reparto por defecto"
+                            >
+                              {ocupada && asignar.variables?.cuenta === "" ? (
+                                <Spinner className="mr-1.5 h-3.5 w-3.5" />
+                              ) : (
+                                <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                              )}
+                              Defecto
+                            </Button>
+                          )}
+                          {destino && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7"
+                              disabled={asignar.isPending}
+                              onClick={() => asignar.mutate({ marca: m.id, cuenta: destino })}
+                              title={`Mover a ${etiquetaCuenta(destino)}`}
+                            >
+                              {ocupada && asignar.variables?.cuenta === destino ? (
+                                <Spinner className="mr-1.5 h-3.5 w-3.5" />
+                              ) : (
+                                <ArrowRightLeft className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                              )}
+                              Mover a {etiquetaCuenta(destino)}
+                            </Button>
+                          )}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
 /** Sección de las cuentas de Claude del servidor: la cuenta A (histórica) y la cuenta B
  *  (segunda cuenta para el split por marcas). Cada una con su estado/uso y login/logout.
  *
@@ -486,6 +617,7 @@ export function SeccionCuentaClaude() {
           descripcion={TARJETAS[cuenta].descripcion}
         />
       ))}
+      <SeccionMarcasPorCuenta />
     </div>
   );
 }

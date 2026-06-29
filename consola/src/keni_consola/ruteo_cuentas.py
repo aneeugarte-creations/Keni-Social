@@ -72,6 +72,40 @@ def cuenta_de_marca(marca: str) -> str:
     return cuenta_por_defecto()
 
 
+def clave_cuenta_marca(marca: str) -> str:
+    """Clave de store del override de cuenta de `marca` (`KENI_CUENTA_CLAUDE::<marca>`)."""
+    return clave_por_marca(ENV_CUENTA_CLAUDE, marca)
+
+
+def override_de_marca(marca: str) -> str | None:
+    """Override EXPLÍCITO de cuenta de `marca` ("a"|"b"), o None si usa el reparto por defecto.
+
+    Lee store>env como `cuenta_de_marca`, pero NO cae al reparto/defecto: distingue "asignada a
+    mano" de "heredada". Base del flag `por_defecto` que muestra el panel de cuentas.
+    """
+    valor = _valor(clave_cuenta_marca(marca)).lower()
+    return valor if valor in jobspec.CUENTAS else None
+
+
+def asignar_marca(marca: str, cuenta: str | None) -> None:
+    """Fija (o limpia) la cuenta de `marca` en el store.
+
+    `cuenta` "a"|"b" escribe el override; None/"" lo BORRA (la marca vuelve a su reparto por
+    defecto). Lanza `ValueError` si la cuenta no es válida. Centralizar aquí el formato de la clave
+    y su lectura (`override_de_marca`/`cuenta_de_marca`) deja un único sitio que la conoce.
+    """
+    from . import ajustes
+
+    clave = clave_cuenta_marca(marca)
+    if not cuenta:
+        ajustes.borrar(clave)
+        return
+    cuenta = cuenta.lower()
+    if cuenta not in jobspec.CUENTAS:
+        raise ValueError(f"cuenta inválida: {cuenta!r} (esperado 'a' o 'b')")
+    ajustes.guardar(clave, cuenta)
+
+
 def marcas_de_cuenta(cuenta: str) -> list[str]:
     """Ids canónicos de las marcas que sirve la cuenta de Claude (A|B), en orden de catálogo.
 

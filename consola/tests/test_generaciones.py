@@ -1028,6 +1028,31 @@ def test_cola_llena_no_deja_cadaver_en_actividad(entorno, monkeypatch):
     )
 
 
+def test_lanzar_estampa_el_carril_de_la_cuenta_de_la_marca(entorno, monkeypatch):
+    """El copy se rutea al carril de la cuenta de su marca: así lo reclama el worker que monta
+    sus credenciales (claro-sports -> A, unotv -> B). Sin marca cae a `inferencia`."""
+    from keni_consola.dominio import generar as gen_dom
+    from keni_consola.dominio import jobspec
+
+    capturado: dict = {}
+
+    def _captura(gen_id, **kw):  # noqa: ANN001
+        capturado["spec"] = kw.get("spec")
+
+    monkeypatch.setattr(generaciones, "encolar_job_claude", _captura)
+
+    def _lanzar(marca: str, titulo: str) -> str:
+        gen_dom.lanzar(
+            tipo="pipeline", titulo=titulo, marca=marca, prompt=f"p-{titulo}",
+            procesar=lambda salida, metricas: {}, procesar_spec=jobspec.construir_prompt_lib(),
+        )
+        return capturado["spec"]["carril"]
+
+    assert _lanzar("claro-sports", "a") == jobspec.CARRIL_CUENTA_A
+    assert _lanzar("unotv", "b") == jobspec.CARRIL_CUENTA_B
+    assert _lanzar("", "sin") == jobspec.CARRIL_INFERENCIA
+
+
 def test_endpoint_cancelar_404_si_no_existe(entorno):
     r = _cliente().post("/api/generaciones/noexiste/cancelar")
     assert r.status_code == 404
