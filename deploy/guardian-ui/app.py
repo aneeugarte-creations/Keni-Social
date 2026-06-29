@@ -231,20 +231,20 @@ async def indice(_request: Request) -> FileResponse:
     return FileResponse(AQUI / "index.html")
 
 
-# Servido bajo /guardian SIN stripprefix: así las rutas absolutas de la página (/guardian/api/...)
-# enrutan de vuelta a este servicio y NO al back (/api). Traefik enruta PathPrefix(/guardian) aquí.
+# Servido en RAÍZ de su propio subdominio (guardian.kenitech.io): no comparte host con el back, así
+# que las rutas `/api/...` de la página no chocan con el `/api` del back. Traefik enruta
+# Host(guardian.kenitech.io) aquí (ver labels en docker-compose).
 app = Starlette(
     routes=[
-        Route("/guardian", indice),
-        Route("/guardian/", indice),
-        Route("/guardian/api/sesiones", sesiones),
-        Route("/guardian/api/sesiones/{id}", sesion),
-        Route("/guardian/api/token", token, methods=["GET", "POST"]),
+        Route("/", indice),
+        Route("/api/sesiones", sesiones),
+        Route("/api/sesiones/{id}", sesion),
+        Route("/api/token", token, methods=["GET", "POST"]),
         # Cuenta de Claude del guardián (rutas específicas antes que la genérica del login).
-        Route("/guardian/api/cuenta", cuenta_estado),
-        Route("/guardian/api/cuenta/login/iniciar", cuenta_login_iniciar, methods=["POST"]),
-        Route("/guardian/api/cuenta/login/codigo", cuenta_login_codigo, methods=["POST"]),
-        Route("/guardian/api/cuenta/login/cancelar", cuenta_login_cancelar, methods=["POST"]),
-        Route("/guardian/api/cuenta/logout", cuenta_logout, methods=["POST"]),
+        Route("/api/cuenta", cuenta_estado),
+        Route("/api/cuenta/login/iniciar", cuenta_login_iniciar, methods=["POST"]),
+        Route("/api/cuenta/login/codigo", cuenta_login_codigo, methods=["POST"]),
+        Route("/api/cuenta/login/cancelar", cuenta_login_cancelar, methods=["POST"]),
+        Route("/api/cuenta/logout", cuenta_logout, methods=["POST"]),
     ]
 )

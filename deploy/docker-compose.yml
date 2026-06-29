@@ -1213,7 +1213,7 @@ services:
   # código, COMMITEA el fix a `main` (dispara test->deploy). Clon del carril worker-dev: reutiliza
   # la imagen del worker (claude+git+gh) y la credencial de GitHub (/data/gh). La cuenta de Claude es
   # PROPIA del guardián (volumen `guardian-claude-cfg`, INDEPENDIENTE de la del worker/daemons): se
-  # gestiona desde el panel /guardian (login/logout), así un límite de uso del keeper no toca a la
+  # gestiona desde el panel guardian.kenitech.io (login/logout), así un límite de uso del keeper no toca a la
   # máquina de contenido ni al revés. NO toca docker (la mitigación es del guardian) ni la cola/Postgres. Best-effort:
   # NO gatea el deploy (un keeper caído no tumba prod). Límites duros y escalada-a-humano en el ROL.
   incident-keeper:
@@ -1285,8 +1285,8 @@ services:
         max-size: "50m"
         max-file: "5"
 
-  # UI INDEPENDIENTE de observación del incident-keeper. Sirve en social.kenitech.io/guardian las
-  # detecciones, el razonamiento en streaming, el coste y los commits del keeper. CLAVE: NO depende
+  # UI INDEPENDIENTE de observación del incident-keeper. Sirve en su subdominio guardian.kenitech.io
+  # las detecciones, el razonamiento en streaming, el coste y los commits del keeper. CLAVE: NO depende
   # del back/db/front — sólo de Traefik (ingress) y del rastro que el keeper deja en /data/keeper
   # (montado read-only). Así, cuando la app está caída y el keeper la arregla, esta UI SIGUE arriba.
   # Reusa la imagen del worker (trae starlette+uvicorn + el CLI `claude`) con app.py bind-montado;
@@ -1313,22 +1313,30 @@ services:
       - autoheal=true
       - traefik.enable=true
       - traefik.docker.network=keni-social_edge
-      # Router PROPIO en /guardian, prioridad ALTA (gana a front/back). Auth PROPIA por basicauth
-      # (htpasswd en KENI_GUARDIAN_HTPASSWD del .env), INDEPENDIENTE de la sesión del back (que
-      # puede estar caída). El DEFAULT (si KENI_GUARDIAN_HTPASSWD está vacío/ausente) es una entrada
-      # BLOQUEADA con un hash aleatorio que nadie conoce: cierra el panel (401 a todos) SIN dejar el
-      # users vacío. IMPORTANTE: un basicauth con users VACÍO hace PANIC a Traefik (auth.NewBasic) y
-      # wedgea TODA su construcción de routers (se queda con la config previa, afecta a TODOS los
-      # servicios); por eso el default debe ser no-vacío. Pon tu htpasswd real con `htpasswd -nB <u>`.
-      - traefik.http.routers.guardian.rule=Host(`${KENI_HOST}`) && PathPrefix(`/guardian`)
-      - traefik.http.routers.guardian.priority=20
+      # Router PROPIO en el subdominio guardian.kenitech.io (KENI_GUARDIAN_HOST), con su CERT LE
+      # propio. Auth PROPIA por basicauth (htpasswd en KENI_GUARDIAN_HTPASSWD del .env), INDEPENDIENTE
+      # de la sesión del back (que puede estar caída). El DEFAULT (si KENI_GUARDIAN_HTPASSWD está
+      # vacío/ausente) es una entrada BLOQUEADA con un hash aleatorio que nadie conoce: cierra el panel
+      # (401 a todos) SIN dejar el users vacío. IMPORTANTE: un basicauth con users VACÍO hace PANIC a
+      # Traefik (auth.NewBasic) y wedgea TODA su construcción de routers (afecta a TODOS los servicios);
+      # por eso el default debe ser no-vacío. Pon tu htpasswd real con `htpasswd -nB <u>`.
+      - traefik.http.routers.guardian.rule=Host(`${KENI_GUARDIAN_HOST:-guardian.kenitech.io}`)
       - traefik.http.routers.guardian.entrypoints=websecure
       - traefik.http.routers.guardian.tls.certresolver=le
       - traefik.http.routers.guardian.middlewares=keni-guardian-auth
       - traefik.http.middlewares.keni-guardian-auth.basicauth.users=${KENI_GUARDIAN_HTPASSWD:-locked:$$apr1$$gimueJgn$$DwknY0jLhZtgeHphuGhgw.}
       - traefik.http.services.guardian.loadbalancer.server.port=8080
+      # Compat: el path viejo social.kenitech.io/guardian -> 302 al subdominio (evita bookmarks rotos).
+      - traefik.http.routers.guardian-old.rule=Host(`${KENI_HOST}`) && PathPrefix(`/guardian`)
+      - traefik.http.routers.guardian-old.priority=20
+      - traefik.http.routers.guardian-old.entrypoints=websecure
+      - traefik.http.routers.guardian-old.tls.certresolver=le
+      - traefik.http.routers.guardian-old.service=guardian
+      - traefik.http.routers.guardian-old.middlewares=guardian-redir
+      - traefik.http.middlewares.guardian-redir.redirectregex.regex=^https://[^/]+/guardian.*
+      - traefik.http.middlewares.guardian-redir.redirectregex.replacement=https://${KENI_GUARDIAN_HOST:-guardian.kenitech.io}/
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/guardian/api/sesiones',timeout=4).status==200 else 1)\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/api/sesiones',timeout=4).status==200 else 1)\""]
       interval: 30s
       timeout: 5s
       retries: 3

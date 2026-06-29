@@ -150,7 +150,7 @@ async function seleccionar(id) {
   if (timerDet) clearInterval(timerDet);
   const cargar = async () => {
     try {
-      const r = await fetch(`/guardian/api/sesiones/${id}`); if (!r.ok) return;
+      const r = await fetch(`/api/sesiones/${id}`); if (!r.ok) return;
       const d = await r.json(); pintarDetalle(d);
       if (d.meta.estado !== "corriendo" && timerDet) { clearInterval(timerDet); timerDet = null; }
     } catch {}
@@ -161,14 +161,14 @@ async function seleccionar(id) {
 
 async function refrescarLista() {
   try {
-    const r = await fetch("/guardian/api/sesiones"); if (!r.ok) return;
+    const r = await fetch("/api/sesiones"); if (!r.ok) return;
     const d = await r.json(); pintarVig(d.vigilancia); pintarLista(d.sesiones || []);
     if (sel === null && d.sesiones && d.sesiones.length) seleccionar(d.sesiones[0].id);
   } catch {}
 }
 async function refrescarToken() {
   try {
-    const r = await fetch("/guardian/api/token"); if (!r.ok) return;
+    const r = await fetch("/api/token"); if (!r.ok) return;
     const d = await r.json(); const b = document.getElementById("btok");
     b.className = "pill " + (d.set ? "on" : "off");
     b.innerHTML = `<span class="dot" style="background:${d.set?'var(--verde)':'var(--ambar)'}"></span>token ${d.set?'✓':'—'}`;
@@ -178,7 +178,7 @@ document.getElementById("btok").onclick = async () => {
   const t = prompt("PAT de Woodpecker para el keeper (poner / rotar).\nGenéralo en ci-social.kenitech.io → avatar → Settings → CLI and API.\nDeja vacío para cancelar:");
   if (!t || !t.trim()) return;
   try {
-    const r = await fetch("/guardian/api/token", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({token: t.trim()})});
+    const r = await fetch("/api/token", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({token: t.trim()})});
     if (r.ok) { alert("Token guardado. El keeper lo tomará en el próximo ciclo."); refrescarToken(); }
     else { const e = await r.json().catch(()=>({})); alert("Error: " + (e.error || r.status)); }
   } catch { alert("Error de red al guardar el token."); }
@@ -200,7 +200,7 @@ function pintarPillCuenta() {
 
 async function cargarCuenta() {
   try {
-    const r = await fetch("/guardian/api/cuenta"); if (!r.ok) return;
+    const r = await fetch("/api/cuenta"); if (!r.ok) return;
     cuenta = await r.json(); pintarPillCuenta();
     if (document.getElementById("ovl").classList.contains("open")) renderModal();
   } catch {}
@@ -232,7 +232,7 @@ function renderModal() {
     m.querySelector("#cVolver").onclick = () => { vista="principal"; errCuenta=""; renderModal(); };
     m.querySelector("#cEnlace").onclick = async (e) => {
       e.target.disabled = true; e.target.textContent = "Pidiendo enlace…"; errCuenta = "";
-      const r = await post("/guardian/api/cuenta/login/iniciar", {
+      const r = await post("/api/cuenta/login/iniciar", {
         console: m.querySelector("#cConsole").checked,
         email: m.querySelector("#cEmail").value.trim() || null,
         sso: m.querySelector("#cSso").checked,
@@ -259,7 +259,7 @@ function renderModal() {
       const cod = m.querySelector("#cCodigo").value.trim();
       if (!cod) { errCuenta = "pega el código"; return renderModal(); }
       e.target.disabled = true; e.target.textContent = "Confirmando…"; errCuenta = "";
-      const r = await post("/guardian/api/cuenta/login/codigo", {sesion: loginSesion.sesion, codigo: cod});
+      const r = await post("/api/cuenta/login/codigo", {sesion: loginSesion.sesion, codigo: cod});
       if (r.ok && r.data.ok) { loginSesion = null; vista = "principal"; cuenta = null; renderModal(); cargarCuenta(); }
       else { errCuenta = r.data.mensaje || r.data.error || "el login falló"; renderModal(); }
     };
@@ -287,14 +287,14 @@ function renderModal() {
   const lg = m.querySelector("#cLogout"); if (lg) lg.onclick = async (e) => {
     if (!confirm("¿Cerrar la sesión de Claude del guardián? El keeper quedará sin cuenta hasta el próximo login.")) return;
     e.target.disabled = true; e.target.textContent = "Cerrando…"; errCuenta = "";
-    const r = await post("/guardian/api/cuenta/logout", {});
+    const r = await post("/api/cuenta/logout", {});
     if (r.ok && r.data.ok) { cuenta = null; renderModal(); cargarCuenta(); }
     else { errCuenta = r.data.mensaje || "no se pudo cerrar sesión"; renderModal(); }
   };
 }
 
 async function cancelarLogin() {
-  if (loginSesion && loginSesion.sesion) { try { await post("/guardian/api/cuenta/login/cancelar", {sesion: loginSesion.sesion}); } catch {} }
+  if (loginSesion && loginSesion.sesion) { try { await post("/api/cuenta/login/cancelar", {sesion: loginSesion.sesion}); } catch {} }
   loginSesion = null; vista = "principal"; errCuenta = ""; renderModal();
 }
 

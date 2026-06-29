@@ -107,7 +107,7 @@ Así el carril de incidentes y la máquina de contenido no comparten cuota: un l
 logout) de una no afecta a la otra. Es deliberado que el guardián use **nuestra** cuenta de Keni,
 no la del piloto.
 
-Se gestiona desde el **panel `/guardian`** (no desde Sistema): el botón **cuenta** muestra el
+Se gestiona desde el **panel `guardian.kenitech.io`** (subdominio propio, no desde Sistema): el botón **cuenta** muestra el
 estado de auth y el uso, y permite login (URL → pegar código) y logout, tras el basicauth propio
 del panel (`KENI_GUARDIAN_HTPASSWD`). Lo sirve `guardian-ui` (reusa la imagen del worker, que trae
 `claude`), escribiendo en el mismo `/claude-cfg` que el keeper lee. Tras un deploy nuevo el volumen
@@ -155,16 +155,17 @@ docker compose version            # comprobar
 
 ## DNS
 
-Hace falta `social.kenitech.io → <IP-DEL-SERVIDOR>` (A, **sin proxy** de Cloudflare —
+Hacen falta `social.kenitech.io`, `ci-social.kenitech.io` y `guardian.kenitech.io`
+(el panel del guardián) → `<IP-DEL-SERVIDOR>` (A, **sin proxy** de Cloudflare —
 Let's Encrypt necesita acceso directo para el challenge HTTP). El DNS de la zona lo
 gestiona Terraform en `keni/devops-iac/cloudflare/dns/`. Añade el registro al mapa
-`custom_records` de `terraform.tfvars` (donde ya están `code` y `api`):
+`custom_records` de `terraform.tfvars`:
 
 ```hcl
 custom_records = {
-  "code"   = "<IP-DEL-SERVIDOR>"
-  "api"    = "<IP-DEL-SERVIDOR>"
-  "social" = "<IP-DEL-SERVIDOR>"   # <-- añadir
+  "social"    = "<IP-DEL-SERVIDOR>"
+  "ci-social" = "<IP-DEL-SERVIDOR>"
+  "guardian"  = "<IP-DEL-SERVIDOR>"   # subdominio del panel del guardián
 }
 ```
 
@@ -173,8 +174,10 @@ y aplica (necesita `CLOUDFLARE_API_TOKEN`, que vive en ansible-vault
 
 ```bash
 cd keni/devops-iac/cloudflare/dns
-export CLOUDFLARE_API_TOKEN=...   # desde el vault
-terraform plan    # revisa que SOLO añade el record social
+export CLOUDFLARE_API_TOKEN=$(cd ../../../devops-infra/ansible && \
+  ansible-vault view inventory/keni-prod/group_vars/all/secrets.yml \
+  --vault-password-file ../.vault_pass | sed -n 's/^cloudflare_api_token: *//p')
+terraform plan    # revisa que SOLO añade el record nuevo
 terraform apply
 ```
 
