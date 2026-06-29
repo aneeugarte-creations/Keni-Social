@@ -218,6 +218,27 @@ def fallos_pipeline(number, pid):
         con.close()
 
 
+def imprimir_logs(number, cola: int = 200) -> None:
+    """Vuelca los steps en ROJO del pipeline `number` y la COLA de sus logs (donde suele estar el
+    traceback/resumen), vía la API de Woodpecker. Es lo que usa el keeper-agent para profundizar:
+    su contenedor NO tiene montado el datastore sqlite, pero SÍ habla con la API."""
+    if not API:
+        print("(sin KENI_WOODPECKER_API: no puedo consultar Woodpecker; revisa el entorno del keeper)")
+        return
+    pasos = _steps_rojos_api(number)
+    if not pasos:
+        print(f"(pipeline #{number}: la API no devuelve steps en rojo; ¿nº correcto / token válido?)")
+        return
+    for sid, sname, exit_code in pasos:
+        print(f"===== step «{sname}» (exit {exit_code}) =====")
+        lineas = []
+        for data in _logs_step_api(number, sid):
+            lineas.extend((data or "").splitlines())
+        for ln in lineas[-cola:]:
+            print(ln)
+        print()
+
+
 def heartbeat(destino: str, ci_on: str) -> None:
     """Escribe el estado de vigilancia para guardian-ui: si el keeper vigila el CI y qué ve."""
     ult = ultimo_pipeline() if ci_on == "1" else None
@@ -250,6 +271,15 @@ def main() -> None:
         except ValueError:
             sys.exit(1)
         sys.exit(0 if hay_verde_despues(pipelines_recientes(), n) else 1)
+
+    # Modo logs: `ci_watch.py --logs <N>` -> vuelca los steps en rojo + cola de logs (para el agente).
+    if len(sys.argv) >= 3 and sys.argv[1] == "--logs":
+        try:
+            n = int(sys.argv[2])
+        except ValueError:
+            sys.exit(1)
+        imprimir_logs(n)
+        return
 
     obj = objetivo_rojo(pipelines_recientes())
     if not obj:

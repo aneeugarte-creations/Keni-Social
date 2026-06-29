@@ -45,3 +45,19 @@ def test_hay_verde_despues():
     assert ci_watch.hay_verde_despues(pls, 45) is False  # nada > 45
     # solo running/failure tras el N -> no hay verde más nuevo
     assert ci_watch.hay_verde_despues([P(44, "running"), P(43, "failure")], 43) is False
+
+
+def test_imprimir_logs_vuelca_steps_rojos(monkeypatch, capsys):
+    monkeypatch.setattr(ci_watch, "API", "http://wp")
+    monkeypatch.setattr(ci_watch, "_steps_rojos_api", lambda n: [(7, "pytest", 1)])
+    monkeypatch.setattr(ci_watch, "_logs_step_api", lambda n, sid: ["ruido\nFAILED test_x - boom\n"])
+    ci_watch.imprimir_logs(57)
+    out = capsys.readouterr().out
+    assert "step «pytest»" in out
+    assert "FAILED test_x - boom" in out
+
+
+def test_imprimir_logs_sin_api_avisa(monkeypatch, capsys):
+    monkeypatch.setattr(ci_watch, "API", "")
+    ci_watch.imprimir_logs(57)
+    assert "KENI_WOODPECKER_API" in capsys.readouterr().out

@@ -123,18 +123,23 @@ diagnóstico claro y el plan para un humano."
     wait "$cl_pid" 2>/dev/null
     kill "$wd_pid" 2>/dev/null
 
-    # ¿Commiteó/pusheó? El HEAD del worktree distinto de la base = fix promovido (gana al watchdog: si
-    # llegó a commitear, el fix es real). Si no, la razón del flag decide el estado.
-    head="$(git -C "$wt" rev-parse HEAD 2>/dev/null)"
+    # ¿RESUELTO? SOLO si el keeper PUSHEÓ un fix: un commit SUYO (autor del keeper) que aterrizó en
+    # `origin/main` durante la sesión. NO vale «HEAD del worktree != base»: el agente puede hacer
+    # `git fetch && git rebase origin/main` y mover su HEAD a un origin/main más nuevo (commits de
+    # OTROS) sin arreglar nada — eso daba falsos `resuelto` con el commit ajeno. Miramos el origin/main
+    # REAL (pusheado), filtrado al autor del keeper, en la ventana de la sesión (base..origin/main).
+    git -C "$REPO" fetch origin -q 2>/dev/null || true
     razon="$(cat "$abort_flag" 2>/dev/null)"
-    if [ -n "$head" ] && [ "$head" != "$base" ]; then
-      commit_sha="$head"; commit_msg="$(git -C "$wt" log -1 --format=%s 2>/dev/null)"; estado=resuelto
+    autor="${KENI_GIT_AUTHOR_NAME:-keni incident-keeper}"
+    mio="$(git -C "$REPO" log --author="$autor" --format=%H "$base..origin/main" 2>/dev/null | head -1)"
+    if [ -n "$mio" ]; then
+      commit_sha="$mio"; commit_msg="$(git -C "$REPO" log -1 --format=%s "$mio" 2>/dev/null)"; estado=resuelto
     elif [ "$razon" = verde ]; then
       estado=abortado      # un pipeline más nuevo salió verde mientras arreglaba: el rojo ya no existía
     elif [ "$razon" = timeout ] || [ "$razon" = shutdown ]; then
       estado=interrumpido  # se cortó por tiempo (cuelgue) o por parada del keeper (deploy)
     else
-      estado=escalado      # terminó sin commitear: o escaló, o no había nada que arreglar
+      estado=escalado      # terminó sin pushear un fix propio: escaló o no había nada que arreglar
     fi
     rm -f "$abort_flag"
     git -C "$REPO" worktree remove --force "$wt" >/dev/null 2>&1 || true

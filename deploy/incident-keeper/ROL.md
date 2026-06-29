@@ -43,18 +43,27 @@ paralelo. Reglas de oro:
   AHORA. Pipelines viejos rojos del historial son ruido.
 
 La evidencia que recibes ya trae el nº de pipeline y los `FAILED`/`error TS`/violaciones
-de frontera. Para profundizar (tracebacks), consulta el datastore de Woodpecker, montado
-read-only en `/woodpecker/woodpecker.sqlite` (`repo_id=1`), con **python** (no hay
-sqlite3 CLI ni ssh aquí):
+de frontera — **empieza por ahí**. Para profundizar (tracebacks, logs completos de los steps
+en rojo) consulta Woodpecker por su **API**. IMPORTANTE: este contenedor **NO** tiene montada
+la sqlite del datastore (`/woodpecker/woodpecker.sqlite` no existe; no pierdas turnos
+buscándola); sí tiene `$KENI_WOODPECKER_API` y el token en `$KENI_WOODPECKER_API_TOKEN_FILE`.
+El atajo (vuelca los steps en rojo del pipeline NNNN + la cola de sus logs):
+```sh
+python3 /keeper/ci_watch.py --logs NNNN
+```
+Para la API cruda (otro endpoint), con **python** (no asumas `curl`):
 ```python
 python3 - <<'PY'
-import sqlite3
-c=sqlite3.connect("file:/woodpecker/woodpecker.sqlite?mode=ro", uri=True)
-pid,=c.execute("SELECT id FROM pipelines WHERE repo_id=1 AND number=NNNN").fetchone()
-for sid,name in c.execute("SELECT id,name FROM steps WHERE pipeline_id=? AND state IN('failure','error')",(pid,)):
-    print("== STEP",name)
-    for (d,) in c.execute("SELECT CAST(data AS TEXT) FROM log_entries WHERE step_id=? ORDER BY line",(sid,)):
-        print(d, end="")
+import os, json, urllib.request as u
+base=os.environ["KENI_WOODPECKER_API"]; tok=open(os.environ["KENI_WOODPECKER_API_TOKEN_FILE"]).read().strip()
+def get(p):
+    r=u.Request(base+p); r.add_header("Authorization","Bearer "+tok); return json.load(u.urlopen(r,timeout=8))
+det=get("/api/repos/1/pipelines/NNNN")           # detalle: workflows -> children (steps) con state/id
+for wf in det.get("workflows") or []:
+    for st in wf.get("children") or []:
+        if st.get("state") in ("failure","error"):
+            print("== STEP", st["name"])
+            for e in get(f"/api/repos/1/logs/NNNN/{st['id']}"): print(e.get("data",""), end="")
 PY
 ```
 Clases de regresión habituales: firma/forma de respuesta de una API (tests que afirman la
@@ -76,9 +85,9 @@ NO toques los contenedores `woodpecker-*` (cortarías pipelines de otros).
 3. **El último deploy**: ¿hubo un deploy justo antes? ¿qué imagen/commit traía? Si el
    crash empezó tras un deploy concreto, ese deploy trae el culpable.
 4. **Pipeline del CI** (si el incidente huele a "pasó los tests pero rompe en prod"):
-   consulta el datastore de Woodpecker montado read-only en `/woodpecker/woodpecker.sqlite`
-   (`repo_id=1`) con **python** (ver el snippet de la sección "Si es un CI ROJO"). Útil
-   para ver si el deploy ya había salido verde (=> el fallo es de runtime/estado, no de tests).
+   consulta Woodpecker por la **API** (`python3 /keeper/ci_watch.py --logs NNNN`, o el snippet
+   de la sección "Si es un CI ROJO"). Útil para ver si el deploy ya había salido verde
+   (=> el fallo es de runtime/estado, no de tests). NO hay sqlite montada en este contenedor.
 
 ## Procedimiento para un fix de CÓDIGO
 
