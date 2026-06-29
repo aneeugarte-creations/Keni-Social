@@ -130,6 +130,24 @@ def _maestros_etapa() -> list[Ajuste]:
             defecto=False,
         ),
         Ajuste(
+            clave=config.ENV_PIPELINE_FUSIONAR,
+            tipo="bool",
+            etiqueta="Fusionar",
+            ayuda="Etapa física: dedup semántico (Haiku) de las notas del mismo hecho con titulares "
+            "distintos antes de priorizar. ON por defecto.",
+            grupo="maestros_investigacion",
+            defecto=True,
+        ),
+        Ajuste(
+            clave=config.ENV_PRIORIZAR_PERFIL_IA,
+            tipo="bool",
+            etiqueta="Priorizar",
+            ayuda="Etapa física: refresca el perfil editorial por marca (Haiku) para que el ranking "
+            "del pool puntúe con sus keywords. OFF por defecto.",
+            grupo="maestros_investigacion",
+            defecto=False,
+        ),
+        Ajuste(
             clave=config.ENV_TRENDS,
             tipo="bool",
             etiqueta="Google Trends",
@@ -186,10 +204,37 @@ def _maestros_etapa() -> list[Ajuste]:
             defecto=False,
         ),
         Ajuste(
+            clave=config.ENV_PIPELINE_DECISOR,
+            tipo="bool",
+            etiqueta="Decisor",
+            ayuda="Etapa física: elige el formato (foto vs carrusel) del tema antes de Redactar. "
+            "OFF por defecto (sin ella, Redactar decide el formato en su propio prompt).",
+            grupo="maestros_produccion",
+            defecto=False,
+        ),
+        Ajuste(
             clave=config.ENV_PIPELINE_REDACTAR,
             tipo="bool",
             etiqueta="Redactar",
             ayuda="Etapa física: redacta el copy de los temas admitidos al flujo.",
+            grupo="maestros_produccion",
+            defecto=False,
+        ),
+        Ajuste(
+            clave=config.ENV_PIPELINE_SUGERIR_HASHTAGS,
+            tipo="bool",
+            etiqueta="Keywords",
+            ayuda="Etapa física: propone hashtags + la keyword visual que alimenta el buscador de "
+            "stock. READ-ONLY (solo deja una propuesta en gris). ON por defecto.",
+            grupo="maestros_produccion",
+            defecto=True,
+        ),
+        Ajuste(
+            clave=config.ENV_PIPELINE_REVISAR,
+            tipo="bool",
+            etiqueta="Revisar",
+            ayuda="Etapa física: verificación ADVISORY de voz/calidad del copy antes del avance "
+            "(no bloquea; solo degrada y deja nota). OFF por defecto.",
             grupo="maestros_produccion",
             defecto=False,
         ),

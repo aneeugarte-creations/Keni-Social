@@ -50,6 +50,11 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
         # Traducir + Admitir: etapas físicas con toggle propio (ON por defecto).
         config.ENV_PIPELINE_TRADUCIR, config.ENV_PIPELINE_ADMITIR,
+        # Fusionar/Priorizar (investigación) + Decisor/Keywords/Revisar (producción): etapas
+        # físicas con toggle GLOBAL propio (Fusionar y Keywords ON por defecto; el resto OFF).
+        config.ENV_PIPELINE_FUSIONAR, config.ENV_PRIORIZAR_PERFIL_IA,
+        config.ENV_PIPELINE_DECISOR, config.ENV_PIPELINE_SUGERIR_HASHTAGS,
+        config.ENV_PIPELINE_REVISAR,
         # Google Trends: fuente de ingesta del pool (con Investigación, no con los automatismos).
         config.ENV_TRENDS,
         # Clasificar marca con IA: modo IA (Haiku) del paso Clasificar (global, no per-marca).
@@ -112,6 +117,11 @@ _MAESTROS_ENV = {
     config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
     # Traducir + Admitir: etapas físicas con toggle propio (ON por defecto).
     config.ENV_PIPELINE_TRADUCIR, config.ENV_PIPELINE_ADMITIR,
+    # Fusionar/Priorizar (investigación) + Decisor/Keywords/Revisar (producción): etapas físicas
+    # con toggle GLOBAL propio (Fusionar y Keywords ON por defecto; el resto OFF).
+    config.ENV_PIPELINE_FUSIONAR, config.ENV_PRIORIZAR_PERFIL_IA,
+    config.ENV_PIPELINE_DECISOR, config.ENV_PIPELINE_SUGERIR_HASHTAGS,
+    config.ENV_PIPELINE_REVISAR,
     # Google Trends: fuente de ingesta del pool, paso del flujo de Investigación (no automatismo).
     config.ENV_TRENDS,
     # Clasificar marca con IA: modo IA del paso Clasificar (grupo `maestros_investigacion`).
@@ -140,11 +150,14 @@ def test_maestros_son_investigacion_produccion_y_arte(store):
     claves = {a.clave for a in maestros}
     assert claves == _MAESTROS_ENV
     # Nacen OFF salvo las seguras/ya-en-marcha que arrancan ON: Stock (ayuda visual atenuada),
-    # Traducir y Admitir (continúan el flujo actual; def ON en sus gate fns).
+    # Traducir y Admitir (continúan el flujo actual), Fusionar (dedup semántico base) y Keywords
+    # (sugerencia READ-ONLY barata). Todas def ON en sus gate fns.
     on_por_defecto = {
         config.ENV_PIPELINE_STOCK,
         config.ENV_PIPELINE_TRADUCIR,
         config.ENV_PIPELINE_ADMITIR,
+        config.ENV_PIPELINE_FUSIONAR,
+        config.ENV_PIPELINE_SUGERIR_HASHTAGS,
     }
     for a in maestros:
         assert a.tipo == "bool"
