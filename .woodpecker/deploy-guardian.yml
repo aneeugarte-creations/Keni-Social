@@ -1,0 +1,59 @@
+# Woodpecker: DESPLIEGUE INDEPENDIENTE del guardián (guardian-ui + incident-keeper).
+#
+# El guardián es quien ARREGLA el CI rojo de `main`. Encadenar su despliegue al gate de la suite
+# completa (`tests-python`, como hace deploy.yml) creaba un CÍRCULO absurdo: para publicar una
+# mejora del guardián había que esperar a que el CI estuviera verde… que es justo lo que el
+# guardián arregla. Este carril lo rompe: despliega el guardián SOLO, gateado por sus PROPIOS
+# tests (`tests-guardian`: helpers stdlib, sin Postgres, que la suite roja de la app nunca bloquea).
+#
+# POR QUÉ ES BARATO (sin build): ambos servicios corren la imagen del worker (ya construida; su tag
+# `:latest` siempre existe en el host) pero montan su CÓDIGO por BIND-MOUNT del dir estable del host
+# (`./guardian-ui`, `./incident-keeper`). Así, desplegar = sincronizar las fuentes a ese dir y
+# RECREAR los dos contenedores (`--force-recreate` re-lee el bind-mount); no compila imágenes ni
+# toca db/back/front (`--no-deps`). `WORKER_VERSION` no se pasa -> compose resuelve `worker:latest`.
+#
+# CUÁNDO DISPARA: push a `main` que toque SUS rutas (no en cada commit de la app -> no recrea el
+# keeper, ni corta un fix en curso, por cambios ajenos) y manual. El deploy.yml general sigue
+# recreándolos también cuando toca (red de seguridad); este carril solo añade la vía rápida.
+#
+# Corre en el agente del server (monta el docker.sock + el dir estable host==contenedor, igual que
+# deploy.yml) y SERIALIZA con el deploy general por el MISMO `flock` del dir estable: nunca rsync a
+# la vez que un deploy construye.
+when:
+  - event: push
+    branch: main
+    path:
+      include:
+        - "deploy/guardian-ui/**"
+        - "deploy/incident-keeper/**"
+        - ".woodpecker/deploy-guardian.yml"
+  - event: manual
+
+depends_on:
+  - tests-guardian
+
+steps:
+  - name: deploy-guardian
+    # Mismo pin por DIGEST que deploy.yml: el step monta el docker.sock, así que su imagen es parte
+    # de la TCB del deploy. Actualízalo en sincronía con deploy.yml (`docker manifest inspect docker:27-cli`).
+    image: docker:27-cli@sha256:851f91d241214e7c6db86513b270d58776379aacc5eb9c4a87e5b47115e3065c
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Dir estable del host al MISMO path (host==contenedor) para que los bind mounts del compose
+      # resuelvan en el host. Aquí vive también el .env (no en git).
+      - /home/ubuntu/keni-social:/home/ubuntu/keni-social
+    commands:
+      - apk add --no-cache docker-cli-compose rsync flock
+      # rsync (mismos excludes que deploy.yml: protege .env/.git/artefactos) + recreación de los dos
+      # contenedores, todo bajo el flock del dir estable (serializa con el deploy general). El flag
+      # `estado/desplegando` evita que el `guardian` resucitador pelee con la recreación; se borra
+      # SIEMPRE al salir vía trap, así no queda huérfano.
+      - >-
+        flock -x -w 1800 /home/ubuntu/keni-social/.deploy.lock sh -c "
+        rsync -a --delete --exclude .git --exclude 'deploy/.env*' --exclude 'deploy/woodpecker/.env'
+        --exclude .claude --exclude .deploy.lock --exclude .ruff_cache --exclude node_modules
+        --exclude '.venv*' --exclude __pycache__ ./ /home/ubuntu/keni-social/
+        && cd /home/ubuntu/keni-social/deploy
+        && mkdir -p estado && chmod 0777 estado 2>/dev/null || true
+        && : > estado/desplegando && trap 'rm -f estado/desplegando' EXIT
+        && docker compose --env-file .env up -d --no-deps --force-recreate guardian-ui incident-keeper"

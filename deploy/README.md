@@ -113,6 +113,26 @@ del panel (`KENI_GUARDIAN_HTPASSWD`). Lo sirve `guardian-ui` (reusa la imagen de
 `claude`), escribiendo en el mismo `/claude-cfg` que el keeper lee. Tras un deploy nuevo el volumen
 arranca **vacío**: hasta el primer login el keeper no tiene cuenta y sus sesiones quedan en error.
 
+### Despliegue PROPIO del guardián (no espera al CI)
+
+El guardián es quien ARREGLA el CI rojo, así que encadenar su deploy al gate `tests-python` era un
+círculo: esperar al CI que él mismo arregla. Tiene su **carril independiente**
+(`.woodpecker/deploy-guardian.yml`), gateado solo por sus PROPIOS tests (`tests-guardian`: stdlib,
+sin Postgres, que la suite roja de la app nunca bloquea). Dispara en push a `main` que toque
+`deploy/guardian-ui/**` o `deploy/incident-keeper/**` (y manual).
+
+Es barato porque `guardian-ui` e `incident-keeper` montan su código por **bind-mount**
+(`./guardian-ui`, `./incident-keeper`) sobre la imagen del worker (ya construida; `:latest` siempre
+presente): desplegar = `rsync` de las fuentes al dir estable + `docker compose up -d --no-deps
+--force-recreate guardian-ui incident-keeper`. No compila imágenes ni toca db/back/front, y
+serializa con el deploy general por el mismo `flock`. El `deploy.sh` general los recrea también
+cuando toca (red de seguridad); este carril solo añade la vía rápida. A mano:
+
+```sh
+cd /home/ubuntu/keni-social/deploy
+docker compose --env-file .env up -d --no-deps --force-recreate guardian-ui incident-keeper
+```
+
 ---
 
 ## Ingress (estado actual: Traefik único, Caddy retirado)
