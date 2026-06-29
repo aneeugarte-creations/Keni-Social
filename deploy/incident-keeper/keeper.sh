@@ -211,17 +211,38 @@ buscar_huella() {
   return 1
 }
 
+# Busca una sesión RESUMIBLE para el rojo actual: la más reciente que quedó `interrumpido` (deploy
+# que cortó el contenedor) o `fallido` (su fix no bastó) PARA EL MISMO incidente, con un
+# claude_session capturado. Empareja por huella ($1, si la hay) o por trigger ($2, p. ej. "CI #65",
+# estable al anclar en el ORIGEN de la racha). Así, tras reiniciarse a media sesión, el keeper
+# CONTINÚA la conversación (el agente ya sabe qué diagnosticó/intentó) en vez de empezar de cero.
+# Imprime su claude_session y devuelve 0; 1 si no hay ninguna resumible.
+buscar_resumible() {  # $1=huella  $2=trigger
+  for meta in $(ls -1 "$DATA"/*.meta.json 2>/dev/null | sort -r); do
+    case "$(meta_get "$meta" estado)" in interrumpido|fallido) ;; *) continue ;; esac
+    h="$(meta_get "$meta" huella)"; t="$(meta_get "$meta" trigger)"
+    if { [ -n "$1" ] && [ "$h" = "$1" ]; } || [ "$t" = "$2" ]; then
+      cs="$(meta_get "$meta" claude_session)"
+      [ -n "$cs" ] || continue   # sin session_id no se puede resumir; sigue buscando una que sí lo tenga
+      printf '%s' "$cs"; return 0
+    fi
+  done
+  return 1
+}
+
 # Reconcilia sesiones HUÉRFANAS: una meta en `corriendo` al ARRANCAR significa que un keeper previo
 # se cayó/reinició (p. ej. un deploy recrea el contenedor) y mató el claude sin cerrar la sesión.
-# Como acabamos de arrancar (no hay sesión viva), cualquier `corriendo` es un fantasma: lo marcamos
-# `interrumpido` para que la UI no lo muestre eternamente "corriendo".
+# La marcamos `interrumpido` (para que la UI no la muestre eternamente "corriendo") CAPTURANDO su
+# claude_session del jsonl: así el bucle puede RESUMIRLA cuando vuelva a detectar el mismo rojo.
 reconciliar_huerfanas() {
   for meta in "$DATA"/*.meta.json; do
     [ -f "$meta" ] || continue
     if [ "$(meta_get "$meta" estado)" = corriendo ]; then
-      log "sesión huérfana $(basename "$meta" .meta.json): marco interrumpida (el keeper se reinició durante la sesión)"
+      sidn="$(basename "$meta" .meta.json)"
+      cs="$(grep -o '"session_id":"[^"]*"' "$DATA/$sidn.jsonl" 2>/dev/null | head -1 | cut -d'"' -f4)"
+      log "sesión huérfana $sidn: marco interrumpida${cs:+ (resumible: $cs)}"
       python3 "$KEEPER_DIR/sesion.py" "$meta" - estado=interrumpido \
-        fin="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        fin="$(date -u +%Y-%m-%dT%H:%M:%SZ)" claude_session="$cs" \
         nota="Interrumpido: el keeper se reinició (p. ej. un deploy) mientras la sesión corría." 2>/dev/null || true
     fi
   done
@@ -294,13 +315,16 @@ while :; do
       if [ "$n" -ge "$CI_MAX" ]; then
         log "CI sigue rojo tras $n intentos en ${CI_VENTANA_MIN}min: pauso el auto-fix; requiere humano"
       else
-        # ¿el MISMO fallo ya tuvo un fix que NO bastó (`fallido`)? Resume esa conversación (el agente
-        # ya sabe qué intentó) en vez de empezar de cero.
-        resume_id="$(buscar_huella "$huella_nueva" fallido 2>/dev/null)" || resume_id=""
+        # ¿ya hay una sesión RESUMIBLE para este rojo? — un fix que NO bastó (`fallido`) o uno que un
+        # deploy CORTÓ a media sesión (`interrumpido`). Resume esa conversación (el agente ya sabe qué
+        # diagnosticó/intentó) en vez de empezar de cero. Empareja por huella o por trigger "CI #$num".
+        resume_id="$(buscar_resumible "$huella_nueva" "CI #$num" 2>/dev/null)" || resume_id=""
         echo "$num" > "$CI_ULTIMO"; echo "$(date +%s)" >> "$CI_INTENTOS"
         log "CI ROJO pipeline #$num: lanzo fix${resume_id:+ (resume $resume_id)}"
-        correr_keeper "El pipeline #$num de \`main\` está ROJO en el CI (Woodpecker). Es un fix de
-CÓDIGO: arréglalo según la sección de CI de tu rol y promueve a main. Evidencia:
+        correr_keeper "El pipeline #$num de \`main\` está ROJO en el CI (Woodpecker). Es el ORIGEN de
+la racha roja actual (el primer rojo tras el último verde); puede haber rojos posteriores que
+HEREDEN este fallo, así que arreglar este suele devolver \`main\` a verde. Es un fix de CÓDIGO:
+arréglalo según la sección de CI de tu rol y promueve a main. Evidencia:
 
 $ci" "CI #$num" "$num" "$huella_nueva" "$resume_id"
       fi

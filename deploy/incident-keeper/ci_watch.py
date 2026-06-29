@@ -166,15 +166,35 @@ def ultimo_completado(pipelines):
 
 
 def objetivo_rojo(pipelines):
-    """El rojo a arreglar = el ÚLTIMO pipeline que CORRIÓ COMPLETO, si falló.
-
-    Recorre del más nuevo al más viejo y se queda con el primero que tenga veredicto real
-    (`COMPLETADO`): si es failure/error -> ese es el objetivo; si es success -> None (el último
-    completo está verde: nada que arreglar, aunque haya rojos más viejos). Si ninguno corrió
-    completo todavía (todos en curso/cancelados) -> None.
+    """¿Está `main` ROJO ahora? = el ÚLTIMO pipeline que CORRIÓ COMPLETO falló. Es el chequeo de
+    SALUD (lo usa `verdicto_fix`): mira solo el veredicto más reciente, no el origen de la racha.
     """
     comp = ultimo_completado(pipelines)
     return comp if comp is not None and comp[1] in TERMINAL_FALLO else None
+
+
+def origen_rojo(pipelines):
+    """El rojo a ARREGLAR = el ORIGEN de la racha roja actual: el PRIMER pipeline que se puso en rojo
+    tras el último verde, NO el último rojo.
+
+    Con varios rojos encadenados (#65, #66… de distintos agentes) los posteriores suelen HEREDAR el
+    fallo del primero (su árbol incluye el commit que rompió): arreglar el ÚLTIMO es arreglar un
+    síntoma; arreglar el ORIGEN es lo que devuelve `main` a verde. Recorre los pipelines con
+    veredicto (más nuevo -> más viejo): si el más reciente está verde -> None (main sano); si está
+    rojo, sigue hacia atrás MIENTRAS sigan rojos y devuelve el MÁS VIEJO de esa racha sin cortar (el
+    primero tras el último verde). Si toda la ventana es roja, devuelve el más viejo disponible (la
+    mejor aproximación al origen con los datos a la vista).
+    """
+    completos = [f for f in pipelines if f[1] in COMPLETADO]
+    if not completos or completos[0][1] not in TERMINAL_FALLO:
+        return None
+    origen = completos[0]
+    for fila in completos[1:]:
+        if fila[1] in TERMINAL_FALLO:
+            origen = fila
+        else:
+            break
+    return origen
 
 
 def hay_verde_despues(pipelines, number: int) -> bool:
@@ -344,7 +364,7 @@ def main() -> None:
         print(verdicto_fix(sys.argv[2]))
         return
 
-    obj = objetivo_rojo(pipelines_recientes())
+    obj = origen_rojo(pipelines_recientes())
     if not obj:
         return  # el último pipeline COMPLETO está verde (o ninguno corrió completo): nada que arreglar
     number, status, message, pid = obj

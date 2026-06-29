@@ -45,6 +45,38 @@ def test_ultimo_completado_es_la_salud_de_main():
     assert ci_watch.ultimo_completado([P(63, "running"), P(62, "pending")]) is None
 
 
+def test_origen_rojo_es_el_primer_rojo_de_la_racha():
+    # #66 y #65 rojos, #64 verde: el ORIGEN es #65 (el primero tras el verde), NO el último #66.
+    pls = [P(68, "running"), P(67, "running"), P(66, "failure"), P(65, "failure"), P(64, "success")]
+    obj = ci_watch.origen_rojo(pls)
+    assert obj is not None and obj[0] == 65
+
+
+def test_origen_rojo_un_solo_rojo():
+    # Una sola racha de un rojo: el origen es ese mismo.
+    assert ci_watch.origen_rojo([P(43, "running"), P(42, "failure"), P(41, "success")])[0] == 42
+
+
+def test_origen_rojo_main_verde_es_none():
+    # El último completo está verde -> main sano, no hay racha que arreglar (aunque haya rojos viejos).
+    assert ci_watch.origen_rojo([P(43, "success"), P(42, "failure"), P(41, "failure")]) is None
+
+
+def test_origen_rojo_ignora_cancelados_entre_medias():
+    # Los killed/declined no son veredicto: la racha roja real es #66<-#65; #64 verde corta -> #65.
+    pls = [P(67, "killed"), P(66, "failure"), P(65, "failure"), P(64, "success"), P(63, "failure")]
+    assert ci_watch.origen_rojo(pls)[0] == 65
+
+
+def test_origen_rojo_ventana_toda_roja():
+    # Sin ningún verde en la ventana: devuelve el más viejo disponible (mejor aproximación al origen).
+    assert ci_watch.origen_rojo([P(66, "failure"), P(65, "failure"), P(64, "failure")])[0] == 64
+
+
+def test_origen_rojo_lista_vacia():
+    assert ci_watch.origen_rojo([]) is None
+
+
 def test_hay_verde_despues():
     pls = [P(45, "success"), P(44, "running"), P(43, "failure")]
     assert ci_watch.hay_verde_despues(pls, 43) is True   # #45 verde > 43
