@@ -31,6 +31,17 @@
 when:
   - event: push
     branch: main
+    # …salvo un cambio SOLO del guardián: tiene su carril propio (deploy-guardian.yml), que despliega
+    # guardian-ui + incident-keeper sin recrear el stack. Sin este exclude, un commit del guardián
+    # disparaba el deploy general entero. Un commit MIXTO (app + guardián) SÍ despliega (hay ficheros
+    # fuera del exclude). (Además, al excluir tests-python/frontend-build de esos commits, este deploy
+    # se saltaría igual por `depends_on`; el exclude lo hace explícito.)
+    path:
+      exclude:
+        - "deploy/guardian-ui/**"
+        - "deploy/incident-keeper/**"
+        - ".woodpecker/deploy-guardian.yml"
+        - ".woodpecker/tests-guardian.yml"
   - event: manual
 
 depends_on:

@@ -51,15 +51,18 @@ steps:
       - /home/ubuntu/keni-social:/home/ubuntu/keni-social
     commands:
       - apk add --no-cache docker-cli-compose rsync flock
-      # rsync (mismos excludes que deploy.yml: protege .env/.git/artefactos) + recreación de los dos
-      # contenedores, todo bajo el flock del dir estable (serializa con el deploy general). El flag
-      # `estado/desplegando` evita que el `guardian` resucitador pelee con la recreación; se borra
-      # SIEMPRE al salir vía trap, así no queda huérfano.
+      # rsync ACOTADO a los DOS dirs de código bind-montados (no el árbol entero): así NUNCA borra
+      # estado host-only del dir estable —`deploy/secrets/*` (renderizados por deploy.sh), `.env`,
+      # `estado/`—. El deploy general sí rsync-ea todo, pero re-renderiza los secrets acto seguido;
+      # este carril NO corre deploy.sh, así que un `rsync --delete ./` del árbol entero los dejaría
+      # sin renderizar y el `compose up` fallaría al montarlos. Ambos dirs solo tienen ficheros de
+      # git, así que `--delete` dentro de ellos es seguro. Todo bajo el flock del dir estable
+      # (serializa con el deploy general). El flag `estado/desplegando` evita que el `guardian`
+      # resucitador pelee con la recreación; se borra SIEMPRE al salir vía trap, así no queda huérfano.
       - >-
         flock -x -w 1800 /home/ubuntu/keni-social/.deploy.lock sh -c "
-        rsync -a --delete --exclude .git --exclude 'deploy/.env*' --exclude 'deploy/woodpecker/.env'
-        --exclude .claude --exclude .deploy.lock --exclude .ruff_cache --exclude node_modules
-        --exclude '.venv*' --exclude __pycache__ ./ /home/ubuntu/keni-social/
+        rsync -a --delete ./deploy/guardian-ui/ /home/ubuntu/keni-social/deploy/guardian-ui/
+        && rsync -a --delete ./deploy/incident-keeper/ /home/ubuntu/keni-social/deploy/incident-keeper/
         && cd /home/ubuntu/keni-social/deploy
         && mkdir -p estado && chmod 0777 estado 2>/dev/null || true
         && : > estado/desplegando && trap 'rm -f estado/desplegando' EXIT

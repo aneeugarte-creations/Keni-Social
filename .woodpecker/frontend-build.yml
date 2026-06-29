@@ -16,6 +16,14 @@ when:
         - "consola/src/keni_consola/esquema_api/**"
   - event: push
     branch: main
+    # …salvo un cambio SOLO del guardián: tiene su carril propio (deploy-guardian.yml) y no compila
+    # frontend. Un commit MIXTO (app + guardián) SÍ corre (hay ficheros fuera del exclude).
+    path:
+      exclude:
+        - "deploy/guardian-ui/**"
+        - "deploy/incident-keeper/**"
+        - ".woodpecker/deploy-guardian.yml"
+        - ".woodpecker/tests-guardian.yml"
   - event: manual
 
 steps:

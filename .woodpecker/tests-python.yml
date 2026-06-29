@@ -30,9 +30,19 @@ when:
         - "consola/tests/conftest.py"
         - "consola/tests/_postgres.py"
         - ".woodpecker/tests-python.yml"
-  # En push a `main` SIEMPRE: verificación pesada en PARALELO al deploy (ya no lo gatea).
+  # En push a `main` SIEMPRE: verificación pesada en PARALELO al deploy (ya no lo gatea)…
   - event: push
     branch: main
+    # …SALVO un cambio SOLO del guardián (guardian-ui/incident-keeper/sus pipelines): tiene su carril
+    # propio (deploy-guardian.yml) y no necesita la suite de la app. Sin este exclude, esta rama
+    # "main sin filtro" arrastraba el pesado tests-python en cada commit del guardián. Un commit MIXTO
+    # (app + guardián) SÍ corre: basta UN fichero fuera del exclude para disparar.
+    path:
+      exclude:
+        - "deploy/guardian-ui/**"
+        - "deploy/incident-keeper/**"
+        - ".woodpecker/deploy-guardian.yml"
+        - ".woodpecker/tests-guardian.yml"
   - event: manual
 
 services:
