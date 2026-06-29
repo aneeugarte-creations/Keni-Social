@@ -1,9 +1,9 @@
 {
-  "version": "0.1.7",
-  "notes": "Galerías más fluidas: la ráfaga responde al instante (las peticiones ya no se bloquean entre sí) y al guardar una foto se conservan su título y etiquetas de keni-fotos.",
-  "pub_date": "2026-06-25T00:00:00Z",
+  "version": "0.1.8",
+  "notes": "La app ya no se cierra al elegir la carpeta del partido; las ráfagas vuelven a cargarse desde keni-social; y ahora puedes buscar por el nombre del partido.",
+  "pub_date": "2026-06-29T00:00:00Z",
   "darwin-aarch64": {
-    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcGY3SXVob3l2bUV3RlFBQ1FCUnBuYitFU0FBWnI1RDkwREFENmRJcTduRVViS1lhMzI0NkNtN1ZwcUVKZlpwSjQ0anFobmpEYlZuV25XVVU1UmthNEFrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNDMyNzU4CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6ClM4cnhnQWl1Wk52aHlyOUtlZHB4cm10UFhXWWtGMUt3WjhpTDZIVUpvRUNQQjJRQS9MdVRDQ04xU0gvNy93WERVNnhISlAreWJ2YmZVdmxwK3piSkFRPT0K",
+    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcGI3SDlOS0pDaUMvWDR4bklpSDVVRCtrQ0g4L3JGQ0lGRGNKRGVkUWFNcjRoYVVtc09ZdjBvcFJGUUJEbloyU1J4NUM4SEE4ZnZEK1JjK0M5aUs1ZWd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzczMjI2CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6Ck5uMk5OL1VGdWFWSG1PRHBmaGJnUEJsSTNJS3JtK1VLbVdwZkp5bFlNaFZsRklJT0EyanpVQ3l1Z1Rsa0tJcEs3QTJKZ2s5RXJZQThLVk5kZnRXSkNBPT0K",
     "url": "https://social.kenitech.io/api/fotos/updater"
   }
 }
