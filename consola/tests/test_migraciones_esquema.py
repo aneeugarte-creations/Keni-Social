@@ -483,11 +483,23 @@ def test_normalizar_huerfanas_noticias(pg):
     db.listar_swaps_turno()  # asegura el esquema
     con = motor_db.conectar_cruda()
     try:
+        # `clave` distinta por item: el UNIQUE `idx_noticias_items_dedup (fuente_id, clave)`
+        # chocaría con varios items de clave vacía.
         con.execute("INSERT INTO noticias_clusters (id) VALUES ('c-real')")
-        con.execute("INSERT INTO noticias_items (id, cluster_id) VALUES ('i-ok', 'c-real')")
-        con.execute("INSERT INTO noticias_items (id, cluster_id) VALUES ('i-huerf', 'c-fantasma')")
-        con.execute("INSERT INTO noticias_items (id, cluster_id) VALUES ('i-sin', '')")
-        con.execute("INSERT INTO noticias_items (id, publicacion_id) VALUES ('i-pub', 'p-fantasma')")
+        con.execute(
+            "INSERT INTO noticias_items (id, clave, cluster_id) VALUES ('i-ok', 'k-ok', 'c-real')"
+        )
+        con.execute(
+            "INSERT INTO noticias_items (id, clave, cluster_id) "
+            "VALUES ('i-huerf', 'k-huerf', 'c-fantasma')"
+        )
+        con.execute(
+            "INSERT INTO noticias_items (id, clave, cluster_id) VALUES ('i-sin', 'k-sin', '')"
+        )
+        con.execute(
+            "INSERT INTO noticias_items (id, clave, publicacion_id) "
+            "VALUES ('i-pub', 'k-pub', 'p-fantasma')"
+        )
         con.execute(
             "INSERT INTO noticias_clusters (id, publicacion_id) VALUES ('c-pub', 'p-fantasma')"
         )
