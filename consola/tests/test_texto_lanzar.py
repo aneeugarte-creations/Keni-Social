@@ -95,11 +95,15 @@ def test_componer_partes_separa_estable_de_dinamico():
     # Dinámico: instrucción de redes + la fuente envuelta en el envelope anti-inyección.
     assert "Genera el copy SOLO para estas redes" in dinamico
     assert "la nota variable" in dinamico and "contenido_usuario" in dinamico
-    # `componer` une ambas partes byte a byte (estable primero).
+    # `componer` une ambas partes (estable primero); salvo el nonce del envoltorio
+    # anti-inyección, que es aleatorio por llamada, la unión es byte a byte.
+    import re
+
     final = generar.componer(
         "Haz X", [ed], "la nota variable", redes_ids=["x"], indicaciones="lineamiento del día",
     )
-    assert final == estable + "\n\n" + dinamico
+    sin_nonce = lambda s: re.sub(r"contenido_usuario_[0-9a-f]+", "contenido_usuario_NONCE", s)  # noqa: E731
+    assert sin_nonce(final) == sin_nonce(estable + "\n\n" + dinamico)
 
 
 def test_instruccion_redes_ancla_limites_desde_el_codigo():
