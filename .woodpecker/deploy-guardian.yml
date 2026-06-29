@@ -3,22 +3,24 @@
 # El guardián es quien ARREGLA el CI rojo de `main`. Encadenar su despliegue al gate de la suite
 # completa (`tests-python`, como hace deploy.yml) creaba un CÍRCULO absurdo: para publicar una
 # mejora del guardián había que esperar a que el CI estuviera verde… que es justo lo que el
-# guardián arregla. Este carril lo rompe: despliega el guardián SOLO, gateado por sus PROPIOS
-# tests (`tests-guardian`: helpers stdlib, sin Postgres, que la suite roja de la app nunca bloquea).
+# guardián arregla. Este carril lo rompe: despliega el guardián SOLO, gateado por SUS PROPIOS tests
+# (paso `test-guardian` aquí mismo), que la suite roja de la app nunca bloquea.
+#
+# POR QUÉ EL GATE VA COMO PASO, NO COMO `depends_on`: Woodpecker SALTA un workflow cuyo `depends_on`
+# fue saltado. Si gateáramos con `depends_on: tests-guardian`, un commit que tocara solo este YAML
+# (sin tocar código del guardián) NO dispararía `tests-guardian` -> su salto arrastraría a este
+# deploy (justo lo que pasó con el pipeline #73). Metiendo los tests como PRIMER paso del MISMO
+# workflow, el deploy gatea de verdad (si el paso de tests falla, el de deploy se salta) sin
+# depender de otro workflow.
 #
 # POR QUÉ ES BARATO (sin build): ambos servicios corren la imagen del worker (ya construida; su tag
 # `:latest` siempre existe en el host) pero montan su CÓDIGO por BIND-MOUNT del dir estable del host
-# (`./guardian-ui`, `./incident-keeper`). Así, desplegar = sincronizar las fuentes a ese dir y
+# (`./guardian-ui`, `./incident-keeper`). Así, desplegar = sincronizar las fuentes al dir estable y
 # RECREAR los dos contenedores (`--force-recreate` re-lee el bind-mount); no compila imágenes ni
 # toca db/back/front (`--no-deps`). `WORKER_VERSION` no se pasa -> compose resuelve `worker:latest`.
 #
 # CUÁNDO DISPARA: push a `main` que toque SUS rutas (no en cada commit de la app -> no recrea el
-# keeper, ni corta un fix en curso, por cambios ajenos) y manual. El deploy.yml general sigue
-# recreándolos también cuando toca (red de seguridad); este carril solo añade la vía rápida.
-#
-# Corre en el agente del server (monta el docker.sock + el dir estable host==contenedor, igual que
-# deploy.yml) y SERIALIZA con el deploy general por el MISMO `flock` del dir estable: nunca rsync a
-# la vez que un deploy construye.
+# keeper, ni corta un fix en curso, por cambios ajenos) y manual.
 when:
   - event: push
     branch: main
@@ -29,10 +31,15 @@ when:
         - ".woodpecker/deploy-guardian.yml"
   - event: manual
 
-depends_on:
-  - tests-guardian
-
 steps:
+  # Gate: los tests stdlib del guardián/keeper (sin Postgres). Si fallan, el paso de deploy se salta.
+  - name: test-guardian
+    image: python:3.11
+    commands:
+      - python -m pip install --upgrade pip
+      - python -m pip install pytest starlette  # app.py importa starlette; lo demás es stdlib
+      - python -m pytest deploy/incident-keeper/test_sesion.py deploy/incident-keeper/test_ci_watch.py deploy/guardian-ui/test_app.py deploy/guardian-ui/test_cuenta.py -q
+
   - name: deploy-guardian
     # Mismo pin por DIGEST que deploy.yml: el step monta el docker.sock, así que su imagen es parte
     # de la TCB del deploy. Actualízalo en sincronía con deploy.yml (`docker manifest inspect docker:27-cli`).
