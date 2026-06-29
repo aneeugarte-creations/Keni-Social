@@ -38,6 +38,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from .. import autogen_redactar, config, generaciones, marcas, redes, repos, rutas
+from ._guardas import redactar_apagado
 from .._http_json import leer_json
 from ..dominio import indicaciones, ingesta, recibir_parse, jobspec
 from ..dominio.frescura import estado_frescura, resolver_linea
@@ -639,6 +640,11 @@ def _usar_item(
 
     redes_iniciales = _redes_iniciales(datos.get("redes"))
     generar = datos.get("generar", True)
+    # Si se pidió copy pero «Redactar» está apagada para la marca, no creamos nada.
+    if generar:
+        err = redactar_apagado(str(item.get("marca") or ""))
+        if err:
+            return 409, err
 
     contenido = repos.crear_publicacion(
         clase="contenido",

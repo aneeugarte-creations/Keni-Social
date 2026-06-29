@@ -20,6 +20,7 @@ from ... import autogen_redactar, config, marcas, repos
 from ..._http_json import leer_json
 from ...seguridad import autor_de_peticion
 from ...tiempo import hoy_utc
+from .._guardas import redactar_apagado
 from ._comun import (
     _LIMITE_DEFECTO,
     _LIMITE_MAX,
@@ -109,6 +110,11 @@ def _materializar_uso(
     autor: str,
 ) -> tuple[int, dict]:
     marca = item.get("marca") or ""
+    # Si se pidió copy pero «Redactar» está apagada para la marca, no creamos nada.
+    if generar:
+        err = redactar_apagado(marca)
+        if err:
+            return 409, err
     titulo = titulo_src or (item.get("url") or "")
     if not titulo:
         return 400, {"error": "La noticia no tiene título ni enlace."}

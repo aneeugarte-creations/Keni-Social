@@ -558,6 +558,54 @@ def test_usar_inexistente_404(cliente):
     assert cliente.post("/api/noticias/historias/nope/usar", json={}).status_code == 404
 
 
+def _store_redactar(monkeypatch, valor: str) -> None:
+    """Fija el toggle GLOBAL de «Redactar» en el store (precede a env), sin tocar Postgres."""
+    from keni_consola import config
+
+    clave = config.ENV_PIPELINE_REDACTAR
+    monkeypatch.setattr("keni_consola.ajustes.obtener", lambda c: valor if c == clave else None)
+
+
+def test_usar_con_redactar_apagada_y_generar_devuelve_409_sin_crear_nada(cliente, monkeypatch):
+    # «Empujar al feed» pidiendo copy con la etapa «Redactar» apagada: no se crea NADA y un 409
+    # accionable pide encenderla (el botón respeta el toggle, no encola un tema sin copy).
+    _store_redactar(monkeypatch, "0")
+    _inicializar_cluster("c1", marca="unotv", titulo="Historia con copy pedido", items=[
+        {"url": "https://a.com/1", "titulo": "Titular A"},
+    ])
+    r = cliente.post("/api/noticias/historias/c1/usar", json={"generar": True})
+    assert r.status_code == 409, r.text
+    assert r.json()["etapa_apagada"] == "redactar"
+    # El cluster sigue 'nuevo' (re-usable cuando enciendan la etapa), sin pieza enlazada…
+    refrescado = repos.obtener_noticia_cluster("c1")
+    assert refrescado["estado"] == "nuevo"
+    assert not refrescado.get("publicacion_id")
+    # …y NO quedó ninguna pieza fantasma en el tablero.
+    assert repos.listar_publicacion(clase="contenido") == []
+
+
+def test_usar_con_redactar_apagada_pero_sin_generar_si_baja_al_tablero(cliente, monkeypatch):
+    # La guarda solo corta cuando se PIDE copy: sin `generar`, empujar al feed funciona aunque
+    # «Redactar» esté apagada (el tema baja como borrador, lo redactará el equipo).
+    _store_redactar(monkeypatch, "0")
+    _inicializar_cluster("c1", marca="unotv", titulo="Historia sin copy")
+    r = cliente.post("/api/noticias/historias/c1/usar", json={"generar": False})
+    assert r.status_code == 200, r.text
+    assert repos.obtener_noticia_cluster("c1")["estado"] == "usado"
+
+
+def test_usar_con_redactar_encendida_y_generar_funciona(cliente, monkeypatch):
+    # Con «Redactar» encendida, pedir copy al empujar al feed crea el tema y arranca la generación.
+    _store_redactar(monkeypatch, "1")
+    _inicializar_cluster("c1", marca="unotv", titulo="Historia con copy", items=[
+        {"url": "https://a.com/1", "titulo": "Titular A"},
+    ])
+    r = cliente.post("/api/noticias/historias/c1/usar", json={"generar": True})
+    assert r.status_code == 200, r.text
+    assert r.json()["copy_en_proceso"] is True
+    assert repos.obtener_noticia_cluster("c1")["estado"] == "usado"
+
+
 _TITULO_ES = "Taiwán espera aprobar pronto la venta de armas de EE. UU."
 
 

@@ -38,6 +38,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from .. import autogen_redactar, marcas, redes, repos
+from ._guardas import redactar_apagado
 from .._http_json import leer_json
 from ..dominio import breaking as dom_breaking
 from ..estados import FLUJO_IMPORTANTE
@@ -160,6 +161,10 @@ async def preparar(request: Request) -> Response:
     marca_crudo = marca_crudo.strip()
     if not marcas.es_marca(marca_crudo):
         return JSONResponse({"error": "Marca no válida."}, status_code=400)
+    # Preparar SIEMPRE encola copy: si «Redactar» está apagada para la marca, no creamos nada.
+    err = redactar_apagado(marca_crudo)
+    if err:
+        return JSONResponse(err, status_code=409)
 
     redes_crudo = datos.get("redes", [])
     if not isinstance(redes_crudo, list):

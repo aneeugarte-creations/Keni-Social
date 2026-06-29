@@ -8,6 +8,7 @@ los fakes de `conftest`.
 
 from __future__ import annotations
 
+import pytest
 from starlette.testclient import TestClient
 
 from keni_consola import app as app_modulo
@@ -18,6 +19,16 @@ from .conftest import TOKEN_PRUEBA
 
 _ORIGIN = {"Origin": "http://testserver"}
 _CLAVE = "clave-de-prueba"
+
+
+@pytest.fixture(autouse=True)
+def _redactar_encendida(monkeypatch):
+    """La puerta creativa (`aportar`) encola copy y exige la etapa «Redactar» encendida.
+
+    El catálogo trae la etapa OFF por defecto; este módulo la ejercita, así que la activa
+    para todos sus tests (los del flujo apagado viven en `test_pipeline_contenido`).
+    """
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")
 
 
 def _app():

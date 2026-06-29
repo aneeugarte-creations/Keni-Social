@@ -13,6 +13,7 @@ from starlette.responses import JSONResponse, Response
 
 from ...dominio import extraccion_url
 from ...tiempo import hoy_utc
+from .._guardas import redactar_apagado
 from ._comun import (
     _MAX_TEXTO,
     _MAX_TITULO,
@@ -243,6 +244,11 @@ def _crear_aportacion(
     url: str,
     autor: dict | None,
 ) -> tuple[int, dict]:
+    # Aportar encola copy cuando hay marca: si «Redactar» está apagada para ella, no creamos nada.
+    if marca:
+        err = redactar_apagado(marca)
+        if err:
+            return 409, err
     # «La lista» (reparto PULL, todas las marcas): la pieza nace LIBRE y el equipo la coge
     # desde «Por cubrir». `responsable_automatico` devuelve None hoy (el gancho de un futuro
     # PUSH por marca vive en él, no aquí).

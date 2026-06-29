@@ -19,6 +19,7 @@ from ... import autogen_redactar, bootstrap_categorias, config, estados, marcas,
 from ..._http_json import leer_json
 from ...seguridad import autor_de_peticion
 from ...tiempo import hoy_utc
+from .._guardas import redactar_apagado
 from ._comun import (
     _LIMITE_DEFECTO,
     _LIMITE_MAX,
@@ -830,6 +831,11 @@ def _materializar_usar(
     from ...pipeline_contenido import _admitir as _pc_ingesta
 
     marca = cluster.get("marca") or ""
+    # Si se pidió copy pero «Redactar» está apagada para la marca, no creamos nada.
+    if generar:
+        err = redactar_apagado(marca)
+        if err:
+            return 409, err
     items = repos.items_de_cluster(cluster_id, limite=_MAX_ENLACES_HISTORIA)
     # Título/resumen en español (traducido a MX si existe), nunca el original extranjero.
     titulo = _pc_ingesta._titulo_es(cluster) or (items[0]["url"] if items else "")
