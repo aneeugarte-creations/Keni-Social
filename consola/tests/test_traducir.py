@@ -267,7 +267,9 @@ def test_procesar_traducir_omite_ids_ajenos_y_vacios(monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-def _inicializar_cluster_idioma(cid, *, idioma, traducido=0, estado="nuevo", traduccion_encolada=""):
+def _inicializar_cluster_idioma(
+    cid, *, idioma, idiomas=None, traducido=0, estado="nuevo", traduccion_encolada=""
+):
     from keni_consola import repos
 
     repos.upsert_noticia_cluster({
@@ -280,7 +282,7 @@ def _inicializar_cluster_idioma(cid, *, idioma, traducido=0, estado="nuevo", tra
         "clave": f"t:{cid}",
         "n_items": 1,
         "n_fuentes": 1,
-        "idiomas": [idioma],
+        "idiomas": [idioma] if idiomas is None else idiomas,
         "senal": 10,
         "score": 0.5,
         "breaking": 0,
@@ -303,7 +305,12 @@ def test_clusters_extranjeros_sin_traducir_no_revienta_con_like(cliente):  # noq
     _inicializar_cluster_idioma("en1", idioma="en")  # extranjero sin traducir -> candidato
     _inicializar_cluster_idioma("es1", idioma="es")  # español -> excluido por el NOT LIKE 'es%'
     _inicializar_cluster_idioma("en2", idioma="en", traducido=1)  # ya traducido -> excluido
-    _inicializar_cluster_idioma("sin", idioma="")  # idioma sin detectar -> candidato (Hueco A)
+    _inicializar_cluster_idioma("sin", idioma="")  # idioma vacío SIN español -> candidato (Hueco A)
+    # Fuente ya en español: el representante llega con `idioma` vacío pero `idiomas=["es"]`.
+    # NO debe traducirse (sería español->español); la tropicalización va en la generación de copy.
+    _inicializar_cluster_idioma("eses", idioma="", idiomas=["es"])
+    # Cluster mixto con español: contiene un titular en español, así que tampoco entra a traducir.
+    _inicializar_cluster_idioma("mix", idioma="", idiomas=["en", "es"])
 
     # Ventana enorme para que el corte temporal no descarte la inicial; min_score bajo.
     candidatos = repos.clusters_extranjeros_sin_traducir(24 * 365 * 100, min_score=0.0, limite=40)
@@ -311,7 +318,9 @@ def test_clusters_extranjeros_sin_traducir_no_revienta_con_like(cliente):  # noq
     assert "en1" in ids
     assert "es1" not in ids  # el `NOT LIKE 'es%'` filtra el español
     assert "en2" not in ids  # ya traducido
-    assert "sin" in ids  # idioma vacío entra a la cola: el daemon lo tropicaliza, no se cuela en inglés
+    assert "sin" in ids  # idioma vacío sin español entra a la cola: no se cuela en inglés
+    assert "eses" not in ids  # fuente en español (idiomas=["es"]) NO se re-traduce es->es
+    assert "mix" not in ids  # un cluster con español ya tiene titular en español: no se traduce
 
 
 def test_traduccion_encolada_excluye_y_se_re_abre_al_expirar(cliente):  # noqa: ARG001

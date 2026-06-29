@@ -459,24 +459,32 @@ def clusters_extranjeros_sin_traducir(
     """Clusters EXTRANJEROS (o sin idioma detectado) recientes aún sin traducir (Ola D), para el paso de traducir.
 
     Selecciona clusters con `traducido = 0`, SIN un job de traducción ya en curso
-    (`traduccion_encolada = ''`), `idioma` VACÍO o distinto de español (no empieza por 'es'),
-    `score >= min_score`, `ultimo_visto` dentro de la ventana, y estado distinto de `descartado`.
+    (`traduccion_encolada = ''`), que NO contengan español, `score >= min_score`, `ultimo_visto`
+    dentro de la ventana, y estado distinto de `descartado`.
     Excluir los `traduccion_encolada` no vacíos hace IDEMPOTENTE el encolado: un cluster cuyo job
     sigue pendiente no se vuelve a encolar (el limpiador de atascados re-abre los que expiran).
-    Incluir el idioma vacío cierra el hueco por el que un titular en inglés sin idioma declarado se
-    quedaba fuera de la cola y se materializaba en inglés; una rara historia en español sin idioma se
-    re-tropicaliza a MX (inocuo). MÁS RELEVANTES primero (`score DESC`), `limite` acota el lote por
-    barrido (el backlog se procesa en barridos sucesivos; sin tope artificial). PURA salvo I/O.
+    "Contiene español" se mide sobre `idiomas` (todos los idiomas presentes en el cluster), NO sobre
+    el `idioma` representante: una historia de fuente ya en español llega con `idioma` vacío pero
+    `idiomas = ["es"]`, y traducirla es un español->español inútil. La tropicalización MX pertenece a
+    la generación de copy, no a la ingesta; aquí solo entran titulares genuinamente extranjeros. El
+    `idioma` vacío SIGUE siendo candidato cuando no hay español (titular en inglés sin idioma
+    declarado), así no se materializa en inglés. MÁS RELEVANTES primero (`score DESC`), `limite` acota
+    el lote por barrido (el backlog se procesa en barridos sucesivos; sin tope artificial). PURA salvo I/O.
     """
     corte = iso_utc(datetime.now(UTC) - timedelta(hours=max(1, int(ventana_h))))
     con = _conectar()
     try:
         filas = con.execute(
             f"{_SELECT_NOTICIA_CLUSTER} WHERE traducido = 0 AND traduccion_encolada = '' "
-            # `es%%`: el `%` literal va DOBLADO porque psycopg interpreta `%` como inicio de
+            # `es%%`/`%%"es"%%`: el `%` literal va DOBLADO porque psycopg interpreta `%` como inicio de
             # placeholder (el shim `?`->`%s` no escapa los `%` del SQL). En Postgres `%%`->`%`
             # (un comodín LIKE); en SQLite `%%` son dos comodines contiguos (equivalentes a uno).
-            "AND (idioma = '' OR idioma NOT LIKE 'es%%') AND score >= ? AND ultimo_visto >= ? "
+            # `idiomas` es un array JSON de códigos entre comillas (`["es"]`, `["en","es"]`): el patrón
+            # `%"es"%` excluye CUALQUIER cluster que contenga español, aunque su `idioma` representante
+            # venga vacío. El `idioma NOT LIKE 'es%%'` queda como red secundaria sobre el representante.
+            "AND (idioma = '' OR idioma NOT LIKE 'es%%') "
+            "AND (idiomas IS NULL OR idiomas NOT LIKE '%%\"es\"%%') "
+            "AND score >= ? AND ultimo_visto >= ? "
             "AND estado <> 'descartado' "
             "ORDER BY score DESC, ultimo_visto DESC LIMIT ?",
             (float(min_score), corte, max(1, int(limite))),
