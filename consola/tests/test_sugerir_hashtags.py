@@ -169,6 +169,25 @@ def test_aplicar_sugerencia_no_mete_la_linea_en_el_gris(entorno):
     assert listas[0] == listas[1] == guardados
 
 
+def test_linea_hashtags_sale_de_la_categoria_del_contenido(entorno):
+    # `linea_hashtags` se resuelve en el SELECT de piezas desde la etiqueta `categoria` del
+    # contenido (su id ES `categoria`); la pieza lo expone como `hashtags_linea`.
+    et = repos.crear_etiqueta(
+        nombre="Ciencia/Tech", clase="categoria", marca=_MARCA, hashtags="cienciatech",
+    )
+    tema = repos.crear_publicacion(
+        clase="contenido", titulo="Tema", marca=_MARCA, categoria=et["id"],
+    )
+    pid = repos.crear_pieza_fila(publicacion_id=tema["id"], red="instagram", copy="x")["id"]
+    assert pieza_a_dict(repos.obtener_pieza(pid))["hashtags_linea"] == ["#cienciatech"]
+
+
+def test_linea_hashtags_vacio_sin_categoria(entorno):
+    # Contenido sin categoría: el LEFT JOIN a `etiquetas` no casa -> `linea_hashtags` NULL -> "".
+    _, ids = _crear_contenido(["instagram"], "Cuerpo del post sin hashtags")
+    assert pieza_a_dict(repos.obtener_pieza(ids[0]))["hashtags_linea"] == []
+
+
 def test_aplicar_sugerencia_guarda_imagen_clave_gemela(entorno):
     pid, ids = _crear_contenido(["instagram", "x"], "Cuerpo del post sin hashtags")
     dom_sh.aplicar_sugerencia(pid, ["#mexico"], "bandera de mexico")

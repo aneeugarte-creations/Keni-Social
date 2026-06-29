@@ -71,12 +71,12 @@ _SELECT_PUBLICACION = (
     # Hashtags de la LÍNEA: salen de la etiqueta categoria cuyo id ES la `categoria` del contenido.
     # `categoria` es la ÚNICA fuente de verdad operativa (filtros, programación, aprobación,
     # métricas, hashtags); el tema (tag del clasificador) es solo metadata y no alimenta nada de
-    # esto. Columna calculada en el mismo SELECT (no un query por pieza) para que el gate
-    # `falta_hashtags` la exija sin N+1. "" si la categoría es señal del motor (breaking/evergreen),
-    # vacía, o sin hashtag fijado.
-    "(SELECT e.hashtags FROM etiquetas e "
-    "WHERE e.id = c.categoria AND e.clase = 'categoria' AND e.activo = 1) AS linea_hashtags "
+    # esto. Se trae con un LEFT JOIN a `etiquetas` (e.id es PK -> 1:1, no multiplica filas) en el
+    # mismo SELECT para que el gate `falta_hashtags` la exija sin un query por pieza. "" si la
+    # categoría es señal del motor (breaking/evergreen), vacía, o sin hashtag fijado.
+    "e.hashtags AS linea_hashtags "
     "FROM pieza cp JOIN publicacion c ON cp.publicacion_id = c.id "
+    "LEFT JOIN etiquetas e ON e.id = c.categoria AND e.clase = 'categoria' AND e.activo = 1 "
     # Toda fila por plataforma de un `contenido` (no de una `tarea`) ES una pieza:
     # el muro `es_publicacion` no se usa. La columna persiste por compatibilidad pero
     # no filtra; `clase` excluye las tareas.
@@ -758,6 +758,17 @@ def actualizar_pieza(
     ahora = ahora_iso()
     con = _conectar()
     try:
+        # Orden de adquisición de locks PADRE->HIJA (igual que el resto del módulo:
+        # `actualizar_publicacion`, `borrar_pieza`): primero el `contenido` padre, luego la
+        # fila por plataforma. El CAS de estado va en la HIJA; si no aplica, la transacción se
+        # cierra sin commit y el UPDATE del padre se descarta con ella.
+        if cambios_padre:
+            asignaciones_p = [f"{col} = ?" for col in cambios_padre]
+            asignaciones_p.append("actualizado = ?")
+            con.execute(
+                f"UPDATE publicacion SET {', '.join(asignaciones_p)} WHERE id = ?",  # noqa: S608 -- allowlist
+                (*cambios_padre.values(), ahora, plat["publicacion_id"]),
+            )
         if cambios_plat:
             asignaciones = [f"{col} = ?" for col in cambios_plat]
             asignaciones.append("actualizado = ?")
@@ -773,15 +784,10 @@ def actualizar_pieza(
                 params.append(estado_esperado)
             cur = con.execute(sql, tuple(params))
             if cur.rowcount == 0:
-                # No existe o el CAS no aplico (estado movido): nada que commitear.
+                # No existe o el CAS no aplico (estado movido): se descarta también el UPDATE
+                # del padre ya emitido en esta transacción.
+                con.rollback()
                 return None
-        if cambios_padre:
-            asignaciones_p = [f"{col} = ?" for col in cambios_padre]
-            asignaciones_p.append("actualizado = ?")
-            con.execute(
-                f"UPDATE publicacion SET {', '.join(asignaciones_p)} WHERE id = ?",  # noqa: S608 -- allowlist
-                (*cambios_padre.values(), ahora, plat["publicacion_id"]),
-            )
         con.commit()
     finally:
         con.close()
