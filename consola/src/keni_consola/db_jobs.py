@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 from ._db_comun import (
     UTC,
@@ -494,6 +495,39 @@ def gen_ids_jobs_pendientes() -> set[str]:
     return {f["gen_id"] for f in filas}
 
 
+# Retencion de la cola: ventana (dias) tras la cual un job `terminado` se BORRA. La cola conserva
+# lo EN CURSO + lo recien terminado; el historial real de cada generacion (y su gasto) vive en
+# otras tablas, asi que la fila terminada solo engorda `jobs` y los seq-scans del polling.
+JOBS_RETENCION_DIAS_DEF = 7
+
+
+def purgar_jobs_terminados(dias: int | None = None) -> int:
+    """Borra los jobs `terminado` mas viejos que `dias`. Devuelve cuantos borro.
+
+    `dias` (def `KENI_JOBS_RETENCION_DIAS`, 7) cuenta sobre `creado`. SEGURO: solo toca filas en
+    estado terminal y antiguas; un job vivo (`pendiente`/`reclamado`) o reciente NUNCA es candidato
+    (`creado IS NOT NULL AND creado < corte`). El historial de cada generacion vive en su registro
+    y su gasto en `gasto_ia`, asi que borrar la fila de cola no pierde informacion.
+    """
+    if dias is None:
+        crudo = os.environ.get("KENI_JOBS_RETENCION_DIAS")
+        try:
+            dias = int(str(crudo).strip()) if crudo is not None else JOBS_RETENCION_DIAS_DEF
+        except (TypeError, ValueError):
+            dias = JOBS_RETENCION_DIAS_DEF
+    corte = iso_utc(datetime.now(UTC) - timedelta(days=max(0, int(dias))))
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "DELETE FROM jobs WHERE estado = ? AND creado IS NOT NULL AND creado < ?",
+            (JOB_TERMINADO, corte),
+        )
+        con.commit()
+        return cur.rowcount or 0
+    finally:
+        con.close()
+
+
 # --------------------------------------------------------------------------- #
 # Ledger de gasto de IA (economia de tokens; ver `presupuesto_ia.py`)          #
 # --------------------------------------------------------------------------- #
@@ -934,6 +968,30 @@ def desindexar_generacion(gen_id: str) -> None:
     try:
         con.execute("DELETE FROM generaciones_indice WHERE gen_id = ?", (gen_id,))
         con.commit()
+    finally:
+        con.close()
+
+
+def purgar_indice_generaciones(corte: str, maximo: int) -> int:
+    """Borra filas del indice con `actualizado` anterior a `corte` (ISO) fuera del piso. Devuelve cuantas.
+
+    SQL de la poda por EDAD del indice, INDEPENDIENTE del fichero (la politica la resuelve
+    `generaciones.purgar_indice_generaciones`). Borra una fila solo si su `actualizado` es no vacio
+    y anterior a `corte` Y ademas NO esta entre las `maximo` mas recientes (piso por
+    `actualizado DESC`): retira las HUERFANAS viejas que el janitor del host o un crash dejaron sin
+    desindexar, sin tocar el listado reciente. `maximo=0` = sin piso (solo manda la edad).
+    """
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "DELETE FROM generaciones_indice WHERE actualizado <> '' AND actualizado < ? "
+            "AND gen_id NOT IN ("
+            "SELECT gen_id FROM generaciones_indice "
+            "ORDER BY actualizado DESC, gen_id DESC LIMIT ?)",
+            (corte, max(0, int(maximo))),
+        )
+        con.commit()
+        return cur.rowcount or 0
     finally:
         con.close()
 

@@ -18,7 +18,7 @@ import hashlib
 import os
 import re
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +56,7 @@ __all__ = [
     "listar",
     "obtener",
     "purgar_generaciones",
+    "purgar_indice_generaciones",
     "raiz",
     "reclamar_atascadas",
     "_RETENCION_DIAS_DEF",
@@ -682,6 +683,40 @@ def purgar_generaciones(
     if podados:
         _log.info("Limpieza de generaciones: %d registro(s) viejo(s) borrado(s).", podados)
     return podados
+
+
+def purgar_indice_generaciones(
+    *,
+    dias: int | None = None,
+    maximo: int | None = None,
+    ahora: datetime | None = None,
+) -> int:
+    """Poda por EDAD del INDICE de generaciones, INDEPENDIENTE del fichero. Devuelve cuantas borro.
+
+    `purgar_generaciones` solo desindexa una fila cuando ELLA borra su YAML; si el fichero lo borro
+    el janitor del host o se perdio en un crash, la fila del indice queda HUERFANA para siempre (el
+    indice crece sin limite y el listado muestra fantasmas). Esta poda retira por SQL las filas
+    viejas aunque su YAML ya no exista, con la MISMA politica de doble red que la de ficheros:
+      - CONSERVA toda fila mas nueva que `dias` (juzgada por `actualizado`, su ultimo cambio).
+      - CONSERVA SIEMPRE las `maximo` mas recientes, aunque sean viejas (piso por `actualizado`).
+    `dias`/`maximo` salen del entorno (`KENI_GENERACIONES_RETENCION_DIAS`/`_MAX`, mismos defaults
+    que la poda de ficheros) si no se inyectan; `ahora` se inyecta en tests. El corte se sella en el
+    mismo canon UTC naive que `ahora_iso` graba en `actualizado`, asi la comparacion mide edad real.
+    """
+    dias_ret = dias if dias is not None else _entero_env(
+        "KENI_GENERACIONES_RETENCION_DIAS", _RETENCION_DIAS_DEF, minimo=0
+    )
+    max_ret = maximo if maximo is not None else _entero_env(
+        "KENI_GENERACIONES_RETENCION_MAX", _RETENCION_MAX_DEF, minimo=0
+    )
+    referencia = ahora if ahora is not None else datetime.now(timezone.utc).replace(tzinfo=None)
+    corte = (referencia - timedelta(days=dias_ret)).isoformat(timespec="seconds")
+    from .. import db_jobs
+
+    podadas = db_jobs.purgar_indice_generaciones(corte, max_ret)
+    if podadas:
+        _log.info("Limpieza de generaciones: %d fila(s) huerfana(s) del indice borrada(s).", podadas)
+    return podadas
 
 
 def reclamar_atascadas(max_edad_seg: float, *, ahora: datetime | None = None) -> int:

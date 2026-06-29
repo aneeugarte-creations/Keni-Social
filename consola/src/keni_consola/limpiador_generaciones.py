@@ -116,6 +116,23 @@ def ejecutar_barrido() -> int:
         generaciones.purgar_generaciones()
     except Exception:  # noqa: BLE001 -- el borrado es best-effort; no debe tumbar el barrido
         _log.warning("Limpiador de generaciones: fallo el borrado de registros viejos.", exc_info=True)
+    # Poda por EDAD del INDICE de generaciones, INDEPENDIENTE del fichero: el borrado de arriba solo
+    # desindexa lo que ÉL borra, así que una fila cuyo YAML borró el janitor del host o se perdió en
+    # un crash queda HUÉRFANA para siempre. Esta poda la retira por SQL aunque el YAML ya no exista.
+    try:
+        generaciones.purgar_indice_generaciones()
+    except Exception:  # noqa: BLE001 -- best-effort: una poda fallida no debe tumbar el barrido
+        _log.warning("Limpiador de generaciones: fallo la poda del índice de generaciones.", exc_info=True)
+    # Retención de la cola de jobs: borra los `terminado` antiguos. La tabla crecía sin límite (nada
+    # purgaba jobs), engordando el TOAST del `spec` y los seq-scans del polling de la cola.
+    try:
+        from . import db_jobs
+
+        p = db_jobs.purgar_jobs_terminados()
+        if p:
+            _log.info("Limpiador de generaciones: %d job(s) terminado(s) antiguo(s) purgado(s).", p)
+    except Exception:  # noqa: BLE001 -- best-effort: una purga fallida no debe tumbar el barrido
+        _log.warning("Limpiador de generaciones: fallo la purga de jobs terminados.", exc_info=True)
     # Tercera reparación: lotes de cajones COLGADOS atascados en `parseando`. Si el worker muere
     # entre el INSERT de los ítems y el UPDATE del lote, el lote queda `parseando` para siempre
     # (spinner "Procesando con Haiku…" eterno en el SPA + lote no borrable). Mismo TTL que las

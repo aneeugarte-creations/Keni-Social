@@ -102,6 +102,7 @@ from ._almacen import (
     listar,
     obtener,
     purgar_generaciones,
+    purgar_indice_generaciones,
     raiz,
     reclamar_atascadas,
 )
@@ -187,6 +188,7 @@ __all__ = [
     "listar",
     "contar",
     "purgar_generaciones",
+    "purgar_indice_generaciones",
     "reclamar_atascadas",
     "nuevo_id",
     "ahora_iso",
