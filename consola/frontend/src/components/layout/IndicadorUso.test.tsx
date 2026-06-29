@@ -2,36 +2,29 @@ import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { IndicadorUso } from "@/components/layout/IndicadorUso";
-import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import type { UsoCuenta } from "@/hooks/use-uso-cuenta";
-import type { RolUsuario } from "@/types";
 
-// Aislamos la red: el componente solo lee el RESULTADO del hook (en `use-uso-cuenta`). Mockear el
-// hook nos deja conducir cada estado (cargando / normal / rojo) sin tocar fetch ni react-query.
+// Aislamos la red y el selector: el componente lee el RESULTADO del hook de uso (`use-uso-cuenta`)
+// y la marca activa (`useMarcaActiva`). Mockear ambos nos deja conducir cada estado (cargando /
+// una cuenta / dos cuentas / sin cuentas / rojo) y cada modo del selector (Todas / marca concreta).
 const usoMock = vi.fn();
+const marcaActivaMock = vi.fn();
 vi.mock("@/hooks/use-uso-cuenta", () => ({
   useUsoCuenta: () => usoMock(),
+}));
+vi.mock("@/hooks/marca-activa-contexto", () => ({
+  useMarcaActiva: () => marcaActivaMock(),
 }));
 
 afterEach(() => {
   vi.clearAllMocks();
 });
 
-function valorSesion(rol: RolUsuario): ValorSesion {
+function cuenta(parcial: Partial<UsoCuenta>): UsoCuenta {
   return {
-    usuario: { id: "u1", usuario: "x", rol, debe_cambiar_password: false },
-    cargando: false,
-    errorConexion: false,
-    iniciarSesion: async () => ({ mfaRequerido: false }),
-    verificarConPasskey: async () => {},
-    entrarConPasskey: async () => {},
-    cerrarSesion: async () => {},
-    refrescar: async () => {},
-  };
-}
-
-function uso(parcial: Partial<UsoCuenta>): UsoCuenta {
-  return {
+    cuenta: "a",
+    etiqueta: "Claro Sports · Fundación",
+    marcas: ["claro-sports", "fundacion"],
     conectada: true,
     semana_pct: 42,
     sesion_5h_pct: 18,
@@ -45,71 +38,114 @@ function uso(parcial: Partial<UsoCuenta>): UsoCuenta {
   };
 }
 
-function renderIndicador(rol: RolUsuario, colapsado = false) {
-  return render(
-    <SesionContexto.Provider value={valorSesion(rol)}>
-      <IndicadorUso colapsado={colapsado} />
-    </SesionContexto.Provider>,
-  );
+const CUENTA_B = cuenta({
+  cuenta: "b",
+  etiqueta: "UnoTV · Nación Gamer",
+  marcas: ["unotv", "nacion-gamer"],
+  semana_pct: 70,
+  sesion_5h_pct: 30,
+});
+
+/** Renderiza con la respuesta del hook y la marca activa dadas. */
+function renderIndicador(
+  resultadoUso: unknown,
+  marcaActiva: string | null = null,
+  colapsado = false,
+) {
+  usoMock.mockReturnValue(resultadoUso);
+  marcaActivaMock.mockReturnValue({ marcaActiva });
+  return render(<IndicadorUso colapsado={colapsado} />);
 }
 
 describe("IndicadorUso", () => {
-  it("no renderiza nada para no-admin (editor)", () => {
-    usoMock.mockReturnValue({ data: uso({}) });
-    const { container } = renderIndicador("editor");
-    expect(container).toBeEmptyDOMElement();
-  });
-
   it("estado de carga (sin dato) es NEUTRO, no rojo: muestra «—» y los medidores", () => {
-    usoMock.mockReturnValue({ data: undefined });
-    renderIndicador("admin");
+    renderIndicador({ data: undefined });
     expect(screen.getByText("Semana")).toBeInTheDocument();
     expect(screen.getByText("5h")).toBeInTheDocument();
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
     expect(screen.queryByText(/Sin cuenta|100%/)).not.toBeInTheDocument();
   });
 
-  it("estado normal expandido: pinta ambos porcentajes sin alerta roja", () => {
-    usoMock.mockReturnValue({ data: uso({ semana_pct: 42, sesion_5h_pct: 18 }) });
-    renderIndicador("admin");
+  it("una cuenta (marca concreta): pinta sus porcentajes, sin etiqueta de marca", () => {
+    renderIndicador({ data: { cuentas: [cuenta({})] } }, "claro-sports");
     expect(screen.getByText("42%")).toBeInTheDocument();
     expect(screen.getByText("18%")).toBeInTheDocument();
-    expect(screen.queryByText(/Sin cuenta/)).not.toBeInTheDocument();
+    // Con UNA cuenta no se rotula la etiqueta de marca (igual que antes).
+    expect(screen.queryByText("Claro Sports · Fundación")).not.toBeInTheDocument();
+  });
+
+  it("dos cuentas (Todas): pinta AMBAS, cada una etiquetada por sus marcas", () => {
+    renderIndicador({ data: { cuentas: [cuenta({}), CUENTA_B] } }, null);
+    expect(screen.getByText("Claro Sports · Fundación")).toBeInTheDocument();
+    expect(screen.getByText("UnoTV · Nación Gamer")).toBeInTheDocument();
+    expect(screen.getByText("42%")).toBeInTheDocument();
+    expect(screen.getByText("70%")).toBeInTheDocument();
+  });
+
+  it("marca concreta filtra a la cuenta de esa marca aunque el back devuelva ambas", () => {
+    renderIndicador({ data: { cuentas: [cuenta({}), CUENTA_B] } }, "unotv");
+    // Solo la cuenta B (la de unotv): sus porcentajes presentes; los de A ausentes.
+    expect(screen.getByText("70%")).toBeInTheDocument();
+    expect(screen.getByText("30%")).toBeInTheDocument();
+    expect(screen.queryByText("42%")).not.toBeInTheDocument();
+    // Una sola cuenta tras el filtro: no se rotula la etiqueta de marca (igual que antes).
+    expect(screen.queryByText("UnoTV · Nación Gamer")).not.toBeInTheDocument();
+  });
+
+  it("sin cuentas (editor sin marcas): no renderiza nada", () => {
+    const { container } = renderIndicador({ data: { cuentas: [] } }, null);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("marca activa que no es de ninguna cuenta permitida: no renderiza nada", () => {
+    const { container } = renderIndicador({ data: { cuentas: [cuenta({})] } }, "unotv");
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("rojo sin cuenta: mensaje «Sin cuenta» en clase destructiva", () => {
-    usoMock.mockReturnValue({
-      data: uso({ conectada: false, semana_pct: null, sesion_5h_pct: null, alerta_roja: true }),
-    });
-    renderIndicador("admin");
+    renderIndicador(
+      {
+        data: {
+          cuentas: [cuenta({ conectada: false, semana_pct: null, sesion_5h_pct: null, alerta_roja: true })],
+        },
+      },
+      "claro-sports",
+    );
     const aviso = screen.getByText("Sin cuenta");
     expect(aviso).toBeInTheDocument();
     expect(aviso.className).toContain("text-destructive");
   });
 
   it("rojo al 100%: mensaje «Límite semanal al 100%»", () => {
-    usoMock.mockReturnValue({
-      data: uso({ semana_pct: 100, sesion_5h_pct: 60, al_100: true, alerta_roja: true }),
-    });
-    renderIndicador("admin");
+    renderIndicador(
+      { data: { cuentas: [cuenta({ semana_pct: 100, sesion_5h_pct: 60, al_100: true, alerta_roja: true })] } },
+      "claro-sports",
+    );
     expect(screen.getByText("Límite semanal al 100%")).toBeInTheDocument();
   });
 
   it("colapsado: pinta un círculo (svg) con el número semanal, sin barras", () => {
-    usoMock.mockReturnValue({ data: uso({ semana_pct: 42 }) });
-    const { container } = renderIndicador("admin", true);
+    const { container } = renderIndicador({ data: { cuentas: [cuenta({ semana_pct: 42 })] } }, "claro-sports", true);
     expect(container.querySelector("svg")).toBeInTheDocument();
-    // El número semanal va dentro del círculo (sin el «%», que sí aparece en las barras expandidas).
     expect(screen.getByText("42")).toBeInTheDocument();
     expect(screen.queryByText("Semana")).not.toBeInTheDocument();
   });
 
+  it("colapsado dos cuentas: un círculo por cuenta", () => {
+    const { container } = renderIndicador({ data: { cuentas: [cuenta({}), CUENTA_B] } }, null, true);
+    expect(container.querySelectorAll("svg").length).toBe(2);
+  });
+
   it("colapsado rojo: el tooltip/etiqueta lleva el aviso «Sin cuenta»", () => {
-    usoMock.mockReturnValue({
-      data: uso({ conectada: false, semana_pct: null, sesion_5h_pct: null, alerta_roja: true }),
-    });
-    renderIndicador("admin", true);
-    // Sin barras ni texto suelto en colapsado: el aviso viaja por el aria-label del círculo.
+    renderIndicador(
+      {
+        data: {
+          cuentas: [cuenta({ conectada: false, semana_pct: null, sesion_5h_pct: null, alerta_roja: true })],
+        },
+      },
+      "claro-sports",
+      true,
+    );
     expect(screen.getByLabelText(/Sin cuenta/)).toBeInTheDocument();
   });
 });

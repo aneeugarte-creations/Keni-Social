@@ -22,6 +22,7 @@ import threading
 import time
 
 from . import config, cuenta_claude, daemon_util, repos
+from .dominio import jobspec
 
 _log = logging.getLogger("keni_consola.cuenta_uso_daemon")
 
@@ -64,21 +65,36 @@ def _extraer_medidores(uso: dict) -> dict:
 
 
 def ejecutar_barrido() -> dict:
-    """Un muestreo: lee el uso (`claude -p /usage`) y persiste el snapshot. Devuelve la fila.
+    """Un muestreo: lee el uso (`claude -p /usage`) de CADA cuenta (A/B) y persiste su snapshot.
 
-    El valor devuelto alimenta el resumen del barrido (`_resumen_barrido`).
+    Best-effort POR CUENTA: si una cuenta no está logueada, su lectura no trae medidor y su fila
+    queda `conectada=false` (no rompe ni frena la otra). Devuelve `{cuenta: fila}` para todas las
+    cuentas, que alimenta el resumen del barrido (`_resumen_barrido`).
     """
-    datos = cuenta_claude.uso()
-    campos = _extraer_medidores(datos)
-    return repos.guardar_uso_cuenta(**campos)
+    filas: dict[str, dict] = {}
+    for cuenta in jobspec.CUENTAS:
+        datos = cuenta_claude.uso(cuenta)
+        campos = _extraer_medidores(datos)
+        filas[cuenta] = repos.guardar_uso_cuenta(cuenta=cuenta, **campos)
+    return filas
 
 
-def _resumen_barrido(fila: dict) -> str:
-    """Resumen corto del muestreo para el historial del daemon."""
+def _resumen_cuenta(fila: dict | None) -> str:
+    """Resumen de UNA cuenta: `semana N%` si hay medidor, si no `sin medidor`."""
     if not fila or not fila.get("conectada"):
-        return "cuenta sin medidor"
+        return "sin medidor"
     semana = fila.get("semana_pct")
     return f"semana {semana}%" if semana is not None else "muestreado"
+
+
+def _resumen_barrido(filas: dict) -> str:
+    """Resumen corto del muestreo de AMBAS cuentas para el historial del daemon.
+
+    P. ej. "a: semana 67% · b: sin medidor". Acepta el `{cuenta: fila}` de `ejecutar_barrido`.
+    """
+    if not filas:
+        return "sin cuentas"
+    return " · ".join(f"{cuenta}: {_resumen_cuenta(filas.get(cuenta))}" for cuenta in jobspec.CUENTAS)
 
 
 def iniciar_muestreo_uso(intervalo_segundos: float | None = None) -> threading.Thread:

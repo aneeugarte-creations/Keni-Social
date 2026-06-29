@@ -64,6 +64,35 @@ def test_override_invalido_se_ignora(monkeypatch):
     assert rc.cuenta_de_marca("unotv") == jobspec.CUENTA_B  # cae al reparto por defecto
 
 
+def test_cuentas_visibles_admin_ve_ambas():
+    # admin / superadmin (es_admin=True) -> ambas cuentas, ignorando las marcas.
+    assert rc.cuentas_visibles(es_admin=True, marcas=[]) == list(jobspec.CUENTAS)
+    assert rc.cuentas_visibles(es_admin=True, marcas=["unotv"]) == list(jobspec.CUENTAS)
+
+
+def test_cuentas_visibles_editor_por_sus_marcas():
+    # editor -> la(s) cuenta(s) de sus marcas (en orden A->B).
+    assert rc.cuentas_visibles(es_admin=False, marcas=["unotv"]) == [jobspec.CUENTA_B]
+    assert rc.cuentas_visibles(es_admin=False, marcas=["claro-sports"]) == [jobspec.CUENTA_A]
+    assert rc.cuentas_visibles(
+        es_admin=False, marcas=["unotv", "claro-sports"]
+    ) == [jobspec.CUENTA_A, jobspec.CUENTA_B]
+
+
+def test_cuentas_visibles_editor_sin_marcas_vacio():
+    assert rc.cuentas_visibles(es_admin=False, marcas=[]) == []
+
+
+def test_marcas_y_etiqueta_de_cuenta():
+    # Las marcas del catálogo (amx por defecto) se reparten A/B; la etiqueta une sus nombres.
+    marcas_b = rc.marcas_de_cuenta(jobspec.CUENTA_B)
+    assert "unotv" in marcas_b and "nacion-gamer" in marcas_b
+    assert "claro-sports" not in marcas_b
+    etiqueta_b = rc.etiqueta_de_cuenta(jobspec.CUENTA_B)
+    assert "UnoTV" in etiqueta_b and "Nación Gamer" in etiqueta_b
+    assert "claro-sports" in rc.marcas_de_cuenta(jobspec.CUENTA_A)
+
+
 def test_carril_de_marca_mapea_a_carril_de_cuenta():
     assert rc.carril_de_marca("claro-sports") == jobspec.CARRIL_CUENTA_A
     assert rc.carril_de_marca("unotv") == jobspec.CARRIL_CUENTA_B

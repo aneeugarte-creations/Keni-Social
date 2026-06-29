@@ -17,6 +17,7 @@ Configurable como el resto de overrides por-marca (STORE > ENV):
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable
 
 from .config import clave_por_marca
 from .dominio import jobspec
@@ -69,6 +70,41 @@ def cuenta_de_marca(marca: str) -> str:
         if marca in _REPARTO_DEFECTO:
             return _REPARTO_DEFECTO[marca]
     return cuenta_por_defecto()
+
+
+def marcas_de_cuenta(cuenta: str) -> list[str]:
+    """Ids canónicos de las marcas que sirve la cuenta de Claude (A|B), en orden de catálogo.
+
+    Recorre el catálogo vivo de marcas y se queda con las que `cuenta_de_marca` rutea a `cuenta`
+    (incluye las que caen ahí por la cuenta por defecto). Base de la etiqueta legible del indicador.
+    """
+    from . import marcas
+
+    return [m for m in marcas.ids() if cuenta_de_marca(m) == cuenta]
+
+
+def etiqueta_de_cuenta(cuenta: str) -> str:
+    """Etiqueta legible de una cuenta = nombres humanos de SUS marcas unidos por ` · `.
+
+    P. ej. la cuenta B -> "UnoTV · Nación Gamer". Cadena vacía si la cuenta no sirve ninguna marca.
+    """
+    from . import marcas
+
+    return " · ".join(marcas.etiqueta_de(m) for m in marcas_de_cuenta(cuenta))
+
+
+def cuentas_visibles(*, es_admin: bool, marcas: Iterable[str]) -> list[str]:
+    """Cuentas de Claude (A|B) que un usuario puede VER en el indicador, en orden A→B.
+
+    - admin / superadmin (`es_admin=True`) -> AMBAS cuentas (gobiernan toda la operación).
+    - editor -> la(s) cuenta(s) de sus `marcas` (`cuenta_de_marca` por marca); puede dar una o
+      ambas. Editor SIN marcas -> lista vacía (no ve el indicador).
+    PURA: no toca request ni BD; el call-site le pasa el rol y las marcas ya resueltas.
+    """
+    if es_admin:
+        return list(jobspec.CUENTAS)
+    vistas = {cuenta_de_marca(m) for m in marcas if m}
+    return [c for c in jobspec.CUENTAS if c in vistas]
 
 
 def carril_de_marca(marca: str) -> str:

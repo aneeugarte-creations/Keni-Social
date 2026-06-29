@@ -136,6 +136,7 @@ from .db_vistas import (  # noqa: F401
 from .db_cuenta_uso import (  # noqa: F401
     guardar_uso_cuenta,
     leer_uso_cuenta,
+    leer_uso_cuentas,
 )
 from .db_publicacion import (  # noqa: F401
     ConflictoVersion,

@@ -121,17 +121,42 @@ def test_consumo_de_hoy_rueda_la_base_al_cambiar_de_dia(entorno):
     assert fila["semana_pct"] - fila["semana_pct_inicio_dia"] == 4
 
 
-def test_barrido_muestrea_y_persiste(entorno, monkeypatch):
-    # El barrido lee `cuenta_claude.uso()` (parcheado, sin `claude`) y persiste el snapshot.
-    monkeypatch.setattr(dae.cuenta_claude, "uso", lambda: _USO_COMPLETO)
-    fila = dae.ejecutar_barrido()
-    assert fila["conectada"] == 1 and fila["semana_pct"] == 67
-    leida = repos.leer_uso_cuenta()
-    assert leida is not None
-    assert leida["semana_pct"] == 67 and leida["sesion_5h_pct"] == 26 and leida["sonnet_pct"] == 2
-    assert leida["reset_semana_iso"] == "2026-07-01T07:00:00Z"
+def test_guardar_y_leer_por_cuenta(entorno):
+    # Una fila POR CUENTA: A y B no se pisan; `leer_uso_cuentas` las devuelve juntas.
+    repos.guardar_uso_cuenta(cuenta="a", conectada=True, semana_pct=10, sesion_5h_pct=1,
+                             sonnet_pct=0, dia_utc="2026-06-14")
+    repos.guardar_uso_cuenta(cuenta="b", conectada=True, semana_pct=80, sesion_5h_pct=5,
+                             sonnet_pct=2, dia_utc="2026-06-14")
+    a = repos.leer_uso_cuenta("a")
+    b = repos.leer_uso_cuenta("b")
+    assert a["semana_pct"] == 10 and a["cuenta"] == "a"
+    assert b["semana_pct"] == 80 and b["cuenta"] == "b"
+    ambas = repos.leer_uso_cuentas()
+    assert ambas["a"]["semana_pct"] == 10 and ambas["b"]["semana_pct"] == 80
+
+
+def test_leer_uso_cuentas_cold_start(entorno):
+    # Sin muestreo aún: ambas cuentas vienen como None (claves siempre presentes).
+    assert repos.leer_uso_cuentas() == {"a": None, "b": None}
+
+
+def test_barrido_muestrea_ambas_cuentas(entorno, monkeypatch):
+    # El barrido lee `cuenta_claude.uso(cuenta)` por cada cuenta y persiste cada snapshot.
+    # Best-effort: la cuenta B no está logueada (lectura sin medidor) -> fila desconectada, no rompe.
+    lecturas = {"a": _USO_COMPLETO, "b": _USO_SIN_MEDIDOR}
+    monkeypatch.setattr(dae.cuenta_claude, "uso", lambda cuenta="a": lecturas[cuenta])
+    filas = dae.ejecutar_barrido()
+    assert set(filas) == {"a", "b"}
+    assert filas["a"]["conectada"] == 1 and filas["a"]["semana_pct"] == 67
+    assert filas["b"]["conectada"] == 0  # B sin medidor -> desconectada (best-effort)
+    a = repos.leer_uso_cuenta("a")
+    b = repos.leer_uso_cuenta("b")
+    assert a["semana_pct"] == 67 and a["sonnet_pct"] == 2
+    assert a["reset_semana_iso"] == "2026-07-01T07:00:00Z"
+    assert b is not None and b["conectada"] == 0 and b["semana_pct"] is None
 
 
 def test_resumen_barrido():
-    assert dae._resumen_barrido({"conectada": 1, "semana_pct": 67}) == "semana 67%"
-    assert dae._resumen_barrido({"conectada": 0}) == "cuenta sin medidor"
+    filas = {"a": {"conectada": 1, "semana_pct": 67}, "b": {"conectada": 0}}
+    assert dae._resumen_barrido(filas) == "a: semana 67% · b: sin medidor"
+    assert dae._resumen_barrido({}) == "sin cuentas"

@@ -129,6 +129,16 @@ def _marcas_asignadas(request: Request) -> list[str]:
     return list(refrescado.get("marcas") or [])
 
 
+def marcas_asignadas(request: Request) -> list[str]:
+    """Marcas (ids canónicos) asignadas a la sesión, o lista vacía (token / sin marcas).
+
+    Forma PÚBLICA de `_marcas_asignadas`: a diferencia de `marcas_preferentes` (que devuelve None
+    cuando "todas"), aquí "sin marcas" es una lista vacía REAL, sin conflarse con superadmin. La
+    usa el indicador de uso para acotar las cuentas de Claude visibles a un editor por sus marcas.
+    """
+    return _marcas_asignadas(request)
+
+
 def es_admin_de_marca(request: Request, marca_id: str) -> bool:
     """True si la sesion es superadmin, o admin con `marca_id` entre sus marcas asignadas.
 

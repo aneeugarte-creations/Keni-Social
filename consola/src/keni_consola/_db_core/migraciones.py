@@ -43,6 +43,7 @@ from .migraciones_columnas import (
     _migrar_columnas_aprobaciones,
     _migrar_columnas_campanias,
     _migrar_columnas_catalogo_media,
+    _migrar_cuenta_uso_por_cuenta,
     _migrar_columnas_origen_fuente,
     _migrar_backfill_origen_catalogo,
     _migrar_reorg_originales_a_portal,
@@ -580,6 +581,11 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # traen del DDL). One-shot e idempotente (`CREATE TABLE IF NOT EXISTS`); sin backfill (el
     # muestreo es prospectivo). Ver `db_cuenta_uso`.
     Migracion("0065-tabla-cuenta-uso", _migrar_tabla_cuenta_uso),
+    # USO POR CUENTA: `cuenta_uso` deja de ser singleton y pasa a una fila por CUENTA de Claude
+    # (A/B). Anade la columna `cuenta` (def 'a'), rebautiza la fila `id='global'` como la cuenta A
+    # y crea el indice unico por `cuenta` (target del UPSERT). One-shot e idempotente; conserva la
+    # lectura previa como cuenta A. Ver `_migrar_cuenta_uso_por_cuenta` y `db_cuenta_uso`.
+    Migracion("0066-cuenta-uso-por-cuenta", _migrar_cuenta_uso_por_cuenta),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

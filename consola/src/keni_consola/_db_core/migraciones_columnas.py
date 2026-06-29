@@ -15,6 +15,26 @@ from ..motor_db import IntegrityError
 from ._comun import _columnas_existentes, _log, _tabla_existe
 
 
+def _migrar_cuenta_uso_por_cuenta(con: Any) -> None:
+    """Hace `cuenta_uso` una fila POR CUENTA de Claude (A/B): anade `cuenta` + indice unico.
+
+    La tabla nacio SINGLETON (`id='global'`); con dos cuentas de Claude el muestreo persiste una
+    fila por cuenta. Anade la columna `cuenta` (def 'a'), REBAUTIZA la fila singleton existente
+    como la cuenta A (`id='a'`, `cuenta='a'`) y crea el indice unico por `cuenta` (clave logica +
+    target del UPSERT). Idempotente y sin perdida: la lectura previa se conserva como cuenta A.
+    """
+    if not _tabla_existe(con, "cuenta_uso"):
+        return
+    if "cuenta" not in _columnas_existentes(con, "cuenta_uso"):
+        con.execute(
+            "ALTER TABLE cuenta_uso ADD COLUMN IF NOT EXISTS cuenta TEXT NOT NULL DEFAULT 'a'"
+        )
+    con.execute("UPDATE cuenta_uso SET id = 'a', cuenta = 'a' WHERE id = 'global'")
+    con.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_cuenta_uso_cuenta ON cuenta_uso (cuenta)"
+    )
+
+
 def _migrar_renombre_catalogo_media(con: Any) -> None:
     """Renombra la tabla `biblioteca_media` a `catalogo_media` y sus índices (idempotente).
 

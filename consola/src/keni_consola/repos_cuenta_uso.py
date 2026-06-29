@@ -1,7 +1,7 @@
-"""Repositorio — uso de la cuenta de Claude (último snapshot). Implementación de repos.py.
+"""Repositorio — uso de las cuentas de Claude (último snapshot por cuenta). Implementación de repos.py.
 
-El muestreo de fondo escribe (`guardar_uso_cuenta`) y el endpoint admin lee (`leer_uso_cuenta`).
-La fachada delega 1:1 en db.py.
+El muestreo de fondo escribe (`guardar_uso_cuenta`) por cuenta y el indicador/gate leen
+(`leer_uso_cuenta` una cuenta, `leer_uso_cuentas` todas). La fachada delega 1:1 en db.py.
 """
 from __future__ import annotations
 
@@ -11,12 +11,17 @@ from ._repos_comun import (
 )
 
 
-def leer_uso_cuenta() -> dict[str, Any] | None:
-    return db.leer_uso_cuenta()
+def leer_uso_cuenta(cuenta: str = "a") -> dict[str, Any] | None:
+    return db.leer_uso_cuenta(cuenta)
+
+
+def leer_uso_cuentas() -> dict[str, dict[str, Any] | None]:
+    return db.leer_uso_cuentas()
 
 
 def guardar_uso_cuenta(
     *,
+    cuenta: str = "a",
     conectada: bool,
     semana_pct: int | None,
     sesion_5h_pct: int | None,
@@ -27,6 +32,7 @@ def guardar_uso_cuenta(
     dia_utc: str | None = None,
 ) -> dict[str, Any]:
     return db.guardar_uso_cuenta(
+        cuenta=cuenta,
         conectada=conectada,
         semana_pct=semana_pct,
         sesion_5h_pct=sesion_5h_pct,
