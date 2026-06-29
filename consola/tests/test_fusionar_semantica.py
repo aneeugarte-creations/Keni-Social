@@ -11,27 +11,11 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 
-import pytest
-
-from keni_consola import recolectar_daemon, repos
+from keni_consola import repos
 from keni_consola.dominio import fusionar_semantica
-from keni_consola.recolectar_daemon import _comun
 
-# Timestamp RECIENTE: `paso_fusionar_semantica` solo mira historias dentro de la ventana de
-# agrupar (`KENI_CLUSTER_VENTANA_H`, 72h), así que se siembran "ahora".
+# Timestamp RECIENTE: las historias se siembran "ahora" (dentro de la ventana de agrupar, 72h).
 _AHORA = datetime.now(UTC).isoformat()
-
-
-@pytest.fixture(autouse=True)
-def _reset_throttle_fusionar():
-    """Resetea el throttle y la huella globales de `paso_fusionar_semantica` antes/después de cada
-    test: así ni una pasada sellada por otro test la hace salir por el throttle, ni una huella
-    previa la hace saltar por skip-if-unchanged."""
-    _comun._ultimo_fusionar = 0.0
-    _comun._ultima_huella_fusionar = None
-    yield
-    _comun._ultimo_fusionar = 0.0
-    _comun._ultima_huella_fusionar = None
 
 
 def _ej(grupos):
@@ -242,7 +226,7 @@ def test_proponer_subtemas_menos_de_dos_o_json_invalido():
 
 
 # --------------------------------------------------------------------------- #
-# paso_fusionar_semantica (end-to-end, Postgres)                                  #
+# fusionar_marca (executor del JOB, end-to-end, Postgres)                         #
 # --------------------------------------------------------------------------- #
 
 
@@ -265,13 +249,22 @@ def _inicializar(cid, *, marca="unotv", n_fuentes=1, score=0.3, fuente_id="f", u
     repos.asignar_cluster_item(match["id"], cid)
 
 
-def test_paso_fusion_funde_grupo_del_mismo_evento(entorno, monkeypatch):
-    monkeypatch.setenv("KENI_PIPELINE_FUSIONAR", "1")
+def _recientes(marca="unotv"):
+    """Las historias `nuevo` recientes de la marca, como las pasaría el barrido en el spec del job."""
+    return [c for c in repos.clusters_recientes(72) if (c.get("marca") or "") == marca]
+
+
+def test_fusionar_marca_funde_grupo_del_mismo_evento(entorno):
+    """El executor del job (`fusionar_marca`) FUNDE el grupo del mismo hecho a partir de la salida de
+    la pasada principal (la verificación se confirma con el ejecutor inyectado). Postgres (CI)."""
     # c1 (2 fuentes) es la canónica; c2 (1 fuente) se absorbe. Fuentes distintas -> n_fuentes 2.
     _inicializar("c1", n_fuentes=2, score=0.6, fuente_id="medioA", url="https://a.com/1")
     _inicializar("c2", n_fuentes=1, score=0.2, fuente_id="medioB", url="https://b.com/1")
 
-    res = recolectar_daemon.paso_fusionar_semantica(ejecutor=_ej([["c1", "c2"]]))
+    salida = json.dumps({"grupos": [["c1", "c2"]]})
+    res = fusionar_semantica.fusionar_marca(
+        "unotv", _recientes(), salida_principal=salida, ejecutor=_ej([["c1", "c2"]]),
+    )
 
     assert res["grupos"] == 1 and res["fusionadas"] == 1
     assert repos.obtener_noticia_cluster("c2") is None          # absorbida -> borrada
@@ -280,10 +273,9 @@ def test_paso_fusion_funde_grupo_del_mismo_evento(entorno, monkeypatch):
     assert len(repos.items_de_cluster("c1")) == 2                # ambos items reasignados
 
 
-def test_paso_solo_facetea_familias_con_subtema_pendiente(entorno, monkeypatch):
-    """La pasada etiqueta las familias y el subtema solo se re-propone para la familia que tiene un
+def test_fusionar_marca_solo_facetea_familias_con_subtema_pendiente(entorno, monkeypatch):
+    """El executor etiqueta las familias y el subtema solo se re-propone para la familia que tiene un
     cluster sin subtema; la familia ya faceteada se omite (`_falta_subtema`). Postgres (CI)."""
-    monkeypatch.setenv("KENI_PIPELINE_FUSIONAR", "1")
     for cid in ("c1", "c2", "c3", "c4"):
         _inicializar(cid)
     # Familia A: ya etiquetada y faceteada (estable, no debe re-faceterarse).
@@ -291,12 +283,10 @@ def test_paso_solo_facetea_familias_con_subtema_pendiente(entorno, monkeypatch):
     repos.marcar_clusters_subtema(["c1", "c2"], "Partidos")
     # c3, c4: nuevos, sin tema_macro ni subtema.
 
-    familias = [
+    salida = json.dumps({"grupos": [], "familias": [
         {"tema": "Mundial 2026", "ids": ["c1", "c2"]},
         {"tema": "Elecciones 2026", "ids": ["c3", "c4"]},
-    ]
-    monkeypatch.setattr(fusionar_semantica, "proponer_fusiones",
-                        lambda *a, **k: fusionar_semantica.Fusiones([], familias))
+    ]})
     faceteadas: list[list[str]] = []
 
     def fake_subtemas(familia, **_kw):
@@ -305,56 +295,69 @@ def test_paso_solo_facetea_familias_con_subtema_pendiente(entorno, monkeypatch):
 
     monkeypatch.setattr(fusionar_semantica, "proponer_subtemas", fake_subtemas)
 
-    recolectar_daemon.paso_fusionar_semantica(ejecutor=_ej([]))
+    fusionar_semantica.fusionar_marca("unotv", _recientes(), salida_principal=salida, ejecutor=_ej([]))
     assert faceteadas == [["c3", "c4"]]  # la familia ya faceteada [c1, c2] no se reenvía al LLM
 
 
-def test_paso_ancla_familias_por_agenda(entorno, monkeypatch):
+def test_fusionar_marca_ancla_familias_por_agenda(entorno, monkeypatch):
     """Sin LLM: las historias que nombran el partido de la AGENDA heredan su título como
     `tema_macro`, aunque la propuesta de fusiones venga vacía. Las que no casan, no. Postgres (CI)."""
-    monkeypatch.setenv("KENI_PIPELINE_FUSIONAR", "1")
     hoy = datetime.now(UTC).date().isoformat()
-    monkeypatch.setattr(_comun, "eventos_proximos",
-                        lambda _marca: [{"titulo": "Portugal vs Uzbekistán", "fecha": hoy}])
+    monkeypatch.setattr(fusionar_semantica, "_eventos_de_marca",
+                        lambda _marca, _ahora: [{"titulo": "Portugal vs Uzbekistán", "fecha": hoy}])
     _inicializar("c1", titulo="Portugal golea a Uzbekistán con doblete de Cristiano")
     _inicializar("c2", titulo="¿Dónde ver Portugal vs Uzbekistán hoy? horario y canal")
     _inicializar("c3", titulo="Tormenta inunda la ciudad y deja apagones")  # no casa la agenda
 
-    recolectar_daemon.paso_fusionar_semantica(ejecutor=_ej([]))
+    fusionar_semantica.fusionar_marca(
+        "unotv", _recientes(), salida_principal='{"grupos": []}', ejecutor=_ej([]),
+    )
 
     assert (repos.obtener_noticia_cluster("c1") or {}).get("tema_macro") == "Portugal vs Uzbekistán"
     assert (repos.obtener_noticia_cluster("c2") or {}).get("tema_macro") == "Portugal vs Uzbekistán"
     assert (repos.obtener_noticia_cluster("c3") or {}).get("tema_macro") == ""
 
 
-def test_paso_ancla_manda_sobre_reaglomerado_de_haiku(entorno, monkeypatch):
+def test_fusionar_marca_ancla_manda_sobre_reaglomerado_de_haiku(entorno, monkeypatch):
     """Una familia ya anclada a la agenda (nivel partido) NO se re-etiqueta por una familia más
     gruesa que proponga el LLM («Mundial 2026»): la agenda es la verdad. Postgres (CI)."""
-    monkeypatch.setenv("KENI_PIPELINE_FUSIONAR", "1")
     hoy = datetime.now(UTC).date().isoformat()
-    monkeypatch.setattr(_comun, "eventos_proximos",
-                        lambda _marca: [{"titulo": "Portugal vs Uzbekistán", "fecha": hoy}])
+    monkeypatch.setattr(fusionar_semantica, "_eventos_de_marca",
+                        lambda _marca, _ahora: [{"titulo": "Portugal vs Uzbekistán", "fecha": hoy}])
     _inicializar("c1", titulo="Portugal golea a Uzbekistán")
     _inicializar("c2", titulo="Portugal vs Uzbekistán: dónde ver hoy")
-    monkeypatch.setattr(
-        fusionar_semantica, "proponer_fusiones",
-        lambda *a, **k: fusionar_semantica.Fusiones([], [{"tema": "Mundial 2026", "ids": ["c1", "c2"]}]),
-    )
 
-    recolectar_daemon.paso_fusionar_semantica(ejecutor=_ej([]))
+    salida = json.dumps({"grupos": [], "familias": [{"tema": "Mundial 2026", "ids": ["c1", "c2"]}]})
+    fusionar_semantica.fusionar_marca("unotv", _recientes(), salida_principal=salida, ejecutor=_ej([]))
 
     assert (repos.obtener_noticia_cluster("c1") or {}).get("tema_macro") == "Portugal vs Uzbekistán"
     assert (repos.obtener_noticia_cluster("c2") or {}).get("tema_macro") == "Portugal vs Uzbekistán"
 
 
-def test_paso_fusion_gateado_off_no_hace_nada(entorno, monkeypatch):
-    # Def ON: para apagar hay que fijarlo EXPLÍCITO a "0" (no basta con no setearlo).
-    monkeypatch.setenv("KENI_PIPELINE_FUSIONAR", "0")
+def test_fusionar_marca_menos_de_dos_no_hace_nada(entorno):
+    """Con <2 historias no hay nada que fundir (el executor sale temprano)."""
     _inicializar("c1")
-    _inicializar("c2")
-    res = recolectar_daemon.paso_fusionar_semantica(ejecutor=_ej([["c1", "c2"]]))
-    assert res == {"grupos": 0, "fusionadas": 0}
-    assert repos.obtener_noticia_cluster("c2") is not None       # nada se fundió
+    res = fusionar_semantica.fusionar_marca(
+        "unotv", _recientes(), salida_principal='{"grupos": []}', ejecutor=_ej([]),
+    )
+    assert res == {"grupos": 0, "fusionadas": 0, "familias": 0, "anclas": 0}
+
+
+def test_construir_procesar_fusionar_limpia_el_marcador(entorno, monkeypatch):
+    """El callback del worker funde y, pase lo que pase, LIMPIA el marcador de fusión en curso."""
+    _inicializar("c1", n_fuentes=2, score=0.6, fuente_id="medioA", url="https://a.com/1")
+    _inicializar("c2", n_fuentes=1, score=0.2, fuente_id="medioB", url="https://b.com/1")
+    limpiados: list[str] = []
+    monkeypatch.setattr(fusionar_semantica, "limpiar_fusion_encolada", lambda m: limpiados.append(m))
+    monkeypatch.setattr(fusionar_semantica, "procesar_fusiones",
+                        lambda *a, **k: fusionar_semantica.Fusiones([["c1", "c2"]], []))
+
+    procesar = fusionar_semantica.construir_procesar_fusionar("unotv", _recientes())
+    res = procesar(json.dumps({"grupos": [["c1", "c2"]]}), None)
+
+    assert res["grupos"] == 1 and res["fusionadas"] == 1
+    assert limpiados == ["unotv"]
+    assert repos.obtener_noticia_cluster("c2") is None
 
 
 # --------------------------------------------------------------------------- #
@@ -409,6 +412,38 @@ def test_construir_prompt_inserta_historias_y_contrato():
 # --------------------------------------------------------------------------- #
 # Frescura del lote (`_fresco_para_fusion`): solo lo VIVO entra al LLM (puro)    #
 # --------------------------------------------------------------------------- #
+
+
+# --------------------------------------------------------------------------- #
+# Marcador PERSISTIDO "fusión en curso" por marca (idempotencia del encolado)    #
+# --------------------------------------------------------------------------- #
+
+
+def test_marcador_en_curso_y_reapertura_por_ttl(monkeypatch, tmp_path):
+    """`marcar_fusion_encolada` sella la marca EN CURSO; `fusion_en_curso` es True dentro del TTL y
+    False cuando el sello caduca (job atascado: se re-encola). `limpiar` la re-abre."""
+    monkeypatch.setattr(fusionar_semantica, "_ruta_encolado", lambda: tmp_path / "fusion_encolada.json")
+    ahora = datetime.now(UTC)
+    fusionar_semantica.marcar_fusion_encolada("unotv", ahora=ahora)
+
+    assert fusionar_semantica.fusion_en_curso("unotv", ahora=ahora, ttl_min=30) is True
+    # Sello más viejo que el TTL -> atascado, NO bloquea (reapertura).
+    viejo = ahora + timedelta(minutes=31)
+    assert fusionar_semantica.fusion_en_curso("unotv", ahora=viejo, ttl_min=30) is False
+    # Otra marca nunca está en curso; tampoco la marca vacía.
+    assert fusionar_semantica.fusion_en_curso("claro-sports", ahora=ahora, ttl_min=30) is False
+    assert fusionar_semantica.fusion_en_curso("", ahora=ahora, ttl_min=30) is False
+
+    fusionar_semantica.limpiar_fusion_encolada("unotv")
+    assert fusionar_semantica.fusion_en_curso("unotv", ahora=ahora, ttl_min=30) is False
+
+
+def test_marcador_corrupto_no_bloquea(monkeypatch, tmp_path):
+    """Un sello ilegible no bloquea (se re-encola): `fusion_en_curso` cae a False."""
+    ruta = tmp_path / "fusion_encolada.json"
+    monkeypatch.setattr(fusionar_semantica, "_ruta_encolado", lambda: ruta)
+    ruta.write_text(json.dumps({"unotv": "no-es-fecha"}), encoding="utf-8")
+    assert fusionar_semantica.fusion_en_curso("unotv", ahora=datetime.now(UTC), ttl_min=30) is False
 
 
 def test_fresco_para_fusion_excluye_lo_rancio_e_incluye_lo_vivo():

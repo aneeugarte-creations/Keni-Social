@@ -92,6 +92,15 @@ PROC_TRADUCIR = "traducir"
 # Es INVESTIGACION: gasta tokens. Solo viaja la `marca` en el spec (la editorial se recompone en el
 # worker para sellar el hash del cache). Idempotencia "refresco en curso" por marcador en el cache.
 PROC_PERFIL = "perfil"
+# Fusión SEMÁNTICA de las historias del MISMO evento de UNA marca (Haiku): el paso de Recolección
+# ENCOLA un job por marca (ruteado al carril de su cuenta) en vez de correr el Haiku INLINE. El
+# worker corre `claude -p` (modelo `config.fusion_modelo()`) con la pasada PRINCIPAL de agrupación; el
+# post-procesado (`fusionar_semantica.construir_procesar_fusionar`) ancla por agenda, VERIFICA y FUNDE
+# los grupos del mismo hecho, ETIQUETA las familias de macro-evento y las facetea en subtemas (esas
+# llamadas extra corren con `_ejecutar_haiku` en el worker). Es INVESTIGACION: gasta tokens. Viajan la
+# `marca` y el `recientes` (el lote de historias de la marca) en el spec. Idempotencia "fusión en
+# curso" por marcador con TTL en un JSON bajo el dir de datos.
+PROC_FUSIONAR = "fusionar"
 # Importacion de CALENDARIO desde un archivo NO tabular (PDF/Word/imagen/captura): parsea el
 # JSON `{"filas":[...]}` de claude (Haiku) e IMPORTA al tablero (`importar_a_tablero`). El camino
 # tabular (.xlsx/.csv) sigue siendo SINCRONO en el back (no usa claude); solo el camino IA se
@@ -526,6 +535,17 @@ def construir_perfil(*, marca: str) -> dict[str, Any]:
     return {"kind": PROC_PERFIL, "marca": marca or ""}
 
 
+def construir_fusionar(*, marca: str, recientes: list[dict[str, Any]]) -> dict[str, Any]:
+    """Spec del post-procesado del JOB de fusión semántica por marca: ancla + funde + etiqueta.
+
+    `marca` es la marca cuyas historias se fusionan; `recientes` es el lote de historias `nuevo`
+    recientes de la marca (id/titulo/tema_macro/n_fuentes/score + texto para el ancla de agenda) sobre
+    el que se construyó el prompt principal. El worker corre `claude -p` (Haiku) con la pasada
+    principal; `dominio.fusionar_semantica.construir_procesar_fusionar` orquesta la fusión y persiste.
+    """
+    return {"kind": PROC_FUSIONAR, "marca": marca or "", "recientes": list(recientes or [])}
+
+
 def construir_import_calendario(
     *, marca_defecto: str = "", autor: dict[str, str] | None = None
 ) -> dict[str, Any]:
@@ -817,6 +837,12 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         from . import perfil_editorial as dom_perfil
 
         return dom_perfil.construir_procesar_perfil(p.get("marca", "") or "")
+
+    if kind == PROC_FUSIONAR:
+        from . import fusionar_semantica as dom_fusion
+
+        recientes = [r for r in (p.get("recientes") or []) if isinstance(r, dict)]
+        return dom_fusion.construir_procesar_fusionar(p.get("marca", "") or "", recientes)
 
     if kind == PROC_IMPORT_CALENDARIO:
         # Import perezoso: el factory toca BD (`repos`); `importador_calendario` vive en el

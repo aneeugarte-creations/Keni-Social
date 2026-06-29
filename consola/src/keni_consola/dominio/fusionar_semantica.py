@@ -30,6 +30,8 @@ import json
 import logging
 import tempfile
 from collections.abc import Callable
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, NamedTuple
 
 from . import json_llm
@@ -96,29 +98,14 @@ def _extraer_grupos(texto: str) -> list[list[str]]:
     return grupos
 
 
-def proponer_fusiones(
-    clusters: list[dict[str, Any]],
-    *,
-    ejecutor: Ejecutor | None = None,
-    al_ejecutar: Callable[[str, str], None] | None = None,
-) -> Fusiones:
-    """En UNA pasada del LLM propone `grupos` (mismo hecho, a fundir) y `familias` (mismo gran
-    evento, a etiquetar). PURO de repos.
+def _payload_clusters(clusters: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """`(validos, payload)` del lote: clusters con `{id, titulo}` (≤`_MAX_CLUSTERS`) y su payload JSON.
 
-    `clusters`: dicts con al menos `{id, titulo}` (y `tema_macro` opcional, que viaja en el payload
-    para que las familias REUTILICEN una etiqueta existente). Los `grupos` salen VÁLIDOS, DISJUNTOS y
-    VERIFICADOS (ids del input, sin repetir entre grupos, ≥2); las `familias` son `{tema, ids}` con
-    ids válidos del input (≥2). `Fusiones([], [])` ante <2 historias o cualquier fallo de la llamada.
-
-    `al_ejecutar(prompt, salida)`: callback OPCIONAL con el PROMPT y la SALIDA reales del LLM tras
-    cada llamada (antes de parsear). El daemon lo usa para registrar la actividad IA de Fusionar con
-    el LLM real; un fallo del callback no afecta a Fusionar (es observabilidad).
+    El payload lleva `id`, `titulo` (truncado) y `tema_macro` (etiqueta de familia actual, para que el
+    modelo REUTILICE verbatim una existente), nunca `resumen`. PURO. Fuente ÚNICA de la construcción
+    del lote, compartida por `construir_prompt_fusion` (encolar) y `procesar_fusiones` (worker).
     """
     validos = [c for c in clusters if (c.get("id") and (c.get("titulo") or "").strip())][:_MAX_CLUSTERS]
-    if len(validos) < 2:
-        return Fusiones([], [])
-    ids_validos = {str(c["id"]) for c in validos}
-
     payload = [
         {
             "id": str(c["id"]),
@@ -132,19 +119,43 @@ def proponer_fusiones(
         }
         for c in validos
     ]
-    correr = ejecutor or _ejecutar_haiku
-    prompt = _construir_prompt(json.dumps(payload, ensure_ascii=False))
-    try:
-        with tempfile.TemporaryDirectory(prefix="keni-fusion-") as carpeta:
-            salida = correr(prompt, carpeta)
-    except Exception as e:  # noqa: BLE001 -- best-effort: cualquier fallo -> no fusiona nada
-        _log.warning("fusionar_semantica: falló la llamada a Haiku: %s", e)
+    return validos, payload
+
+
+def construir_prompt_fusion(clusters: list[dict[str, Any]]) -> str:
+    """Prompt de la pasada PRINCIPAL de fusión (plantilla + lista JSON del lote), o "" si <2 válidos.
+
+    Lo usa el paso de Recolección para componer el prompt del JOB que ENCOLA por marca: el worker lo
+    corre con `claude -p` (modelo `config.fusion_modelo()`) y su salida es la propuesta de grupos +
+    familias que `procesar_fusiones` parsea y verifica. PURO.
+    """
+    validos, payload = _payload_clusters(clusters)
+    if len(validos) < 2:
+        return ""
+    return _construir_prompt(json.dumps(payload, ensure_ascii=False))
+
+
+def procesar_fusiones(
+    salida: str,
+    clusters: list[dict[str, Any]],
+    *,
+    ejecutor: Ejecutor | None = None,
+    al_ejecutar: Callable[[str, str], None] | None = None,
+) -> Fusiones:
+    """Parsea la salida de la pasada PRINCIPAL y VERIFICA los grupos. PURO de repos.
+
+    `salida` es el texto de la pasada principal (la corre el worker con `claude -p`, o `proponer_
+    fusiones` en el camino síncrono). Devuelve `grupos` (mismo hecho, DISJUNTOS, ids del input, ≥2,
+    VERIFICADOS) y `familias` (`{tema, ids}`, mismo gran evento, ≥2). La verificación («Cotejar»)
+    re-pregunta cada grupo con `ejecutor` (`_ejecutar_haiku` por defecto). `al_ejecutar(prompt,
+    salida)` recibe el prompt+salida REALES de cada llamada de VERIFICACIÓN (observabilidad).
+    `Fusiones([], [])` ante <2 historias.
+    """
+    validos, payload = _payload_clusters(clusters)
+    if len(validos) < 2:
         return Fusiones([], [])
-    if al_ejecutar is not None:
-        try:
-            al_ejecutar(prompt, salida)
-        except Exception:  # noqa: BLE001 -- el callback (registrar actividad) es best-effort
-            _log.warning("fusionar_semantica: fallo en al_ejecutar.", exc_info=True)
+    ids_validos = {str(c["id"]) for c in validos}
+    correr = ejecutor or _ejecutar_haiku
 
     # GRUPOS (a fundir): disjuntos, solo ids del input, ≥2.
     vistos: set[str] = set()
@@ -170,6 +181,46 @@ def proponer_fusiones(
     for grupo in salida_grupos:
         confirmados.extend(_verificar_grupo(grupo, payload_por_id, correr, al_ejecutar))
     return Fusiones(confirmados, familias)
+
+
+def proponer_fusiones(
+    clusters: list[dict[str, Any]],
+    *,
+    ejecutor: Ejecutor | None = None,
+    al_ejecutar: Callable[[str, str], None] | None = None,
+) -> Fusiones:
+    """En UNA pasada del LLM propone `grupos` (mismo hecho, a fundir) y `familias` (mismo gran
+    evento, a etiquetar). PURO de repos.
+
+    `clusters`: dicts con al menos `{id, titulo}` (y `tema_macro` opcional, que viaja en el payload
+    para que las familias REUTILICEN una etiqueta existente). Los `grupos` salen VÁLIDOS, DISJUNTOS y
+    VERIFICADOS (ids del input, sin repetir entre grupos, ≥2); las `familias` son `{tema, ids}` con
+    ids válidos del input (≥2). `Fusiones([], [])` ante <2 historias o cualquier fallo de la llamada.
+
+    `al_ejecutar(prompt, salida)`: callback OPCIONAL con el PROMPT y la SALIDA reales del LLM tras
+    cada llamada (antes de parsear). El daemon lo usa para registrar la actividad IA de Fusionar con
+    el LLM real; un fallo del callback no afecta a Fusionar (es observabilidad).
+
+    Camino SÍNCRONO (corre la pasada principal con `ejecutor` y delega el parseo+verificación a
+    `procesar_fusiones`). El camino ENCOLADO separa ambas: el worker corre la principal y el
+    post-procesado llama a `procesar_fusiones`.
+    """
+    prompt = construir_prompt_fusion(clusters)
+    if not prompt:
+        return Fusiones([], [])
+    correr = ejecutor or _ejecutar_haiku
+    try:
+        with tempfile.TemporaryDirectory(prefix="keni-fusion-") as carpeta:
+            salida = correr(prompt, carpeta)
+    except Exception as e:  # noqa: BLE001 -- best-effort: cualquier fallo -> no fusiona nada
+        _log.warning("fusionar_semantica: falló la llamada a Haiku: %s", e)
+        return Fusiones([], [])
+    if al_ejecutar is not None:
+        try:
+            al_ejecutar(prompt, salida)
+        except Exception:  # noqa: BLE001 -- el callback (registrar actividad) es best-effort
+            _log.warning("fusionar_semantica: fallo en al_ejecutar.", exc_info=True)
+    return procesar_fusiones(salida, clusters, ejecutor=ejecutor, al_ejecutar=al_ejecutar)
 
 
 def _verificar_grupo(
@@ -332,3 +383,395 @@ def _ejecutar_haiku(prompt: str, dir_permitido: str) -> str:
         prompt, dir_permitido, modelo=config.fusion_modelo(),
         max_turns=1, sin_tools=True,
     )
+
+
+# --------------------------------------------------------------------------- #
+# FUNDIR un grupo (mutación de repos, anti-TOCTOU) y etiquetar familias         #
+# --------------------------------------------------------------------------- #
+
+
+def _etiqueta_canonica(ids: list[str], por_id: dict[str, dict[str, Any]], propuesta: str) -> str:
+    """Etiqueta ESTABLE de una familia de macro-evento: backstop determinista contra los sinónimos.
+
+    Reúsa la `tema_macro` YA persistida que MÁS clusters de la familia comparten (así el mismo
+    evento no se parte en «Mundial 2026» vs «Copa del Mundo 2026»: si Haiku agrupa ambos, gana la
+    etiqueta dominante y se unifican). Cae a `propuesta` (la que propuso Haiku) solo si NINGÚN
+    cluster de la familia traía etiqueta. Determinista: a empate de conteo, orden alfabético.
+    """
+    conteo: dict[str, int] = {}
+    for i in ids:
+        existente = str((por_id.get(i) or {}).get("tema_macro") or "").strip()
+        if existente:
+            conteo[existente] = conteo.get(existente, 0) + 1
+    if not conteo:
+        return propuesta
+    return max(sorted(conteo), key=lambda e: conteo[e])
+
+
+def _falta_subtema(ids: list[str], por_id: dict[str, dict[str, Any]]) -> bool:
+    """True si algún cluster de la familia aún no tiene `subtema` (etiquetado incremental).
+
+    Una familia con TODOS sus clusters ya faceteados no se reenvía a Haiku: re-proponer subtemas
+    sobre una familia estable reescribiría la misma etiqueta y pagaría un Haiku por barrido.
+    """
+    return any(not str((por_id.get(i) or {}).get("subtema") or "").strip() for i in ids)
+
+
+def _partir_en_subtemas(
+    tema: str, ids: list[str], por_id: dict[str, dict[str, Any]],
+    *, ejecutor: Ejecutor | None,
+) -> int:
+    """Parte una familia de macro-evento en SUBTEMAS (Haiku) y los persiste. Devuelve nº etiquetados.
+
+    Cada subtema (faceta: «Partidos», «Espectáculo»…) agrupa los clusters de un tipo, para que el
+    carrusel sea coherente y la cadencia sea por subtema. Best-effort: cualquier fallo (Haiku o
+    persistencia) se loguea y devuelve lo que llevara, sin abortar el paso.
+    """
+    from .. import repos
+
+    familia = [por_id[i] for i in ids if i in por_id]
+    if len(familia) < 2:
+        return 0
+    try:
+        grupos = proponer_subtemas(familia, ejecutor=ejecutor)
+    except Exception:  # noqa: BLE001 -- un fallo de Haiku no aborta el etiquetado del evento
+        _log.exception("fusionar_semantica: fallo proponiendo subtemas de «%s».", tema[:60])
+        return 0
+    etiquetados = 0
+    for g in grupos:
+        subtema = str(g.get("subtema") or "").strip()
+        sub_ids = [str(i) for i in (g.get("ids") or []) if i]
+        if not subtema or not sub_ids:
+            continue
+        try:
+            etiquetados += repos.marcar_clusters_subtema(sub_ids, subtema) or 0
+        except Exception:  # noqa: BLE001 -- persistir un subtema no aborta el paso
+            _log.exception("fusionar_semantica: fallo al etiquetar el subtema «%s».", subtema[:60])
+    return etiquetados
+
+
+def _fusionar_grupo(
+    ids: list[str],
+    por_id: dict[str, dict[str, Any]],
+    *,
+    pesos: Any,
+    eventos: list[dict[str, Any]] | None = None,
+    breaking_peso: float,
+    breaking_ventana_h: int,
+    fuentes_baja: frozenset[str],
+    perfil_activo: bool,
+    ahora: datetime,
+) -> bool:
+    """Funde un grupo de historias en la CANÓNICA (más fuentes, desempate por score).
+
+    Reasigna los items de las absorbidas a la canónica, borra las absorbidas (vacías) y recalcula
+    + repuntúa la canónica (n_fuentes/score reales). Devuelve True si fusionó (≥2 historias).
+
+    Salvaguardas:
+      - ANTI-TOCTOU: antes de absorber, RE-LEE cada cluster absorbible; si entre la lectura del
+        lote y ahora adquirió `publicacion_id` o dejó de ser `nuevo` (el pipeline lo promovió),
+        NO se absorbe (se conserva intacto).
+      - SIN ITEMS SUELTOS: los items se reasignan en LOTES de 500 HASTA VACIAR el cluster (antes el
+        tope de 500 dejaba items colgando del cluster borrado si había más).
+    """
+    from .. import noticias_umbral, repos
+    from . import agrupar
+
+    clusters = [por_id[i] for i in ids if i in por_id]
+    if len(clusters) < 2:
+        return False
+    canon = max(clusters, key=lambda c: (int(c.get("n_fuentes") or 0), float(c.get("score") or 0.0)))
+    canon_id = str(canon["id"])
+    absorbidas = 0
+    for c in clusters:
+        cid = str(c["id"])
+        if cid == canon_id:
+            continue
+        # Re-verificación anti-TOCTOU: el absorbido pudo ser promovido entre lectura y fusionar.
+        actual = repos.obtener_noticia_cluster(cid)
+        if actual is None:
+            continue
+        if (actual.get("publicacion_id") or "") or (actual.get("estado") or "nuevo") != "nuevo":
+            continue
+        # Reasigna TODOS los items, por lotes, hasta vaciar (cota dura de seguridad: 100 lotes).
+        for _ in range(100):
+            lote = repos.items_de_cluster(cid, limite=500)
+            if not lote:
+                break
+            repos.asignar_cluster_items({canon_id: [it["id"] for it in lote]})
+        repos.borrar_noticia_cluster(cid)
+        absorbidas += 1
+    if not absorbidas:
+        return False
+    items = repos.items_de_cluster(canon_id, limite=500)
+    if not items:
+        return False
+    base = repos.obtener_noticia_cluster(canon_id) or canon
+    recalc = agrupar.recalcular(
+        base, items,
+        breaking_peso=breaking_peso,
+        breaking_ventana_h=breaking_ventana_h,
+        fuentes_baja_confianza=fuentes_baja,
+        ahora=ahora,
+    )
+    palabras = noticias_umbral.palabras_relevancia(recalc.get("marca") or "", perfil_activo)
+    recalc["score"], recalc["score_razon"], recalc["score_desglose"] = agrupar.puntuar_detalle(
+        recalc, palabras_marca=palabras, eventos=eventos, ahora=ahora, pesos=pesos,
+        breaking_peso=breaking_peso, breaking_ventana_h=breaking_ventana_h,
+    )
+    repos.upsert_noticia_cluster(recalc)
+    return True
+
+
+# --------------------------------------------------------------------------- #
+# Marcador PERSISTIDO "fusión en curso" por marca (idempotencia del encolado)    #
+# --------------------------------------------------------------------------- #
+#
+# El throttle/huella en memoria del barrido evita TRABAJO redundante (re-evaluar un lote que no
+# cambió), pero NO sobrevive a un reinicio ni coordina barrido↔worker. Para no re-encolar una marca
+# cuya fusión sigue EN VUELO (mismo papel que la columna `traduccion_encolada` de Traducir o el
+# marcador `refresco_encolado_en` de Perfil), se persiste un sello ISO por marca en un JSON bajo el
+# dir de datos (volumen compartido, escribible por el worker). Reapertura por TTL: un sello más viejo
+# que el TTL se considera atascado (deploy/OOM) y NO bloquea (un barrido posterior re-encola).
+
+_NOMBRE_CACHE_ENCOLADO = "fusion_encolada.json"
+
+
+def _ruta_encolado() -> Path | None:
+    """Ruta del JSON de marcas con fusión en curso (bajo el dir de datos). None si no se resuelve."""
+    try:
+        from .. import libprompts
+
+        return libprompts.raiz() / _NOMBRE_CACHE_ENCOLADO
+    except Exception:  # noqa: BLE001 -- sin dir de datos no hay marcador (el throttle igual frena)
+        return None
+
+
+def _cargar_encolado() -> dict[str, Any]:
+    ruta = _ruta_encolado()
+    if ruta is None or not ruta.exists():
+        return {}
+    try:
+        return json.loads(ruta.read_text(encoding="utf-8")) or {}
+    except (OSError, json.JSONDecodeError, ValueError):
+        return {}
+
+
+def _guardar_encolado(data: dict[str, Any]) -> None:
+    ruta = _ruta_encolado()
+    if ruta is None:
+        return
+    try:
+        from ..io_atomico import escribir_atomico
+
+        ruta.parent.mkdir(parents=True, exist_ok=True)
+        escribir_atomico(ruta, json.dumps(data, ensure_ascii=False, indent=2))
+    except Exception:  # noqa: BLE001 -- el marcador es best-effort; un fallo no rompe la Recolección
+        _log.warning("fusionar_semantica: no se pudo persistir el marcador de encolado.", exc_info=True)
+
+
+def fusion_en_curso(marca: str, *, ahora: datetime | None = None, ttl_min: int) -> bool:
+    """True si hay una fusión EN VUELO para `marca` (marcador dentro del TTL).
+
+    Un marcador más viejo que `ttl_min` se considera ATASCADO (job interrumpido por deploy/OOM/error)
+    y NO bloquea: el barrido re-encola (reapertura por TTL). Un marcador corrupto/ilegible tampoco
+    bloquea (se re-encola). `marca` vacía nunca está en curso.
+    """
+    if not marca:
+        return False
+    sello = str(_cargar_encolado().get(marca) or "")
+    if not sello:
+        return False
+    ref = ahora or datetime.now(UTC)
+    try:
+        edad_min = (ref - datetime.fromisoformat(sello)).total_seconds() / 60.0
+    except (ValueError, TypeError):
+        return False
+    return edad_min < max(1, ttl_min)
+
+
+def marcar_fusion_encolada(marca: str, *, ahora: datetime | None = None) -> None:
+    """Sella la fusión de `marca` como EN CURSO (timestamp) AL ENCOLAR su job.
+
+    Idempotencia entre barridos: mientras el marcador siga fresco (`fusion_en_curso`), el barrido NO
+    re-encola la marca. Lo limpia el job al completar (`limpiar_fusion_encolada`) o el barrido si la
+    admisión rechaza el encolado.
+    """
+    if not marca:
+        return
+    ref = ahora or datetime.now(UTC)
+    cache = _cargar_encolado()
+    cache[marca] = ref.isoformat()
+    _guardar_encolado(cache)
+
+
+def limpiar_fusion_encolada(marca: str) -> None:
+    """Quita el marcador de fusión en curso de `marca` (job completado o encolado rechazado).
+
+    La usa el worker al terminar la fusión (la marca vuelve a ser candidata) y el barrido cuando el
+    encolado NO llegó a ocurrir (presupuesto/pausa), para reintentar sin esperar al TTL.
+    """
+    if not marca:
+        return
+    cache = _cargar_encolado()
+    if marca in cache:
+        del cache[marca]
+        _guardar_encolado(cache)
+
+
+# --------------------------------------------------------------------------- #
+# Camino ENCOLADO (job del worker): orquesta la fusión de UNA marca             #
+# --------------------------------------------------------------------------- #
+
+
+def fusionar_marca(
+    marca: str,
+    recientes: list[dict[str, Any]],
+    *,
+    salida_principal: str,
+    ejecutor: Ejecutor | None = None,
+    al_ejecutar: Callable[[str, str], None] | None = None,
+    ahora: datetime | None = None,
+) -> dict[str, Any]:
+    """Orquesta la fusión semántica de UNA marca a partir de la salida de la pasada principal.
+
+    `recientes` es el lote de historias `nuevo` recientes de la marca (las que el barrido mandó a la
+    pasada principal); `salida_principal` es la respuesta de esa pasada (la corre el worker con
+    `claude -p`). Reproduce el bloque por-marca del paso inline:
+      1. ANCLA DE AGENDA (determinista, sin LLM): una historia que nombra SIN ambigüedad un evento
+         programado HEREDA su título como `tema_macro` (familia estable aunque caiga fuera del lote).
+      2. `procesar_fusiones` parsea+VERIFICA los grupos y FUNDE cada uno (`_fusionar_grupo`,
+         anti-TOCTOU sobre lo persistido).
+      3. ETIQUETA las familias de macro-evento (NO las funde) reusando la etiqueta dominante, y las
+         parte en SUBTEMAS (Haiku) si falta facetar alguna.
+    Best-effort: un fallo por grupo/familia se loguea y no aborta. Devuelve `{grupos, fusionadas,
+    familias, anclas}`.
+    """
+    from .. import config, marcas, repos
+    from . import agrupar
+
+    ref = ahora or datetime.now(UTC)
+    resultado = {"grupos": 0, "fusionadas": 0, "familias": 0, "anclas": 0}
+    if len(recientes) < 2:
+        return resultado
+
+    maximo = config.fusion_semantica_max()
+    breaking_peso = config.cluster_breaking_peso()
+    breaking_ventana_h = config.cluster_breaking_ventana_h()
+    fuentes_baja = config.fuentes_baja_confianza()
+    perfil_activo = config.priorizar_perfil_activo()
+    pesos = config.score_pesos(marca)
+    try:
+        eventos = _eventos_de_marca(marca, ref)
+    except Exception:  # noqa: BLE001 -- sin agenda legible la señal/ancla queda inerte
+        _log.warning("fusionar_semantica: no se pudieron leer eventos de la marca %s.", marca)
+        eventos = []
+
+    lote = recientes[:maximo]
+    por_id = {str(c["id"]): c for c in lote}
+
+    # 1) ANCLA DE AGENDA: clave de familia determinista (la agenda es la verdad; el LLM solo etiqueta
+    # lo NO agendado). Marca `ancladas_ids` para no dejar que el LLM las re-aglomere en una familia
+    # más gruesa. Idempotente: solo (re)escribe las que aún no llevan ESA etiqueta.
+    ancladas_ids: set[str] = set()
+    por_evento: dict[str, list[dict[str, Any]]] = {}
+    for c in recientes:
+        titulo_ev = agrupar.evento_ancla(c, eventos, ahora=ref)
+        if titulo_ev:
+            por_evento.setdefault(titulo_ev, []).append(c)
+    for titulo_ev, miembros in por_evento.items():
+        for c in miembros:
+            ancladas_ids.add(str(c["id"]))
+        pendientes = [
+            str(c["id"]) for c in miembros
+            if str(c.get("tema_macro") or "").strip() != titulo_ev
+        ]
+        if pendientes:
+            try:
+                repos.marcar_clusters_tema_macro(pendientes, titulo_ev)
+                resultado["anclas"] += 1
+            except Exception:  # noqa: BLE001 -- persistir un ancla no aborta el paso
+                _log.exception("fusionar_semantica: fallo al anclar el evento '%s'.", titulo_ev)
+                continue
+        # Refleja el ancla en memoria para que `_etiqueta_canonica` (abajo) lo respete.
+        for c in miembros:
+            c["tema_macro"] = titulo_ev
+
+    # 2) GRUPOS (mismo hecho): parsea+verifica y funde cada uno.
+    try:
+        res = procesar_fusiones(salida_principal, lote, ejecutor=ejecutor, al_ejecutar=al_ejecutar)
+    except Exception:  # noqa: BLE001 -- un fallo de parseo/verificación no aborta el resto del paso
+        _log.exception("fusionar_semantica: fallo procesando las fusiones de %r.", marca)
+        res = Fusiones([], [])
+    for grupo in res.grupos:
+        try:
+            if _fusionar_grupo(
+                grupo, por_id, pesos=pesos, eventos=eventos, breaking_peso=breaking_peso,
+                breaking_ventana_h=breaking_ventana_h, fuentes_baja=fuentes_baja,
+                perfil_activo=perfil_activo, ahora=ref,
+            ):
+                resultado["grupos"] += 1
+                resultado["fusionadas"] += len(grupo) - 1
+        except Exception:  # noqa: BLE001 -- un fusionado problemático no aborta el paso
+            _log.exception("fusionar_semantica: fallo al fusionar un grupo de historias.")
+
+    # 3) FAMILIAS de macro-evento (NO se funden): etiqueta + facetea.
+    for familia in res.familias:
+        tema_propuesto = str(familia.get("tema") or "").strip()
+        ids = [str(i) for i in (familia.get("ids") or []) if i]
+        if not tema_propuesto or len(ids) < 2:
+            continue
+        # La agenda ya etiquetó estas (determinista): NO dejes que el LLM las pise.
+        if any(i in ancladas_ids for i in ids):
+            continue
+        tema = _etiqueta_canonica(ids, por_id, tema_propuesto)
+        try:
+            n = repos.marcar_clusters_tema_macro(ids, tema)
+        except Exception:  # noqa: BLE001 -- persistir una etiqueta no aborta el paso
+            _log.exception("fusionar_semantica: fallo al etiquetar el macro-evento '%s'.", tema)
+            continue
+        if n:
+            resultado["familias"] += 1
+        if _falta_subtema(ids, por_id):
+            _partir_en_subtemas(tema, ids, por_id, ejecutor=ejecutor)
+
+    if resultado["grupos"] or resultado["fusionadas"]:
+        _log.info(
+            "fusionar_semantica(%s): %d grupo(s), %d historia(s) absorbida(s).",
+            marcas.etiqueta_de(marca) if marca else marca,
+            resultado["grupos"], resultado["fusionadas"],
+        )
+    return resultado
+
+
+def _eventos_de_marca(marca: str, ahora: datetime) -> list[dict[str, Any]]:
+    """Eventos de la AGENDA de la marca en la ventana de encaje (ayer .. +7 días). Lectura de repos."""
+    from datetime import timedelta
+
+    from .. import repos
+
+    if not marca:
+        return []
+    hoy = ahora.date()
+    desde = (hoy - timedelta(days=1)).isoformat()
+    hasta = (hoy + timedelta(days=7)).isoformat()
+    return repos.listar_eventos_rota(desde=desde, hasta=hasta, marca=marca)
+
+
+def construir_procesar_fusionar(marca: str, recientes: list[dict[str, Any]]):  # noqa: ANN201 -- Procesar
+    """Callback de post-procesado del JOB de fusión semántica de UNA marca.
+
+    El worker corre `claude -p` (modelo `config.fusion_modelo()`) con el prompt de
+    `construir_prompt_fusion`; aquí tomamos esa `salida` como la pasada PRINCIPAL y orquestamos la
+    fusión de la marca (`fusionar_marca`: ancla de agenda + grupos verificados + familias + subtemas),
+    persistiendo en repos. La verificación y los subtemas corren con `_ejecutar_haiku` (el worker
+    tiene claude). Al terminar limpia el marcador de fusión en curso de la marca. Devuelve
+    `{grupos, fusionadas, familias, anclas}`.
+    """
+    def procesar(salida: str, _metricas: object) -> dict[str, object]:
+        try:
+            return fusionar_marca(marca, recientes, salida_principal=salida or "")
+        finally:
+            limpiar_fusion_encolada(marca)
+
+    return procesar

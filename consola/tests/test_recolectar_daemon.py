@@ -10,6 +10,7 @@ Postgres: se comprueba que persiste items nuevos y que programa el próximo sond
 from __future__ import annotations
 
 import contextlib
+import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -208,7 +209,7 @@ def test_barrido_sin_feeds_vencidos_corre_los_pasos_post_rss(monkeypatch):
 
 
 def test_barrido_con_ia_bloqueada_salta_los_pasos_haiku_no_los_de_io(monkeypatch):
-    """Parada de emergencia / presupuesto: los pasos Haiku INLINE (fusión, traducir) NO corren;
+    """Parada de emergencia / presupuesto: los pasos Haiku que ENCOLAN (fusión, traducir) NO corren;
     los de I/O (agencias, agrupar, re-score) SÍ (no gastan tokens)."""
     _parchear_comun(monkeypatch, feeds=[], fetcher=lambda _u: _FEED_OK)
     monkeypatch.setattr(recolectar_daemon, "ia_fondo_bloqueada", lambda: True)
@@ -745,114 +746,45 @@ def test_barrido_no_aborta_si_paso_agencias_revienta(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# Actividad IA del pool: fusión semántica deja constancia VISIBLE (noticias-ia) #
+# fusionar_marca (executor del JOB): etiquetado de macro-evento + backstop        #
 # --------------------------------------------------------------------------- #
 
 
-def test_paso_fusionar_semantica_registra_actividad_ia(monkeypatch):
-    """Al fundir, sella `noticias-ia` con el Haiku REAL (prompt + salida) + el resumen humano."""
-    monkeypatch.setattr(recolectar_daemon.config, "fusionar_semantica_activo", lambda: True)
-    recientes = [
-        {"id": "c1", "titulo": "Remontada épica", "estado": "nuevo", "marca": "unotv"},
-        {"id": "c2", "titulo": "Remontada increíble", "estado": "nuevo", "marca": "unotv"},
-    ]
-    monkeypatch.setattr(recolectar_daemon.repos, "clusters_recientes",
-                        lambda ventana_h, *a, **k: list(recientes))
-
-    def _fake_proponer(lote, *, ejecutor=None, al_ejecutar=None):
-        if al_ejecutar:  # el daemon captura el prompt+salida reales del LLM
-            al_ejecutar("PROMPT-HAIKU-FUSION", '{"grupos": [["c1","c2"]], "familias": []}')
-        return recolectar_daemon.fusionar_semantica.Fusiones([["c1", "c2"]], [])
-    monkeypatch.setattr(recolectar_daemon.fusionar_semantica, "proponer_fusiones", _fake_proponer)
-    monkeypatch.setattr(recolectar_daemon, "_fusionar_grupo", lambda *a, **k: True)
-    registradas: list[tuple[str, str, str, str, str]] = []
-    monkeypatch.setattr(
-        recolectar_daemon, "_registrar_actividad_ia",
-        lambda marca, etiqueta, salida, *, prompt="", etapa="":
-            registradas.append((marca, etiqueta, salida, prompt, etapa)),
-    )
-
-    resumen = recolectar_daemon.paso_fusionar_semantica()
-    assert resumen == {"grupos": 1, "fusionadas": 1}
-    assert len(registradas) == 1
-    marca, etiqueta, salida, prompt, etapa = registradas[0]
-    assert marca == "unotv"
-    assert "Fusionar" in etiqueta
-    assert etapa == "Fusionar"  # ETAPA explícita para el desglose por etapa de la economía
-    assert prompt == "PROMPT-HAIKU-FUSION"  # el prompt REAL de Haiku
-    assert '{"grupos"' in salida  # la salida REAL de Haiku
-    assert "Remontada épica" in salida  # + el resumen humano de qué se unió
+def _ej_fusion(grupos):
+    """Ejecutor falso de la VERIFICACIÓN: devuelve `{"grupos": ...}`."""
+    def run(_p, _c):
+        return json.dumps({"grupos": grupos})
+    return run
 
 
-def test_paso_fusionar_semantica_sin_fusiones_no_registra(monkeypatch):
-    """Si Haiku no agrupa nada, no hay generación de actividad (sin ruido a 0)."""
-    monkeypatch.setattr(recolectar_daemon.config, "fusionar_semantica_activo", lambda: True)
-    recientes = [
-        {"id": "c1", "titulo": "A", "estado": "nuevo", "marca": "unotv"},
-        {"id": "c2", "titulo": "B", "estado": "nuevo", "marca": "unotv"},
-    ]
-    monkeypatch.setattr(recolectar_daemon.repos, "clusters_recientes",
-                        lambda ventana_h, *a, **k: list(recientes))
-    monkeypatch.setattr(recolectar_daemon.fusionar_semantica, "proponer_fusiones",
-                        lambda lote, **kw: recolectar_daemon.fusionar_semantica.Fusiones([], []))
-    registradas: list[object] = []
-    monkeypatch.setattr(recolectar_daemon, "_registrar_actividad_ia",
-                        lambda *a, **k: registradas.append(a))
-
-    assert recolectar_daemon.paso_fusionar_semantica() == {"grupos": 0, "fusionadas": 0}
-    assert registradas == []
-
-
-def test_paso_fusionar_semantica_etiqueta_macro_evento(monkeypatch):
-    """Tras la fusión dura, ETIQUETA familias de macro-evento (clusters DISTINTOS del mismo gran
-    evento) SIN fundirlos: persiste `tema_macro` por familia y sella la actividad IA."""
-    monkeypatch.setattr(recolectar_daemon.config, "fusionar_semantica_activo", lambda: True)
+def test_fusionar_marca_etiqueta_macro_evento(monkeypatch):
+    """ETIQUETA familias de macro-evento (clusters DISTINTOS del mismo gran evento) SIN fundirlos:
+    persiste `tema_macro` por familia. Sin agenda ni grupos (aislamos el etiquetado de familias)."""
+    monkeypatch.setattr(recolectar_daemon.fusionar_semantica, "_eventos_de_marca", lambda *a: [])
     recientes = [
         {"id": "c1", "titulo": "Meloni deja de fumar en el G7", "estado": "nuevo", "marca": "unotv"},
         {"id": "c2", "titulo": "Trump habla de Irán en el G7", "estado": "nuevo", "marca": "unotv"},
         {"id": "c3", "titulo": "Acuerdo comercial en el G7", "estado": "nuevo", "marca": "unotv"},
     ]
-    monkeypatch.setattr(recolectar_daemon.repos, "clusters_recientes",
-                        lambda ventana_h, *a, **k: list(recientes))
-    # Sin fusión dura (grupos vacíos): aislamos el etiquetado de familias, que viene en la MISMA
-    # respuesta que los grupos (una sola pasada del LLM).
-    def _fake_proponer(lote, *, ejecutor=None, al_ejecutar=None):
-        if al_ejecutar:
-            al_ejecutar("PROMPT-FUSION",
-                        '{"grupos": [], "familias": [{"tema": "Cumbre del G7", "ids": ["c1","c2","c3"]}]}')
-        return recolectar_daemon.fusionar_semantica.Fusiones(
-            [], [{"tema": "Cumbre del G7", "ids": ["c1", "c2", "c3"]}])
-    monkeypatch.setattr(recolectar_daemon.fusionar_semantica, "proponer_fusiones", _fake_proponer)
+    salida = '{"grupos": [], "familias": [{"tema": "Cumbre del G7", "ids": ["c1","c2","c3"]}]}'
     monkeypatch.setattr(recolectar_daemon.fusionar_semantica, "proponer_subtemas", lambda *a, **k: [])
-
     etiquetados: list[tuple[list[str], str]] = []
     monkeypatch.setattr(recolectar_daemon.repos, "marcar_clusters_tema_macro",
                         lambda ids, tema: etiquetados.append((list(ids), tema)) or len(ids))
-    registradas: list[tuple[str, str, str, str, str]] = []
-    monkeypatch.setattr(
-        recolectar_daemon, "_registrar_actividad_ia",
-        lambda marca, etiqueta, salida, *, prompt="", etapa="":
-            registradas.append((marca, etiqueta, salida, prompt, etapa)),
-    )
 
-    recolectar_daemon.paso_fusionar_semantica()
+    res = recolectar_daemon.fusionar_semantica.fusionar_marca(
+        "unotv", recientes, salida_principal=salida, ejecutor=_ej_fusion([]),
+    )
 
     # La familia se persiste tal cual (no se funde ningún cluster).
     assert etiquetados == [(["c1", "c2", "c3"], "Cumbre del G7")]
-    # Y se deja constancia IA del macro-evento (con el Haiku real + resumen humano).
-    assert len(registradas) == 1
-    marca, etiqueta, salida, prompt, etapa = registradas[0]
-    assert marca == "unotv"
-    assert "familia" in etiqueta
-    assert etapa == "Fusionar"  # ETAPA única para el desglose por etapa de la economía
-    assert prompt == "PROMPT-FUSION"
-    assert "Cumbre del G7" in salida
+    assert res["familias"] == 1 and res["grupos"] == 0
 
 
-def test_paso_fusionar_semantica_macro_reusa_etiqueta_dominante(monkeypatch):
+def test_fusionar_marca_macro_reusa_etiqueta_dominante(monkeypatch):
     """Backstop determinista: si la familia ya tiene una `tema_macro` persistida, se reusa la
     DOMINANTE (no el sinónimo propuesto), para que el evento no se parta en dos cajas."""
-    monkeypatch.setattr(recolectar_daemon.config, "fusionar_semantica_activo", lambda: True)
+    monkeypatch.setattr(recolectar_daemon.fusionar_semantica, "_eventos_de_marca", lambda *a: [])
     # c1/c2 ya etiquetados "Mundial 2026"; c3 con el sinónimo "Copa del Mundo 2026".
     recientes = [
         {"id": "c1", "titulo": "México vs Corea", "estado": "nuevo", "marca": "unotv",
@@ -862,31 +794,26 @@ def test_paso_fusionar_semantica_macro_reusa_etiqueta_dominante(monkeypatch):
         {"id": "c3", "titulo": "CDMX recibe la Copa", "estado": "nuevo", "marca": "unotv",
          "tema_macro": "Copa del Mundo 2026"},
     ]
-    monkeypatch.setattr(recolectar_daemon.repos, "clusters_recientes",
-                        lambda ventana_h, *a, **k: list(recientes))
     # El LLM agrupa las 3 en una familia pero propone el sinónimo "Copa del Mundo 2026".
-    monkeypatch.setattr(
-        recolectar_daemon.fusionar_semantica, "proponer_fusiones",
-        lambda lote, **kw: recolectar_daemon.fusionar_semantica.Fusiones(
-            [], [{"tema": "Copa del Mundo 2026", "ids": ["c1", "c2", "c3"]}]),
-    )
+    salida = '{"grupos": [], "familias": [{"tema": "Copa del Mundo 2026", "ids": ["c1","c2","c3"]}]}'
     monkeypatch.setattr(recolectar_daemon.fusionar_semantica, "proponer_subtemas", lambda *a, **k: [])
     etiquetados: list[tuple[list[str], str]] = []
     monkeypatch.setattr(recolectar_daemon.repos, "marcar_clusters_tema_macro",
                         lambda ids, tema: etiquetados.append((list(ids), tema)) or len(ids))
-    monkeypatch.setattr(recolectar_daemon, "_registrar_actividad_ia", lambda *a, **k: None)
 
-    recolectar_daemon.paso_fusionar_semantica()
+    recolectar_daemon.fusionar_semantica.fusionar_marca(
+        "unotv", recientes, salida_principal=salida, ejecutor=_ej_fusion([]),
+    )
 
     # Gana la etiqueta dominante ("Mundial 2026", 2 historias) sobre el sinónimo propuesto.
     assert etiquetados == [(["c1", "c2", "c3"], "Mundial 2026")]
 
 
-def test_paso_fusionar_semantica_macro_unifica_al_entrar_cluster_nuevo(monkeypatch):
+def test_fusionar_marca_macro_unifica_al_entrar_cluster_nuevo(monkeypatch):
     """Backstop por la OTRA vía: un cluster NUEVO sin `tema_macro` se une a una familia que ya tiene
     una etiqueta dominante; el backstop arrastra a toda la familia a la dominante, no al sinónimo que
     propone el LLM."""
-    monkeypatch.setattr(recolectar_daemon.config, "fusionar_semantica_activo", lambda: True)
+    monkeypatch.setattr(recolectar_daemon.fusionar_semantica, "_eventos_de_marca", lambda *a: [])
     # c1/c2 ya etiquetados "Mundial 2026"; c3 es nuevo SIN etiqueta y reactiva el etiquetado macro.
     recientes = [
         {"id": "c1", "titulo": "México vs Corea", "estado": "nuevo", "marca": "unotv",
@@ -895,21 +822,15 @@ def test_paso_fusionar_semantica_macro_unifica_al_entrar_cluster_nuevo(monkeypat
          "tema_macro": "Mundial 2026"},
         {"id": "c3", "titulo": "CDMX recibe la Copa", "estado": "nuevo", "marca": "unotv"},
     ]
-    monkeypatch.setattr(recolectar_daemon.repos, "clusters_recientes",
-                        lambda ventana_h, *a, **k: list(recientes))
-    # El LLM agrupa las 3 en una familia pero propone el sinónimo "Copa del Mundo 2026".
-    monkeypatch.setattr(
-        recolectar_daemon.fusionar_semantica, "proponer_fusiones",
-        lambda lote, **kw: recolectar_daemon.fusionar_semantica.Fusiones(
-            [], [{"tema": "Copa del Mundo 2026", "ids": ["c1", "c2", "c3"]}]),
-    )
+    salida = '{"grupos": [], "familias": [{"tema": "Copa del Mundo 2026", "ids": ["c1","c2","c3"]}]}'
     monkeypatch.setattr(recolectar_daemon.fusionar_semantica, "proponer_subtemas", lambda *a, **k: [])
     etiquetados: list[tuple[list[str], str]] = []
     monkeypatch.setattr(recolectar_daemon.repos, "marcar_clusters_tema_macro",
                         lambda ids, tema: etiquetados.append((list(ids), tema)) or len(ids))
-    monkeypatch.setattr(recolectar_daemon, "_registrar_actividad_ia", lambda *a, **k: None)
 
-    recolectar_daemon.paso_fusionar_semantica()
+    recolectar_daemon.fusionar_semantica.fusionar_marca(
+        "unotv", recientes, salida_principal=salida, ejecutor=_ej_fusion([]),
+    )
 
     # Gana la etiqueta dominante ("Mundial 2026", 2 historias) sobre el sinónimo propuesto.
     assert etiquetados == [(["c1", "c2", "c3"], "Mundial 2026")]
@@ -1079,19 +1000,23 @@ def test_fusionar_grupo_no_absorbe_historia_promovida_entre_lectura_y_fusion(mon
 
 def test_paso_fusionar_semantica_va_throttled(monkeypatch):
     """Tras una pasada (que sella el throttle), la siguiente sin `forzar` sale temprano y NO
-    re-lee la ventana ni llama a Haiku; `forzar=True` la salta."""
+    re-lee la ventana ni encola; `forzar=True` la salta."""
     monkeypatch.setattr(recolectar_daemon.config, "fusionar_semantica_activo", lambda: True)
     lecturas = []
     monkeypatch.setattr(recolectar_daemon.repos, "clusters_recientes",
                         lambda ventana_h, *a, **k: lecturas.append(ventana_h) or [])
     recolectar_daemon.paso_fusionar_semantica(forzar=True)   # corre y sella el throttle
-    assert recolectar_daemon.paso_fusionar_semantica() == {"grupos": 0, "fusionadas": 0}  # throttled
+    assert recolectar_daemon.paso_fusionar_semantica() == {  # throttled
+        "encolados": 0, "marcas": 0, "candidatos": 0,
+    }
     assert len(lecturas) == 1  # la 2ª no llegó a leer la ventana
 
 
 def test_paso_fusionar_semantica_salta_si_el_lote_no_cambio(monkeypatch):
-    """Skip-if-unchanged: si el conjunto candidato no cambió desde la última pasada, NO se llama al
-    LLM (no hay nada nuevo que fusionar). Un cluster nuevo/actualizado mueve la huella y re-evalúa."""
+    """Skip-if-unchanged: si el conjunto candidato no cambió desde la última pasada, NO se encola
+    (no hay nada nuevo que fusionar). Un cluster nuevo/actualizado mueve la huella y re-evalúa."""
+    from keni_consola.recolectar_daemon.pasos import fusionar_semantica as paso
+
     monkeypatch.setattr(recolectar_daemon.config, "fusionar_semantica_activo", lambda: True)
     recientes = [
         {"id": "c1", "titulo": "A", "estado": "nuevo", "marca": "unotv", "ultimo_visto": "t1"},
@@ -1099,28 +1024,29 @@ def test_paso_fusionar_semantica_salta_si_el_lote_no_cambio(monkeypatch):
     ]
     monkeypatch.setattr(recolectar_daemon.repos, "clusters_recientes",
                         lambda ventana_h, *a, **k: [dict(c) for c in recientes])
-    llamadas = {"fusiones": 0}
+    monkeypatch.setattr(recolectar_daemon.fusionar_semantica, "fusion_en_curso", lambda *a, **k: False)
+    llamadas = {"encolar": 0}
 
-    def _fusiones(lote, **kw):
-        llamadas["fusiones"] += 1
-        return recolectar_daemon.fusionar_semantica.Fusiones([], [])
+    def _encolar(_m, _c, **_k):
+        llamadas["encolar"] += 1
+        return True
 
-    monkeypatch.setattr(recolectar_daemon.fusionar_semantica, "proponer_fusiones", _fusiones)
+    monkeypatch.setattr(paso, "_encolar_fusion", _encolar)
 
-    # 1ª pasada: lote nuevo -> evalúa (llama al LLM) y sella la huella.
+    # 1ª pasada: lote nuevo -> evalúa (encola) y sella la huella.
     recolectar_daemon.paso_fusionar_semantica()
-    assert llamadas["fusiones"] == 1
+    assert llamadas["encolar"] == 1
 
     # 2ª pasada con el MISMO lote (throttle reseteado para que no gatee él): huella idéntica -> salta.
     _comun._ultimo_fusionar = 0.0
-    assert recolectar_daemon.paso_fusionar_semantica() == {"grupos": 0, "fusionadas": 0}
-    assert llamadas["fusiones"] == 1  # no se volvió a llamar
+    assert recolectar_daemon.paso_fusionar_semantica() == {"encolados": 0, "marcas": 0, "candidatos": 0}
+    assert llamadas["encolar"] == 1  # no se volvió a encolar
 
     # Cambia el marcador de un cluster (entró un item nuevo) -> la huella cambia -> re-evalúa.
     recientes[0]["ultimo_visto"] = "t2"
     _comun._ultimo_fusionar = 0.0
     recolectar_daemon.paso_fusionar_semantica()
-    assert llamadas["fusiones"] == 2
+    assert llamadas["encolar"] == 2
 
 
 def test_paso_fusionar_semantica_gateado_off_no_corre(monkeypatch):
@@ -1129,7 +1055,9 @@ def test_paso_fusionar_semantica_gateado_off_no_corre(monkeypatch):
     def _no_leer(*a, **k):  # noqa: ANN002, ANN003
         raise AssertionError("apagado: no debe leer la ventana")
     monkeypatch.setattr(recolectar_daemon.repos, "clusters_recientes", _no_leer)
-    assert recolectar_daemon.paso_fusionar_semantica(forzar=True) == {"grupos": 0, "fusionadas": 0}
+    assert recolectar_daemon.paso_fusionar_semantica(forzar=True) == {
+        "encolados": 0, "marcas": 0, "candidatos": 0,
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -1196,7 +1124,8 @@ def test_registrar_actividad_ia_sella_metricas_acumuladas(entorno):
 
 def test_partir_en_subtemas_persiste_cada_faceta(monkeypatch):
     """`_partir_en_subtemas` parte la familia (Haiku) y persiste cada subtema por sus ids."""
-    from keni_consola.recolectar_daemon.pasos import fusionar_semantica as paso
+    from keni_consola import repos
+    from keni_consola.dominio import fusionar_semantica
 
     por_id = {
         "p1": {"id": "p1", "titulo": "México vence a Sudáfrica"},
@@ -1204,7 +1133,7 @@ def test_partir_en_subtemas_persiste_cada_faceta(monkeypatch):
         "show": {"id": "show", "titulo": "Concierto en la inauguración"},
     }
     monkeypatch.setattr(
-        paso.fusionar_semantica, "proponer_subtemas",
+        fusionar_semantica, "proponer_subtemas",
         lambda familia, *, ejecutor=None: [
             {"subtema": "Partidos", "ids": ["p1", "p2"]},
             {"subtema": "Espectáculo", "ids": ["show"]},
@@ -1212,11 +1141,11 @@ def test_partir_en_subtemas_persiste_cada_faceta(monkeypatch):
     )
     persistidos: list[tuple[list[str], str]] = []
     monkeypatch.setattr(
-        paso.repos, "marcar_clusters_subtema",
+        repos, "marcar_clusters_subtema",
         lambda ids, subtema: (persistidos.append((list(ids), subtema)), len(ids))[1],
     )
 
-    n = paso._partir_en_subtemas("Mundial 2026", ["p1", "p2", "show"], por_id, ejecutor=None)
+    n = fusionar_semantica._partir_en_subtemas("Mundial 2026", ["p1", "p2", "show"], por_id, ejecutor=None)
 
     assert n == 3
     assert persistidos == [(["p1", "p2"], "Partidos"), (["show"], "Espectáculo")]
@@ -1224,11 +1153,13 @@ def test_partir_en_subtemas_persiste_cada_faceta(monkeypatch):
 
 def test_partir_en_subtemas_familia_de_uno_no_llama_a_haiku(monkeypatch):
     """Con <2 historias no hay nada que partir: ni Haiku ni persistencia."""
-    from keni_consola.recolectar_daemon.pasos import fusionar_semantica as paso
+    from keni_consola.dominio import fusionar_semantica
 
     def _no_llamar(*a, **k):
         raise AssertionError("no debería invocarse con familia de uno")
 
-    monkeypatch.setattr(paso.fusionar_semantica, "proponer_subtemas", _no_llamar)
-    n = paso._partir_en_subtemas("Mundial 2026", ["solo"], {"solo": {"id": "solo", "titulo": "X"}}, ejecutor=None)
+    monkeypatch.setattr(fusionar_semantica, "proponer_subtemas", _no_llamar)
+    n = fusionar_semantica._partir_en_subtemas(
+        "Mundial 2026", ["solo"], {"solo": {"id": "solo", "titulo": "X"}}, ejecutor=None,
+    )
     assert n == 0

@@ -18,13 +18,13 @@ siga surtiendo efecto tras el troceado.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 import keni_consola.recolectar_daemon as _pkg
 
 from .. import config, generaciones, marcas, noticias_umbral, repos
-from ..dominio import agrupar, traducir
+from ..dominio import fusionar_semantica, traducir
 from ..tiempo import ahora_iso, hoy_utc
 
 _log = logging.getLogger("keni_consola.recolectar_daemon")
@@ -243,71 +243,8 @@ def _clasificar_marca_ia(cluster: dict[str, Any]) -> str:
     return marca
 
 
-def _fusionar_grupo(
-    ids: list[str],
-    por_id: dict[str, dict[str, Any]],
-    *,
-    pesos: Any,
-    eventos: list[dict[str, Any]] | None = None,
-    breaking_peso: float,
-    breaking_ventana_h: int,
-    fuentes_baja: frozenset[str],
-    perfil_activo: bool,
-    ahora: datetime,
-) -> bool:
-    """Funde un grupo de historias en la CANÓNICA (más fuentes, desempate por score).
-
-    Reasigna los items de las absorbidas a la canónica, borra las absorbidas (vacías) y recalcula
-    + repuntúa la canónica (n_fuentes/score reales). Devuelve True si fusionó (≥2 historias).
-
-    Salvaguardas:
-      - ANTI-TOCTOU: antes de absorber, RE-LEE cada cluster absorbible; si entre la lectura del
-        lote y ahora adquirió `publicacion_id` o dejó de ser `nuevo` (el pipeline lo promovió),
-        NO se absorbe (se conserva intacto).
-      - SIN ITEMS SUELTOS: los items se reasignan en LOTES de 500 HASTA VACIAR el cluster (antes el
-        tope de 500 dejaba items colgando del cluster borrado si había más).
-    """
-    clusters = [por_id[i] for i in ids if i in por_id]
-    if len(clusters) < 2:
-        return False
-    canon = max(clusters, key=lambda c: (int(c.get("n_fuentes") or 0), float(c.get("score") or 0.0)))
-    canon_id = str(canon["id"])
-    absorbidas = 0
-    for c in clusters:
-        cid = str(c["id"])
-        if cid == canon_id:
-            continue
-        # Re-verificación anti-TOCTOU: el absorbido pudo ser promovido entre lectura y fusionar.
-        actual = repos.obtener_noticia_cluster(cid)
-        if actual is None:
-            continue
-        if (actual.get("publicacion_id") or "") or (actual.get("estado") or "nuevo") != "nuevo":
-            continue
-        # Reasigna TODOS los items, por lotes, hasta vaciar (cota dura de seguridad: 100 lotes).
-        for _ in range(100):
-            lote = repos.items_de_cluster(cid, limite=500)
-            if not lote:
-                break
-            repos.asignar_cluster_items({canon_id: [it["id"] for it in lote]})
-        repos.borrar_noticia_cluster(cid)
-        absorbidas += 1
-    if not absorbidas:
-        return False
-    items = repos.items_de_cluster(canon_id, limite=500)
-    if not items:
-        return False
-    base = repos.obtener_noticia_cluster(canon_id) or canon
-    recalc = agrupar.recalcular(
-        base, items,
-        breaking_peso=breaking_peso,
-        breaking_ventana_h=breaking_ventana_h,
-        fuentes_baja_confianza=fuentes_baja,
-        ahora=ahora,
-    )
-    palabras = _palabras_relevancia(recalc.get("marca") or "", perfil_activo)
-    recalc["score"], recalc["score_razon"], recalc["score_desglose"] = agrupar.puntuar_detalle(
-        recalc, palabras_marca=palabras, eventos=eventos, ahora=ahora, pesos=pesos,
-        breaking_peso=breaking_peso, breaking_ventana_h=breaking_ventana_h,
-    )
-    repos.upsert_noticia_cluster(recalc)
-    return True
+# `_fusionar_grupo` (mutación anti-TOCTOU: reasigna items a la canónica, borra absorbidas, recalcula
+# + repuntúa) vive en `dominio.fusionar_semantica` para que el executor del JOB de fusión (worker) lo
+# reutilice. Se re-exporta aquí para preservar `recolectar_daemon._fusionar_grupo` (facade público que
+# parchean los tests y resuelven los pasos vía `_pkg._fusionar_grupo`).
+_fusionar_grupo = fusionar_semantica._fusionar_grupo

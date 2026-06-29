@@ -285,14 +285,16 @@ def ejecutar_barrido() -> dict[str, Any]:
         except Exception:  # noqa: BLE001 -- el re-score es aditivo; nunca tumba la recolección
             _log.exception("recolectar_daemon: fallo en el paso de re-score.")
 
-        # Pasos Haiku INLINE (gastan tokens fuera de la cola): los corta la parada de emergencia /
-        # presupuesto igual que a la cola (`ia_fondo_bloqueada`). Los pasos de arriba (feeds, agencias,
-        # etiquetas, agrupar dedup, re-score, caducidad) son I/O y NO gastan tokens: siguen corriendo.
+        # Pasos Haiku que ENCOLAN (gastan tokens vía worker): los corta la parada de emergencia /
+        # presupuesto igual que a la cola (`ia_fondo_bloqueada`), porque el barrido decide ENCOLAR.
+        # Los pasos de arriba (feeds, agencias, etiquetas, agrupar dedup, re-score, caducidad) son
+        # I/O y NO gastan tokens: siguen corriendo.
         ia_bloqueada = _pkg.ia_fondo_bloqueada()
 
-        # Paso de FUSIONAR SEMÁNTICAMENTE (Fase 2b): fusiona con Haiku las historias del MISMO evento
-        # contadas con titulares distintos (la formación solo dedup-ea EXACTO: url o hash de título).
-        # Gateado `KENI_PIPELINE_FUSIONAR` (def ON; throttled internamente). Best-effort.
+        # Paso de FUSIONAR SEMÁNTICAMENTE (Fase 2b): ENCOLA un job de fusión Haiku POR MARCA por las
+        # historias del MISMO evento contadas con titulares distintos (la formación solo dedup-ea
+        # EXACTO: url o hash de título); el worker funde/etiqueta, ruteado al carril de la cuenta de la
+        # marca. Gateado `KENI_PIPELINE_FUSIONAR` (def ON; throttled internamente). Best-effort.
         if not ia_bloqueada:
             try:
                 _pkg.paso_fusionar_semantica(recientes=clusters_ventana)
