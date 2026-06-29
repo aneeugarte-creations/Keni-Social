@@ -44,6 +44,7 @@ def crear_fuente_rss(
     prioridad: int = 0,
     intervalo_min: int = 0,
     peso: float = 1.0,
+    idioma: str = "",
 ) -> dict[str, Any]:
     return db.crear_fuente_rss(
         nombre,
@@ -58,6 +59,7 @@ def crear_fuente_rss(
         prioridad=prioridad,
         intervalo_min=intervalo_min,
         peso=peso,
+        idioma=idioma,
     )
 
 

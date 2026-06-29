@@ -36,6 +36,7 @@ from .migraciones_columnas import (
     _asegurar_marca_grid_rota,
     _backfill_categoria_desde_linea,
     _backfill_gasto_ia_proceso,
+    _backfill_idioma_fuente,
     _backfill_pesos_fuente,
     _forzar_reset_password_existentes,
     _materializar_passkey_requerido_existentes,
@@ -587,6 +588,11 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # traen del DDL). One-shot e idempotente (`CREATE TABLE IF NOT EXISTS`); sin backfill (el
     # muestreo es prospectivo). Ver `db_cuenta_uso`.
     Migracion("0065-tabla-cuenta-uso", _migrar_tabla_cuenta_uso),
+    # IDIOMA de la fuente: la columna la trae el DDL/`_migrar_columnas_fuentes_rss`; este backfill
+    # siembra el idioma declarado en las fuentes ya creadas cruzando por URL con el catálogo de
+    # presets, para que dejen de pasar por langdetect. One-shot e idempotente (solo filas con
+    # `idioma=''`). Ver `_backfill_idioma_fuente`.
+    Migracion("0066-backfill-idioma-fuente", _backfill_idioma_fuente),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

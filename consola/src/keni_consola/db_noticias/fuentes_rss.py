@@ -32,6 +32,7 @@ _COLS_FUENTE_RSS = (
     "desactivado_auto",
     "ultimo_filtrados",
     "peso",
+    "idioma",
     "creado",
 )
 _SELECT_FUENTE_RSS = f"SELECT {', '.join(_COLS_FUENTE_RSS)} FROM fuentes_rss"
@@ -42,6 +43,8 @@ _CAMPOS_EDITABLES_FUENTE_RSS: tuple[str, ...] = (
     "desactivado_auto", "errores_seguidos", "proximo_sondeo", "pausado_hasta",
     # Peso editorial (ranking ponderado): editable desde la UI de Fuentes.
     "peso",
+    # Idioma declarado: editable a mano para corregir una detección dudosa (gana a langdetect).
+    "idioma",
 )
 
 
@@ -78,6 +81,9 @@ def _fila_a_fuente_rss(fila: Any) -> dict[str, Any]:
         "ultimo_filtrados": int(fila["ultimo_filtrados"] or 0),
         # Peso editorial de la fuente (pondera la corroboración del ranking de historias).
         "peso": float(fila["peso"] or 1.0),
+        # Idioma declarado de la fuente (ISO es/en/…): gana a la detección automática en la ingesta.
+        # '' = desconocido (se detecta del texto). La siembra el preset al activarse.
+        "idioma": fila["idioma"] or "",
     }
 
 
@@ -169,12 +175,15 @@ def crear_fuente_rss(
     prioridad: int = 0,
     intervalo_min: int = 0,
     peso: float = 1.0,
+    idioma: str = "",
 ) -> dict[str, Any]:
     """Crea una fuente RSS (activa, salud vacia) y la devuelve.
 
     `categoria`/`prioridad`/`intervalo_min` alimentan la planificación del motor de ingesta
     (Ola A); `proximo_sondeo` nace '' para que el primer barrido la sondee de inmediato.
     `peso` es el peso editorial de la fuente (pondera la corroboración del ranking).
+    `idioma` es el código ISO declarado (gana a la detección automática en la ingesta);
+    '' deja que la ingesta lo detecte del texto.
     """
     # Microsegundos (no segundos): el listado ordena por `creado DESC` y dos fuentes creadas
     # en el mismo segundo empataban, dejando el orden al `id` (uuid aleatorio) -> test flaky.
@@ -203,6 +212,7 @@ def crear_fuente_rss(
         "desactivado_auto": 0,
         "ultimo_filtrados": 0,
         "peso": float(peso or 1.0),
+        "idioma": (idioma or "").strip().lower(),
         "creado": ahora,
     }
     con = _conectar()

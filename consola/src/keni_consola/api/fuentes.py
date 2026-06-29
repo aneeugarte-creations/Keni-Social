@@ -247,14 +247,16 @@ def _activar_presets(ids_raw: list, marca_override: str | None) -> dict[str, Any
             # Peso editorial: el del preset si lo declara; si no, el seed por host
             # (Reuters/BBC/… nacen potentes). Ver `dominio/fuentes_pesos.py`.
             peso=float(preset.get("peso") or 0) or fuentes_pesos.peso_de_url(url_limpia),
+            # Idioma DECLARADO del preset: se PERSISTE en la fuente para que gane a langdetect en la
+            # ingesta (una fuente de idioma conocido no se detecta del texto, ni se confunde es↔pt).
+            idioma=preset.get("idioma", "") or "",
         )
         # Añade a las ya activas para que iteraciones posteriores en este mismo request
         # sean idempotentes (misma URL pedida dos veces -> solo se crea una).
         urls_activas.add(url_limpia)
-        # Enriquece la respuesta con el idioma/región del preset.
+        # Enriquece la respuesta con la región del preset (no se persiste; cosmética de catálogo).
         fuente_resp = {
             **fuente,
-            "idioma": preset.get("idioma", ""),
             "region": preset.get("region", ""),
         }
         creadas.append(fuente_resp)

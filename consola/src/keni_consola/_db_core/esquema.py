@@ -1248,6 +1248,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         desactivado_auto      INTEGER NOT NULL DEFAULT 0,
         ultimo_filtrados      INTEGER NOT NULL DEFAULT 0,
         peso                  REAL NOT NULL DEFAULT 1.0,
+        idioma                TEXT NOT NULL DEFAULT '',
         creado                TEXT NOT NULL DEFAULT ''
     )
     """,

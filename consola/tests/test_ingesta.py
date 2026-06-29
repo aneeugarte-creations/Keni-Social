@@ -121,6 +121,17 @@ def test_detectar_idioma_extranjero_no_es():
     assert not ingesta.detectar_idioma("Tu przeniosą się Lewandowscy, mocny komentarz Bońka").startswith("es")
 
 
+def test_detectar_idioma_rescata_es_de_primo_iberico(monkeypatch):
+    """Si langdetect devuelve un primo ibérico (pt/ca/gl) pero las palabras funcionales dicen ES,
+    se manda ES: rescata el titular español que langdetect confundió (si no, se "traduciría" es->es).
+    Sin señal española, se respeta el código de langdetect."""
+    monkeypatch.setattr(ingesta, "_LANGDETECT_OK", True)
+    monkeypatch.setattr(ingesta, "_ld_detect", lambda _t: "pt", raising=False)
+    assert ingesta.detectar_idioma("El presidente de la ciudad anuncia que los planes siguen") == "es"
+    # Texto sin palabras funcionales españolas: el pt de langdetect se respeta (no es un rescate).
+    assert ingesta.detectar_idioma("Lewandowski marcou um golo decisivo") == "pt"
+
+
 def test_idioma_por_palabras_fallback():
     """El fallback por palabras funcionales (sin la lib) sigue dando es/en; "" sin señal clara."""
     assert ingesta._idioma_por_palabras("the minister of the city") == "en"

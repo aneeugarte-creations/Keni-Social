@@ -1336,6 +1336,11 @@ _COLUMNAS_FUENTES_RSS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # `categoria`->`linea_id` por marca lo hace `bootstrap_categorias.vincular_fuentes_a_lineas`
     # en el arranque (necesita las líneas ya sembradas, que no existen aún en la migración).
     ("linea_id", "TEXT NOT NULL DEFAULT ''"),
+    # IDIOMA declarado de la fuente (código ISO es/en/…): gana a la detección automática en la
+    # ingesta (`idioma_feed or detectar_idioma(...)`), así una fuente de idioma conocido NUNCA pasa
+    # por langdetect (que confunde es↔pt en titulares cortos). Lo siembra el preset al activarse y el
+    # backfill `0066` lo rellena en fuentes ya creadas. '' = desconocido (se detecta del texto).
+    ("idioma", "TEXT NOT NULL DEFAULT ''"),
 )
 
 def _migrar_columnas_fuentes_rss(con: Any) -> None:
@@ -1487,6 +1492,32 @@ def _backfill_pesos_fuente(con: Any) -> None:
         "UPDATE noticias_items SET fuente_peso = ? WHERE fuente_id LIKE 'agencia-%%'",
         (fuentes_pesos.PESO_POTENTE,),
     )
+
+
+def _backfill_idioma_fuente(con: Any) -> None:
+    """Backfill ONE-SHOT del idioma de la fuente desde el catálogo de presets (idempotente).
+
+    Las fuentes creadas antes de persistir `idioma` nacieron con '' y la ingesta las detectaba con
+    langdetect (que confunde es↔pt en titulares cortos). Este backfill cruza por URL contra el
+    catálogo de presets y siembra el idioma declarado. Solo toca filas con `idioma = ''` y URL que
+    casa con un preset; las fuentes ajenas al catálogo se quedan en '' (detección por texto).
+    """
+    from ..dominio import fuentes_presets  # import local: evitar ciclos en el arranque
+
+    por_url = {
+        str(p.get("url") or ""): str(p.get("idioma") or "")
+        for p in fuentes_presets.listar_presets()
+        if p.get("url") and p.get("idioma")
+    }
+    if not por_url:
+        return
+    for fila in con.execute("SELECT id, url FROM fuentes_rss WHERE idioma = ''").fetchall():
+        idioma = por_url.get(str(fila["url"] or ""))
+        if idioma:
+            con.execute(
+                "UPDATE fuentes_rss SET idioma = ? WHERE id = ? AND idioma = ''",
+                (idioma, fila["id"]),
+            )
 
 
 def _backfill_gasto_ia_proceso(con: Any) -> None:

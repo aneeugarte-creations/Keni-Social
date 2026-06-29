@@ -303,6 +303,33 @@ def test_post_activar_presets_crea_fuentes(cliente, monkeypatch):
     por_nombre = {f["nombre"]: f for f in _repos.listar_fuentes_rss()}
     assert por_nombre["Infobae — México"]["categoria"] == "mx"
     assert por_nombre["IGN — Latinoamérica"]["categoria"] == "gaming"
+    # El IDIOMA declarado del preset también se PERSISTE: gana a langdetect en la ingesta, así una
+    # fuente en español no se re-detecta como pt en titulares cortos (ni se "traduce" es->es).
+    assert por_nombre["Infobae — México"]["idioma"] == "es"
+    assert por_nombre["IGN — Latinoamérica"]["idioma"] == "es"
+
+
+def test_backfill_idioma_fuente_rellena_desde_preset(cliente):  # noqa: ARG001
+    """Una fuente ya creada SIN idioma cuya URL casa con un preset recibe el idioma declarado del
+    catálogo al correr el backfill: las fuentes pre-existentes dejan de pasar por langdetect."""
+    from keni_consola import repos
+    from keni_consola._db_comun import _conectar
+    from keni_consola._db_core.migraciones_columnas import _backfill_idioma_fuente
+    from keni_consola.dominio import fuentes_presets
+
+    preset = fuentes_presets.obtener_preset("ign-latam")
+    assert preset and preset["idioma"] == "es"
+    fuente = repos.crear_fuente_rss("IGN viejo", preset["url"])  # nace con idioma=''
+    assert fuente["idioma"] == ""
+
+    con = _conectar()
+    try:
+        _backfill_idioma_fuente(con)
+        con.commit()
+    finally:
+        con.close()
+
+    assert repos.obtener_fuente_rss(fuente["id"])["idioma"] == "es"
 
 
 def test_post_activar_idempotente(cliente, monkeypatch):

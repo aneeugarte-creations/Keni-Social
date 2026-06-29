@@ -74,6 +74,12 @@ try:
 except Exception:  # noqa: BLE001 -- sin la lib, se degrada a la heurística por palabras
     _LANGDETECT_OK = False
 
+# Primos ibéricos que langdetect confunde con el español en titulares cortos (comparten n-gramas):
+# si la heurística de palabras funcionales dice ES, mandamos ES. Aguas abajo solo importa "es vs
+# extranjero", así que rescatar un español mal etiquetado evita una traducción es->es; el riesgo de
+# pisar un pt/ca/gl real es nulo en el piloto (sin fuentes en esos idiomas) y, de haberlas, el idioma
+# DECLARADO de la fuente gana antes de llegar aquí.
+_CONFUNDIBLES_CON_ES = frozenset({"pt", "ca", "gl"})
 _PISTAS_ES = frozenset(
     {"el", "la", "los", "las", "de", "que", "en", "con", "por", "para", "del", "una", "un"}
 )
@@ -99,9 +105,10 @@ def detectar_idioma(texto: str) -> str:
 
     `langdetect` (n-gram multi-idioma, determinista) sobre el texto CRUDO; ante texto muy corto, sin
     señal o sin la lib, cae a `_idioma_por_palabras`. Aguas abajo solo se decide "es vs extranjero"
-    (Traducir traduce todo lo que no empiece por `es`), así que un código de más por un español
-    dudoso (ca/gl/pt) a lo sumo dispara una traducción es->es inocua; un inglés mal etiquetado "es"
-    —lo que pasaba antes— sí dejaba inglés en el feed, y eso es lo que esto elimina.
+    (Traducir traduce todo lo que no empiece por `es`). Si langdetect devuelve un primo ibérico
+    confundible (pt/ca/gl) pero la heurística de palabras dice ES, mandamos ES: rescata el español
+    mal etiquetado (que si no se "traduciría" es->es). Un inglés mal etiquetado "es" —lo que pasaba
+    antes— sí dejaba inglés en el feed, y eso es lo que esto elimina.
     """
     t = (texto or "").strip()
     if len(t) < 3:
@@ -114,7 +121,10 @@ def detectar_idioma(texto: str) -> str:
         except Exception:  # noqa: BLE001 -- una rareza de la lib no debe romper la ingesta
             codigo = ""
         if codigo:
-            return codigo.split("-")[0].lower()  # normaliza "zh-cn" -> "zh"
+            codigo = codigo.split("-")[0].lower()  # normaliza "zh-cn" -> "zh"
+            if codigo in _CONFUNDIBLES_CON_ES and _idioma_por_palabras(t) == "es":
+                return "es"
+            return codigo
     return _idioma_por_palabras(t)
 
 
