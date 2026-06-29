@@ -142,7 +142,7 @@ def _materializar_uso(
     genero = False
     if marca and generar:
         try:
-            genero = autogen_redactar.lanzar_para_topic(contenido) is not None
+            genero = autogen_redactar.lanzar_para_topic(contenido, manual=True) is not None
         except Exception:  # noqa: BLE001 -- la generación es opcional; nunca tumba el uso
             genero = False
 

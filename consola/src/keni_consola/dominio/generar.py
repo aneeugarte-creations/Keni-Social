@@ -502,6 +502,7 @@ def lanzar(
     endurecer: dict[str, Any] | None = None,
     clave_idem: str | None = None,
     urgente: bool = False,
+    manual: bool = False,
     publicacion_id: str = "",
     proceso: str = generaciones.PROCESO_PRODUCCION,
     al_fallar: dict[str, Any] | None = None,
@@ -567,12 +568,14 @@ def lanzar(
         endurecer=endurecer,
         # PRIORIDAD de despacho: el lote de FONDO (pipeline/autogen/verificación de la fuente) cede el
         # paso a los lanzamientos manuales del equipo (API/MCP) en la cola del worker.
-        # `urgente` (solo fondo): el tema viene de una curación humana urgente (p. ej. una
-        # breaking empujada desde el panel) y adelanta al lote de fondo SIN pisar lo manual.
+        # `manual`: un lanzamiento que dispara una PERSONA (p. ej. "Empujar al feed") es MANUAL aunque
+        # use un `tipo` de fondo —nunca lo corta el nivel SOLO_MANUAL del presupuesto ni cede el paso—.
+        # `urgente` (solo fondo): el tema viene de una curación humana urgente (p. ej. una breaking
+        # empujada desde el panel) y adelanta al lote de fondo SIN pisar lo manual.
         prioridad=(
-            (jobspec.PRIORIDAD_BREAKING if urgente else jobspec.PRIORIDAD_PIPELINE)
-            if tipo in _TIPOS_FONDO
-            else jobspec.PRIORIDAD_MANUAL
+            jobspec.PRIORIDAD_MANUAL
+            if manual or tipo not in _TIPOS_FONDO
+            else (jobspec.PRIORIDAD_BREAKING if urgente else jobspec.PRIORIDAD_PIPELINE)
         ),
         carril=carril,
         al_fallar=al_fallar,
@@ -793,6 +796,7 @@ def lanzar_copy(
     etiqueta_exito: str = "",
     endurecer: dict[str, Any] | None = None,
     urgente: bool = False,
+    manual: bool = False,
 ) -> dict[str, Any]:
     """Lanza una generación de COPY (piezas por red -> borradores). Camino unificado.
 
@@ -872,6 +876,7 @@ def lanzar_copy(
     )
     return lanzar(
         tipo=tipo, titulo=titulo or "Copy", marca=marca, prompt=prompt, urgente=urgente,
+        manual=manual,
         procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
         procesar_spec=procesar_spec, dir_temporal=dir_temporal, autor=autor,
         endurecer=endurecer, clave_idem=clave_estable, publicacion_id=publicacion_id or "",

@@ -100,8 +100,12 @@ def _redes_de(item: dict[str, Any]) -> list[str]:
     return list(redes.redes_de_formato(item.get("formato")))
 
 
-def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
+def lanzar_para_topic(item: dict[str, Any], *, manual: bool = False) -> dict[str, Any] | None:
     """Encola una generacion de copy para un tema y lo marca como generado. None si se omite.
+
+    `manual` (def False): el lanzamiento lo dispara una PERSONA (p. ej. "Empujar al feed"), no el
+    barrido del pipeline. Entonces el copy va con prioridad MANUAL —no lo corta el nivel
+    SOLO_MANUAL del presupuesto ni cede el paso en la cola—. Por defecto es trabajo de fondo.
 
     Reutiliza el lanzador NEUTRO `dominio.generar.lanzar_copy` (mismo camino que el boton
     manual del asistente y que `api/rss.generar`): compone el prompt copy-desde-nota
@@ -130,6 +134,8 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
         # típicamente una breaking): su copy adelanta al lote de fondo en la cola del worker
         # (PRIORIDAD_BREAKING), sin pisar los lanzamientos manuales.
         urgente=(item.get("origen") or "") == ORIGEN_HISTORIA,
+        # Empuje a mano (endpoint del asistente): MANUAL real, intocable por el presupuesto de fondo.
+        manual=manual,
         marca=marca,
         contexto=nota,
         redes_ids=redes_ids,

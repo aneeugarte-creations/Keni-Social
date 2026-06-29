@@ -1053,6 +1053,31 @@ def test_lanzar_estampa_el_carril_de_la_cuenta_de_la_marca(entorno, monkeypatch)
     assert _lanzar("", "sin") == jobspec.CARRIL_INFERENCIA
 
 
+def test_lanzar_manual_es_prioridad_manual_aunque_el_tipo_sea_de_fondo(entorno, monkeypatch):
+    """Un lanzamiento que dispara una PERSONA (`manual=True`, p. ej. "Empujar al feed") va con
+    prioridad MANUAL aunque use un `tipo` de fondo: así no lo corta el nivel SOLO_MANUAL del
+    presupuesto ni cede el paso. Sin `manual`, el mismo tipo es trabajo de fondo."""
+    from keni_consola.dominio import generar as gen_dom
+    from keni_consola.dominio import jobspec
+
+    capturado: dict = {}
+
+    def _captura(gen_id, **kw):  # noqa: ANN001
+        capturado["spec"] = kw.get("spec")
+
+    monkeypatch.setattr(generaciones, "encolar_job_claude", _captura)
+
+    def _prioridad(*, manual: bool, titulo: str) -> int:
+        gen_dom.lanzar(
+            tipo="pipeline", titulo=titulo, marca="unotv", prompt=f"p-{titulo}", manual=manual,
+            procesar=lambda salida, metricas: {}, procesar_spec=jobspec.construir_prompt_lib(),
+        )
+        return jobspec.prioridad(capturado["spec"])
+
+    assert _prioridad(manual=True, titulo="m") == jobspec.PRIORIDAD_MANUAL
+    assert _prioridad(manual=False, titulo="f") < jobspec.PRIORIDAD_MANUAL
+
+
 def test_endpoint_cancelar_404_si_no_existe(entorno):
     r = _cliente().post("/api/generaciones/noexiste/cancelar")
     assert r.status_code == 404

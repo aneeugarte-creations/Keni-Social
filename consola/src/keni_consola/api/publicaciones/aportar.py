@@ -285,7 +285,7 @@ def _crear_aportacion(
     genero = False
     if marca:
         try:
-            genero = autogen_redactar.lanzar_para_topic(item) is not None
+            genero = autogen_redactar.lanzar_para_topic(item, manual=True) is not None
         except Exception:  # noqa: BLE001 -- la generacion es opcional; nunca tumba el alta
             genero = False
 

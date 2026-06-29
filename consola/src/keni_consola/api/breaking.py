@@ -216,7 +216,7 @@ def _preparar(titulo: str, marca_crudo: str, redes_ids: list[str], autor: object
     # --- Encolar generación de copy (reusa autogen_redactar.lanzar_para_topic) ---
     gen_id = ""
     try:
-        gen = autogen_redactar.lanzar_para_topic(item)
+        gen = autogen_redactar.lanzar_para_topic(item, manual=True)
         if gen:
             gen_id = gen.get("id") or ""
     except Exception:  # noqa: BLE001 -- la generación es opcional; nunca tumba la preparación
