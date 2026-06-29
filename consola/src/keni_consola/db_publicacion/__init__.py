@@ -51,6 +51,7 @@ from ._contenido import (
     reparar_verificacion_en_curso_sueltos,
     publicados_marca_cache,
     titulos_recientes_marca,
+    id_titulos_recientes_marca,
 )
 from ._etiquetas import (
     _CAMPOS_EDITABLES_ETIQUETA,
@@ -106,6 +107,7 @@ __all__ = [
     "crear_publicacion",
     "listar_publicacion",
     "titulos_recientes_marca",
+    "id_titulos_recientes_marca",
     "contar_publicacion_origen_desde",
     "resumen_plan_por_categoria",
     "verificacion_fuente_por_publicacion",

@@ -168,6 +168,7 @@ from .db_publicacion import (  # noqa: F401
     reparar_verificacion_en_curso_sueltos,
     resumen_plan_por_categoria,
     titulos_recientes_marca,
+    id_titulos_recientes_marca,
     verificacion_fuente_por_publicacion,
 )
 from .db_editor import (  # noqa: F401
