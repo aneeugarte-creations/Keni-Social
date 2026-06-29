@@ -236,6 +236,59 @@ def test_registrar_snapshots_de_listado_idempotente_por_ts(pg):
     assert len(db.serie_pieza("x")) == 1
 
 
+def test_registrar_snapshots_lote_inserta_y_dedup(pg):
+    # El lote inserta varias piezas en una sola transacción; reejecutar con el MISMO ts no
+    # duplica (se omite lo ya presente) y un lote PARCIALMENTE nuevo solo escribe lo nuevo.
+    ts = "2026-06-20T08:00:00"
+    filas = [
+        {"pieza_id": "L1", "marca": "unotv", "red": "instagram", "formato": "reel",
+         "metricas": {"visualizaciones": 10, "alcance": 8}},
+        {"pieza_id": "L2", "marca": "unotv", "red": "facebook", "formato": "foto",
+         "metricas": {"visualizaciones": 20}},
+        {"pieza_id": "", "metricas": {}},  # sin id -> se ignora
+    ]
+    assert repos.registrar_snapshots_piezas_lote(filas, ts) == 2
+    s1 = db.serie_pieza("L1")
+    assert len(s1) == 1 and s1[0]["alcance"] == 8 and s1[0]["red"] == "instagram"
+    # Reejecutar el mismo lote/ts: nada nuevo.
+    assert repos.registrar_snapshots_piezas_lote(filas, ts) == 0
+    # Lote con una pieza ya presente (L1) y una nueva (L3): solo L3 se escribe.
+    mezcla = [
+        {"pieza_id": "L1", "marca": "unotv", "red": "instagram", "formato": "reel", "metricas": {}},
+        {"pieza_id": "L3", "marca": "unotv", "red": "x", "formato": "texto", "metricas": {"visualizaciones": 30}},
+    ]
+    assert repos.registrar_snapshots_piezas_lote(mezcla, ts) == 1
+    assert len(db.serie_pieza("L1")) == 1  # no se duplicó
+    assert db.serie_pieza("L3")[0]["visualizaciones"] == 30
+
+
+def test_registrar_snapshots_lote_sin_ts_ni_filas_noop(pg):
+    assert repos.registrar_snapshots_piezas_lote([{"pieza_id": "z", "metricas": {}}], "") == 0
+    assert repos.registrar_snapshots_piezas_lote([], "2026-06-20T08:00:00") == 0
+
+
+def test_backfill_solo_corre_una_vez(pg):
+    # Tras el primer backfill queda una marca en `metricas_cache`: un segundo arranque con
+    # caches NUEVAS no las relee (devuelve 0 y no escribe la pieza nueva), aunque su ts no
+    # exista aún en el histórico (prueba que es el GATE, no la dedup por (pieza_id, ts)).
+    repos.guardar_metricas_cache(
+        metricas_cache._clave(metricas_cache.TIPO_PIEZAS_LISTADO, "mes", None),
+        metricas_cache.TIPO_PIEZAS_LISTADO, "mes", "",
+        {"piezas": [{"id": "bf-1", "red": "instagram", "visualizaciones": 5}]},
+        "muestra", "2026-06-16T08:00:00",
+    )
+    assert metricas_pieza.backfill_historico_desde_cache() == 1
+    # Cache nueva (otra pieza, otro ts) DESPUÉS de marcar el backfill como hecho.
+    repos.guardar_metricas_cache(
+        metricas_cache._clave(metricas_cache.TIPO_PIEZAS_LISTADO, "semana", None),
+        metricas_cache.TIPO_PIEZAS_LISTADO, "semana", "",
+        {"piezas": [{"id": "bf-2", "red": "instagram", "visualizaciones": 9}]},
+        "muestra", "2026-06-19T08:00:00",
+    )
+    assert metricas_pieza.backfill_historico_desde_cache() == 0
+    assert db.serie_pieza("bf-2") == []  # no se backfilleó: el gate cortó la relectura
+
+
 def test_backfill_historico_desde_cache_reconstruye_serie(pg):
     # Varias entradas de cache del listado (claves distintas, `generado_en` distintos) con la
     # MISMA pieza y valores crecientes -> el backfill reconstruye su serie histórica.

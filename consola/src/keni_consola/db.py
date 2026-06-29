@@ -287,6 +287,7 @@ from .db_metricas import (  # noqa: F401
     purgar_metricas_cache,
     purgar_snapshots_piezas,
     registrar_snapshot_pieza,
+    registrar_snapshots_piezas_lote,
     serie_pieza,
 )
 from .db_noticias import (  # noqa: F401
@@ -603,6 +604,7 @@ __all__ = [
     "reclamar_job",
     "reclamar_preparacion",
     "registrar_salud_fuente_rss",    "registrar_snapshot_pieza",
+    "registrar_snapshots_piezas_lote",
     "inicializar_franjas_por_defecto",
     "serie_pieza",
     "terminar_job",    "actualizar_swap_turno",

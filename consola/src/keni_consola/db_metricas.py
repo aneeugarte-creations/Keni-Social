@@ -146,6 +146,89 @@ def registrar_snapshot_pieza(
         con.close()
 
 
+# Filas por sentencia en el INSERT multi-fila del lote. Cada fila lleva 18 columnas; el tope
+# de parámetros de un statement de Postgres es 65535, así que 1000 filas (18 000 parámetros)
+# deja margen de sobra y mantiene las sentencias de tamaño razonable.
+_FILAS_POR_INSERT = 1000
+
+
+def _trozos(seq: list[Any], tam: int) -> Any:
+    """Parte `seq` en trozos de hasta `tam` elementos (generador)."""
+    for i in range(0, len(seq), tam):
+        yield seq[i : i + tam]
+
+
+def registrar_snapshots_piezas_lote(filas: list[dict[str, Any]], ts: str) -> int:
+    """Inserta en UN lote (una conexión, una transacción) los snapshots de varias piezas.
+
+    Todas las filas comparten el mismo instante `ts` (el `generado_en` del refresco del
+    listado). Antes de insertar consulta qué `pieza_id` del lote YA tienen un snapshot en ese
+    `ts` y los omite: así la inmensa mayoría de las reejecuciones (replay del backfill,
+    refrescos repetidos) no llegan al INSERT. Lo que queda se escribe con un solo INSERT
+    multi-fila `ON CONFLICT (pieza_id, ts) DO NOTHING` por trozo, en vez de N conexiones +
+    N commits. Devuelve cuántas filas nuevas se insertaron. Idempotente por `(pieza_id, ts)`.
+
+    Cada elemento de `filas` es `{pieza_id, marca, red, formato, metricas}` (`metricas` lleva
+    las claves de `_METRICAS_PIEZA_SNAPSHOT`; las ausentes -> 0). Dentro del lote gana el
+    primer registro de cada `pieza_id` (el `ON CONFLICT` lo confirma).
+    """
+    if not ts or not filas:
+        return 0
+    por_pieza: dict[str, dict[str, Any]] = {}
+    for f in filas:
+        pid = str(f.get("pieza_id") or "")
+        if pid:
+            por_pieza.setdefault(pid, f)
+    if not por_pieza:
+        return 0
+    cols = (
+        "id",
+        *_COLS_PIEZA_SNAPSHOT_CLAVE,
+        *(col for col, _ in _METRICAS_PIEZA_SNAPSHOT),
+    )
+    con = _conectar()
+    try:
+        candidatos = list(por_pieza)
+        existentes: set[str] = set()
+        for grupo in _trozos(candidatos, _FILAS_POR_INSERT):
+            marcadores = ", ".join("?" for _ in grupo)
+            for fila in con.execute(
+                f"SELECT pieza_id FROM metricas_pieza_snapshots "
+                f"WHERE ts = ? AND pieza_id IN ({marcadores})",
+                (ts, *grupo),
+            ).fetchall():
+                existentes.add(fila["pieza_id"])
+        nuevos = [por_pieza[pid] for pid in candidatos if pid not in existentes]
+        if not nuevos:
+            return 0
+        una_fila = "(" + ", ".join("?" for _ in cols) + ")"
+        escritos = 0
+        for trozo in _trozos(nuevos, _FILAS_POR_INSERT):
+            valores: list[Any] = []
+            for f in trozo:
+                metricas = f.get("metricas") or {}
+                valores.extend((
+                    uuid.uuid4().hex,
+                    str(f.get("pieza_id") or ""),
+                    f.get("marca") or "",
+                    f.get("red") or "",
+                    f.get("formato") or "",
+                    ts,
+                    *(_coaccionar_metrica(metricas.get(col), tipo) for col, tipo in _METRICAS_PIEZA_SNAPSHOT),
+                ))
+            grupos = ", ".join(una_fila for _ in trozo)
+            cur = con.execute(
+                f"INSERT INTO metricas_pieza_snapshots ({', '.join(cols)}) "
+                f"VALUES {grupos} ON CONFLICT (pieza_id, ts) DO NOTHING",
+                tuple(valores),
+            )
+            escritos += max(cur.rowcount or 0, 0)
+        con.commit()
+        return escritos
+    finally:
+        con.close()
+
+
 def serie_pieza(pieza_id: str, *, limite: int | None = None) -> list[dict[str, Any]]:
     """Serie temporal histórica de UNA pieza (más antiguo primero), lista para graficar.
 

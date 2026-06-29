@@ -22,6 +22,10 @@ def registrar_snapshot_pieza(
     return db.registrar_snapshot_pieza(pieza_id, marca, red, formato, ts, metricas)
 
 
+def registrar_snapshots_piezas_lote(filas: list[dict[str, Any]], ts: str) -> int:
+    return db.registrar_snapshots_piezas_lote(filas, ts)
+
+
 def serie_pieza(pieza_id: str, *, limite: int | None = None) -> list[dict[str, Any]]:
     return db.serie_pieza(pieza_id, limite=limite)
 

@@ -57,6 +57,14 @@ TIPO_PIEZA = "pieza_contenido"
 # rendimiento de un post no cambia minuto a minuto.
 TTL_SEGUNDOS = 4 * 60 * 60
 
+# Marca en `metricas_cache` de que el backfill retroactivo del histórico YA corrió. El
+# backfill recorre TODAS las caches del listado (una lectura cara que destoasta decenas de
+# MB) y solo tiene sentido una vez: a partir de ahí el histórico crece por el camino vivo
+# (cada refresco del listado escribe sus snapshots). El tipo queda FUERA de `_TIPOS_BARRIDO`
+# para que la purga de la cache no borre la marca.
+_TIPO_ESTADO_INTERNO = "estado_interno"
+_CLAVE_BACKFILL_HECHO = "estado:backfill_historico_piezas"
+
 
 def _ahora() -> datetime:
     return datetime.now()
@@ -291,29 +299,23 @@ def registrar_snapshots_de_listado(piezas: list[dict[str, Any]], ts: str) -> int
     del refresco como instante. Así la curva del detalle crece para CUALQUIER pieza del
     periodo —no solo las que la Consola sigue por `id_post_metricool`—. La clave de cada
     snapshot es el `id` de Metricool de la pieza, el MISMO con el que el detalle lee la serie
-    (`serie_pieza`). Idempotente por `(pieza_id, ts)`; best-effort por pieza (un fallo de una
-    no aborta el resto).
+    (`serie_pieza`). El lote entero va en una sola conexión/transacción y los `(pieza_id, ts)`
+    ya presentes se omiten antes de insertar. Idempotente por `(pieza_id, ts)`.
     """
     if not ts:
         return 0
-    escritos = 0
-    for p in piezas:
-        pieza_id = str(p.get("id") or "")
-        if not pieza_id:
-            continue
-        try:
-            if repos.registrar_snapshot_pieza(
-                pieza_id,
-                p.get("cuenta") or "",
-                p.get("red") or p.get("plataforma") or "",
-                p.get("formato") or "",
-                ts,
-                p,
-            ):
-                escritos += 1
-        except Exception:  # noqa: BLE001 -- el histórico es best-effort; nunca rompe el refresco
-            _log.exception("metricas_pieza: fallo al registrar histórico de pieza id=%s.", pieza_id)
-    return escritos
+    filas = [
+        {
+            "pieza_id": pieza_id,
+            "marca": p.get("cuenta") or "",
+            "red": p.get("red") or p.get("plataforma") or "",
+            "formato": p.get("formato") or "",
+            "metricas": p,
+        }
+        for p in piezas
+        if (pieza_id := str(p.get("id") or ""))
+    ]
+    return repos.registrar_snapshots_piezas_lote(filas, ts)
 
 
 def backfill_historico_desde_cache() -> int:
@@ -323,11 +325,15 @@ def backfill_historico_desde_cache() -> int:
     con un `generado_en` distinto), el listado de piezas del periodo con sus métricas en ESA
     fecha: puntos históricos reales ya capturados y dispersos. Esto los vuelca a
     `metricas_pieza_snapshots` (idempotente por `(pieza_id, ts)`), de modo que la curva del
-    detalle se llena con el pasado sin esperar a que el daemon acumule puntos nuevos. Se
-    invoca una vez al arrancar; reejecutarlo no duplica. Devuelve nº de snapshots escritos.
+    detalle se llena con el pasado sin esperar a que el daemon acumule puntos nuevos. Corre
+    una SOLA vez por base de datos: una marca en `metricas_cache` corta los arranques
+    siguientes (sin esa marca releería las caches del listado en cada start). Devuelve nº de
+    snapshots escritos (0 si ya estaba hecho).
     """
     from . import metricas_cache
 
+    if repos.leer_metricas_cache(_CLAVE_BACKFILL_HECHO) is not None:
+        return 0
     try:
         filas = repos.listar_metricas_cache_por_tipo((metricas_cache.TIPO_PIEZAS_LISTADO,))
     except Exception:  # noqa: BLE001 -- el backfill es best-effort; no debe romper el arranque
@@ -342,6 +348,14 @@ def backfill_historico_desde_cache() -> int:
         total += registrar_snapshots_de_listado(piezas, fila.get("generado_en") or "")
     if total:
         _log.info("Backfill del histórico por pieza: %d snapshot(s) reconstruidos desde la cache.", total)
+    # Marca el backfill como hecho (idempotente): los próximos arranques no releen las caches.
+    try:
+        repos.guardar_metricas_cache(
+            _CLAVE_BACKFILL_HECHO, _TIPO_ESTADO_INTERNO, "-", "",
+            {"hecho": True}, "", _ahora().isoformat(timespec="seconds"),
+        )
+    except Exception:  # noqa: BLE001 -- la marca es best-effort; sin ella solo se repetiría el backfill
+        _log.exception("metricas_pieza: fallo al marcar el backfill como hecho.")
     return total
 
 
