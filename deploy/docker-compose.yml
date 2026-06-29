@@ -998,6 +998,13 @@ services:
     # latencia en prod. Va en shared_preload_libraries (solo se carga al arranque); ademas hay
     # que crear la extension una vez (CREATE EXTENSION pg_stat_statements). track=top mide las
     # sentencias de nivel superior (no las anidadas en funciones), suficiente y mas barato.
+    # Red de seguridad: corta sesiones en transaccion ociosa, esperas de lock y queries
+    # eternas para que un cuelgue no agote conexiones ni bloquee al resto. Los jobs `claude -p`
+    # corren FUERA de conexion abierta (reclamar_job hace COMMIT antes de lanzar claude), asi
+    # que estos timeouts no los afectan.
+    # Tuning a NVMe/RAM (VPS 61 GiB, db mem_limit 8g): work_mem evita derrames a disco en
+    # sorts/hashes; effective_cache_size refleja la cache del SO; random_page_cost~=seq por
+    # disco NVMe; max_wal_size/checkpoint_timeout espacian checkpoints; wal_compression baja IO.
     command:
       - postgres
       - -c
@@ -1010,6 +1017,26 @@ services:
       - pg_stat_statements.max=10000
       - -c
       - pg_stat_statements.track=top
+      - -c
+      - idle_in_transaction_session_timeout=60000
+      - -c
+      - lock_timeout=15000
+      - -c
+      - statement_timeout=120000
+      - -c
+      - effective_cache_size=6GB
+      - -c
+      - work_mem=24MB
+      - -c
+      - maintenance_work_mem=512MB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - max_wal_size=4GB
+      - -c
+      - checkpoint_timeout=15min
+      - -c
+      - wal_compression=on
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
