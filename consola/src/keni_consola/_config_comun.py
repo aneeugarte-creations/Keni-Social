@@ -164,6 +164,12 @@ ENV_CLAUDE_SESSION_PERSISTENCE = "KENI_CLAUDE_SESSION_PERSISTENCE"
 # solo `--fallback-model <lista>`. Solo aplica cuando el run usa el modelo por defecto: si
 # el job fija su propio `--model`, se respeta su eleccion (no se añade fallback).
 ENV_CLAUDE_FALLBACK_MODEL = "KENI_CLAUDE_FALLBACK_MODEL"
+# Etapa de COPY: enviar el contexto editorial ESTABLE de la marca (cuerpo base + linea
+# editorial + indicaciones) como `--system-prompt` en vez de incrustarlo en el mensaje de
+# usuario. El system queda byte-identico por marca/dia (se cachea de verdad) y el mensaje de
+# usuario solo lleva lo dinamico (contrato JSON + CONTEXTO de la fuente). Def ON; falsy lo apaga
+# (vuelve a un unico mensaje de usuario con todo dentro).
+ENV_COPY_SYSTEM_PROMPT = "KENI_COPY_SYSTEM_PROMPT"
 # Idle-timeout del stream (watchdog): un stream SILENCIOSO pero con stdout abierto dejaria el
 # lector bloqueado para siempre (el wall-timeout global no se alcanza). Si pasan mas de N s sin
 # una linea nueva, se mata el arbol del proceso (cierra stdout -> el lector termina). Def 90 s;
@@ -913,6 +919,7 @@ __all__ = [
     'ENV_CLAUDE_DISALLOWED_TOOLS',
     'ENV_CLAUDE_EXCLUDE_DYNAMIC_SECTIONS',
     'ENV_CLAUDE_FALLBACK_MODEL',
+    'ENV_COPY_SYSTEM_PROMPT',
     'ENV_CLAUDE_IDLE_TIMEOUT',
     'ENV_CLAUDE_MAX_TURNS',
     'ENV_CLAUDE_MAX_USD',

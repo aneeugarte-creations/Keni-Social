@@ -397,6 +397,77 @@ def cuerpo_sin_texto(cuerpo: str) -> bool:
         if s and _RE_LINEA_SIN_TEXTO.match(s) is None:
             return False
     return True
+def componer_partes(
+    cuerpo_prompt: str,
+    adjuntos: list[libprompts.Documento],
+    bloque_contexto: str,
+    *,
+    redes_ids: list[str] | None = None,
+    copy_unico: bool = False,
+    n_notas: int = 0,
+    fotos_notas: list[dict[str, str]] | None = None,
+    camino: str = "",
+    indicaciones: str = "",
+    fecha_redaccion: str = "",
+) -> tuple[str, str]:
+    """Compone el prompt en DOS partes: `(estable, dinamico)`.
+
+    ESTABLE (cacheable byte-idéntico por marca/día): cuerpo del prompt base + LÍNEA EDITORIAL
+    (adjuntos) + indicaciones VIGENTES del equipo. Es contenido CONFIABLE (interno, lo cura el
+    equipo) y NO cambia entre lanzamientos de la misma marca dentro de una ventana de caché.
+
+    DINÁMICO (cambia por lanzamiento): la instrucción de salida/contrato (redes / copy
+    unificado, que varía con las redes pedidas y el carrusel) + el bloque CONTEXTO con la
+    fuente envuelta en el envelope anti-inyección (nota/transcripción/ítem RSS NO confiable) y,
+    si se da, la fecha de redacción del SISTEMA.
+
+    Esta partición es la que aprovecha `lanzar_copy` para mandar la parte ESTABLE como
+    `--system-prompt` (se cachea de verdad) y dejar solo lo DINÁMICO en el mensaje de usuario.
+    El resto de los argumentos se documentan en `componer`.
+    """
+    estable: list[str] = [cuerpo_prompt.strip()]
+    if adjuntos:
+        # MODELO DE PIEZA (rediseno de la Prompts): los pipelines inyectan la
+        # version PUBLICADA de cada adjunto editorial (sha fijado por un admin), no la
+        # working copy. Sin puntero (o sin BD/git) el doc queda intacto: fallback suave.
+        # Este es el UNICO punto de ensamblaje de adjuntos (lo cruzan lanzamientos reales
+        # Y la previsualizacion: "lo que inyectas es lo que ves").
+        adjuntos = libprompts.aplicar_produccion(adjuntos)
+        # Filtra documentos sin texto efectivo (solo headings): no aportan y gastan tokens.
+        bloques = [
+            f"## {d.titulo}\n\n{d.cuerpo.strip()}" for d in adjuntos if not cuerpo_sin_texto(d.cuerpo)
+        ]
+        if bloques:
+            estable.append(
+                "---\nLÍNEA EDITORIAL (material de referencia, no lo copies literal):\n\n"
+                + "\n\n".join(bloques)
+            )
+    if indicaciones and indicaciones.strip():
+        # Indicaciones VIGENTES del equipo (cajón `contexto` de los Insumos): instrucciones
+        # CONFIABLES (las cura el equipo), van fuera del envoltorio anti-inyección. Son
+        # ESTABLES dentro de una ventana de caché (mismas para toda la marca el día entero), así
+        # que forman parte del prefijo estable que se cachea / viaja como system prompt.
+        estable.append("---\n" + indicaciones.strip())
+    dinamico: list[str] = []
+    if redes_ids:
+        dinamico.append(
+            instruccion_copy_unico(redes_ids, n_notas=n_notas, fotos_notas=fotos_notas, camino=camino)
+            if copy_unico
+            else instruccion_redes(redes_ids)
+        )
+    if bloque_contexto and bloque_contexto.strip():
+        # El contexto (nota/transcripción/ítem RSS) es contenido NO confiable: lo envolvemos
+        # en <contenido_usuario>...</contenido_usuario> con un aviso anti-inyección, para que
+        # el modelo no lo interprete como instrucciones (defensa contra prompt-injection).
+        # La fecha de redacción es dato del SISTEMA: va FUERA del envoltorio (no es contenido
+        # del usuario) y DENTRO del bloque CONTEXTO (variable por lanzamiento).
+        prefijo_fecha = f"Fecha de redacción: {fecha_redaccion}\n\n" if fecha_redaccion else ""
+        dinamico.append(
+            "---\nCONTEXTO:\n\n" + prefijo_fecha + envolver_contenido_usuario(bloque_contexto)
+        )
+    return "\n\n".join(estable), "\n\n".join(dinamico)
+
+
 def componer(
     cuerpo_prompt: str,
     adjuntos: list[libprompts.Documento],
@@ -411,6 +482,11 @@ def componer(
     fecha_redaccion: str = "",
 ) -> str:
     """Arma el prompt final autocontenido: prompt + editorial adjunta + contexto.
+
+    Une en un solo mensaje las dos partes de `componer_partes` (estable primero, dinámico
+    después): el ORDEN ESTABLE-PRIMERO es lo que permite el prompt caching cuando todo viaja
+    en el mismo mensaje de usuario. `lanzar_copy` puede en cambio separar la parte estable a
+    `--system-prompt` (ver el gate `config.copy_system_prompt_activo`).
 
     `redes_ids` es ADITIVO y OPT-IN: por defecto NO se añade el bloque de piezas por red,
     para que un prompt cualquiera de la Texto no quede forzado a él. Lo activan las features
@@ -427,55 +503,12 @@ def componer(
     bloque CONTEXTO para que el modelo resuelva referencias temporales relativas de la fuente
     ("el pasado domingo") a fechas absolutas. "" (default) = no se añade.
     """
-    # ORDEN ESTABLE-PRIMERO (prompt caching): lo que NO cambia entre lanzamientos de la misma
-    # marca (cuerpo del prompt + instrucciones fijas + editorial de la marca) va ANTES; lo
-    # VARIABLE por lanzamiento (la instrucción de redes, que cambia con las redes pedidas, y
-    # la nota/transcripción del CONTEXTO) va AL FINAL. Así dos copies de la misma marca
-    # comparten el prefijo y el proveedor puede cachearlo.
-    partes: list[str] = [cuerpo_prompt.strip()]
-    if adjuntos:
-        # MODELO DE PIEZA (rediseno de la Prompts): los pipelines inyectan la
-        # version PUBLICADA de cada adjunto editorial (sha fijado por un admin), no la
-        # working copy. Sin puntero (o sin BD/git) el doc queda intacto: fallback suave.
-        # Este es el UNICO punto de ensamblaje de adjuntos (lo cruzan lanzamientos reales
-        # Y la previsualizacion: "lo que inyectas es lo que ves").
-        adjuntos = libprompts.aplicar_produccion(adjuntos)
-        # Filtra documentos sin texto efectivo (solo headings): no aportan y gastan tokens.
-        bloques = [
-            f"## {d.titulo}\n\n{d.cuerpo.strip()}" for d in adjuntos if not cuerpo_sin_texto(d.cuerpo)
-        ]
-        if bloques:
-            partes.append(
-                "---\nLÍNEA EDITORIAL (material de referencia, no lo copies literal):\n\n"
-                + "\n\n".join(bloques)
-            )
-    if indicaciones and indicaciones.strip():
-        # Indicaciones VIGENTES del equipo (cajón `contexto` de los Insumos): instrucciones
-        # CONFIABLES (las cura el equipo), van fuera del envoltorio anti-inyección. Posición
-        # (prompt caching): son ESTABLES dentro de una ventana de caché (mismas para toda la
-        # marca el día entero), a diferencia de la instrucción de redes —que VARÍA por tema
-        # cuando hay carrusel (catálogo de fotos/`n_notas`)— y del CONTEXTO (cambia por
-        # lanzamiento). Por eso van en el PREFIJO estable, ANTES de redes y del contexto: así el
-        # prefijo byte-idéntico por marca llega lo más lejos posible.
-        partes.append("---\n" + indicaciones.strip())
-    if redes_ids:
-        partes.append(
-            instruccion_copy_unico(redes_ids, n_notas=n_notas, fotos_notas=fotos_notas, camino=camino)
-            if copy_unico
-            else instruccion_redes(redes_ids)
-        )
-    if bloque_contexto and bloque_contexto.strip():
-        # El contexto (nota/transcripción/ítem RSS) es contenido NO confiable: lo envolvemos
-        # en <contenido_usuario>...</contenido_usuario> con un aviso anti-inyección, para que
-        # el modelo no lo interprete como instrucciones (defensa contra prompt-injection).
-        # La fecha de redacción es dato del SISTEMA: va FUERA del envoltorio (no es contenido
-        # del usuario) y DENTRO del bloque CONTEXTO (variable por lanzamiento → no rompe el
-        # prefijo estable del prompt caching).
-        prefijo_fecha = f"Fecha de redacción: {fecha_redaccion}\n\n" if fecha_redaccion else ""
-        partes.append(
-            "---\nCONTEXTO:\n\n" + prefijo_fecha + envolver_contenido_usuario(bloque_contexto)
-        )
-    return "\n\n".join(partes)
+    estable, dinamico = componer_partes(
+        cuerpo_prompt, adjuntos, bloque_contexto,
+        redes_ids=redes_ids, copy_unico=copy_unico, n_notas=n_notas, fotos_notas=fotos_notas,
+        camino=camino, indicaciones=indicaciones, fecha_redaccion=fecha_redaccion,
+    )
+    return "\n\n".join(p for p in (estable, dinamico) if p)
 
 
 def _autor_campos(autor: dict[str, str] | None) -> dict[str, str]:
@@ -740,6 +773,37 @@ def adjuntos_copy(marca: str) -> list[libprompts.Documento]:
     return adjuntos
 
 
+def componer_copy_partes(
+    cuerpo: str,
+    *,
+    marca: str,
+    contexto: str,
+    redes_ids: list[str],
+    n_notas: int = 0,
+    fotos_notas: list[dict[str, str]] | None = None,
+    camino: str = "",
+) -> tuple[str, str]:
+    """Compone el prompt de copy en `(estable, dinamico)` (ver `componer_partes`).
+
+    ESTABLE = cuerpo base + LÍNEA EDITORIAL de la marca + indicaciones vigentes del equipo
+    (lo cacheable, que `lanzar_copy` puede mandar como `--system-prompt`). DINÁMICO = el
+    contrato JSON (copy unificado) + el CONTEXTO de la fuente envuelto en el envelope
+    anti-inyección. Es el punto ÚNICO donde se inyectan las INDICACIONES del equipo (cajón
+    `contexto` de los Insumos), así guían TODOS los copys de la marca; best-effort: sin ítems
+    vigentes (o sin BD) no cambia ni un byte.
+    """
+    # Perezoso y sin ciclo: `indicaciones` importa `repos` solo al consultar.
+    from . import indicaciones as indicaciones_dom
+
+    return componer_partes(
+        cuerpo, adjuntos_copy(marca), contexto,
+        redes_ids=redes_ids, copy_unico=True, n_notas=n_notas, fotos_notas=fotos_notas,
+        camino=camino,
+        indicaciones=indicaciones_dom.bloque_para_marca(marca),
+        fecha_redaccion=fecha_es(),
+    )
+
+
 def componer_copy(
     cuerpo: str,
     *,
@@ -750,31 +814,21 @@ def componer_copy(
     fotos_notas: list[dict[str, str]] | None = None,
     camino: str = "",
 ) -> str:
-    """Composición ÚNICA del prompt de copy (la usan `lanzar_copy` y la previsualización).
+    """Composición ÚNICA del prompt de copy en UN solo mensaje (la usa la previsualización).
 
     "Lo que lanzas es lo que previsualizas": la Prompts (`libprompts.previsualizar_pipeline`)
-    pasa por AQUÍ, así el prompt mostrado es el mismo que recibe `claude -p`. El pipeline de
-    copy pide copy UNIFICADO (un texto+copy_in para todas las redes), también en la preview.
-    `n_notas` (historias que agrupan varias notas): con 2+, la instrucción ofrece al modelo
-    decidir entre `post` y `carrusel` EDITORIAL (un slide con titular por sub-historia);
-    `fotos_notas` es el catálogo numerado de fotos propias por nota.
-
-    INDICACIONES DEL EQUIPO: aquí (punto ÚNICO de composición del copy) se inyectan las
-    indicaciones VIGENTES del cajón `contexto` de los Insumos (`dominio.indicaciones`),
-    para que los lineamientos del día guíen TODOS los copys de la marca, vengan de donde
-    vengan (nota, RSS, pipeline, autogen, evergreen, asistente, clips) y también la preview.
-    Best-effort: sin ítems vigentes (o sin BD) el prompt no cambia ni un byte.
+    pasa por AQUÍ, así el prompt mostrado es el mismo CONTENIDO que recibe `claude -p` (el
+    modelo recibe estable+dinámico, aunque al lanzar la parte estable pueda viajar como system
+    prompt). El pipeline de copy pide copy UNIFICADO (un texto+copy_in para todas las redes),
+    también en la preview. `n_notas` (historias que agrupan varias notas): con 2+, la
+    instrucción ofrece al modelo decidir entre `post` y `carrusel` EDITORIAL (un slide con
+    titular por sub-historia); `fotos_notas` es el catálogo numerado de fotos propias por nota.
     """
-    # Perezoso y sin ciclo: `indicaciones` importa `repos` solo al consultar.
-    from . import indicaciones as indicaciones_dom
-
-    return componer(
-        cuerpo, adjuntos_copy(marca), contexto,
-        redes_ids=redes_ids, copy_unico=True, n_notas=n_notas, fotos_notas=fotos_notas,
-        camino=camino,
-        indicaciones=indicaciones_dom.bloque_para_marca(marca),
-        fecha_redaccion=fecha_es(),
+    estable, dinamico = componer_copy_partes(
+        cuerpo, marca=marca, contexto=contexto, redes_ids=redes_ids,
+        n_notas=n_notas, fotos_notas=fotos_notas, camino=camino,
     )
+    return "\n\n".join(p for p in (estable, dinamico) if p)
 
 
 def lanzar_copy(
@@ -847,10 +901,24 @@ def lanzar_copy(
         if isinstance(f, dict) and str(f.get("imagen") or "").strip()
     ]
     # La política de emojis del copy vive en el prompt + editorial adjunta (única fuente).
-    prompt = componer_copy(
+    # GATE `KENI_COPY_SYSTEM_PROMPT` (def ON): mandamos la parte ESTABLE (cuerpo base + línea
+    # editorial + indicaciones) como `--system-prompt` —byte-idéntico por marca/día, así se
+    # cachea de verdad— y dejamos en el mensaje de usuario SOLO lo dinámico (contrato JSON +
+    # CONTEXTO de la fuente, ya envuelto en su envelope anti-inyección). El system es contenido
+    # CONFIABLE (interno); la fuente NO confiable nunca sale del mensaje de usuario. Con el gate
+    # OFF se compone todo en un único mensaje de usuario (comportamiento previo).
+    from .. import config  # noqa: PLC0415 -- perezoso: no acopla config al paquete `dominio`
+
+    estable, dinamico = componer_copy_partes(
         cuerpo, marca=marca, contexto=contexto, redes_ids=redes_ids,
         n_notas=max(0, int(n_notas or 0)), fotos_notas=fotos, camino=camino,
     )
+    if config.copy_system_prompt_activo() and estable:
+        prompt = dinamico
+        endurecer = dict(endurecer or {})
+        endurecer["system_prompt"] = estable
+    else:
+        prompt = "\n\n".join(p for p in (estable, dinamico) if p)
     # Defensivo: solo propagamos fuente_id/clave si AMBOS vienen (un caso parcial no debe
     # marcar el item del feed). Reparamos y enviamos ambos o ninguno.
     fuente = fuente_id.strip() if isinstance(fuente_id, str) and fuente_id.strip() else None

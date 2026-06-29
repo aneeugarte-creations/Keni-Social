@@ -1158,6 +1158,28 @@ def test_argv_secciones_dinamicas_reactivables_por_env(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# argv de claude: --system-prompt (linea editorial estable del copy)            #
+# --------------------------------------------------------------------------- #
+
+
+def test_argv_sin_system_prompt_por_defecto(entorno):
+    # Sin `endurecer["system_prompt"]` no se añade la flag (flujos que no separan el system).
+    assert "--system-prompt" not in generaciones._argv_claude("hola")
+
+
+def test_argv_system_prompt_desde_endurecer(entorno):
+    # El copy pasa la linea editorial estable via `endurecer["system_prompt"]` -> `--system-prompt`.
+    argv = generaciones._argv_claude("hola", endurecer={"system_prompt": "LINEA EDITORIAL"})
+    assert "--system-prompt" in argv
+    assert argv[argv.index("--system-prompt") + 1] == "LINEA EDITORIAL"
+
+
+def test_argv_system_prompt_vacio_no_añade_flag(entorno):
+    # "" / ausente = no se añade (se comporta como antes).
+    assert "--system-prompt" not in generaciones._argv_claude("hola", endurecer={"system_prompt": ""})
+
+
+# --------------------------------------------------------------------------- #
 # argv de claude: --no-session-persistence (M4, def: SI añadir la flag)         #
 # --------------------------------------------------------------------------- #
 

@@ -78,6 +78,30 @@ def test_componer_orden_estable_primero_contexto_al_final():
     assert i_contexto > max(i_cuerpo, i_editorial, i_redes)
 
 
+def test_componer_partes_separa_estable_de_dinamico():
+    """`componer_partes` reparte: ESTABLE (cuerpo base + editorial + indicaciones) vs DINÁMICO
+    (instrucción de redes + CONTEXTO de la fuente). `componer` = unión byte-idéntica de ambas."""
+    from keni_consola.dominio import generar
+
+    ed = libprompts.crear(
+        "Voz", tipo="editorial", clase="voz", marcas=[_MARCA], cuerpo="tono cercano"
+    )
+    estable, dinamico = generar.componer_partes(
+        "Haz X", [ed], "la nota variable", redes_ids=["x"], indicaciones="lineamiento del día",
+    )
+    # Estable: contenido CONFIABLE; el CONTEXTO no confiable NO aparece aquí.
+    assert "Haz X" in estable and "tono cercano" in estable and "lineamiento del día" in estable
+    assert "la nota variable" not in estable and "contenido_usuario" not in estable
+    # Dinámico: instrucción de redes + la fuente envuelta en el envelope anti-inyección.
+    assert "Genera el copy SOLO para estas redes" in dinamico
+    assert "la nota variable" in dinamico and "contenido_usuario" in dinamico
+    # `componer` une ambas partes byte a byte (estable primero).
+    final = generar.componer(
+        "Haz X", [ed], "la nota variable", redes_ids=["x"], indicaciones="lineamiento del día",
+    )
+    assert final == estable + "\n\n" + dinamico
+
+
 def test_instruccion_redes_ancla_limites_desde_el_codigo():
     """Los límites por red del prompt salen de `keni_shared.limites_plataforma` (fuente
     única), no van hardcodeados: el prompt no puede divergir del código que valida."""
@@ -313,24 +337,46 @@ def test_lanzar_prompt_piezas_sin_redes_cae_a_identidad(encolado):
 def test_lanzar_copy_adjunta_reglas_de_imagen_y_sin_hardcode_de_emojis(encolado):
     """El copy redacta el `copy_in` (texto sobre la placa): adjunta las reglas de imagen
     (best-effort, de la inicial si el store no las tiene) y NO inyecta el hardcode de
-    emojis (la política vive en el prompt + editorial adjunta)."""
+    emojis (la política vive en el prompt + editorial adjunta).
+
+    Con el gate `KENI_COPY_SYSTEM_PROMPT` (def ON) la línea editorial (incl. las reglas de
+    imagen) viaja como `--system-prompt`; el contrato JSON se queda en el mensaje de usuario."""
     from keni_consola.dominio import generar
 
     generar.lanzar_copy(
         marca=_MARCA, contexto="Nota: gol en el 90'", redes_ids=["x"], titulo="Copy",
     )
+    user = encolado["prompt"]
+    sistema = encolado["spec"]["endurecer"]["system_prompt"]
+    # La línea editorial (reglas de imagen) va en el system prompt, no en el mensaje de usuario.
+    assert "Reglas de imagen" in sistema  # título del adjunto `editorial/reglas/imagen`
+    assert "Reglas de imagen" not in user
+    assert "No uses emojis en el copy." not in sistema and "No uses emojis en el copy." not in user
+    # Contrato JSON (dinámico): se queda en el mensaje de usuario. Modo UNIFICADO: el tope viene
+    # del límite más estricto de las redes pedidas (X = 25000).
+    assert "más estricto" in user and "25000 caracteres" in user
+    assert "UN SOLO copy" in user
+
+
+def test_lanzar_copy_sin_gate_compone_un_solo_mensaje(entorno, encolado, monkeypatch):
+    """Gate OFF (`KENI_COPY_SYSTEM_PROMPT=0`): todo en un único mensaje de usuario, sin
+    `--system-prompt` (comportamiento previo)."""
+    from keni_consola.dominio import generar
+
+    monkeypatch.setenv("KENI_COPY_SYSTEM_PROMPT", "0")
+    generar.lanzar_copy(
+        marca=_MARCA, contexto="Nota: gol en el 90'", redes_ids=["x"], titulo="Copy",
+    )
     final = encolado["prompt"]
-    assert "Reglas de imagen" in final  # título del adjunto `editorial/reglas/imagen`
-    assert "No uses emojis en el copy." not in final
-    # Modo UNIFICADO: el tope viene del límite más estricto de las redes pedidas (X = 25000).
-    assert "más estricto" in final and "25000 caracteres" in final
-    assert "UN SOLO copy" in final
+    # Editorial Y contrato JSON conviven en el mismo mensaje; no se fija system_prompt.
+    assert "Reglas de imagen" in final and "UN SOLO copy" in final
+    assert "system_prompt" not in (encolado["spec"]["endurecer"] or {})
 
 
 def test_previsualizar_copy_compone_igual_que_lanzar_copy(encolado):
-    """Previsualización FIEL: la Prompts muestra el MISMO prompt que recibe `claude -p`
-    (misma composición: adjuntos de copy + instrucción de redes), salvo el nonce del
-    envoltorio anti-inyección del contexto."""
+    """Previsualización FIEL: la Prompts muestra el MISMO contenido que recibe `claude -p`,
+    aunque al lanzar la línea editorial estable viaje como `--system-prompt`. El prompt de la
+    preview = system prompt + mensaje de usuario, salvo el nonce del envoltorio anti-inyección."""
     import re
 
     from keni_consola.dominio import generar
@@ -341,7 +387,9 @@ def test_previsualizar_copy_compone_igual_que_lanzar_copy(encolado):
     prev = libprompts.previsualizar_pipeline("redactar", _MARCA, "Nota: gol en el 90'", redes_ids=["x"])
 
     sin_nonce = lambda s: re.sub(r"contenido_usuario_[0-9a-f]+", "contenido_usuario_NONCE", s)  # noqa: E731
-    assert sin_nonce(prev["prompt_efectivo"]) == sin_nonce(encolado["prompt"])
+    sistema = encolado["spec"]["endurecer"]["system_prompt"]
+    efectivo = sistema + "\n\n" + encolado["prompt"]
+    assert sin_nonce(prev["prompt_efectivo"]) == sin_nonce(efectivo)
     # Los adjuntos listados incluyen las reglas de imagen.
     assert any(a["id"] == "editorial/reglas/imagen" for a in prev["adjuntos"])
 

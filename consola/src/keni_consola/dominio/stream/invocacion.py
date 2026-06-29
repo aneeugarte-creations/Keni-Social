@@ -206,15 +206,29 @@ def arg_sin_tools() -> list[str]:
 def arg_excluir_secciones_dinamicas() -> list[str]:
     """`['--exclude-dynamic-system-prompt-sections']` si esta activo (def ON); si no, `[]`.
 
-    El copy no pasa `--system-prompt`, asi que las secciones dinamicas del system prompt de
-    Claude Code (entorno/CWD/git) son ruido. La decision vive en
-    `config.claude_exclude_dynamic_sections` (`KENI_CLAUDE_EXCLUDE_DYNAMIC_SECTIONS` falsy lo apaga).
+    Las secciones dinamicas del system prompt de Claude Code (entorno/CWD/git) son ruido para
+    la generacion (cwd neutro), pase o no el copy su propio `--system-prompt`. La decision vive
+    en `config.claude_exclude_dynamic_sections` (`KENI_CLAUDE_EXCLUDE_DYNAMIC_SECTIONS` falsy lo apaga).
     """
     return (
         ["--exclude-dynamic-system-prompt-sections"]
         if config.claude_exclude_dynamic_sections()
         else []
     )
+
+
+def arg_system_prompt(system: str) -> list[str]:
+    """`['--system-prompt', '<system>']` si `system` no esta vacio; si no, `[]`.
+
+    Lo usa la etapa de copy para enviar el contexto editorial ESTABLE de la marca (cuerpo
+    base + linea editorial + indicaciones) como system prompt en vez de incrustarlo en el
+    mensaje de usuario: ese system queda byte-identico por marca/dia y el proveedor lo cachea
+    de verdad. El contenido del system es CONFIABLE (interno, lo cura el equipo); la fuente NO
+    confiable (nota/RSS) se queda SIEMPRE en el mensaje de usuario, dentro de su envelope
+    anti-inyeccion. El valor llega via `endurecer['system_prompt']`; "" / ausente = no se
+    añade la flag (un run sin system editorial se comporta como antes).
+    """
+    return ["--system-prompt", system] if system else []
 
 
 def arg_session_persistence() -> list[str]:

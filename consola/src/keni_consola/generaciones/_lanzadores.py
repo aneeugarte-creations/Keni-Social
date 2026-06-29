@@ -169,14 +169,16 @@ def _argv_claude(
         globales para ese run. Se aplican solo si vienen; si no, se usan los globales.
       - `modelo`: nombre de modelo para ESE run (`--model <modelo>`). Lo usan los parseos de
         insumos / investigacion (Haiku via `config.insumos_modelo()`). "" / ausente = default.
-    Los overrides de seguridad solo pueden ENDURECER (vetar mas, topar mas bajo); `modelo`
-    solo SELECCIONA el modelo del run (no relaja nada).
-
+      - `system_prompt`: system prompt del run (`--system-prompt <texto>`). Lo usa la etapa de
+        copy para enviar la linea editorial ESTABLE de la marca (cacheable byte-identico por
+        marca/dia). Solo contenido CONFIABLE; "" / ausente = no se añade la flag.
       - `sin_tools`: True para una etapa JSON-in/JSON-out que NO usa herramienta alguna
         (Decisor de formato, Sugerir-hashtags, Traducir). Emite `--tools ""` (cero tools) en
         vez de `--disallowed-tools`: no se expone NINGUN esquema de tool en el system prompt
         (ahorro ~17k tokens/llamada). Con cero tools no hay nada que vetar ni filesystem que
         abrir, así que `--disallowed-tools` y `--add-dir` quedan fuera de ESE run.
+    Los overrides de seguridad solo pueden ENDURECER (vetar mas, topar mas bajo); `modelo` y
+    `system_prompt` solo CONFIGURAN el run (no relajan nada).
     """
     endurecer = endurecer or {}
     sin_tools = bool(endurecer.get("sin_tools"))
@@ -232,6 +234,13 @@ def _argv_claude(
     # el job fija su propio `--model` (p.ej. Haiku para parsing), se respeta su eleccion.
     arg_fallback = stream.arg_fallback_model(omitir=bool(modelo))
 
+    # System prompt del job (`endurecer["system_prompt"]`): la etapa de copy envia aqui el
+    # contexto editorial ESTABLE de la marca (cuerpo base + linea editorial + indicaciones),
+    # byte-identico por marca/dia, para que el proveedor lo cachee de verdad. Solo contenido
+    # CONFIABLE (interno): la fuente NO confiable se queda en el mensaje de usuario con su
+    # envelope anti-inyeccion. "" / ausente = no se añade (se comporta como antes).
+    arg_system = stream.arg_system_prompt(str(endurecer.get("system_prompt") or ""))
+
     return [
         "claude", "-p", prompt,
         "--output-format", "stream-json", "--verbose", "--include-partial-messages",
@@ -242,8 +251,11 @@ def _argv_claude(
         # Defensa en profundidad anti prompt-injection: veta herramientas peligrosas (por
         # defecto `Bash`/`Write`/`Edit`, mas las extra del job). Va DESPUES de skip-permisos.
         *arg_tools,
-        # El copy no pasa `--system-prompt`: excluimos las secciones dinamicas (entorno/CWD/git)
-        # del system prompt de Claude Code, que son ruido para la generacion.
+        # Linea editorial estable de la marca como system prompt (solo el copy la pasa). Vacio
+        # en el resto de flujos => no se añade la flag.
+        *arg_system,
+        # Las secciones dinamicas del system prompt de Claude Code (entorno/CWD/git) son ruido
+        # para la generacion (cwd neutro), pase o no el copy su propio `--system-prompt`.
         *stream.arg_excluir_secciones_dinamicas(),
         # El copy es one-shot: no persistimos la sesion en disco (el `session_id` se sigue
         # emitiendo en el stream). Reactivable con `KENI_CLAUDE_SESSION_PERSISTENCE`.

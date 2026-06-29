@@ -405,6 +405,7 @@ from .config_generacion import (  # noqa: F401
     claude_session_persistence,
     claude_skip_permisos,
     claude_timeout,
+    copy_system_prompt_activo,
 )
 from .config_hosted import (  # noqa: F401
     database_url,
