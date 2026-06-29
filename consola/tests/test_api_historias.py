@@ -553,10 +553,12 @@ def test_descartar_borra_la_historia_y_deja_lapida(cliente):
     assert r.status_code == 200, r.text
     assert r.json()["historia"]["estado"] == "descartado"
     assert repos.obtener_noticia_cluster("c1") is None  # la fila se borró
-    # El item sobrevive como lápida `descartado` (bloquea la re-ingesta).
+    # El item sobrevive como lápida `descartado` (bloquea la re-ingesta) y suelta su `cluster_id`
+    # (el cluster ya no existe: no debe quedar colgando de una fila inexistente).
     items, _ = repos.listar_noticias_items(limite=500)
-    lapidas = [it for it in items if it["cluster_id"] == "c1"]
+    lapidas = [it for it in items if it["url"] == "https://a.com/1"]
     assert lapidas and all(it["estado"] == "descartado" for it in lapidas)
+    assert all(it["cluster_id"] == "" for it in lapidas)
 
 
 def test_descartar_inexistente_404(cliente):

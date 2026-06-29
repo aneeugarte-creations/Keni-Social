@@ -319,7 +319,7 @@ def purgar_pool_irrelevante(
             r["id"]
             for r in con.execute(  # noqa: S608 -- condición estática; valores parametrizados
                 f"SELECT id FROM noticias_clusters WHERE {cond_clusters}", (score_umbral, cutoff)
-            )
+            ).fetchall()
         ]
         cur_cl = con.execute(  # noqa: S608 -- condición estática; valores parametrizados
             f"DELETE FROM noticias_clusters WHERE {cond_clusters}", (score_umbral, cutoff)
