@@ -176,7 +176,7 @@ function olvidarDetalle(id) {
     document.getElementById("detalle").innerHTML = `<div class="vacio">Selecciona una detección para ver el razonamiento.</div>`; }
 }
 async function borrarSesion(id) {
-  if (!confirm("¿Borrar esta detección?")) return;
+  // Borrado directo (sin confirmación): una detección es desechable y la papelera está por fila.
   try { await fetch(`/api/sesiones/${id}/borrar`, {method:"POST"}); olvidarDetalle(id); refrescarLista(); }
   catch { alert("Error de red al borrar."); }
 }
