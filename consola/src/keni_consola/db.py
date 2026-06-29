@@ -354,6 +354,7 @@ from .db_noticias import (  # noqa: F401
     marcar_etiquetas_revisadas,
     marcar_item,
     marcar_items_cluster_usados,
+    desmarcar_items_cluster_usados,
     marcar_noticia_algoritmo,
     notas_por_etiqueta,
     noticia_item_por_clave,
@@ -663,6 +664,7 @@ __all__ = [
     "limpiar_items_cluster_colgante",
     "limpiar_traduccion_encolada",
     "marcar_items_cluster_usados",
+    "desmarcar_items_cluster_usados",
     "ESTADOS_NOTICIA_CLUSTER",
     # Traducción + verificación de historias (Ola D).
     "clusters_extranjeros_sin_traducir",
