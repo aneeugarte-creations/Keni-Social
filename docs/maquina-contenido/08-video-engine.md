@@ -18,7 +18,7 @@ Decisión de arquitectura (tomada):
   colgarse de Actividad IA + streaming, vía un **camino de job genérico (no-claude)**.
 
 Esta Ola G nació como **BASE COMPARTIDA / CONTRATO** entre cuatro agentes en paralelo.
-**Ya está toda construida** (render FFmpeg, ASR, `api/video.py`, UI `EstudioVideo`). Lo que
+**Ya está toda construida** (render FFmpeg, ASR, `api/video.py`, UI `Video.tsx`). Lo que
 sigue describe el esquema JSON, las tablas, los job kinds, la superficie API, las
 convenciones S3 y los presets de formato — sigue siendo la referencia vigente del motor.
 
@@ -31,7 +31,7 @@ convenciones S3 y los presets de formato — sigue siendo la referencia vigente 
 | Render FFmpeg | `consola/src/keni_consola/motores/estudio_video/` (`ejecutar_render`) | **listo** |
 | ASR subtítulos | `consola/src/keni_consola/motores/transcripcion/` (`ejecutar_transcripcion`) | **listo** |
 | API HTTP | `consola/src/keni_consola/api/video.py` | **listo** (declarado en `apps/produccion.toml`) |
-| UI Estudio de Video | `consola/frontend/src/pages/EstudioVideo.tsx` | **listo** |
+| UI Estudio de Video | `consola/frontend/src/pages/Video.tsx` | **listo** |
 | Presets + validador | `keni-shared/src/keni_shared/video.py` | **listo** |
 | Tablas + CRUD | `db.py` / `repos.py` | **listo** |
 | Seam job genérico | `dominio/jobspec.py` + `generaciones.py` + `worker.py` | **listo** |

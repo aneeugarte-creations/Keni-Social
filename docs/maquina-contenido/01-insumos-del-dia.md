@@ -61,7 +61,7 @@ creado          TEXT NOT NULL DEFAULT ''
 ```
 Índices: `(fecha, cajon)`, `(lote_id)`, `(marca, fecha)`.
 
-## Parseo (dominio/insumos_parse.py)
+## Parseo (dominio/recibir_parse.py)
 
 Reutiliza el patrón **síncrono** de `importador_calendario._ejecutar_claude_json`
 / `extraer_con_claude` (escribe a temp dir, corre `claude -p <prompt>
@@ -80,7 +80,7 @@ Cada item del JSON de Haiku: `titulo` (oblig.), `resumen`, `marca` (nombre o
 (nota|cobertura|evento), `idioma`. Normaliza marca por nombre→id con
 `marcas`. Item sin título => error de fila, no rompe el resto.
 
-**Prompt por cajón** (uno por tipo, en `insumos_parse.py`):
+**Prompt por cajón** (uno por tipo, en `recibir_parse.py`):
 - `portal`: parte la lista numerada; cada `N.- TITULAR`+cuerpo => item
   `tipo=nota`. Clasifica marca: deportes→`claro-sports`, videojuegos→`nacion-gamer`, resto→`unotv`.
 - `corresponsales`: cada línea `VOSOT/VO/FT ESTADO (REPORTERO) TITULAR - Tengo/Espero material`
@@ -143,6 +143,13 @@ Lleva el item al tablero reutilizando el camino existente de aportación
 `generar` y hay marca, encola copy como hace `api/fuentes.aportar`). Marca el
 item `usado=1`, guarda `contenido_id`. → `{ "item": {Item}, "contenido_id": "..." }`
 
+### `POST /api/insumos/item/{id}/crear-evento`  (JSON opc: `{ "tipo_cobertura"?, "prioridad"? }`)
+Convierte un ítem del cajón `eventos_claro` en un evento de la rota (`repos.crear_evento_rota`):
+mapea `titulo→titulo`, `fecha→fecha`, `hora→hora`, `resumen→nota` y propaga la `marca`. Marca el
+ítem `usado=1` guardando el id del evento en `publicacion_id` (reusa el campo). Idempotente: si el
+ítem ya está usado devuelve su estado sin crear otro. Rechaza ítems `tipo=contexto` (guía editorial,
+no genera eventos) y exige `titulo` + `fecha`. → `{ "item": {Item}, "evento": {Evento} }`
+
 ### `DELETE /api/insumos/lote/{id}`  → `{ "ok": true }` (borra lote + sus items)
 
 ## Formas JSON (frontend types.ts)
@@ -176,31 +183,9 @@ interface RespuestaDiasInsumos { dias: DiaInsumos[]; }
 El backend devuelve `marca_nombre` resolviendo `marca` con `marcas.etiqueta_de(...)`
 (como `api/rss.py`). `usado` se serializa como `bool`.
 
-## Frontend (página + navegación)
+## Frontend
 
-- Ruta nueva `/datos/investigacion/cajones` (lazy en `router.tsx`).
-- Tab "Cajones del día" en `TABS_INVESTIGACION` (`components/layout/hub-tabs.ts`),
-  icono lucide adecuado (p.ej. `Inbox`).
-- Página `pages/CajonesDia.tsx`:
-  - `PageHeader` + selector de **fecha** (def hoy) + selector de **historial**
-    de días (de `GET /api/insumos/dias`).
-  - 4 tarjetas (Portal/SMS · Corresponsales · Reporteros · Eventos Claro). Cada
-    una: `textarea` para pegar + `input file` + botón **Procesar** →
-    `POST aportar` (loading mientras parsea) → lista de items **limpia y
-    ordenada** con badges (marca, línea, hora, `estado_material`), acciones
-    **Llevar al tablero** / editar / borrar lote.
-  - Reusa primitivas shadcn de `@/components/ui` y badges de
-    `@/components/comunes`. React Query (`useQuery`/`useMutation`).
-- `lib/api.ts`: `insumos.listar(fecha, signal)`, `insumos.dias(signal)`,
-  `insumos.aportar(form)`, `insumos.lote(id)`, `insumos.editarItem(id, campos)`,
-  `insumos.usarItem(id, body)`, `insumos.borrarLote(id)`. Subida de archivo con
-  `FormData` y `timeoutMs: 200_000` (el parse Haiku puede tardar).
-
-## Reglas de trabajo (CLAUDE.md)
-- Trabajar SOLO en el worktree `~/projects/keni-social-maquina`.
-- **No** correr la suite de pytest ni levantar Postgres en local. Backend: valida
-  con `ruff check` y un import sano (`python -c "import keni_consola.api.insumos"`
-  con `DATABASE_URL` dummy si hace falta). Escribe tests (los corre el CI).
-- Frontend: valida con `npm run typecheck`/`tsc -b` y `npm run lint`. Escribe tests
-  (vitest) colocalizados.
-- No tocar el bundle vendorizado en `webapp/`.
+La UI de los cajones vive en `pages/CajonesDia.tsx` y se monta **dentro de Fuentes**
+(`pages/Fuentes.tsx`, sección de fuentes internas del hub Investigación), no en una ruta propia.
+El cliente HTTP está en `lib/api/` (`insumos.*`); la subida de archivo usa `FormData` con timeout
+amplio (el parse Haiku puede tardar). La verdad de la superficie vive en esos componentes.
