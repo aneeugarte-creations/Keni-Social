@@ -26,6 +26,7 @@ CI="${KENI_KEEPER_CI:-0}"
 CI_WATCH="${KENI_KEEPER_CI_WATCH:-/keeper/ci_watch.py}"
 CI_MAX="${KENI_KEEPER_CI_MAX:-3}"        # tope de sesiones de fix de CI por ventana
 CI_VENTANA_MIN="${KENI_KEEPER_CI_VENTANA_MIN:-30}"
+CI_ABORT_INTERVALO="${KENI_KEEPER_CI_ABORT_INTERVALO:-20}"  # cada cuánto comprueba el watchdog de aborto
 # Rastro de sesiones para la UI INDEPENDIENTE (guardian-ui): el keeper deja aquí, en el volumen
 # compartido /data, el stream-json de cada sesión + su meta + un heartbeat de vigilancia. La UI
 # (otro contenedor) sólo LEE esto; no depende del back/db.
@@ -41,8 +42,8 @@ CI_INTENTOS=/tmp/keni-keeper.ci-intentos  # marcas de tiempo de intentos recient
 log() { echo "incident-keeper: $*"; }
 
 # Lanza UNA sesión claude -p en un worktree limpio desde origin/main. $1 = texto del incidente.
-correr_keeper() {  # $1 = texto del incidente ; $2 = trigger (etiqueta corta para la UI)
-  texto="$1"; trigger="${2:-incidente}"
+correr_keeper() {  # $1 = texto ; $2 = trigger (etiqueta UI) ; $3 = nº pipeline CI (vacío=incidente prod)
+  texto="$1"; trigger="${2:-incidente}"; ci_num="${3:-}"
   : > "$LOCK"
   mkdir -p "$DATA" 2>/dev/null || true
   sid="$(date +%s)"
@@ -74,18 +75,42 @@ verde. Si debes ESCALAR (fuera de tus límites o causa no clara), NO actúes: de
 diagnóstico claro y el plan para un humano."
 
     log "claude -p en $wt (rama $rama)"
-    # `tee` al jsonl de la sesión (lectura casi en vivo para la UI) y a stdout (docker logs).
-    ( cd "$wt" && claude -p "$prompt" \
+    abort_flag="$DATA/$sid.abort"; rm -f "$abort_flag"
+    # claude con `exec`: el subshell se REEMPLAZA por claude, así $cl_pid ES el proceso claude y el
+    # watchdog puede abortarlo. La salida va al jsonl (la UI lo lee del fichero, no de stdout).
+    ( cd "$wt" && exec claude -p "$prompt" \
         --output-format stream-json --verbose --include-partial-messages \
-        --dangerously-skip-permissions --model "$MODELO" ) 2>&1 | tee "$jsonl"
+        --dangerously-skip-permissions --model "$MODELO" ) > "$jsonl" 2>&1 &
+    cl_pid=$!
+    # Watchdog de ABORTO (solo en fix de CI): si mientras arreglamos aparece un pipeline MÁS NUEVO en
+    # verde, el rojo ya lo resolvió otro commit -> matamos el claude para no arreglar lo ya arreglado.
+    wd_pid=""
+    if [ -n "$ci_num" ]; then
+      ( while kill -0 "$cl_pid" 2>/dev/null; do
+          sleep "$CI_ABORT_INTERVALO"
+          if python3 "$CI_WATCH" --verde-despues "$ci_num" >/dev/null 2>&1; then
+            log "CI #$ci_num: pipeline VERDE más nuevo -> aborto el fix (ya resuelto por otro commit)"
+            : > "$abort_flag"
+            kill -TERM "$cl_pid" 2>/dev/null; sleep 5; kill -KILL "$cl_pid" 2>/dev/null
+            break
+          fi
+        done ) &
+      wd_pid=$!
+    fi
+    wait "$cl_pid" 2>/dev/null
+    [ -n "$wd_pid" ] && kill "$wd_pid" 2>/dev/null
 
-    # ¿Commiteó/pusheó? El HEAD del worktree distinto de la base = fix promovido.
+    # ¿Commiteó/pusheó? El HEAD del worktree distinto de la base = fix promovido (gana al aborto: si
+    # llegó a commitear, el fix es real). Si no commiteó pero el watchdog abortó -> `abortado`.
     head="$(git -C "$wt" rev-parse HEAD 2>/dev/null)"
     if [ -n "$head" ] && [ "$head" != "$base" ]; then
       commit_sha="$head"; commit_msg="$(git -C "$wt" log -1 --format=%s 2>/dev/null)"; estado=resuelto
+    elif [ -f "$abort_flag" ]; then
+      estado=abortado   # un pipeline más nuevo salió verde mientras arreglaba: el rojo ya no existía
     else
       estado=escalado   # terminó sin commitear: o escaló, o no había nada que arreglar
     fi
+    rm -f "$abort_flag"
     git -C "$REPO" worktree remove --force "$wt" >/dev/null 2>&1 || true
     git -C "$REPO" branch -D "$rama" >/dev/null 2>&1 || true
     log "fin de la sesión ($estado); worktree limpio"
@@ -95,8 +120,11 @@ diagnóstico claro y el plan para un humano."
 
   # Meta final: estado + commit + coste/tokens (sesion.py parsea el `result` del jsonl). Si el
   # jsonl trae is_error, sesion.py lo marca y la UI lo pinta.
+  nota=""
+  [ "$estado" = abortado ] && nota="Abortado: un pipeline más nuevo salió verde; el rojo ya estaba resuelto."
   python3 "$KEEPER_DIR/sesion.py" "$meta" "$jsonl" estado="$estado" \
-    fin="$(date -u +%Y-%m-%dT%H:%M:%SZ)" commit_sha="$commit_sha" commit_msg="$commit_msg" 2>/dev/null || true
+    fin="$(date -u +%Y-%m-%dT%H:%M:%SZ)" commit_sha="$commit_sha" commit_msg="$commit_msg" \
+    ${nota:+"nota=$nota"} 2>/dev/null || true
   # Retención: conserva los $RETENCION más recientes (jsonl + meta).
   ls -1t "$DATA"/*.meta.json 2>/dev/null | tail -n +"$((RETENCION + 1))" | while read -r m; do
     rm -f "$m" "${m%.meta.json}.jsonl" 2>/dev/null || true
@@ -146,7 +174,7 @@ while :; do
         correr_keeper "El pipeline #$num de \`main\` está ROJO en el CI (Woodpecker). Es un fix de
 CÓDIGO: arréglalo según la sección de CI de tu rol y promueve a main. Evidencia:
 
-$ci" "CI #$num"
+$ci" "CI #$num" "$num"
       fi
     fi
   fi

@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
-"""Watcher de CI para el incident-keeper: replica el disparo del "green keeper".
+"""Watcher de CI para el incident-keeper: decide QUÉ rojo de `main` arreglar, de forma inteligente.
 
-Mira el estado del ÚLTIMO pipeline de `main` en Woodpecker y, si está ROJO (estado terminal
-failure/error), imprime un bloque con el número del pipeline, el mensaje del commit y los fallos
-REALES de los steps en rojo (FAILED/ERROR/error TS/violaciones de frontera). El keeper usa esa
-salida como evidencia para lanzar un claude -p que lo arregle.
+NO mira solo el último pipeline (casi siempre `running` con ~7 agentes empujando: inútil). Mira el
+ÚLTIMO que CORRIÓ COMPLETO (con veredicto real: success/failure/error; salta los running/pendientes
+y los cancelados) y solo dispara si ESE falló. Así:
+- Si el último completo está VERDE, no hay nada que arreglar aunque haya rojos más viejos.
+- Si el último completo está ROJO, imprime el bloque (nº de pipeline + commit + fallos REALES de los
+  steps en rojo) que el keeper usa como evidencia para lanzar un claude -p.
+
+Además expone `--verde-despues <N>`: sale 0 si existe un pipeline MÁS NUEVO que `N` ya en verde
+(success). El keeper lo usa como watchdog para ABORTAR un fix en curso cuando otro commit ya dejó
+`main` verde (no arreglar algo ya arreglado).
 
 Dos fuentes, seleccionadas por entorno:
 - API REST de Woodpecker (`KENI_WOODPECKER_API` definido): la vía desacoplada. No depende del
   esquema interno ni del backend (sqlite/postgres) del server.
 - SQLite del datastore (`KENI_WOODPECKER_DB`, montado read-only): fallback histórico.
 
-No imprime nada si el último pipeline está verde, corriendo/pendiente, o no hay datos: en esos
-casos no hay nada que arreglar. Solo lectura e idempotente (no toca Woodpecker).
+Solo lectura e idempotente (no toca Woodpecker).
 """
 import datetime
 import json
@@ -27,6 +32,12 @@ REPO = int(os.environ.get("KENI_KEEPER_REPO_ID", "1"))
 API = os.environ.get("KENI_WOODPECKER_API", "").rstrip("/")
 TIMEOUT = float(os.environ.get("KENI_WOODPECKER_API_TIMEOUT", "8"))
 TERMINAL_FALLO = {"failure", "error"}
+# Estados que significan "el pipeline corrió hasta un VEREDICTO real" (no en curso, no cancelado).
+# `killed`/`declined`/`blocked`/`skipped` son cancelaciones/saltos: no son un veredicto, se ignoran
+# al buscar el último completo (queremos el último que de verdad pasó o falló).
+COMPLETADO = {"success", "failure", "error"}
+# Cuántos pipelines recientes traer para decidir (cubre de sobra la racha de pushes en paralelo).
+PERPAGE = int(os.environ.get("KENI_KEEPER_CI_PERPAGE", "20"))
 # exit_code 126 = el step lo CANCELÓ un push posterior (no es un fallo real). Un pipeline cuyos
 # steps en rojo son TODOS 126 está cancelado, no roto: NO se arregla. Con ~7 agentes empujando en
 # paralelo las cancelaciones son constantes; sin este filtro el keeper "arreglaría" nada en bucle.
@@ -74,13 +85,12 @@ def _api_get(path: str):
         return cuerpo
 
 
-def _ultimo_pipeline_api():
-    """Último pipeline vía API: (number, status, message, id) o None."""
-    datos = _api_get(f"/api/repos/{REPO}/pipelines?page=1&perPage=1")
-    if not isinstance(datos, list) or not datos:
-        return None
-    p = datos[0]
-    return (p.get("number"), p.get("status"), p.get("message") or "", p.get("id"))
+def _pipelines_api(n: int):
+    """Últimos `n` pipelines vía API: lista de (number, status, message, id), más nuevo primero."""
+    datos = _api_get(f"/api/repos/{REPO}/pipelines?page=1&perPage={n}")
+    if not isinstance(datos, list):
+        return []
+    return [(p.get("number"), p.get("status"), p.get("message") or "", p.get("id")) for p in datos]
 
 
 def _steps_rojos_api(number):
@@ -116,27 +126,54 @@ def _con_sqlite():
         return None
 
 
-def _ultimo_pipeline_sqlite():
-    """Último pipeline vía sqlite: (number, status, message, id) o None."""
+def _pipelines_sqlite(n: int):
+    """Últimos `n` pipelines vía sqlite: lista de (number, status, message, id), más nuevo primero."""
     con = _con_sqlite()
     if con is None:
-        return None
+        return []
     try:
-        fila = con.execute(
+        filas = con.execute(
             "SELECT number, status, message, id FROM pipelines WHERE repo_id=? "
-            "ORDER BY number DESC LIMIT 1",
-            (REPO,),
-        ).fetchone()
-        return fila
+            "ORDER BY number DESC LIMIT ?",
+            (REPO, n),
+        ).fetchall()
+        return [tuple(f) for f in filas]
     except sqlite3.Error:
-        return None
+        return []
     finally:
         con.close()
 
 
+def pipelines_recientes(n: int = PERPAGE):
+    """Últimos `n` pipelines de `main` (más nuevo primero), según la fuente activa."""
+    return _pipelines_api(n) if API else _pipelines_sqlite(n)
+
+
 def ultimo_pipeline():
-    """Último pipeline de `main`: (number, status, message, id) o None, según fuente activa."""
-    return _ultimo_pipeline_api() if API else _ultimo_pipeline_sqlite()
+    """El pipeline MÁS NUEVO (sea cual sea su estado): para el heartbeat de la UI."""
+    pls = pipelines_recientes(1)
+    return pls[0] if pls else None
+
+
+def objetivo_rojo(pipelines):
+    """El rojo a arreglar = el ÚLTIMO pipeline que CORRIÓ COMPLETO, si falló.
+
+    Recorre del más nuevo al más viejo y se queda con el primero que tenga veredicto real
+    (`COMPLETADO`): si es failure/error -> ese es el objetivo; si es success -> None (el último
+    completo está verde: nada que arreglar, aunque haya rojos más viejos). Si ninguno corrió
+    completo todavía (todos en curso/cancelados) -> None.
+    """
+    for fila in pipelines:
+        status = fila[1]
+        if status in COMPLETADO:
+            return fila if status in TERMINAL_FALLO else None
+    return None
+
+
+def hay_verde_despues(pipelines, number: int) -> bool:
+    """¿Existe un pipeline MÁS NUEVO que `number` ya en verde (success)? (watchdog de aborto)."""
+    return any(num is not None and num > number and status == "success"
+               for num, status, *_ in pipelines)
 
 
 def fallos_pipeline(number, pid):
@@ -206,12 +243,18 @@ def main() -> None:
         heartbeat(sys.argv[2], sys.argv[3])
         return
 
-    ult = ultimo_pipeline()
-    if not ult:
-        return
-    number, status, message, pid = ult
-    if status not in TERMINAL_FALLO:
-        return  # verde, corriendo o pendiente: nada que arreglar
+    # Modo watchdog: `ci_watch.py --verde-despues <N>` -> sale 0 si hay un pipeline > N en verde.
+    if len(sys.argv) >= 3 and sys.argv[1] == "--verde-despues":
+        try:
+            n = int(sys.argv[2])
+        except ValueError:
+            sys.exit(1)
+        sys.exit(0 if hay_verde_despues(pipelines_recientes(), n) else 1)
+
+    obj = objetivo_rojo(pipelines_recientes())
+    if not obj:
+        return  # el último pipeline COMPLETO está verde (o ninguno corrió completo): nada que arreglar
+    number, status, message, pid = obj
 
     _pasos, lineas, fallo_real = fallos_pipeline(number, pid)
 
