@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
  * Indicador SUTIL del uso de las cuentas de Claude del servidor, alojado en el pie del sidebar
  * junto al control «Colapsar». Reutiliza el lenguaje visual de `PanelActualizando` (hilo de 1px,
  * avance discreto, nada de cajas ni alarmas): expandido pinta dos medidores mini (Semana / 5h) por
- * cuenta; colapsado, un círculo con el % semanal y un anillo secundario para la ventana de 5 h.
+ * cuenta; colapsado, un único anillo fino con el % semanal (la ventana de 5 h va al tooltip).
  *
  * QUÉ CUENTAS muestra: el backend devuelve solo las que el usuario PUEDE ver (suelo por marcas);
  * de esas, el selector de marca activo (`useMarcaActiva`) decide cuál(es) PINTAR — en "Todas"
@@ -95,56 +95,29 @@ function MiniMedidor({
   );
 }
 
-/** Círculo del rail colapsado: anillo externo = semana, anillo interno = 5 h, número = % semanal. */
-function CirculoUso({
-  semana,
-  sesion5h,
-  rojo,
-}: {
-  semana: number | null;
-  sesion5h: number | null;
-  rojo: boolean;
-}) {
-  const rExt = 15.5;
-  const rInt = 11;
-  const cExt = 2 * Math.PI * rExt;
-  const cInt = 2 * Math.PI * rInt;
+/** Círculo del rail colapsado: un único anillo fino con el % semanal; la ventana de 5 h va al tooltip. */
+function CirculoUso({ semana, rojo }: { semana: number | null; rojo: boolean }) {
+  const r = 15.5;
+  const c = 2 * Math.PI * r;
   const sem = pctEntero(semana);
-  const ses = pctEntero(sesion5h);
   const colorTrazo = rojo ? "hsl(var(--destructive))" : "hsl(var(--foreground))";
   return (
-    <svg viewBox="0 0 36 36" className="h-8 w-8" aria-hidden="true">
-      {/* Pistas (lo no usado): mismo gris fino del hilo de PanelActualizando. */}
-      <circle cx="18" cy="18" r={rExt} fill="none" stroke="hsl(var(--border))" strokeWidth="2.5" />
-      <circle cx="18" cy="18" r={rInt} fill="none" stroke="hsl(var(--border))" strokeWidth="1.5" />
-      {/* Progreso: semana (externo) + sesión 5 h (interno, secundario). Arranca arriba (-90°). */}
+    <svg viewBox="0 0 36 36" className="h-[22px] w-[22px]" aria-hidden="true">
+      {/* Pista (lo no usado): mismo gris fino del hilo de PanelActualizando. */}
+      <circle cx="18" cy="18" r={r} fill="none" stroke="hsl(var(--border))" strokeWidth="2" />
+      {/* Progreso: % semanal. Arranca arriba (-90°). */}
       {sem != null && (
         <circle
           cx="18"
           cy="18"
-          r={rExt}
+          r={r}
           fill="none"
           stroke={colorTrazo}
-          strokeWidth="2.5"
+          strokeWidth="2"
           strokeLinecap="round"
-          strokeDasharray={cExt}
-          strokeDashoffset={cExt * (1 - sem / 100)}
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - sem / 100)}
           transform="rotate(-90 18 18)"
-        />
-      )}
-      {ses != null && (
-        <circle
-          cx="18"
-          cy="18"
-          r={rInt}
-          fill="none"
-          stroke={colorTrazo}
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeDasharray={cInt}
-          strokeDashoffset={cInt * (1 - ses / 100)}
-          transform="rotate(-90 18 18)"
-          opacity="0.55"
         />
       )}
       <text
@@ -152,8 +125,8 @@ function CirculoUso({
         y="18"
         textAnchor="middle"
         dominantBaseline="central"
-        className={cn("text-[10px] tabular-nums", rojo ? "fill-destructive" : "fill-muted-foreground")}
-        style={{ fontSize: "11px" }}
+        className={cn("tabular-nums", rojo ? "fill-destructive" : "fill-muted-foreground")}
+        style={{ fontSize: "13px" }}
       >
         {sem == null ? "—" : sem}
       </text>
@@ -187,7 +160,7 @@ function CirculoCuenta({ uso }: { uso: UsoCuenta }) {
   return (
     <Tooltip label={etiqueta} side="right">
       <div aria-label={etiqueta} className="flex items-center justify-center">
-        <CirculoUso semana={uso.semana_pct} sesion5h={uso.sesion_5h_pct} rojo={uso.alerta_roja} />
+        <CirculoUso semana={uso.semana_pct} rojo={uso.alerta_roja} />
       </div>
     </Tooltip>
   );
@@ -211,7 +184,7 @@ function IndicadorUsoContenido({ colapsado }: { colapsado: boolean }) {
       return (
         <Tooltip label="Uso de la cuenta" side="right">
           <div aria-label="Uso de la cuenta" className="flex items-center justify-center">
-            <CirculoUso semana={null} sesion5h={null} rojo={false} />
+            <CirculoUso semana={null} rojo={false} />
           </div>
         </Tooltip>
       );
