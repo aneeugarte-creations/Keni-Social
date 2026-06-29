@@ -198,7 +198,13 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
             continue
         if item.get("id") in ya_generados:
             continue
-        if _tiene_copy(item.get("id", "") or ""):
+        tema_id = item.get("id", "") or ""
+        # Un tema SIN ninguna pieza no es redactable: el copy no tendría dónde aterrizar, así que
+        # nunca quedaría "con copy" y el barrido lo re-elegiría cada ciclo (bucle de gasto). Hoy las
+        # vías de admisión crean piezas por defecto; este guard corta cualquier tema malformado.
+        if not repos.listar_piezas_fila(tema_id):
+            continue
+        if _tiene_copy(tema_id):
             continue
         elegidos.append(item)
     return elegidos

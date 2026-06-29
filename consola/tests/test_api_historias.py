@@ -519,6 +519,16 @@ def test_usar_con_redes_crea_plataformas(cliente):
     assert len(r.json()["contenido"]["plataformas"]) == 2
 
 
+def test_usar_sin_redes_usa_las_de_foto_por_defecto(cliente):
+    # Sin redes pedidas, el tema nace con las de FOTO (instagram/x/facebook): nunca queda SIN
+    # piezas —un tema sin piezas no es redactable y el barrido lo re-elegiría sin fin—.
+    _inicializar_cluster("c1")
+    r = cliente.post("/api/noticias/historias/c1/usar", json={"generar": False})
+    assert r.status_code == 200, r.text
+    plataformas = r.json()["contenido"]["plataformas"]
+    assert {p["red"] for p in plataformas} == {"instagram", "x", "facebook"}
+
+
 def test_usar_idempotente_si_ya_usada(cliente):
     _inicializar_cluster("c1")
     primero = cliente.post("/api/noticias/historias/c1/usar", json={"generar": False}).json()

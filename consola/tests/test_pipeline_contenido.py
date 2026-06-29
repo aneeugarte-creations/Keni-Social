@@ -1808,6 +1808,7 @@ def test_temas_autogen_sin_copy_selecciona_origenes_de_noticias(entorno):
     bueno = repos.crear_publicacion(
         clase="contenido", titulo="Noticia rss", marca="unotv", origen="rss",
     )
+    repos.crear_pieza_fila(publicacion_id=bueno["id"], red="x", falta_copy=True)
     repos.crear_publicacion(
         clase="contenido", titulo="Tecleado a mano", marca="unotv", origen="",
     )
@@ -1816,11 +1817,22 @@ def test_temas_autogen_sin_copy_selecciona_origenes_de_noticias(entorno):
     historia = repos.crear_publicacion(
         clase="contenido", titulo="Breaking curada", marca="unotv", origen="historia",
     )
+    repos.crear_pieza_fila(publicacion_id=historia["id"], red="x", falta_copy=True)
     ids = {t["id"] for t in pc.temas_autogen_sin_copy()}
     assert bueno["id"] in ids
     assert historia["id"] in ids
     # El tecleado (origen "") NO entra.
     assert len(ids) == 2
+
+
+def test_temas_autogen_sin_copy_salta_temas_sin_piezas(entorno):
+    """Un tema de origen auto-redactable pero SIN ninguna pieza NO se selecciona: el copy no
+    tendría dónde aterrizar y se re-elegiría cada ciclo (el bucle de gasto que esto corta)."""
+    sin_piezas = repos.crear_publicacion(
+        clase="contenido", titulo="Historia sin redes", marca="unotv", origen="historia",
+    )
+    ids = {t["id"] for t in pc.temas_autogen_sin_copy()}
+    assert sin_piezas["id"] not in ids
 
 
 def test_temas_autogen_sin_copy_incluye_temas_con_piezas_vacias(entorno):
@@ -1853,9 +1865,10 @@ def test_ejecutar_cd_funde_pool_via_autogen_lanzar(entorno, monkeypatch):
         autogen_redactar, "lanzar_para_topic",
         lambda item: lanzadas.append(item["id"]) or {"id": f"g-{item['id']}"},
     )
-    repos.crear_publicacion(
+    tema = repos.crear_publicacion(
         clase="contenido", titulo="Noticia pool", marca="unotv", origen="rss",
     )
+    repos.crear_pieza_fila(publicacion_id=tema["id"], red="x", falta_copy=True)
     lanzados = pc.ejecutar_redactar(autor=None)
     assert len(lanzadas) == 1
     assert len(lanzados) == 1
@@ -1872,9 +1885,10 @@ def test_ejecutar_cd_salta_pool_de_marca_apagada(entorno, monkeypatch):
         autogen_redactar, "lanzar_para_topic",
         lambda item: lanzadas.append(item["id"]) or {"id": "g"},
     )
-    repos.crear_publicacion(
+    apagada = repos.crear_publicacion(
         clase="contenido", titulo="Apagada", marca="unotv", origen="rss",
     )
+    repos.crear_pieza_fila(publicacion_id=apagada["id"], red="x", falta_copy=True)
     pc.ejecutar_redactar(autor=None)
     assert lanzadas == []
 

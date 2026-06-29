@@ -15,7 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ... import autogen_redactar, bootstrap_categorias, config, estados, marcas, repos
+from ... import autogen_redactar, bootstrap_categorias, config, estados, marcas, redes, repos
 from ..._http_json import leer_json
 from ...seguridad import autor_de_peticion
 from ...tiempo import hoy_utc
@@ -861,6 +861,10 @@ def _materializar_usar(
         fecha_fuente=fecha_fuente,
         url_fuente=url_fuente or "",
     )
+    # Sin redes pedidas, caen las de FOTO por defecto (instagram/x/facebook): un tema SIN ninguna
+    # pieza no es redactable —el copy no tiene dónde aterrizar— y el barrido lo re-elegiría sin fin.
+    if not redes_iniciales:
+        redes_iniciales = list(redes.redes_de_formato(redes.FORMATO_FOTO))
     for red in redes_iniciales:
         repos.crear_pieza_fila(
             publicacion_id=contenido["id"], red=red, falta_copy=True, falta_imagen=True
