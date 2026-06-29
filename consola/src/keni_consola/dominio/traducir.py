@@ -71,29 +71,66 @@ _metricas_hilo = threading.local()
 def _metricas_de_envelope(envelope: dict[str, Any]) -> dict[str, Any] | None:
     """Métricas del envelope de `claude -p --output-format json`, o None si no trae ninguna.
 
-    Forma compatible con `generaciones.metricas` (la que normaliza el dominio `actividad`):
-    `{tokens_in, tokens_out, total_cost_usd, duration_ms, num_turns}`. PURA y tolerante:
-    campos ausentes/ilegibles se omiten.
+    Forma compatible con `generaciones.metricas`: `{tokens_in, tokens_out, cache_read,
+    cache_creation, total_cost_usd, duration_ms, num_turns, modelo}`. Los tokens y la CACHÉ se
+    prefieren de `modelUsage` (suma por modelo: capta multi-modelo y multi-turno, donde el `usage`
+    de sesión solo refleja el último turno); fallback al `usage` agregado. El `modelo` sale de las
+    claves de `modelUsage` (coma-separado) o de `model`. Sin esto, los pasos inline del pool
+    (Fusionar/Macro/Traducir…) guardaban coste pero NO caché ni modelo, dejando el ledger con
+    caché 0 y modelo vacío (tokens descuadrados frente al coste real). PURA y tolerante: campos
+    ausentes/ilegibles se omiten.
     """
     if not isinstance(envelope, dict):
         return None
-    out: dict[str, Any] = {}
     usage = envelope.get("usage") if isinstance(envelope.get("usage"), dict) else {}
-    for destino, fuente, conv in (
-        ("tokens_in", usage.get("input_tokens"), int),
-        ("tokens_out", usage.get("output_tokens"), int),
-        ("total_cost_usd", envelope.get("total_cost_usd"), float),
-        ("duration_ms", envelope.get("duration_ms"), int),
-        ("num_turns", envelope.get("num_turns"), int),
+    model_usage = envelope.get("modelUsage") if isinstance(envelope.get("modelUsage"), dict) else {}
+
+    def _num(valor: object) -> int | float | None:
+        return valor if isinstance(valor, (int, float)) and not isinstance(valor, bool) else None
+
+    def _suma(campo_mu: str, campo_usage: str) -> int | None:
+        # Preferir la suma por modelo de `modelUsage`; si no aporta, caer al `usage` agregado.
+        total: int | None = None
+        for uso in model_usage.values():
+            n = _num(uso.get(campo_mu)) if isinstance(uso, dict) else None
+            if n is not None:
+                total = (total or 0) + int(n)
+        if total is None:
+            n = _num(usage.get(campo_usage))
+            total = int(n) if n is not None else None
+        return total
+
+    out: dict[str, Any] = {}
+    for destino, valor in (
+        ("tokens_in", _suma("inputTokens", "input_tokens")),
+        ("tokens_out", _suma("outputTokens", "output_tokens")),
+        ("cache_read", _suma("cacheReadInputTokens", "cache_read_input_tokens")),
+        ("cache_creation", _suma("cacheCreationInputTokens", "cache_creation_input_tokens")),
     ):
-        if isinstance(fuente, bool) or not isinstance(fuente, (int, float)):
-            continue
-        out[destino] = conv(fuente)
+        if valor is not None:
+            out[destino] = valor
+    coste = _num(envelope.get("total_cost_usd"))
+    if coste is not None:
+        out["total_cost_usd"] = float(coste)
+    for destino, fuente in (("duration_ms", envelope.get("duration_ms")), ("num_turns", envelope.get("num_turns"))):
+        n = _num(fuente)
+        if n is not None:
+            out[destino] = int(n)
+    modelos = [n for n in model_usage if isinstance(n, str) and n]
+    modelo = ", ".join(modelos) if modelos else (
+        envelope.get("model") if isinstance(envelope.get("model"), str) and envelope.get("model") else None
+    )
+    if modelo:
+        out["modelo"] = modelo
     return out or None
 
 
 def _acumular_metricas(metricas: dict[str, Any] | None) -> None:
-    """Suma `metricas` al acumulador del hilo (no-op con None)."""
+    """Suma `metricas` al acumulador del hilo (no-op con None).
+
+    Los campos numéricos se SUMAN entre las llamadas del paso; `modelo` (texto) se UNE
+    (nombres distintos, coma-separados) porque sumar cadenas no tiene sentido.
+    """
     if not metricas:
         return
     acc = getattr(_metricas_hilo, "acumulado", None)
@@ -101,7 +138,14 @@ def _acumular_metricas(metricas: dict[str, Any] | None) -> None:
         acc = {}
         _metricas_hilo.acumulado = acc
     for clave, valor in metricas.items():
-        acc[clave] = acc.get(clave, 0) + valor
+        if clave == "modelo":
+            vistos: list[str] = []
+            for n in str(acc.get("modelo", "")).split(", ") + str(valor).split(", "):
+                if n and n not in vistos:
+                    vistos.append(n)
+            acc["modelo"] = ", ".join(vistos)
+        else:
+            acc[clave] = acc.get(clave, 0) + valor
 
 
 def tomar_metricas_acumuladas() -> dict[str, Any] | None:

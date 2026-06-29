@@ -379,6 +379,42 @@ def test_metricas_de_envelope_extrae_y_tolera():
     assert traducir._metricas_de_envelope("no-dict") is None
 
 
+def test_metricas_de_envelope_capta_cache_y_modelo_de_model_usage():
+    """Con `modelUsage`: tokens y CACHÉ se SUMAN por modelo (no del `usage` de sesión, que en
+    multi-modelo solo refleja el último turno) y `modelo` sale de las claves de `modelUsage`."""
+    envelope = {
+        "result": "ok",
+        "total_cost_usd": 0.14,
+        "usage": {"input_tokens": 2, "output_tokens": 6},  # sesión: solo el último turno
+        "modelUsage": {
+            "claude-haiku-4-5-20251001": {
+                "inputTokens": 1000, "outputTokens": 200,
+                "cacheReadInputTokens": 5000, "cacheCreationInputTokens": 100,
+            },
+            "claude-sonnet-4-6": {
+                "inputTokens": 3000, "outputTokens": 900,
+                "cacheReadInputTokens": 18000, "cacheCreationInputTokens": 2000,
+            },
+        },
+    }
+    m = traducir._metricas_de_envelope(envelope)
+    assert m["tokens_in"] == 4000 and m["tokens_out"] == 1100
+    assert m["cache_read"] == 23000 and m["cache_creation"] == 2100
+    assert m["modelo"] == "claude-haiku-4-5-20251001, claude-sonnet-4-6"
+    assert m["total_cost_usd"] == pytest.approx(0.14)
+
+
+def test_metricas_de_envelope_cache_y_modelo_de_usage_y_model():
+    """Sin `modelUsage`: la caché sale del `usage` agregado y `modelo` del campo `model`."""
+    m = traducir._metricas_de_envelope({
+        "usage": {"input_tokens": 100, "output_tokens": 40,
+                  "cache_read_input_tokens": 7000, "cache_creation_input_tokens": 300},
+        "model": "claude-sonnet-4-6",
+    })
+    assert m["cache_read"] == 7000 and m["cache_creation"] == 300
+    assert m["modelo"] == "claude-sonnet-4-6"
+
+
 # --------------------------------------------------------------------------- #
 # Ejecutor real: argv (acotado no-agéntico vs. comportamiento por defecto)      #
 # --------------------------------------------------------------------------- #
@@ -541,3 +577,13 @@ def test_acumulador_de_metricas_suma_y_resetea():
     assert tomadas["tokens_out"] == 7
     assert tomadas["total_cost_usd"] == pytest.approx(0.03)
     assert traducir.tomar_metricas_acumuladas() is None
+
+
+def test_acumulador_une_modelo_sin_sumarlo():
+    """Los numéricos se suman; `modelo` (texto) se UNE sin duplicar (no se concatena/suma)."""
+    traducir.tomar_metricas_acumuladas()  # limpia restos del hilo
+    traducir._acumular_metricas({"tokens_in": 3, "modelo": "haiku"})
+    traducir._acumular_metricas({"tokens_in": 4, "modelo": "haiku, sonnet"})
+    tomadas = traducir.tomar_metricas_acumuladas()
+    assert tomadas["tokens_in"] == 7
+    assert tomadas["modelo"] == "haiku, sonnet"
