@@ -61,3 +61,43 @@ def test_imprimir_logs_sin_api_avisa(monkeypatch, capsys):
     monkeypatch.setattr(ci_watch, "API", "")
     ci_watch.imprimir_logs(57)
     assert "KENI_WOODPECKER_API" in capsys.readouterr().out
+
+
+def _raw(*tuplas):  # (number, status, commit) -> dicts como los de la API
+    return [{"number": n, "status": s, "commit": c, "message": "", "id": n * 10} for n, s, c in tuplas]
+
+
+def _mock_api(monkeypatch, raw):
+    monkeypatch.setattr(ci_watch, "API", "http://wp")
+    monkeypatch.setattr(ci_watch, "_api_get", lambda path: raw)
+
+
+def test_verdicto_resuelto_si_su_pipeline_verde(monkeypatch):
+    _mock_api(monkeypatch, _raw((60, "success", "abc123"), (59, "failure", "viejo")))
+    assert ci_watch.verdicto_fix("abc123") == "resuelto"
+
+
+def test_verdicto_fallido_si_rojo_y_sin_verde_nuevo(monkeypatch):
+    _mock_api(monkeypatch, _raw((60, "failure", "abc123")))
+    assert ci_watch.verdicto_fix("abc123") == "fallido"
+
+
+def test_verdicto_abortado_si_otro_commit_dejo_verde(monkeypatch):
+    # El fix del keeper (#60) salió rojo, pero #61 (de OTRO) salió verde -> no se acredita al keeper.
+    _mock_api(monkeypatch, _raw((61, "success", "otro"), (60, "failure", "abc123")))
+    assert ci_watch.verdicto_fix("abc123") == "abortado"
+
+
+def test_verdicto_verificando_mientras_corre(monkeypatch):
+    _mock_api(monkeypatch, _raw((60, "running", "abc123")))
+    assert ci_watch.verdicto_fix("abc123") == "verificando"
+
+
+def test_verdicto_commit_no_visto_main_verde_es_abortado(monkeypatch):
+    _mock_api(monkeypatch, _raw((70, "success", "otro"), (69, "failure", "x")))
+    assert ci_watch.verdicto_fix("abc123") == "abortado"
+
+
+def test_verdicto_commit_no_visto_main_rojo_sigue_verificando(monkeypatch):
+    _mock_api(monkeypatch, _raw((70, "failure", "otro")))
+    assert ci_watch.verdicto_fix("abc123") == "verificando"

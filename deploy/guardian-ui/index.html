@@ -29,7 +29,7 @@
   .ses:hover .borrar { opacity: .6; } .ses .borrar:hover { opacity: 1; color: var(--rojo); }
   .ses .meta2 { display: flex; gap: 10px; align-items: center; margin-top: 5px; color: var(--apag); font-size: 12px; flex-wrap: wrap; }
   .estado { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
-  .e-corriendo { color: var(--azul); } .e-resuelto { color: var(--verde); } .e-escalado { color: var(--ambar); } .e-error { color: var(--rojo); } .e-bloqueado-limite { color: var(--rojo); } .e-abortado { color: var(--apag); } .e-interrumpido { color: var(--apag); }
+  .e-corriendo { color: var(--azul); } .e-resuelto { color: var(--verde); } .e-escalado { color: var(--ambar); } .e-error { color: var(--rojo); } .e-bloqueado-limite { color: var(--rojo); } .e-abortado { color: var(--apag); } .e-interrumpido { color: var(--apag); } .e-verificando { color: var(--azul); } .e-fallido { color: var(--rojo); }
   .banner { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 16px; padding: 11px 14px; border-radius: 8px; background: rgba(255,92,92,.1); border: 1px solid rgba(255,92,92,.3); color: var(--txt); font-size: 13px; }
   .banner b { color: var(--rojo); } .banner .sub { color: var(--apag); display: block; margin-top: 3px; font-size: 12px; }
   .banner.info { background: rgba(79,134,255,.08); border-color: rgba(79,134,255,.3); } .banner.info b { color: var(--azul); }
@@ -88,8 +88,9 @@ const esc = s => (s ?? "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"
 const fmtHora = iso => { if (!iso) return ""; try { return new Date(iso).toLocaleString("es-ES", {day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}); } catch { return iso; } };
 const fmtCoste = m => m.coste_usd != null ? "$" + Number(m.coste_usd).toFixed(4) : "—";
 const fmtTok = m => (m.tokens_in != null || m.tokens_out != null) ? `${(m.tokens_in||0)+(m.tokens_out||0)} tok` : "";
-const ESTADO_LBL = { "bloqueado-limite": "límite", "abortado": "abortado", "interrumpido": "interrumpido" };
+const ESTADO_LBL = { "bloqueado-limite": "límite", "abortado": "abortado", "interrumpido": "interrumpido", "verificando": "verificando", "fallido": "fallido" };
 const lblEstado = e => ESTADO_LBL[e] || e || "";
+const pendiente = e => e === "corriendo" || e === "verificando";  // parpadea / sigue sondeando
 const CI_BASE = "https://ci-social.kenitech.io";
 const CIPIPE = n => `${CI_BASE}/repos/1/pipeline/${n}`;
 // "CI #42" -> el #42 enlazado a su pipeline; "incidente prod" (sin #N) -> texto plano.
@@ -112,7 +113,7 @@ function pintarLista(ses) {
   const el = document.getElementById("lista");
   if (!ses.length) { el.innerHTML = `<div class="ses" style="cursor:default;color:var(--apag)">Aún no hay detecciones.</div>`; return; }
   el.innerHTML = ses.map(m => {
-    const corr = m.estado === "corriendo";
+    const corr = pendiente(m.estado);
     return `<div class="ses ${m.id===sel?'sel':''}" data-id="${m.id}">
       <div class="fila"><span class="trig">${esc(m.trigger||"incidente")}</span>
         <span class="estado e-${m.estado} ${corr?'blink':''}">${esc(lblEstado(m.estado))}</span>
@@ -149,7 +150,7 @@ document.getElementById("blimpiar").onclick = limpiarHistorial;
 
 function pintarDetalle(d) {
   const el = document.getElementById("detalle"); const m = d.meta;
-  const corr = m.estado === "corriendo";
+  const corr = pendiente(m.estado);
   const items = (d.transcript||[]).map(it => {
     const et = it.tipo==="razonamiento" ? "razonamiento" : it.tipo==="accion" ? "acción" : "";
     return `<div class="item ${it.tipo} ${it.vivo?'cursor':''}">${et?`<span class="et">${et}</span>`:""}${esc(it.texto)}</div>`;
@@ -161,7 +162,11 @@ function pintarDetalle(d) {
     : m.estado === "abortado" ? `
     <div class="banner info">✋<div><b>Fix abortado.</b> ${esc(m.nota || "Apareció un pipeline más nuevo en verde mientras arreglaba: el rojo ya estaba resuelto.")}</div></div>`
     : m.estado === "interrumpido" ? `
-    <div class="banner info">⚠️<div><b>Sesión interrumpida.</b> ${esc(m.nota || "La sesión se cortó antes de terminar (reinicio del keeper o límite de tiempo).")}</div></div>` : "";
+    <div class="banner info">⚠️<div><b>Sesión interrumpida.</b> ${esc(m.nota || "La sesión se cortó antes de terminar (reinicio del keeper o límite de tiempo).")}</div></div>`
+    : m.estado === "verificando" ? `
+    <div class="banner info">⏳<div><b>Verificando el fix.</b> ${esc(m.nota || "Fix pusheado; esperando a que su pipeline termine para confirmar el verde.")}</div></div>`
+    : m.estado === "fallido" ? `
+    <div class="banner">❌<div><b>El fix no bastó.</b> ${esc(m.nota || "El pipeline del fix salió rojo.")}</div></div>` : "";
   el.innerHTML = `
     <div class="cab"><h2>${trigHTML(m.trigger)}</h2>
       <span class="estado e-${m.estado} ${corr?'blink':''}">${esc(lblEstado(m.estado))}</span>
@@ -185,7 +190,7 @@ async function seleccionar(id) {
     try {
       const r = await fetch(`/api/sesiones/${id}`); if (!r.ok) return;
       const d = await r.json(); pintarDetalle(d);
-      if (d.meta.estado !== "corriendo" && timerDet) { clearInterval(timerDet); timerDet = null; }
+      if (!pendiente(d.meta.estado) && timerDet) { clearInterval(timerDet); timerDet = null; }
     } catch {}
   };
   await cargar();

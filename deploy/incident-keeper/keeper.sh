@@ -123,17 +123,20 @@ diagnóstico claro y el plan para un humano."
     wait "$cl_pid" 2>/dev/null
     kill "$wd_pid" 2>/dev/null
 
-    # ¿RESUELTO? SOLO si el keeper PUSHEÓ un fix: un commit SUYO (autor del keeper) que aterrizó en
-    # `origin/main` durante la sesión. NO vale «HEAD del worktree != base»: el agente puede hacer
-    # `git fetch && git rebase origin/main` y mover su HEAD a un origin/main más nuevo (commits de
-    # OTROS) sin arreglar nada — eso daba falsos `resuelto` con el commit ajeno. Miramos el origin/main
-    # REAL (pusheado), filtrado al autor del keeper, en la ventana de la sesión (base..origin/main).
+    # PRIMERO: ¿el keeper PUSHEÓ un fix? = un commit SUYO (autor del keeper) en `origin/main` durante
+    # la sesión (base..origin/main). NO vale «HEAD del worktree != base»: el agente puede
+    # `git fetch && git rebase origin/main` y mover su HEAD a commits de OTROS sin arreglar nada.
     git -C "$REPO" fetch origin -q 2>/dev/null || true
     razon="$(cat "$abort_flag" 2>/dev/null)"
     autor="${KENI_GIT_AUTHOR_NAME:-keni incident-keeper}"
     mio="$(git -C "$REPO" log --author="$autor" --format=%H "$base..origin/main" 2>/dev/null | head -1)"
     if [ -n "$mio" ]; then
-      commit_sha="$mio"; commit_msg="$(git -C "$REPO" log -1 --format=%s "$mio" 2>/dev/null)"; estado=resuelto
+      # Pusheó un fix, PERO push != resuelto: el veredicto lo da la ETAPA VERDE de ESE commit. Si su
+      # pipeline aún corre, queda `verificando` y el bucle lo resuelve cuando termine (verde=resuelto,
+      # rojo=fallido; si lo dejó verde OTRO commit, abortado).
+      commit_sha="$mio"; commit_msg="$(git -C "$REPO" log -1 --format=%s "$mio" 2>/dev/null)"
+      estado="$(python3 "$CI_WATCH" --verdicto-fix "$mio" 2>/dev/null)"
+      case "$estado" in resuelto|fallido|abortado|verificando) ;; *) estado=verificando ;; esac
     elif [ "$razon" = verde ]; then
       estado=abortado      # un pipeline más nuevo salió verde mientras arreglaba: el rojo ya no existía
     elif [ "$razon" = timeout ] || [ "$razon" = shutdown ]; then
@@ -152,14 +155,16 @@ diagnóstico claro y el plan para un humano."
   # Meta final: estado + commit + coste/tokens (sesion.py parsea el `result` del jsonl). Si el
   # jsonl trae is_error, sesion.py lo marca y la UI lo pinta.
   nota=""
-  if [ "$estado" = abortado ]; then
-    nota="Abortado: un pipeline más nuevo salió verde; el rojo ya estaba resuelto."
-  elif [ "$estado" = interrumpido ]; then
-    case "$razon" in
-      timeout) nota="Interrumpido: la sesión superó el límite de tiempo (${TIMEOUT}s) y se cortó." ;;
-      *)       nota="Interrumpido: el keeper se detuvo (p. ej. un deploy) durante la sesión." ;;
-    esac
-  fi
+  case "$estado" in
+    abortado) nota="Abortado: otro commit dejó main verde; el fix del keeper quedó superado." ;;
+    verificando) nota="Fix pusheado; esperando a que su pipeline termine para confirmar el verde." ;;
+    fallido) nota="El pipeline del fix salió ROJO: el arreglo no bastó." ;;
+    interrumpido)
+      case "$razon" in
+        timeout) nota="Interrumpido: la sesión superó el límite de tiempo (${TIMEOUT}s) y se cortó." ;;
+        *)       nota="Interrumpido: el keeper se detuvo (p. ej. un deploy) durante la sesión." ;;
+      esac ;;
+  esac
   python3 "$KEEPER_DIR/sesion.py" "$meta" "$jsonl" estado="$estado" \
     fin="$(date -u +%Y-%m-%dT%H:%M:%SZ)" commit_sha="$commit_sha" commit_msg="$commit_msg" \
     ${nota:+"nota=$nota"} 2>/dev/null || true
@@ -181,6 +186,11 @@ ci_intentos_recientes() {
   fi
 }
 
+# Lee un campo de una meta (cadena vacía si no existe). $1=fichero meta, $2=clave.
+meta_get() {
+  python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2],''))" "$1" "$2" 2>/dev/null
+}
+
 # Reconcilia sesiones HUÉRFANAS: una meta en `corriendo` al ARRANCAR significa que un keeper previo
 # se cayó/reinició (p. ej. un deploy recrea el contenedor) y mató el claude sin cerrar la sesión.
 # Como acabamos de arrancar (no hay sesión viva), cualquier `corriendo` es un fantasma: lo marcamos
@@ -188,13 +198,33 @@ ci_intentos_recientes() {
 reconciliar_huerfanas() {
   for meta in "$DATA"/*.meta.json; do
     [ -f "$meta" ] || continue
-    est="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('estado',''))" "$meta" 2>/dev/null)"
-    if [ "$est" = corriendo ]; then
+    if [ "$(meta_get "$meta" estado)" = corriendo ]; then
       log "sesión huérfana $(basename "$meta" .meta.json): marco interrumpida (el keeper se reinició durante la sesión)"
       python3 "$KEEPER_DIR/sesion.py" "$meta" - estado=interrumpido \
         fin="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         nota="Interrumpido: el keeper se reinició (p. ej. un deploy) mientras la sesión corría." 2>/dev/null || true
     fi
+  done
+}
+
+# Resuelve sesiones en `verificando`: el keeper pusheó un fix y esperamos el VEREDICTO de su pipeline.
+# Cada ciclo re-consulta el commit; cuando su etapa termina, cierra la sesión (verde=resuelto,
+# rojo=fallido; si lo dejó verde OTRO commit, abortado). Mientras corre, sigue en `verificando`.
+verificar_pendientes() {
+  for meta in "$DATA"/*.meta.json; do
+    [ -f "$meta" ] || continue
+    [ "$(meta_get "$meta" estado)" = verificando ] || continue
+    sha="$(meta_get "$meta" commit_sha)"; [ -n "$sha" ] || continue
+    v="$(python3 "$CI_WATCH" --verdicto-fix "$sha" 2>/dev/null)"
+    case "$v" in
+      resuelto) nota="El pipeline del fix salió VERDE." ;;
+      fallido)  nota="El pipeline del fix salió ROJO: el arreglo no bastó." ;;
+      abortado) nota="Otro commit dejó main verde; el fix del keeper quedó superado." ;;
+      *) continue ;;  # sigue corriendo: lo dejamos en verificando
+    esac
+    log "sesión $(basename "$meta" .meta.json): $v (veredicto del pipeline del fix)"
+    python3 "$KEEPER_DIR/sesion.py" "$meta" - estado="$v" \
+      fin="$(date -u +%Y-%m-%dT%H:%M:%SZ)" nota="$nota" 2>/dev/null || true
   done
 }
 
@@ -211,6 +241,8 @@ while :; do
   : > "$LATIDO" 2>/dev/null || true   # latido para el healthcheck
   # Heartbeat de vigilancia para guardian-ui: estado de la vigilancia + último pipeline visto.
   python3 "$CI_WATCH" --heartbeat "$ESTADO_VIGILANCIA" "$CI" 2>/dev/null || true
+  # Cierra las sesiones `verificando` cuyo pipeline del fix ya tenga veredicto (verde/rojo).
+  [ "$CI" = 1 ] && verificar_pendientes
 
   # No tocar `main` durante un deploy ni con un keeper ya en marcha.
   if [ -f "$FLAG_DEPLOY" ] || [ -f "$LOCK" ]; then

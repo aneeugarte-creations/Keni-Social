@@ -176,6 +176,44 @@ def hay_verde_despues(pipelines, number: int) -> bool:
                for num, status, *_ in pipelines)
 
 
+def verdicto_fix(sha: str) -> str:
+    """Veredicto de un fix PUSHEADO por el keeper (commit `sha`), por ETAPAS VERDES (no por push):
+      - resuelto:    el pipeline de ESE commit está VERDE -> el fix del keeper funcionó.
+      - abortado:    el de ese commit NO está verde pero hay uno MÁS NUEVO verde -> main quedó sano
+                     por OTRO commit (de otro agente), no por el fix del keeper.
+      - fallido:     el de ese commit está ROJO y no hay verde más nuevo -> el fix no bastó.
+      - verificando: el de ese commit aún corre (y main no está verde por otro) -> esperar.
+    """
+    if not API or not sha:
+        return "verificando"
+    raw = _api_get(f"/api/repos/{REPO}/pipelines?page=1&perPage={PERPAGE}")
+    if not isinstance(raw, list):
+        return "verificando"
+    mio_num, mio_status = None, None
+    for p in raw:
+        c = p.get("commit") or ""
+        if c and (c.startswith(sha) or sha.startswith(c)):
+            mio_num, mio_status = p.get("number"), p.get("status")
+            break
+    verde_nuevo = any(
+        p.get("status") == "success" and mio_num is not None and (p.get("number") or 0) > mio_num
+        for p in raw
+    )
+    if mio_status == "success":
+        return "resuelto"
+    if mio_status in TERMINAL_FALLO:
+        return "abortado" if verde_nuevo else "fallido"
+    if mio_num is None:
+        # El pipeline del commit del keeper no está entre los recientes (aún no creado / desplazado):
+        # si el último COMPLETO no es rojo y hay algún verde, main está sano por otro -> abortado.
+        objetivo = objetivo_rojo(
+            [(p.get("number"), p.get("status"), p.get("message") or "", p.get("id")) for p in raw]
+        )
+        if objetivo is None and any(p.get("status") == "success" for p in raw):
+            return "abortado"
+    return "verificando"
+
+
 def fallos_pipeline(number, pid):
     """(steps_en_rojo, lineas_fallo) para un pipeline. `number` para la API, `pid` para sqlite."""
     lineas = []
@@ -279,6 +317,11 @@ def main() -> None:
         except ValueError:
             sys.exit(1)
         imprimir_logs(n)
+        return
+
+    # Modo veredicto: `ci_watch.py --verdicto-fix <sha>` -> resuelto/fallido/abortado/verificando.
+    if len(sys.argv) >= 3 and sys.argv[1] == "--verdicto-fix":
+        print(verdicto_fix(sys.argv[2]))
         return
 
     obj = objetivo_rojo(pipelines_recientes())
