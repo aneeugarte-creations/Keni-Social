@@ -37,14 +37,10 @@ def test_clave_por_marca_formato():
 
 def test_catalogo_expone_toggles_por_marca():
     claves = {a.clave for a in ajustes_catalogo.catalogo()}
-    # Por marca hay TRES toggles de máquina (ADR 0011): «Investigación» y «Producción»
-    # (virtuales, agrupan sus etapas) y «Arte». La publicación va en su grupo `publicacion_marca`,
+    # Cada FASE editable es un toggle por marca (ADR 0011 rev. fase×marca): apagar una
+    # fase en una marca no afecta al resto. La publicación va en su grupo `publicacion_marca`,
     # y el plan editorial diario (texto) en `noticias_produccion_marca`.
-    assert config.clave_por_marca(config.ENV_INVESTIGACION, "nacion-gamer") in claves
-    assert config.clave_por_marca(config.ENV_PRODUCCION, "nacion-gamer") in claves
     assert config.clave_por_marca(config.ENV_PIPELINE_ILUSTRAR, "unotv") in claves
-    # Cada FASE editable es AHORA un toggle por marca (ADR 0011 rev. fase×marca): apagar una
-    # fase en una marca no afecta al resto.
     assert config.clave_por_marca(config.ENV_PIPELINE_REDACTAR, "unotv") in claves
     assert config.clave_por_marca(config.ENV_PIPELINE_RECOLECTAR, "unotv") in claves
     assert config.clave_por_marca(config.ENV_CRITICA_IA, "unotv") in claves

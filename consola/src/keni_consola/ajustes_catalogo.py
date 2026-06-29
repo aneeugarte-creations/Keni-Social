@@ -94,33 +94,15 @@ GRUPOS_MAQUINA: tuple[str, ...] = (
 
 
 def _maestros_etapa() -> list[Ajuste]:
-    """Los interruptores de etapa de la máquina + los maestros virtuales (ADR 0011).
+    """Los interruptores de etapa de la máquina, uno por etapa física (ADR 0011).
 
-    La tira «Pipeline en vivo» del Monitor opera las etapas FÍSICAS una a una: Recolectar
+    La vista Pipeline opera cada etapa por su propia clave del store (sin fan-out): Recolectar
     (`KENI_PIPELINE_RECOLECTAR`), Verificar (`KENI_PIPELINE_VERIFICAR`), Redactar
-    (`KENI_PIPELINE_REDACTAR`) e Ilustrar (`KENI_PIPELINE_ILUSTRAR`). Cada una es su propia clave del
-    store (sin fan-out): el operador puede apagar una etapa sin tocar las demás.
-
-    `KENI_INVESTIGACION` y `KENI_PRODUCCION` son VIRTUALES (no se leen en runtime): al
-    guardarlas, la API escribe sus etapas físicas (`config.ETAPAS_INVESTIGACION` /
-    `config.ETAPAS_PRODUCCION`) con el mismo valor. Su valor mostrado es el de una etapa
-    representativa (Recolectar para Investigación, Redactar para Producción). SIGUEN en el catálogo
-    aunque la tira ya no las pinte: son la base de las excepciones por marca
-    (`KENI_INVESTIGACION::marca` apaga el proceso entero con un toggle), el respaldo de
-    lectura del flujo de Noticias (etapas sin flag propio en catálogo: Fusionar/Clasificar/
-    Priorizar) y el interruptor «de proceso» para API/MCP. «Publicar» vive en `pieza`.
+    (`KENI_PIPELINE_REDACTAR`), Ilustrar (`KENI_PIPELINE_ILUSTRAR`)… El operador apaga una etapa
+    sin tocar las demás; la cascada (crítica apaga lo posterior) la calcula la propia vista a
+    partir de estos estados. «Publicar» vive en `pieza`.
     """
     return [
-        Ajuste(
-            clave=config.ENV_INVESTIGACION,
-            tipo="bool",
-            etiqueta="Investigación",
-            ayuda="Para todas las marcas: recolecta, deduplica, clasifica, prioriza y "
-            "verifica noticias para dejar el pool listo (no escribe copy). Virtual: "
-            "enciende/apaga TODAS las etapas del proceso a la vez.",
-            grupo="maestros_investigacion",
-            defecto=False,
-        ),
         Ajuste(
             clave=config.ENV_PIPELINE_RECOLECTAR,
             tipo="bool",
@@ -181,16 +163,6 @@ def _maestros_etapa() -> list[Ajuste]:
             "redacción. ADITIVA sobre Recolectar (necesita ambas). ON por defecto.",
             grupo="maestros_investigacion",
             defecto=True,
-        ),
-        Ajuste(
-            clave=config.ENV_PRODUCCION,
-            tipo="bool",
-            etiqueta="Producción",
-            ayuda="Para todas las marcas: redacta el copy que convierte una noticia "
-            "verificada en pieza publicable (la imagen tiene interruptor propio). Virtual: "
-            "equivale hoy a la etapa Redactar.",
-            grupo="maestros_produccion",
-            defecto=False,
         ),
         Ajuste(
             clave=config.ENV_PIPELINE_DECISOR,
@@ -270,9 +242,7 @@ def _global_de_etapa(env_flag: str) -> bool:
 # Fases EDITABLES por marca de cada proceso (ADR 0011, rev. fase×marca): cada fase tiene su
 # toggle `ENV::marca` independiente, así apagar una fase en una marca NO afecta a las demás
 # (p. ej. UnoTV apaga Crítica sin tocar el resto). Los pasos PRE-marca o cross-marca (Clasificar,
-# Cotejar, Traducir…) quedan SOLO globales: no se puede gatear por una marca que aún no existe.
-# El maestro VIRTUAL del proceso sigue como botón "enciende/apaga TODAS las fases de esta marca"
-# (fan-out vía `claves_fisicas`); estas entradas le dan el control granular por fase.
+# Cotejar…) quedan SOLO globales: no se puede gatear por una marca que aún no existe.
 _FASES_MARCA_INVESTIGACION: tuple[tuple[str, str], ...] = (
     (config.ENV_PIPELINE_RECOLECTAR, "Recolectar"),
     (config.ENV_PIPELINE_FUSIONAR, "Fusionar"),
@@ -291,35 +261,12 @@ _FASES_MARCA_PRODUCCION: tuple[tuple[str, str], ...] = (
 
 
 def _ajustes_por_marca() -> list[Ajuste]:
-    """Toggles `bool` por marca: el maestro VIRTUAL de cada proceso (fan-out a sus etapas) Y cada
-    FASE editable por separado (`ENV_FASE::marca`).
+    """Toggles `bool` por marca: cada FASE del pipeline editable por separado (`ENV_FASE::marca`).
 
-    Apagar el maestro «Investigación»/«Producción» en una marca apaga TODO su proceso para esa
-    marca; apagar una fase concreta (Recolectar, Verificar, Redactar, Crítica…) la desvía SOLO en
-    esa marca, sin afectar a las demás. Se generan en caliente desde el catálogo de marcas."""
+    Apagar una fase concreta (Recolectar, Verificar, Redactar, Crítica…) la desvía SOLO en esa
+    marca, sin afectar a las demás. Se generan en caliente desde el catálogo de marcas."""
     salida: list[Ajuste] = []
     for mid, nombre in marcas.opciones():
-        # Maestro virtual del proceso (lo usa el control de cabecera y el "apaga todo").
-        salida.append(
-            Ajuste(
-                clave=config.clave_por_marca(config.ENV_INVESTIGACION, mid),
-                tipo="bool",
-                etiqueta=f"{nombre} · Investigación",
-                ayuda=f"Apaga TODA la investigación de noticias (pool) solo para «{nombre}».",
-                grupo="automatizacion_marca_investigacion",
-                defecto=_global_de_etapa(config.ENV_PIPELINE_RECOLECTAR),
-            )
-        )
-        salida.append(
-            Ajuste(
-                clave=config.clave_por_marca(config.ENV_PRODUCCION, mid),
-                tipo="bool",
-                etiqueta=f"{nombre} · Producción",
-                ayuda=f"Apaga TODA la producción de copy solo para «{nombre}».",
-                grupo="automatizacion_marca_produccion",
-                defecto=_global_de_etapa(config.ENV_PIPELINE_REDACTAR),
-            )
-        )
         # Cada fase del proceso, por separado (la divergencia por fase que permite la rev. fase×marca).
         for flag, etapa in _FASES_MARCA_INVESTIGACION:
             salida.append(
@@ -558,11 +505,10 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="automatismos_generales",
             defecto=False,
         ),
-        # NOTA: las etapas de la fase noticia→copy (Fusionar/Priorizar/Recolectar/Verificar/Redactar/
-        # Avance) NO tienen toggle propio: las agrupa el interruptor único «Generar»
-        # (`KENI_GENERAR`, virtual con fan-out; ver `claves_fisicas`). El master
-        # «Priorizar por rendimiento» (KENI_RENDIMIENTO_RANKING) tampoco: NO es un daemon on/off,
-        # sino un modulador de la priorización, así que vive con sus pesos en `noticias_ranking`.
+        # NOTA: las etapas de la fase noticia→copy (Recolectar/Verificar/Redactar…) tienen su
+        # propio toggle en `_maestros_etapa()`, no aquí. El master «Priorizar por rendimiento»
+        # (KENI_RENDIMIENTO_RANKING) NO es un daemon on/off sino un modulador de la priorización,
+        # así que vive con sus pesos en `noticias_ranking`.
         # --- Pieza (peligroso) ----------------------------------------------- #
         Ajuste(
             clave=config.ENV_PUBLICAR_REAL,
@@ -932,52 +878,12 @@ def _castea(ajuste: Ajuste, crudo: str) -> Any:
     return valor if valor in ids else ajuste.defecto
 
 
-# Maestros VIRTUALES (ADR 0011): cada uno hace fan-out a sus etapas físicas, y su estado
-# mostrado se lee de una etapa REPRESENTATIVA (tras cualquier escritura desde la UI todas las
-# etapas del maestro coinciden, así que la representativa basta).
-_ETAPAS_VIRTUAL: dict[str, tuple[str, ...]] = {
-    config.ENV_INVESTIGACION: config.ETAPAS_INVESTIGACION,
-    config.ENV_PRODUCCION: config.ETAPAS_PRODUCCION,
-}
-_LECTURA_VIRTUAL: dict[str, str] = {
-    config.ENV_INVESTIGACION: config.ENV_PIPELINE_RECOLECTAR,
-    config.ENV_PRODUCCION: config.ENV_PIPELINE_REDACTAR,
-}
-
-
-def claves_fisicas(clave: str) -> list[str]:
-    """Claves REALES del store que escribe/borra un ajuste del catálogo.
-
-    Para casi todos es su propia clave. Para los maestros VIRTUALES «Investigación»/«Producción»
-    (global o `::marca`) son sus etapas físicas (`_ETAPAS_VIRTUAL`) con el mismo sufijo de
-    marca: un botón por proceso, varias claves coherentes — las etapas no pueden divergir desde
-    la UI.
-    """
-    base, sep, marca = clave.partition(config.SEP_MARCA)
-    etapas = _ETAPAS_VIRTUAL.get(base)
-    if etapas is None:
-        return [clave]
-    sufijo = f"{sep}{marca}" if sep else ""
-    return [f"{etapa}{sufijo}" for etapa in etapas]
-
-
-def _clave_lectura(clave: str) -> str:
-    """Clave que REPRESENTA el valor de un ajuste: la propia, salvo los maestros virtuales,
-    cuyo estado mostrado se lee de su etapa representativa (`_LECTURA_VIRTUAL`)."""
-    base, sep, marca = clave.partition(config.SEP_MARCA)
-    repr_etapa = _LECTURA_VIRTUAL.get(base)
-    if repr_etapa is None:
-        return clave
-    return f"{repr_etapa}{sep}{marca}" if sep else repr_etapa
-
-
 def valor_y_fuente(ajuste: Ajuste) -> tuple[Any, str]:
     """Valor EFECTIVO (tipado) + su FUENTE ('store' | 'env' | 'defecto').
 
-    Misma precedencia que `config._crudo`: store (UI) > env > defecto del catalogo. La clave
-    virtual «Generar» se resuelve desde su clave de lectura (etapa de Redactar).
+    Misma precedencia que `config._crudo`: store (UI) > env > defecto del catalogo.
     """
-    clave = _clave_lectura(ajuste.clave)
+    clave = ajuste.clave
     desde_store = ajustes.obtener(clave)
     if desde_store is not None:
         return _castea(ajuste, desde_store), "store"

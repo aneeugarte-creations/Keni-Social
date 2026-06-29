@@ -69,7 +69,6 @@ interface Fase {
 }
 
 const CLAVE_MAQUINA = "KENI_MAQUINA";
-const CLAVE_PAUSA = "KENI_GENERACION_PAUSADA";
 
 const PIPELINE: Fase[] = [
   {
@@ -117,15 +116,6 @@ const PIPELINE: Fase[] = [
         ayuda: "Adapta el texto al español de México",
         proceso: "investigacion",
         clave: "KENI_PIPELINE_TRADUCIR",
-        navegable: true,
-      },
-      {
-        nombre: "Clasificar",
-        tipo: "OPCIONAL",
-        es_ia: true,
-        ayuda: "Asigna marca a las notas sin marca",
-        proceso: "investigacion",
-        clave: "KENI_CLASIFICAR_MARCA_IA",
         navegable: true,
       },
       {
@@ -359,9 +349,7 @@ export function PipelineUnificado({
     [marcaActiva, porClave],
   );
 
-  const clavePausaEf = claveConMarca(CLAVE_PAUSA, marcaActiva, porClave);
   const ajusteMaquina = esAdmin ? porClave.get(CLAVE_MAQUINA) : undefined;
-  const ajustePausa = esAdmin ? porClave.get(clavePausaEf) : undefined;
 
   // Ajustes del «⋮» del header: los DOS motores juntos (antes uno por pestaña).
   const ajustesDrawer = (
@@ -425,7 +413,7 @@ export function PipelineUnificado({
   return (
     <div className="mt-4 space-y-4">
       {/* Master controls: admin only */}
-      {esAdmin && (ajusteMaquina || ajustePausa) && (
+      {esAdmin && ajusteMaquina && (
         <section className="rounded-lg border border-border bg-card p-4">
           <div className="mb-3 flex items-center justify-between gap-2">
             <p className="text-sm font-semibold">Estado global</p>
@@ -437,40 +425,21 @@ export function PipelineUnificado({
             />
           </div>
           <div className="space-y-3">
-            {ajusteMaquina && (
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium">Auto</p>
-                  <p className="text-xs text-muted-foreground">Toda la auto-producción</p>
-                </div>
-                <Switch
-                  tono="estado"
-                  checked={Boolean(ajusteMaquina.valor)}
-                  disabled={guardar.isPending}
-                  onCheckedChange={(v) => guardar.mutate({ clave: ajusteMaquina.clave, valor: v })}
-                  aria-label="Auto (interruptor general de toda la auto-producción)"
-                />
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium">Auto</p>
+                <p className="text-xs text-muted-foreground">Toda la auto-producción</p>
               </div>
-            )}
-            {ajusteMaquina && ajustePausa && <div className="h-px bg-border" aria-hidden="true" />}
-            {ajustePausa && (
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium">Pausa de emergencia</p>
-                  <p className="text-xs text-muted-foreground">Detiene incluso el empuje manual</p>
-                </div>
-                <Switch
-                  tono="estado"
-                  checked={Boolean(ajustePausa.valor)}
-                  disabled={guardar.isPending}
-                  onCheckedChange={(v) => guardar.mutate({ clave: ajustePausa.clave, valor: v })}
-                  aria-label="Pausa de emergencia"
-                />
-              </div>
-            )}
+              <Switch
+                tono="estado"
+                checked={Boolean(ajusteMaquina.valor)}
+                disabled={guardar.isPending}
+                onCheckedChange={(v) => guardar.mutate({ clave: ajusteMaquina.clave, valor: v })}
+                aria-label="Auto (interruptor general de toda la auto-producción)"
+              />
+            </div>
             <p className="text-xs text-muted-foreground">
-              El empuje manual desde Noticias funciona aunque «Auto» esté apagado; solo lo detiene
-              la pausa de emergencia.
+              El empuje manual desde Noticias funciona aunque «Auto» esté apagado.
             </p>
           </div>
         </section>
@@ -573,11 +542,6 @@ export function PipelineUnificado({
           )}
         </section>
       ))}
-
-      {/* Legend */}
-      <p className="text-xs text-muted-foreground">
-        🔴 crítica = apaga lo que viene después · 🟡 opcional = solo se oscurece
-      </p>
 
       {/* Servicios (daemons de mantenimiento, no-IA): bajo el pipeline, solo admin. */}
       {esAdmin && (

@@ -39,7 +39,7 @@ function latido(parcial: Partial<LatidoDaemon>): LatidoDaemon {
     descripcion: "Verifica las historias del pool antes de admitirlas a producción.",
     ultimo_resumen: "verificó 3 historias",
     prompts: [{ etiqueta: "Verificar", doc: "prompt/verificar" }],
-    clave_gate: "KENI_INVESTIGACION",
+    clave_gate: "KENI_PIPELINE_VERIFICAR",
     gate_activo: true,
     ajustes: [],
     ...parcial,
@@ -143,13 +143,13 @@ describe("AgenteDetalle", () => {
     stubFetch({
       daemons: [
         latido({
-          clave_gate: "KENI_INVESTIGACION",
+          clave_gate: "KENI_PIPELINE_VERIFICAR",
           descripcion: "Motor de reutilizar: verifica y admite.",
           ajustes: [
-            // El gate (KENI_INVESTIGACION) viene en la lista de ajustes del API, pero como ya es el
+            // El gate (KENI_PIPELINE_VERIFICAR) viene en la lista de ajustes del API, pero como ya es el
             // toggle «Encendido» de Controles debe FILTRARSE del bloque de Ajustes (no duplicarse).
             {
-              clave: "KENI_INVESTIGACION",
+              clave: "KENI_PIPELINE_VERIFICAR",
               tipo: "bool",
               etiqueta: "Investigación",
               ayuda: "Enciende la investigación.",

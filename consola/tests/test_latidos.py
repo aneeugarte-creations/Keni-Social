@@ -394,10 +394,10 @@ def test_clave_gate_de_mapea_cada_daemon_gateado():
     assert latidos.clave_gate_de("noticias_gc") == "KENI_NOTICIAS_GC"
     assert latidos.clave_gate_de("patrones") == "KENI_PATRONES_AUTO"
     assert latidos.clave_gate_de("alertas_rendimiento") == "KENI_ALERTAS_RENDIMIENTO"
-    # Investigación tiene interruptor PROPIO (maestro virtual de sus etapas Recolectar/Verificar),
-    # independiente de Producción. Producción sí usa el
-    # maestro de la máquina (su loop gatea solo con la máquina: el Avance corre incondicional).
-    assert latidos.clave_gate_de("investigacion") == "KENI_INVESTIGACION"
+    # Investigación gatea su fila por la etapa Verificar (Recolectar tiene su propia fila, ingesta).
+    # Producción usa el maestro de la máquina (su loop gatea solo con la máquina: el Avance corre
+    # incondicional).
+    assert latidos.clave_gate_de("investigacion") == "KENI_PIPELINE_VERIFICAR"
     assert latidos.clave_gate_de("produccion") == "KENI_MAQUINA"
 
 

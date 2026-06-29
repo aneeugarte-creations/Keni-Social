@@ -43,10 +43,8 @@ def test_catalogo_tiene_las_claves_esperadas(store):
     esperadas = {
         # Interruptor general de la máquina de contenido (kill-switch global).
         config.ENV_MAQUINA,
-        # Los maestros de la máquina (ADR 0011): «Investigación» y «Producción» (virtuales,
-        # agrupan sus etapas) + las etapas FÍSICAS que opera la tira «Pipeline en vivo»
+        # Los maestros de la máquina (ADR 0011): una etapa FÍSICA por toggle
         # (Recolectar/Verificar/Redactar/Ilustrar/Stock; Ilustrar siempre tuvo interruptor propio).
-        config.ENV_INVESTIGACION, config.ENV_PRODUCCION,
         config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
         # Traducir + Admitir: etapas físicas con toggle propio (ON por defecto).
         config.ENV_PIPELINE_TRADUCIR, config.ENV_PIPELINE_ADMITIR,
@@ -110,8 +108,7 @@ def test_catalogo_tiene_las_claves_esperadas(store):
 
 
 _MAESTROS_ENV = {
-    # Virtuales de proceso (fan-out) + etapas físicas de la tira «Pipeline en vivo».
-    config.ENV_INVESTIGACION, config.ENV_PRODUCCION,
+    # Una etapa física por toggle (la vista Pipeline las opera de una en una).
     config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
     # Traducir + Admitir: etapas físicas con toggle propio (ON por defecto).
     config.ENV_PIPELINE_TRADUCIR, config.ENV_PIPELINE_ADMITIR,
@@ -132,13 +129,11 @@ _MAESTROS_ENV = {
 
 def test_maestros_son_investigacion_produccion_y_arte(store):
     """Los maestros (grupos `maestros_investigacion`/`maestros_produccion`) son EXACTAMENTE
-    los dos virtuales de proceso + las etapas físicas de la tira + los pasos GLOBALES de ingesta y
-    clasificación (Google Trends, Clasificar marca con IA), que no van en el fan-out por marca.
+    las etapas FÍSICAS del pipeline + el paso GLOBAL de ingesta (Google Trends), que no va en el
+    fan-out por marca.
 
-    «Investigación» y «Producción» son claves VIRTUALES (`KENI_INVESTIGACION`/`KENI_PRODUCCION`):
-    agrupan sus etapas internas con fan-out (ver `claves_fisicas`) y se conservan para las
-    excepciones por marca, el respaldo de lectura del flujo de Noticias y la API/MCP. La tira
-    «Pipeline en vivo» opera las FÍSICAS: Recolectar/Verificar/Redactar/Ilustrar, cada una su clave."""
+    Cada etapa es su propia clave del store: la vista Pipeline las opera de una en una
+    (Recolectar/Verificar/Redactar/Ilustrar…) y calcula la cascada a partir de sus estados."""
     maestros = [
         a for a in ajustes_catalogo.catalogo()
         if a.grupo in {"maestros_investigacion", "maestros_produccion"}
@@ -159,8 +154,6 @@ def test_maestros_son_investigacion_produccion_y_arte(store):
         assert a.tipo == "bool"
         assert a.defecto is (a.clave in on_por_defecto)
     etiquetas = {a.clave: a.etiqueta for a in maestros}
-    assert etiquetas[config.ENV_INVESTIGACION] == "Investigación"
-    assert etiquetas[config.ENV_PRODUCCION] == "Producción"
     assert etiquetas[config.ENV_PIPELINE_RECOLECTAR] == "Recolectar"
     assert etiquetas[config.ENV_PIPELINE_VERIFICAR] == "Verificar"
     assert etiquetas[config.ENV_PIPELINE_REDACTAR] == "Redactar"
@@ -168,47 +161,12 @@ def test_maestros_son_investigacion_produccion_y_arte(store):
     assert etiquetas[config.ENV_PIPELINE_STOCK] == "Stock"
 
 
-def test_maestros_fan_out_a_sus_etapas(store):
-    """`claves_fisicas`: los virtuales «Investigación»/«Producción» escriben sus etapas (global
-    y por marca); cualquier otra clave se escribe a sí misma."""
-    assert ajustes_catalogo.claves_fisicas(config.ENV_INVESTIGACION) == list(
-        config.ETAPAS_INVESTIGACION
-    )
-    assert ajustes_catalogo.claves_fisicas(config.ENV_PRODUCCION) == list(
-        config.ETAPAS_PRODUCCION
-    )
-    con_marca = ajustes_catalogo.claves_fisicas(
-        config.clave_por_marca(config.ENV_INVESTIGACION, "unotv")
-    )
-    assert con_marca == [
-        config.clave_por_marca(e, "unotv") for e in config.ETAPAS_INVESTIGACION
-    ]
-    # COPY va en Producción, no en Investigación; Arte va aparte de ambos.
-    assert config.ENV_PIPELINE_REDACTAR not in config.ETAPAS_INVESTIGACION
-    assert config.ENV_PIPELINE_ILUSTRAR not in config.ETAPAS_INVESTIGACION
-    assert config.ENV_PIPELINE_ILUSTRAR not in config.ETAPAS_PRODUCCION
-    assert ajustes_catalogo.claves_fisicas(config.ENV_CUPO_DIA) == [config.ENV_CUPO_DIA]
-
-
-def test_produccion_se_lee_desde_copy_e_investigacion_desde_ingesta(store):
-    """El valor mostrado de cada maestro es el de su etapa representativa: Producción = Redactar,
-    Investigación = Recolectar (ingesta)."""
-    ajustes.guardar(config.ENV_PIPELINE_REDACTAR, "1")
-    a_prod = _ajuste(config.ENV_PRODUCCION)
-    valor, fuente = ajustes_catalogo.valor_y_fuente(a_prod)
-    assert valor is True and fuente == "store"
-    ajustes.guardar(config.ENV_PIPELINE_RECOLECTAR, "1")
-    a_inv = _ajuste(config.ENV_INVESTIGACION)
-    valor, fuente = ajustes_catalogo.valor_y_fuente(a_inv)
-    assert valor is True and fuente == "store"
-
-
 def test_toggles_por_marca_por_fase(store):
-    """Las excepciones por marca son, por proceso (ADR 0011 rev. fase×marca): el maestro VIRTUAL
-    del proceso (fan-out) MÁS cada FASE editable por separado, para que apagar una fase en una
-    marca NO afecte al resto. Investigación → `automatizacion_marca_investigacion`; Producción
-    (incl. Arte y Crítica) → `automatizacion_marca_produccion`. Los pasos pre-marca (Clasificar)
-    quedan SOLO globales: no se gatean por una marca que aún no existe."""
+    """Las excepciones por marca son, por proceso (ADR 0011 rev. fase×marca): cada FASE editable
+    por separado, para que apagar una fase en una marca NO afecte al resto. Investigación →
+    `automatizacion_marca_investigacion`; Producción (incl. Arte y Crítica) →
+    `automatizacion_marca_produccion`. Los pasos pre-marca (Cotejar) quedan SOLO globales: no
+    se gatean por una marca que aún no existe."""
     def _bases(grupo: str) -> set[str]:
         return {
             a.clave.split(config.SEP_MARCA, 1)[0]
@@ -219,14 +177,12 @@ def test_toggles_por_marca_por_fase(store):
     investigacion = _bases("automatizacion_marca_investigacion")
     produccion = _bases("automatizacion_marca_produccion")
     assert investigacion == {
-        config.ENV_INVESTIGACION,  # maestro virtual del proceso (fan-out)
         config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_FUSIONAR,
         config.ENV_PIPELINE_TRADUCIR,
         config.ENV_PRIORIZAR_PERFIL_IA, config.ENV_PIPELINE_VERIFICAR,
         config.ENV_PIPELINE_ADMITIR,
     }
     assert produccion == {
-        config.ENV_PRODUCCION,  # maestro virtual del proceso (fan-out)
         config.ENV_PIPELINE_REDACTAR, config.ENV_PIPELINE_SUGERIR_HASHTAGS,
         config.ENV_PIPELINE_ILUSTRAR, config.ENV_PIPELINE_STOCK, config.ENV_CRITICA_IA,
     }
@@ -498,8 +454,8 @@ def test_patrones_auto_es_toggle_de_automatismos(store, monkeypatch):
 
 def test_publicar_real_es_peligroso(store):
     assert _ajuste(config.ENV_PUBLICAR_REAL).peligroso is True
-    assert _ajuste(config.ENV_INVESTIGACION).peligroso is False
-    assert _ajuste(config.ENV_PRODUCCION).peligroso is False
+    assert _ajuste(config.ENV_PIPELINE_RECOLECTAR).peligroso is False
+    assert _ajuste(config.ENV_PIPELINE_REDACTAR).peligroso is False
 
 
 def test_por_clave_desconocida(store):
@@ -669,8 +625,6 @@ def test_plan_redes_por_marca_en_catalogo(store):
     assert a is not None
     assert a.tipo == "texto"
     assert a.grupo == "noticias_produccion_marca"
-    # No es un maestro virtual: su única clave física es ella misma.
-    assert ajustes_catalogo.claves_fisicas(clave) == [clave]
 
 
 def test_validar_plan_redes_acepta_csv_de_redes(store):

@@ -42,7 +42,6 @@ function todosActivos(): AjusteAdmin[] {
     ajuste("KENI_TRENDS", true),
     ajuste("KENI_PIPELINE_FUSIONAR", true),
     ajuste("KENI_PIPELINE_TRADUCIR", true),
-    ajuste("KENI_CLASIFICAR_MARCA_IA", true),
     ajuste("KENI_PRIORIZAR_PERFIL_IA", true),
     ajuste("KENI_PIPELINE_VERIFICAR", true),
     ajuste("KENI_PIPELINE_ADMITIR", true),
@@ -151,12 +150,6 @@ describe("PipelineUnificado", () => {
     expect(fijosBadges[1]).toHaveTextContent("fijo");
   });
 
-  it("pinta la leyenda", () => {
-    renderPipeline({ esAdmin: false });
-    expect(screen.getByText(/crítica = apaga lo que viene después/)).toBeInTheDocument();
-    expect(screen.getByText(/opcional = solo se oscurece/)).toBeInTheDocument();
-  });
-
   it("un CRÍTICA apagado genera el marcador de corte en la etapa siguiente", async () => {
     mockAjustes.mockResolvedValue({
       grupos: [
@@ -203,7 +196,7 @@ describe("PipelineUnificado", () => {
     expect(screen.getByText("Fusionar")).toBeInTheDocument();
   });
 
-  it("muestra los controles maestros (Auto + Pausa) solo al admin", async () => {
+  it("muestra el control maestro (Auto) solo al admin", async () => {
     renderPipeline({ esAdmin: true });
     // Admin sees the master controls header after data loads
     expect(

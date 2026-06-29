@@ -937,33 +937,6 @@ def sugerir_hashtags_activo() -> bool:
 # Toggle ÚNICO «Generar» (noticia → copy)                                       #
 # --------------------------------------------------------------------------- #
 
-# CLAVE VIRTUAL del catálogo/UI: el equipo enciende/apaga UN solo interruptor «Generar»
-# («o llega copy o no empieza») y la capa de ajustes lo TRADUCE a las cinco etapas internas
-# de la fase noticia→copy. Las etapas siguen existiendo como mecanismo (daemons, vista
-# Pipelines, tests) pero dejan de ser botones: la única etapa con interruptor propio es
-# Ilustrar (la única con coste externo real). Estas claves VIRTUALES nunca se leen en runtime:
-# las lecturas siguen siendo por etapa; la API de ajustes escribe las claves físicas a la vez.
-#
-# DOS PROCESOS (ADR 0011): la máquina se gobierna con dos maestros, no con un único «Generar».
-#   - INVESTIGACIÓN: noticia recolectada, deduplicada, priorizada y VERIFICADA (el pool listo).
-#   - PRODUCCIÓN: la noticia verificada se convierte en pieza (copy). Ilustrar conserva su propio
-#     interruptor (única etapa con coste externo real); el AVANCE a revisión corre siempre.
-ENV_INVESTIGACION = "KENI_INVESTIGACION"
-ENV_PRODUCCION = "KENI_PRODUCCION"
-
-# Etapas que agrupa cada maestro (orden de pipeline). Solo las que admiten override por marca
-# (`etapa_activa`) entran en el fan-out, para que el toggle por marca sea simétrico. La
-# Clasificar marca IA y la priorización por rendimiento son flags propios de Investigación
-# (no per-marca) y se muestran aparte, no en el fan-out del maestro.
-ETAPAS_INVESTIGACION: tuple[str, ...] = (
-    ENV_PIPELINE_RECOLECTAR,
-    ENV_PIPELINE_FUSIONAR,
-    ENV_PRIORIZAR_PERFIL_IA,
-    ENV_PIPELINE_VERIFICAR,
-)
-ETAPAS_PRODUCCION: tuple[str, ...] = (ENV_PIPELINE_REDACTAR,)
-
-
 def _accesor_global_de_etapa(env_flag: str):
     """Accesor del maestro GLOBAL de una etapa del pipeline por su env (`KENI_PIPELINE_<ETAPA>`).
 

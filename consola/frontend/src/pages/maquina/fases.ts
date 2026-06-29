@@ -1,10 +1,10 @@
 /**
  * Las FASES de las dos máquinas (Investigación y Producción), en orden de flujo.
  *
- * Centralizadas aquí para que un único `PanelPipeline` las pinte como el ESQUELETO de cada
- * pestaña de la página «Contexto» (Máquina). Cada fase resuelve su switch por la PRIMERA de sus `claves`
- * presente en el catálogo; las que solo cuelgan del maestro virtual del proceso lo indican con
- * `heredada`.
+ * Centralizadas aquí como el ESQUELETO de cada proceso: alimentan las subpáginas por fase
+ * (`DetalleFase`) y el cálculo de qué daemons son «servicios» aparte (`ServiciosMaquina`, por
+ * `claves`). La vista Pipeline (`PipelineUnificado`) tiene su propia tabla de etapas con la
+ * criticidad y la cascada.
  */
 import type { FasePipeline } from "@/pages/monitor/PanelPipeline";
 
@@ -31,20 +31,14 @@ export function tieneContenido(fase: FasePipeline): boolean {
   );
 }
 
-/** Maestro VIRTUAL de Investigación: respaldo de las fases sin flag físico propio. */
-export const MAESTRO_INVESTIGACION = "KENI_INVESTIGACION";
-/** Maestro VIRTUAL de Producción: respaldo de las fases sin flag físico propio. */
-export const MAESTRO_PRODUCCION = "KENI_PRODUCCION";
-
 /** El flujo COMPLETO de Investigación (ADR 0011), de ENTRADA a SALIDA. */
 export const FASES_INVESTIGACION: readonly FasePipeline[] = [
   {
     nombre: "Recolectar",
     es_ia: false,
-    claves: ["KENI_PIPELINE_RECOLECTAR", MAESTRO_INVESTIGACION],
+    claves: ["KENI_PIPELINE_RECOLECTAR"],
     ayuda: "Recolecta artículos de las fuentes y agrupa las notas idénticas (misma url o titular)",
     queue: "recolectar",
-    excepciones: { base: MAESTRO_INVESTIGACION, nota: "Apaga Recolectar y Verificar juntas." },
     paralelo: "ingesta",
   },
   {
@@ -54,24 +48,24 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
     // barrido del daemon `trends`.
     nombre: "Google Trends",
     es_ia: false,
-    claves: ["KENI_TRENDS", MAESTRO_INVESTIGACION],
+    claves: ["KENI_TRENDS"],
     ayuda: "Ingiere las tendencias de Google al pool, como fuente extra junto a las fuentes RSS",
     daemon: "trends",
     paralelo: "ingesta",
   },
   {
-    // Cotejo previo a la fusión: corre por grupo propuesto ANTES de fundir. Seguidora del flag de
-    // Fusionar (solo el maestro en `claves`): no pinta switch propio, su recorrido lo gobierna Fusionar.
+    // Cotejo previo a la fusión: corre por grupo propuesto ANTES de fundir. Seguidora de Fusionar
+    // (sin flag propio, `claves: []`): su recorrido lo gobierna Fusionar.
     nombre: "Cotejar",
     es_ia: true,
-    claves: [MAESTRO_INVESTIGACION],
+    claves: [],
     ayuda: "Verifica cada grupo propuesto antes de fundir",
     doc: "prompt/fusionar-verificar",
   },
   {
     nombre: "Fusionar",
     es_ia: true,
-    claves: ["KENI_PIPELINE_FUSIONAR", MAESTRO_INVESTIGACION],
+    claves: ["KENI_PIPELINE_FUSIONAR"],
     ayuda: "Funde las notas del mismo hecho y agrupa las de un mismo gran evento",
     doc: "prompt/fusionar",
     etapa: "fusionar",
@@ -79,14 +73,14 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
   {
     nombre: "Traducir",
     es_ia: true,
-    claves: [MAESTRO_INVESTIGACION],
+    claves: [],
     ayuda: "Adapta el texto al español de México",
     doc: "prompt/traducir",
   },
   {
     nombre: "Priorizar",
     es_ia: true,
-    claves: ["KENI_PRIORIZAR_PERFIL_IA", MAESTRO_INVESTIGACION],
+    claves: ["KENI_PRIORIZAR_PERFIL_IA"],
     ayuda: "Ordena por relevancia para tu marca",
     doc: "prompt/priorizar",
     contextoMarca: true,
@@ -95,19 +89,18 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
   {
     nombre: "Admitir",
     es_ia: false,
-    claves: [MAESTRO_INVESTIGACION],
+    claves: [],
     ayuda: "Crea el tema admitido en la mesa de redacción",
     etapa: "admitir",
   },
   {
     nombre: "Verificar",
     es_ia: true,
-    claves: ["KENI_PIPELINE_VERIFICAR", MAESTRO_INVESTIGACION],
+    claves: ["KENI_PIPELINE_VERIFICAR"],
     ayuda: "Contrasta las fuentes antes de pasar a la mesa",
     doc: "prompt/verificar",
     queue: "verificar",
     etapa: "verificar",
-    excepciones: { base: MAESTRO_INVESTIGACION, nota: "Apaga Recolectar y Verificar juntas." },
     // Verificar (noticias) e Investigar evergreen son las dos vías de INVESTIGACIÓN —contrastar la
     // fuente de una historia vs. investigar una idea propia—: comparten fila horizontal (mismo `paralelo`).
     paralelo: "investigacion",
@@ -115,10 +108,10 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
   {
     // Rama PARALELA de Verificar: investiga una IDEA EVERGREEN aprobada (con web) y produce material
     // verificado que entra a producción como un tema más. No es un daemon (lo dispara aprobar la idea,
-    // no un barrido): solo cuelga del maestro y no pinta switch propio. Su prompt es editable aquí.
+    // no un barrido): sin flag propio (`claves: []`). Su prompt es editable aquí.
     nombre: "Investigar evergreen",
     es_ia: true,
-    claves: [MAESTRO_INVESTIGACION],
+    claves: [],
     ayuda: "Investiga una idea evergreen aprobada con web y produce material verificado para producción",
     doc: "prompt/investigar-evergreen",
     contextoMarca: true,
@@ -145,7 +138,7 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
     // decide el formato dentro de su propio prompt.
     nombre: "Decisor",
     es_ia: true,
-    claves: ["KENI_PIPELINE_DECISOR", MAESTRO_PRODUCCION],
+    claves: ["KENI_PIPELINE_DECISOR"],
     ayuda: "Elige el camino de la pieza —foto o carrusel— antes de redactarla",
     doc: "prompt/decisor",
     contextoMarca: true,
@@ -155,17 +148,13 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
   {
     nombre: "Redactar",
     es_ia: true,
-    claves: ["KENI_PIPELINE_REDACTAR", MAESTRO_PRODUCCION],
+    claves: ["KENI_PIPELINE_REDACTAR"],
     ayuda:
       "Redacta el copy que convierte la noticia verificada en pieza y revisa su voz y calidad antes de avanzar",
     doc: "prompt/redactar",
     contextoMarca: true,
     queue: "redactar",
     etapa: "redactar",
-    excepciones: {
-      base: MAESTRO_PRODUCCION,
-      nota: "Apagar «Producción» en una marca la deja sin copy automático.",
-    },
     // RAMA del Decisor: Redactar (foto) y Carrusel son los dos caminos PARALELOS entre los que el
     // Decisor enruta; comparten fila horizontal (como Recolectar + Google Trends en ingesta).
     paralelo: "redactar",
@@ -182,10 +171,10 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
     // Camino CARRUSEL de Redactar: RAMA PARALELA a Redactar (mismo `paralelo` id → comparten fila).
     // Cuando el Decisor elige carrusel, el copy se redacta con este prompt (panel editorial: portada
     // paraguas + un slide por sub-historia) en vez del de foto. Comparte el motor de copy de Redactar
-    // (su flag/cola); por eso solo cuelga del maestro y no pinta switch propio. Su prompt es editable aquí.
+    // (su flag/cola); por eso no tiene flag propio (`claves: []`). Su prompt es editable aquí.
     nombre: "Carrusel",
     es_ia: true,
-    claves: [MAESTRO_PRODUCCION],
+    claves: [],
     ayuda: "Redacta el copy como carrusel (panel de tarjetas) cuando el Decisor elige ese camino",
     doc: "prompt/redactar-carrusel",
     contextoMarca: true,
@@ -194,7 +183,7 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
   {
     nombre: "Keywords",
     es_ia: true,
-    claves: ["KENI_PIPELINE_SUGERIR_HASHTAGS", MAESTRO_PRODUCCION],
+    claves: ["KENI_PIPELINE_SUGERIR_HASHTAGS"],
     ayuda:
       "Propone los hashtags habituales de la marca (en gris, para aceptar o rechazar de un clic al revisar) y una imagen clave (keyword del sujeto visual) que alimenta el buscador de fotos de stock. Solo cuando al copy le faltan",
     doc: "prompt/sugerir-hashtags",
@@ -205,15 +194,11 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
   {
     nombre: "Ilustrar",
     es_ia: true,
-    claves: ["KENI_PIPELINE_ILUSTRAR", MAESTRO_PRODUCCION],
+    claves: ["KENI_PIPELINE_ILUSTRAR"],
     ayuda: "Genera imagen por IA para los temas con copy y sin imagen",
     doc: "prompt/ilustrar",
     queue: "ilustrar",
     etapa: "ilustrar",
-    excepciones: {
-      base: "KENI_PIPELINE_ILUSTRAR",
-      nota: "Apagar «Ilustrar» en una marca la deja sin imagen por IA.",
-    },
   },
   {
     // Respaldo de imagen cuando Ilustrar no aplica: descarga inline una foto de stock (banco
@@ -221,7 +206,7 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
     // (no lanza `claude -p`): no encola jobs ni deja runs, por eso no tiene `queue` ni `etapa`.
     nombre: "Stock",
     es_ia: false,
-    claves: ["KENI_PIPELINE_STOCK", MAESTRO_PRODUCCION],
+    claves: ["KENI_PIPELINE_STOCK"],
     ayuda: "Adjunta una foto de stock como referencia sin licencia para los temas sin imagen",
     // Su subpágina son los TOGGLES de fuentes de stock por marca (no Prompt · Contexto · Logs).
     panel: "stock",
@@ -232,7 +217,7 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
     // (`KENI_CRITICA_IA`), OFF por defecto. `seccion` la separa de la secuencia automática anterior.
     nombre: "Crítica",
     es_ia: true,
-    claves: ["KENI_CRITICA_IA", MAESTRO_PRODUCCION],
+    claves: ["KENI_CRITICA_IA"],
     ayuda: "Tras los dos OK humanos, revisa con visión la pieza terminada antes de auto-programar",
     doc: "prompt/critica",
     seccion: "Cadena de aprobación",

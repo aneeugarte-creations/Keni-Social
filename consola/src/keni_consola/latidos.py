@@ -159,10 +159,10 @@ def motor_de(daemon: str) -> str | None:
 #   - noticias_gc        -> KENI_NOTICIAS_GC          (noticias_gc_daemon: noticias_gc_activo)
 #   - patrones           -> KENI_PATRONES_AUTO        (patrones_refresco: patrones_auto_activo)
 #   - alertas_rendimiento-> KENI_ALERTAS_RENDIMIENTO  (alertas_rendimiento_activas)
-#   - investigacion      -> KENI_INVESTIGACION  (maestro virtual = sus etapas Recolectar+Verificar;
-#                                           el loop gatea con gate_maquina(alguna_etapa_investigacion_activa),
-#                                           que es True sii Recolectar o Verificar lo está. Interruptor PROPIO,
-#                                           independiente de Producción.)
+#   - investigacion      -> KENI_PIPELINE_VERIFICAR  (loop pipeline: gate_maquina(
+#                                           alguna_etapa_investigacion_activa), True sii Recolectar o
+#                                           Verificar lo está. Recolectar tiene su propia fila (ingesta);
+#                                           la de este loop refleja/controla su etapa Verificar.)
 #   - produccion         -> KENI_MAQUINA   (loop pipeline: gate_maquina(alguna_etapa_produccion_activa),
 #                                           que siempre es True bajo la máquina => su único interruptor de loop
 #                                           ES el maestro de la máquina. Redactar/Ilustrar se gatean dentro.)
@@ -179,7 +179,7 @@ CLAVE_GATE = {
     "noticias_gc": "KENI_NOTICIAS_GC",
     "patrones": "KENI_PATRONES_AUTO",
     "alertas_rendimiento": "KENI_ALERTAS_RENDIMIENTO",
-    "investigacion": "KENI_INVESTIGACION",
+    "investigacion": "KENI_PIPELINE_VERIFICAR",
     "produccion": "KENI_MAQUINA",
 }
 
@@ -364,12 +364,12 @@ def descripcion_de(daemon: str) -> str:
 # no expone ajustes: su comportamiento no tiene knobs de operación.
 AJUSTES: dict[str, list[str]] = {
     "investigacion": [
-        "KENI_INVESTIGACION", "KENI_PIPELINE_RECOLECTAR", "KENI_PIPELINE_VERIFICAR",
+        "KENI_PIPELINE_VERIFICAR", "KENI_PIPELINE_RECOLECTAR",
         "KENI_PIPELINE_MAX", "KENI_PIPELINE_EN_PROCESO_MAX",
         "KENI_PROMOVER_MIN_SCORE", "KENI_PROMOVER_MIN_MARCA", "KENI_PROMOVER_MADURACION_MIN",
     ],
     "produccion": [
-        "KENI_PRODUCCION", "KENI_PIPELINE_ILUSTRAR", "KENI_PIPELINE_STOCK",
+        "KENI_PIPELINE_REDACTAR", "KENI_PIPELINE_ILUSTRAR", "KENI_PIPELINE_STOCK",
         "KENI_GENERACION_PAUSADA", "KENI_ESFUERZO",
     ],
     "ingesta": ["KENI_PIPELINE_RECOLECTAR", "KENI_INGESTA_FILTRO"],
