@@ -924,8 +924,10 @@ def descartar_cluster(cluster_id: str) -> bool:
         return False
     con = _conectar()
     try:
+        # La lápida `descartado` suelta su `cluster_id` (el cluster se va): sin esto apuntaría a una
+        # fila inexistente. Mismo gesto que la migración 0062 hizo con las huérfanas históricas.
         con.execute(
-            "UPDATE noticias_items SET estado = 'descartado' WHERE cluster_id = ?",
+            "UPDATE noticias_items SET estado = 'descartado', cluster_id = '' WHERE cluster_id = ?",
             (cluster_id,),
         )
         cur = con.execute("DELETE FROM noticias_clusters WHERE id = ?", (cluster_id,))

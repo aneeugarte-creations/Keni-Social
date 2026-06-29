@@ -315,6 +315,12 @@ def purgar_pool_irrelevante(
                 f"SELECT COUNT(*) AS n FROM noticias_items WHERE {cond_items}", (cutoff,)
             ).fetchone()["n"]
             return {"clusters": int(n_cl or 0), "items": int(n_it or 0), "dry_run": 1}
+        ids_borrar = [
+            r["id"]
+            for r in con.execute(  # noqa: S608 -- condición estática; valores parametrizados
+                f"SELECT id FROM noticias_clusters WHERE {cond_clusters}", (score_umbral, cutoff)
+            )
+        ]
         cur_cl = con.execute(  # noqa: S608 -- condición estática; valores parametrizados
             f"DELETE FROM noticias_clusters WHERE {cond_clusters}", (score_umbral, cutoff)
         )
@@ -322,6 +328,14 @@ def purgar_pool_irrelevante(
         cur_it = con.execute(  # noqa: S608 -- idem
             f"DELETE FROM noticias_items WHERE {cond_items}", (cutoff,)
         )
+        # Los items que SOBREVIVEN (recientes, ligados…) de un cluster recién borrado sueltan su
+        # `cluster_id`: no debe quedar apuntando a una fila inexistente.
+        if ids_borrar:
+            marcadores = ",".join("?" for _ in ids_borrar)
+            con.execute(
+                f"UPDATE noticias_items SET cluster_id = '' WHERE cluster_id IN ({marcadores})",  # noqa: S608 -- marcadores parametrizados
+                tuple(ids_borrar),
+            )
         con.commit()
         return {"clusters": cur_cl.rowcount, "items": cur_it.rowcount, "dry_run": 0}
     finally:
@@ -365,7 +379,7 @@ def caducar_pool(
             "     OR (ultimo_visto = '' AND creado <> '' AND creado < ?))"
         )
         con.execute(  # noqa: S608 -- condición estática; valores parametrizados
-            "UPDATE noticias_items SET estado = 'descartado' WHERE cluster_id IN "
+            "UPDATE noticias_items SET estado = 'descartado', cluster_id = '' WHERE cluster_id IN "
             f"(SELECT id FROM noticias_clusters WHERE {cond_ttl})",
             (corte_ttl, corte_ttl),
         )
@@ -405,8 +419,14 @@ def borrar_noticia_cluster(cluster_id: str) -> bool:
     (`asignar_cluster_item`), se borra la fila vacía. NO toca `noticias_items` (sus items ya
     apuntan a otro cluster); si quedara alguno apuntando aquí, el clustering/GC lo recoloca.
     """
+    if not cluster_id:
+        return False
     con = _conectar()
     try:
+        # Por si algún item se quedó sin reasignar: que no apunte a la fila que se va.
+        con.execute(
+            "UPDATE noticias_items SET cluster_id = '' WHERE cluster_id = ?", (cluster_id,)
+        )
         cur = con.execute("DELETE FROM noticias_clusters WHERE id = ?", (cluster_id,))
         con.commit()
         return cur.rowcount > 0

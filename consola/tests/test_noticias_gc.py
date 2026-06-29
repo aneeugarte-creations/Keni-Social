@@ -156,6 +156,55 @@ def test_caducar_pool_retencion_borra_lapidas_e_items_sueltos_viejos(entorno):
     assert {it["clave"] for it in items} == set()
 
 
+def _item_por_clave(clave):
+    items, _ = repos.listar_noticias_items(limite=500)
+    return next((it for it in items if it["clave"] == clave), None)
+
+
+def test_descartar_cluster_suelta_cluster_id_de_la_lapida(entorno):
+    """Descartar borra el cluster; su item lápida no queda apuntando a la fila inexistente."""
+    _cluster("desc", ultimo_visto=_ahora())
+    repos.crear_noticias_items([
+        {"fuente_id": "f", "titulo": "It", "clave": "k-desc", "cluster_id": "desc",
+         "capturado_en": _ahora()},
+    ])
+
+    assert repos.descartar_cluster("desc") is True
+
+    it = _item_por_clave("k-desc")
+    assert it["estado"] == "descartado"
+    assert it["cluster_id"] == ""  # no cuelga del cluster borrado
+
+
+def test_purga_suelta_cluster_id_de_items_supervivientes(entorno):
+    """Un item RECIENTE de un cluster purgado sobrevive, pero suelta su `cluster_id`."""
+    _cluster("ruido", score=0.05, n_fuentes=1)  # purgable
+    repos.crear_noticias_items([
+        {"fuente_id": "f", "titulo": "It reciente", "clave": "k-superv", "cluster_id": "ruido",
+         "capturado_en": _ahora()},  # reciente: no entra en el borrado de items
+    ])
+
+    repos.purgar_pool_irrelevante(score_umbral=0.15, inactividad_horas=1)
+
+    assert "ruido" not in _ids()
+    it = _item_por_clave("k-superv")
+    assert it is not None and it["cluster_id"] == ""  # sobrevive, ya no cuelga
+
+
+def test_caducar_suelta_cluster_id_de_la_lapida(entorno):
+    """La lápida `descartado` de una historia caducada no apunta al cluster borrado."""
+    _cluster("caducada", ultimo_visto=_VIEJO)
+    repos.crear_noticias_items([
+        {"fuente_id": "f", "titulo": "Item", "clave": "k1", "cluster_id": "caducada",
+         "capturado_en": _VIEJO},
+    ])
+
+    repos.caducar_pool(ttl_horas=72, retencion_horas=0)
+
+    it = _item_por_clave("k1")
+    assert it["estado"] == "descartado" and it["cluster_id"] == ""
+
+
 def test_caducar_pool_retencion_cero_no_borra_lapidas(entorno):
     """Con retención 0 el TTL borra el cluster pero su item lápida sobrevive (no se purga)."""
     _cluster("caducada", ultimo_visto=_VIEJO)

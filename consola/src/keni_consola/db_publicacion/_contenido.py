@@ -777,6 +777,16 @@ def borrar_publicacion(publicacion_id: str) -> bool:
     """Borra un item del tablero, SUS filas por plataforma y etiquetas (cascada). True si existia."""
     con = _conectar()
     try:
+        # Noticias que se promovieron a este tema sueltan su `publicacion_id` (sentinel, no FK):
+        # si no, items y clusters quedarían apuntando a un tablero inexistente.
+        con.execute(
+            "UPDATE noticias_items SET publicacion_id = '' WHERE publicacion_id = ?",
+            (publicacion_id,),
+        )
+        con.execute(
+            "UPDATE noticias_clusters SET publicacion_id = '' WHERE publicacion_id = ?",
+            (publicacion_id,),
+        )
         con.execute(
             "DELETE FROM pieza WHERE publicacion_id = ?", (publicacion_id,)
         )

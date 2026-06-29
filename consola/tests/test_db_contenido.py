@@ -9,7 +9,7 @@ y que `actualizado` se refresca. Reutiliza la fixture `entorno` (Postgres de pru
 
 from __future__ import annotations
 
-from keni_consola import db, db_publicacion
+from keni_consola import db, db_publicacion, repos
 
 
 def test_crear_contenido_minimal(entorno):
@@ -130,6 +130,43 @@ def test_borrar_contenido_cascada_plataformas(entorno):
     assert db.borrar_publicacion(c["id"]) is True
     assert db.obtener_publicacion(c["id"]) is None
     assert db.obtener_pieza_fila(p["id"]) is None
+
+
+def test_borrar_publicacion_desliga_noticias(entorno):
+    """Borrar el tablero suelta el `publicacion_id` (sentinel) de las noticias que lo apuntaban."""
+    pub = db.crear_publicacion(titulo="Tema desde noticia")
+    repos.upsert_noticia_cluster({
+        "id": "cl-pub", "titulo": "H", "resumen": "r", "marca": "unotv",
+        "categoria": "mx", "geo": "MX", "clave": "t:cl-pub", "n_items": 1, "n_fuentes": 1,
+        "idiomas": ["es"], "senal": 0, "score": 0.1, "breaking": 0,
+        "primer_visto": "", "ultimo_visto": "", "estado": "usado",
+        "publicacion_id": pub["id"],
+    })
+    repos.crear_noticias_items([
+        {"fuente_id": "f", "titulo": "It", "clave": "k-pub", "cluster_id": "cl-pub",
+         "publicacion_id": pub["id"], "capturado_en": "2020-01-01T00:00:00+00:00"},
+    ])
+
+    assert db.borrar_publicacion(pub["id"]) is True
+
+    item = next(it for it in repos.listar_noticias_items(limite=500)[0] if it["clave"] == "k-pub")
+    assert item["publicacion_id"] == ""  # no cuelga del tablero borrado
+    assert repos.obtener_noticia_cluster("cl-pub")["publicacion_id"] == ""
+
+
+def test_borrar_pieza_suelta_desliga_noticias(entorno):
+    """El borrado del padre 1:1 via `borrar_pieza` también suelta las refs de noticias."""
+    pub = db.crear_pieza("unotv", "x", titulo="T", contenido="C")
+    padre_id = db.obtener_pieza_fila(pub["id"])["publicacion_id"]
+    repos.crear_noticias_items([
+        {"fuente_id": "f", "titulo": "It", "clave": "k-pieza", "cluster_id": "",
+         "publicacion_id": padre_id, "capturado_en": "2020-01-01T00:00:00+00:00"},
+    ])
+
+    assert db.borrar_pieza(pub["id"]) is True
+
+    item = next(it for it in repos.listar_noticias_items(limite=500)[0] if it["clave"] == "k-pieza")
+    assert item["publicacion_id"] == ""
 
 
 def test_crear_preserva_id_para_migracion(entorno):

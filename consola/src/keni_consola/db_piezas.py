@@ -920,6 +920,15 @@ def borrar_pieza(pieza_id: str) -> bool:
         if cuenta is not None and int(cuenta["n"]) <= 1:
             # Padre 1:1 con la pieza: borrarlo arrastra fila y etiquetas (cascada manual,
             # mismas sentencias que `borrar_publicacion` pero dentro de ESTA transaccion).
+            # Las noticias promovidas a este tema sueltan su `publicacion_id` (sentinel, no FK).
+            con.execute(
+                "UPDATE noticias_items SET publicacion_id = '' WHERE publicacion_id = ?",
+                (publicacion_id,),
+            )
+            con.execute(
+                "UPDATE noticias_clusters SET publicacion_id = '' WHERE publicacion_id = ?",
+                (publicacion_id,),
+            )
             con.execute(
                 "DELETE FROM pieza WHERE publicacion_id = ?", (publicacion_id,)
             )
