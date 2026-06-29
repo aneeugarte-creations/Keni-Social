@@ -616,7 +616,8 @@ def test_gasto_ia_economia_filtra_por_marca(pg):
 
     solo_unotv = db.gasto_ia_economia_por_proceso(3, marca="unotv")
     assert solo_unotv["produccion"]["total"] == {
-        "items": 1, "tokens": 140, "coste_usd": pytest.approx(0.01)}
+        "items": 1, "tokens_in": 100, "tokens_out": 40, "tokens": 140,
+        "coste_usd": pytest.approx(0.01)}
 
     todas = db.gasto_ia_economia_por_proceso(3)
     assert todas["produccion"]["total"]["items"] == 2
