@@ -143,7 +143,10 @@ def _chequeos_presupuesto() -> list[dict]:
         salida.append(_chequeo(
             "maquina:presupuesto", "Presupuesto de IA", "ok", detalle, admin=False,
         ))
-    gate = est.get("gate_diario") or {}
+    # Gate diario por % POR CUENTA: cualquier cuenta que haya alcanzado su umbral del día pausa SUS
+    # marcas. Reportamos las cuentas gateadas (puede haber una o las dos).
+    cuentas = est.get("gate_diario_cuentas") or {}
+    gateadas = [g for g in cuentas.values() if g.get("pausado_por_pct")]
     if bool(est.get("pausada")):
         salida.append(_chequeo(
             "maquina:pausa", "Generación con IA", "aviso",
@@ -151,15 +154,18 @@ def _chequeos_presupuesto() -> list[dict]:
             admin=False,
             siguiente_paso="Reactívala en el Monitor (ajuste «Generación con IA: pausada»).",
         ))
-    elif bool(gate.get("pausado_por_pct")):
-        consumo = gate.get("consumo_hoy_pct")
-        umbral = gate.get("umbral_pct")
+    elif gateadas:
+        detalle_cuentas = "; ".join(
+            f"cuenta {str(g.get('cuenta') or '?').upper()}: {g.get('consumo_hoy_pct')}% "
+            f"(umbral {g.get('umbral_pct')}%)"
+            for g in gateadas
+        )
         salida.append(_chequeo(
             "maquina:pausa", "Generación con IA", "aviso",
-            f"Generación PAUSADA por consumo del día: {consumo}% del límite semanal hoy "
-            f"(umbral {umbral}%). No se encola ni se ejecuta nada nuevo.",
+            f"Generación PAUSADA por consumo del día en {len(gateadas)} cuenta(s): {detalle_cuentas}. "
+            "Las marcas de esa(s) cuenta(s) no encolan ni ejecutan nada nuevo.",
             admin=False,
-            siguiente_paso="Un administrador puede aceptar +10% en el Monitor (Economía) para reanudar.",
+            siguiente_paso="Un administrador puede aceptar +10% en el Monitor (Economía) para reanudar la cuenta afectada.",
         ))
     else:
         salida.append(_chequeo(

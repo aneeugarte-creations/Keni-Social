@@ -289,41 +289,69 @@ def test_purgar_requiere_admin(entorno):
 # --------------------------------------------------------------------------- #
 
 
-def test_cola_expone_gate_diario(entorno):
-    """El snapshot trae el gate diario bajo `presupuesto.gate_diario`. Sin cablear la fuente del
-    %, `consumo_hoy_pct` es None y no pausa (rollout: gate inerte)."""
-    gate = _cli_token().get("/api/actividad/cola").json()["presupuesto"]["gate_diario"]
-    assert {"consumo_hoy_pct", "umbral_pct", "aceptados_hoy", "pausado_por_pct"} <= set(gate)
-    assert gate["consumo_hoy_pct"] is None
-    assert gate["pausado_por_pct"] is False
-    assert gate["aceptados_hoy"] == 0
+def test_cola_expone_gate_diario_por_cuenta(entorno):
+    """El snapshot trae el gate diario POR CUENTA bajo `presupuesto.gate_diario_cuentas` (las dos
+    cuentas). En vista global (sin marca) `gate_diario` es None. Sin cablear la fuente del %,
+    `consumo_hoy_pct` es None y ninguna cuenta pausa (rollout: gate inerte)."""
+    presupuesto = _cli_token().get("/api/actividad/cola").json()["presupuesto"]
+    assert presupuesto["gate_diario"] is None  # vista global: sin cuenta concreta
+    cuentas = presupuesto["gate_diario_cuentas"]
+    assert set(cuentas) == {"a", "b"}
+    for cuenta, gate in cuentas.items():
+        assert gate["cuenta"] == cuenta
+        assert {"consumo_hoy_pct", "umbral_pct", "aceptados_hoy", "pausado_por_pct"} <= set(gate)
+        assert gate["consumo_hoy_pct"] is None
+        assert gate["pausado_por_pct"] is False
+        assert gate["aceptados_hoy"] == 0
 
 
-def test_gate_diario_aceptar_sube_umbral_admin(entorno):
-    r = _cli_como("admin").post("/api/actividad/cola/gate-diario/aceptar", headers=_ORIGIN)
+def test_gate_diario_aceptar_sube_umbral_de_la_cuenta_admin(entorno):
+    """Aceptar +10% por cuenta sube el umbral del dia de ESA cuenta (no de la otra)."""
+    r = _cli_como("admin").post("/api/actividad/cola/gate-diario/aceptar?cuenta=b", headers=_ORIGIN)
     assert r.status_code == 200
     body = r.json()
+    assert body["cuenta"] == "b"
     assert body["aceptados_hoy"] == 1
     # Umbral base ~14,3 + 10 = 24,3 (redondeado a 1 decimal).
     assert body["umbral_pct"] == round(100.0 / 7.0 + 10.0, 1)
+    # La otra cuenta (A) sigue en la base: el aceptar fue solo de B.
+    cuentas = _cli_token().get("/api/actividad/cola").json()["presupuesto"]["gate_diario_cuentas"]
+    assert cuentas["a"]["aceptados_hoy"] == 0
+    assert cuentas["b"]["aceptados_hoy"] == 1
+
+
+def test_gate_diario_aceptar_cuenta_invalida_es_400(entorno):
+    """Sin `cuenta` valida el endpoint responde 400 (no muta nada)."""
+    assert (
+        _cli_como("admin")
+        .post("/api/actividad/cola/gate-diario/aceptar", headers=_ORIGIN)
+        .status_code
+        == 400
+    )
+    assert (
+        _cli_como("admin")
+        .post("/api/actividad/cola/gate-diario/aceptar?cuenta=z", headers=_ORIGIN)
+        .status_code
+        == 400
+    )
 
 
 def test_gate_diario_aceptar_requiere_admin(entorno):
     assert (
         _cli_como("editor")
-        .post("/api/actividad/cola/gate-diario/aceptar", headers=_ORIGIN)
+        .post("/api/actividad/cola/gate-diario/aceptar?cuenta=a", headers=_ORIGIN)
         .status_code
         == 403
     )
     assert (
         _cli_token()
-        .post("/api/actividad/cola/gate-diario/aceptar", headers=_ORIGIN)
+        .post("/api/actividad/cola/gate-diario/aceptar?cuenta=a", headers=_ORIGIN)
         .status_code
         == 403
     )
-    # Ningun aceptar caló: el umbral sigue en la base.
-    gate = _cli_token().get("/api/actividad/cola").json()["presupuesto"]["gate_diario"]
-    assert gate["aceptados_hoy"] == 0
+    # Ningun aceptar caló: las cuentas siguen en la base.
+    cuentas = _cli_token().get("/api/actividad/cola").json()["presupuesto"]["gate_diario_cuentas"]
+    assert all(g["aceptados_hoy"] == 0 for g in cuentas.values())
 
 
 def test_lanzar_urgente_encola_con_prioridad_breaking(entorno, monkeypatch):

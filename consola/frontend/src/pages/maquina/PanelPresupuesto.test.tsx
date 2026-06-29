@@ -12,6 +12,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 function gate(parcial: Partial<GateDiarioIA> = {}): GateDiarioIA {
   return {
+    cuenta: "a",
     consumo_hoy_pct: null,
     umbral_pct: 14.3,
     aceptados_hoy: 0,
@@ -47,41 +48,46 @@ function renderConProviders(ui: React.ReactElement) {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
-describe("PanelPresupuesto · gate diario por %", () => {
+// Modo "una marca": el back manda `gate_diario` (el bloque de la cuenta de esa marca).
+describe("PanelPresupuesto · gate diario por % · modo una marca", () => {
   beforeEach(() => vi.restoreAllMocks());
 
   it("sin pausa ni datos del % no pinta el gate diario", () => {
     renderConProviders(
-      <PanelPresupuesto presupuesto={presupuesto({ gate_diario: gate() })} esAdmin />,
+      <PanelPresupuesto presupuesto={presupuesto({ marca: "unotv", gate_diario: gate() })} esAdmin />,
     );
     expect(screen.queryByText(/consumo del día/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Aceptar continuar/i)).not.toBeInTheDocument();
   });
 
-  it("pausado por % muestra la pantalla y el botón Aceptar +10% (admin) y al pulsarlo llama al endpoint", async () => {
+  it("pausado por % muestra la pantalla y el botón Aceptar +10% (admin) y al pulsarlo llama al endpoint con la cuenta", async () => {
     const aceptar = vi
       .spyOn(api, "gateDiarioAceptar")
-      .mockResolvedValue(gate({ consumo_hoy_pct: 16, umbral_pct: 24.3, aceptados_hoy: 1, pausado_por_pct: false }));
+      .mockResolvedValue(
+        gate({ cuenta: "b", consumo_hoy_pct: 16, umbral_pct: 24.3, aceptados_hoy: 1, pausado_por_pct: false }),
+      );
     renderConProviders(
       <PanelPresupuesto
         presupuesto={presupuesto({
+          marca: "unotv",
           nivel: "pausado",
-          gate_diario: gate({ consumo_hoy_pct: 16, umbral_pct: 14.3, pausado_por_pct: true }),
+          gate_diario: gate({ cuenta: "b", consumo_hoy_pct: 16, umbral_pct: 14.3, pausado_por_pct: true }),
         })}
         esAdmin
       />,
     );
-    expect(screen.getByText(/Generación pausada por el consumo del día/i)).toBeInTheDocument();
+    expect(screen.getByText(/Generación pausada por el consumo del día \(cuenta B\)/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Aceptar continuar \(\+10%\)/i }));
-    await waitFor(() => expect(aceptar).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(aceptar).toHaveBeenCalledWith("b"));
   });
 
   it("pausado por % a un NO-admin: ve la pausa pero ningún botón de aceptar", () => {
     renderConProviders(
       <PanelPresupuesto
         presupuesto={presupuesto({
+          marca: "unotv",
           nivel: "pausado",
-          gate_diario: gate({ consumo_hoy_pct: 16, umbral_pct: 14.3, pausado_por_pct: true }),
+          gate_diario: gate({ cuenta: "b", consumo_hoy_pct: 16, umbral_pct: 14.3, pausado_por_pct: true }),
         })}
         esAdmin={false}
       />,
@@ -91,13 +97,79 @@ describe("PanelPresupuesto · gate diario por %", () => {
     expect(screen.getByText(/administrador puede aceptar \+10%/i)).toBeInTheDocument();
   });
 
-  it("con datos del % sin pausa muestra una línea discreta de consumo del día", () => {
+  it("con datos del % sin pausa muestra una línea discreta de consumo del día (con la cuenta)", () => {
     renderConProviders(
       <PanelPresupuesto
-        presupuesto={presupuesto({ gate_diario: gate({ consumo_hoy_pct: 9.5, umbral_pct: 14.3 }) })}
+        presupuesto={presupuesto({
+          marca: "unotv",
+          gate_diario: gate({ cuenta: "b", consumo_hoy_pct: 9.5, umbral_pct: 14.3 }),
+        })}
         esAdmin
       />,
     );
-    expect(screen.getByText(/Consumo de hoy: 9.5% del límite semanal/i)).toBeInTheDocument();
+    expect(screen.getByText(/Consumo de hoy \(cuenta B\): 9.5% del límite semanal/i)).toBeInTheDocument();
+  });
+});
+
+// Modo "Todas" (sin marca): el back manda `gate_diario` null y `gate_diario_cuentas` con ambas.
+// Solo se pintan los avisos de las cuentas GATEADAS; cada «Aceptar» actúa sobre SU cuenta.
+describe("PanelPresupuesto · gate diario por % · modo Todas", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it("pausa solo la cuenta B: muestra el aviso de B, no el de A, y aceptar usa la cuenta B", async () => {
+    const aceptar = vi.spyOn(api, "gateDiarioAceptar").mockResolvedValue(gate({ cuenta: "b" }));
+    renderConProviders(
+      <PanelPresupuesto
+        presupuesto={presupuesto({
+          marca: "",
+          gate_diario: null,
+          gate_diario_cuentas: {
+            a: gate({ cuenta: "a", consumo_hoy_pct: 5, pausado_por_pct: false }),
+            b: gate({ cuenta: "b", consumo_hoy_pct: 16, umbral_pct: 14.3, pausado_por_pct: true }),
+          },
+        })}
+        esAdmin
+      />,
+    );
+    expect(screen.getByText(/Generación pausada por el consumo del día \(cuenta B\)/i)).toBeInTheDocument();
+    expect(screen.queryByText(/\(cuenta A\)/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Aceptar continuar \(\+10%\)/i }));
+    await waitFor(() => expect(aceptar).toHaveBeenCalledWith("b"));
+  });
+
+  it("ambas cuentas gateadas: dos avisos, uno por cuenta", () => {
+    renderConProviders(
+      <PanelPresupuesto
+        presupuesto={presupuesto({
+          marca: "",
+          gate_diario: null,
+          gate_diario_cuentas: {
+            a: gate({ cuenta: "a", consumo_hoy_pct: 20, umbral_pct: 14.3, pausado_por_pct: true }),
+            b: gate({ cuenta: "b", consumo_hoy_pct: 30, umbral_pct: 14.3, pausado_por_pct: true }),
+          },
+        })}
+        esAdmin
+      />,
+    );
+    expect(screen.getByText(/Generación pausada por el consumo del día \(cuenta A\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Generación pausada por el consumo del día \(cuenta B\)/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Aceptar continuar \(\+10%\)/i })).toHaveLength(2);
+  });
+
+  it("ninguna cuenta gateada: no pinta avisos del gate diario", () => {
+    renderConProviders(
+      <PanelPresupuesto
+        presupuesto={presupuesto({
+          marca: "",
+          gate_diario: null,
+          gate_diario_cuentas: {
+            a: gate({ cuenta: "a", consumo_hoy_pct: 5, pausado_por_pct: false }),
+            b: gate({ cuenta: "b", consumo_hoy_pct: 8, pausado_por_pct: false }),
+          },
+        })}
+        esAdmin
+      />,
+    );
+    expect(screen.queryByText(/consumo del día/i)).not.toBeInTheDocument();
   });
 });

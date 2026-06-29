@@ -242,17 +242,22 @@ def test_chequeo_pausa_por_kill_switch(entorno, sondas_sanas, monkeypatch):
 
 
 def test_chequeo_pausa_por_gate_diario(entorno, sondas_sanas, monkeypatch):
-    """Pausa por % del consumo del día (no kill switch): el chequeo `maquina:pausa` lo distingue."""
+    """Pausa por % del consumo del día de UNA cuenta (no kill switch): el chequeo `maquina:pausa` lo
+    distingue y nombra la cuenta afectada."""
     est = {
         **_presupuesto_sano(),
         "nivel": presupuesto_ia.NIVEL_PAUSADO,
         "pausada": False,
-        "gate_diario": {"consumo_hoy_pct": 16.0, "umbral_pct": 14.3, "pausado_por_pct": True},
+        "gate_diario_cuentas": {
+            "a": {"cuenta": "a", "consumo_hoy_pct": 5.0, "umbral_pct": 14.3, "pausado_por_pct": False},
+            "b": {"cuenta": "b", "consumo_hoy_pct": 16.0, "umbral_pct": 14.3, "pausado_por_pct": True},
+        },
     }
     monkeypatch.setattr(presupuesto_ia, "estado", lambda: est)
     ch = _chequeos(_cliente().get("/api/estado").json())["maquina:pausa"]
     assert ch["estado"] == "aviso"
     assert "consumo del día" in ch["detalle"]
+    assert "cuenta B" in ch["detalle"]  # nombra la cuenta gateada, no la sana
     assert "+10%" in ch["siguiente_paso"]
 
 

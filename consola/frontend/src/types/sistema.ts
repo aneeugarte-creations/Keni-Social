@@ -198,13 +198,17 @@ export interface PresupuestoProcesoIA {
   nivel: string;
 }
 
-/** Gate DIARIO por % del límite SEMANAL de la cuenta de Claude (GLOBAL, igual en toda marca: la
- *  cuenta es una). Pausa TODA la generación (auto y manual) cuando el consumo del día alcanza el
- *  umbral vigente; aceptar +10% sube el umbral del día y reanuda. Es la razón de un `nivel ==
- *  "pausado"` cuando `pausada` (kill switch) es false. */
+/** Gate DIARIO por % del límite SEMANAL POR CUENTA de Claude (hay dos cuentas, A/B; cada una con su
+ *  cupo semanal). Pausa la generación de las marcas de SU cuenta (auto y manual) cuando el consumo
+ *  del día de esa cuenta alcanza su umbral vigente; aceptar +10% sube el umbral del día de la cuenta
+ *  y reanuda sus marcas. Es la razón de un `nivel == "pausado"` (en la vista de una marca de esa
+ *  cuenta) con `pausada` (kill switch) en false. */
 export interface GateDiarioIA {
-  /** Puntos porcentuales del límite semanal consumidos HOY (UTC). null mientras la fuente del %
-   *  no exista (rollout): con null el gate está inerte y `pausado_por_pct` es false. */
+  /** Cuenta de Claude a la que pertenece este bloque ("a" | "b"): a quién aplica el aviso y el
+   *  «Aceptar +10%». */
+  cuenta: string;
+  /** Puntos porcentuales del límite semanal de la cuenta consumidos HOY (UTC). null mientras la
+   *  fuente del % no exista (rollout): con null el gate está inerte y `pausado_por_pct` es false. */
   consumo_hoy_pct: number | null;
   /** Umbral vigente del día (puntos porcentuales del semanal): base ~14,3 + 10 por cada aceptar. */
   umbral_pct: number;
@@ -250,9 +254,14 @@ export interface PresupuestoIA {
   /** Desglose por motor (investigación/producción): gasto in/out + tope propio. Opcional para
    *  compatibilidad con backs anteriores (durante el rollout puede no venir). */
   por_proceso?: Partial<Record<Proceso, PresupuestoProcesoIA>>;
-  /** Gate diario por % del límite semanal (GLOBAL). Opcional para compatibilidad con backs
+  /** Gate diario por % del límite semanal de la CUENTA de esta marca (su aviso/«Aceptar +10%»).
+   *  null en la vista global ("Todas", sin cuenta concreta). Opcional para compatibilidad con backs
    *  anteriores (durante el rollout puede no venir). */
-  gate_diario?: GateDiarioIA;
+  gate_diario?: GateDiarioIA | null;
+  /** Gate diario por % de TODAS las cuentas (`{a, b}`): lo usa el modo "Todas" del selector para
+   *  pintar el aviso de cada cuenta que esté gateada. Opcional para compatibilidad con backs
+   *  anteriores. */
+  gate_diario_cuentas?: Record<string, GateDiarioIA>;
 }
 
 /** Conteo del pool COMPARTIDO atribuible a un proceso (jobs en curso de ese loop). */

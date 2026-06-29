@@ -382,32 +382,42 @@ function PanelMotor({
   );
 }
 
-/** Gate DIARIO por % del límite SEMANAL de la cuenta de Claude (GLOBAL). Cuando el consumo del día
- *  alcanza el umbral vigente, TODA la generación (auto y manual) se pausa y aparece la pantalla
- *  «Aceptar continuar (+10%)» (solo admin: sube el umbral del día y reanuda). A un no-admin solo le
- *  aparece que la generación está pausada por el presupuesto del día. Muy claro pero no intrusivo:
- *  sin pausa NO pinta nada (devuelve null); con datos del % sin pausa, una línea discreta de estado.
- *  Hooks siempre al tope (el componente siempre se monta), por eso decide qué pintar al final. */
-function BloqueGateDiario({ gate, esAdmin }: { gate: GateDiarioIA | undefined; esAdmin: boolean }) {
+/** Aviso del gate diario por % de UNA cuenta de Claude. Cuando el consumo del día de la cuenta
+ *  alcanza su umbral, la generación de SUS marcas (auto y manual) se pausa y aparece la pantalla
+ *  «Aceptar continuar (+10%)» (solo admin: sube el umbral del día de ESA cuenta y reanuda). A un
+ *  no-admin solo le aparece que está pausada por el consumo del día. `lineaSiNoPausada` controla si,
+ *  sin pausa, se pinta una línea discreta de consumo (modo de una marca) o nada (modo "Todas", donde
+ *  solo interesan las cuentas gateadas). Sin datos del % (rollout) no pinta nada. */
+function AvisoGateCuenta({
+  gate,
+  esAdmin,
+  lineaSiNoPausada,
+}: {
+  gate: GateDiarioIA;
+  esAdmin: boolean;
+  lineaSiNoPausada: boolean;
+}) {
   const qc = useQueryClient();
   const aceptar = useMutation({
-    mutationFn: () => api.gateDiarioAceptar(),
+    mutationFn: () => api.gateDiarioAceptar(gate.cuenta),
     onSuccess: () => {
-      toast.success("Generación reanudada: +10% para hoy.");
+      toast.success(`Generación reanudada (cuenta ${gate.cuenta.toUpperCase()}): +10% para hoy.`);
       void qc.invalidateQueries({ queryKey: ["actividad", "cola"] });
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
 
   // Sin datos del % (la fuente aún no existe / rollout) no hay nada que decir.
-  if (!gate || gate.consumo_hoy_pct == null) return null;
+  if (gate.consumo_hoy_pct == null) return null;
   const consumo = gate.consumo_hoy_pct;
+  const etiquetaCuenta = `cuenta ${gate.cuenta.toUpperCase()}`;
 
-  // No pausado: una línea discreta de consumo del día (informativa, no intrusiva).
+  // No pausado: una línea discreta de consumo del día (solo cuando se pide; informativa).
   if (!gate.pausado_por_pct) {
+    if (!lineaSiNoPausada) return null;
     return (
       <p className="text-xs text-muted-foreground tabular-nums">
-        Consumo de hoy: {consumo.toFixed(1)}% del límite semanal · umbral del día{" "}
+        Consumo de hoy ({etiquetaCuenta}): {consumo.toFixed(1)}% del límite semanal · umbral del día{" "}
         {gate.umbral_pct.toFixed(1)}%
         {gate.aceptados_hoy > 0 && ` · +${gate.aceptados_hoy * gate.paso_pct}% aceptado`}
       </p>
@@ -421,12 +431,12 @@ function BloqueGateDiario({ gate, esAdmin }: { gate: GateDiarioIA | undefined; e
         <PauseCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" aria-hidden="true" />
         <div className="space-y-1">
           <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-            Generación pausada por el consumo del día
+            Generación pausada por el consumo del día ({etiquetaCuenta})
           </p>
           <p className="text-xs text-amber-800 dark:text-amber-300/90 tabular-nums">
-            Hoy se ha consumido {consumo.toFixed(1)}% del límite semanal de la cuenta (umbral del
-            día {gate.umbral_pct.toFixed(1)}%). No se encola ni se ejecuta nada nuevo —ni automático
-            ni manual— hasta reanudar.
+            Hoy se ha consumido {consumo.toFixed(1)}% del límite semanal de la {etiquetaCuenta}{" "}
+            (umbral del día {gate.umbral_pct.toFixed(1)}%). No se encola ni se ejecuta nada nuevo de
+            sus marcas —ni automático ni manual— hasta reanudar.
           </p>
         </div>
       </div>
@@ -441,9 +451,38 @@ function BloqueGateDiario({ gate, esAdmin }: { gate: GateDiarioIA | undefined; e
         </Button>
       ) : (
         <p className="text-xs text-amber-800 dark:text-amber-300/90">
-          Un administrador puede aceptar +10% para reanudar la generación de hoy.
+          Un administrador puede aceptar +10% para reanudar la generación de hoy de esta cuenta.
         </p>
       )}
+    </div>
+  );
+}
+
+/** Gate DIARIO por % del límite SEMANAL POR CUENTA. Sigue el SELECTOR DE MARCA activo (lo refleja el
+ *  ámbito del presupuesto que trae la cola): con una marca seleccionada, el back manda el bloque de
+ *  SU cuenta (`gate_diario`) y se pinta un único aviso (con línea discreta de consumo si no hay
+ *  pausa); en "Todas" (sin marca, `gate_diario` null) se pintan los bloques de `gate_diario_cuentas`
+ *  de las cuentas que estén gateadas (puede haber dos avisos). Hooks al tope del subcomponente; este
+ *  solo decide qué bloques montar. */
+function BloqueGateDiario({
+  gate,
+  gateCuentas,
+  esAdmin,
+}: {
+  gate: GateDiarioIA | null | undefined;
+  gateCuentas: Record<string, GateDiarioIA> | undefined;
+  esAdmin: boolean;
+}) {
+  // Marca seleccionada: el back resolvió la cuenta de esa marca -> un único aviso (con línea discreta).
+  if (gate) return <AvisoGateCuenta gate={gate} esAdmin={esAdmin} lineaSiNoPausada />;
+  // "Todas": un aviso por cada cuenta GATEADA (las no pausadas no se pintan para no saturar).
+  const cuentas = Object.values(gateCuentas ?? {}).filter((g) => g.pausado_por_pct);
+  if (cuentas.length === 0) return null;
+  return (
+    <div className="space-y-3">
+      {cuentas.map((g) => (
+        <AvisoGateCuenta key={g.cuenta} gate={g} esAdmin={esAdmin} lineaSiNoPausada={false} />
+      ))}
     </div>
   );
 }
@@ -491,10 +530,15 @@ export function PanelPresupuesto({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Gate diario por % del límite semanal (GLOBAL): el aviso/pantalla de «Aceptar +10%»
-            cuando el consumo del día pausa la generación. Va arriba para que sea lo primero que
-            se ve cuando hay pausa. */}
-        <BloqueGateDiario gate={presupuesto.gate_diario} esAdmin={esAdmin} />
+        {/* Gate diario por % del límite semanal POR CUENTA: el aviso/pantalla de «Aceptar +10%»
+            cuando el consumo del día de una cuenta pausa SUS marcas. Con marca activa, el de su
+            cuenta; en "Todas", el de la(s) cuenta(s) gateada(s). Va arriba para que sea lo primero
+            que se ve cuando hay pausa. */}
+        <BloqueGateDiario
+          gate={presupuesto.gate_diario}
+          gateCuentas={presupuesto.gate_diario_cuentas}
+          esAdmin={esAdmin}
+        />
         {/* Cabecera: gasto de hoy (del ámbito) + parada de emergencia (global o de la marca). */}
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <p className="text-sm">

@@ -549,17 +549,26 @@ def _cola_reencolar(gen_id: str) -> tuple[int, dict]:
 
 
 async def gate_diario_aceptar(request: Request) -> Response:
-    """POST /api/actividad/cola/gate-diario/aceptar: sube el umbral del dia +10%. Admin.
+    """POST /api/actividad/cola/gate-diario/aceptar?cuenta=a|b: sube +10% el umbral del dia de ESA
+    cuenta. Admin.
 
-    El gate DIARIO pausa TODA la generacion cuando el consumo del dia alcanza el umbral vigente
-    (un % del limite SEMANAL de la cuenta). Aceptar +10% sube el umbral del dia y reanuda; al
-    cruzar el nuevo umbral vuelve a pausar. Devuelve el estado del gate ya actualizado (la misma
-    forma que `presupuesto.gate_diario` de `/api/actividad/cola`). El estado se LEE de ahi; este
-    endpoint solo MUTA (sube el umbral), por eso es admin.
+    El gate DIARIO pausa la generacion de las marcas de UNA cuenta cuando el consumo del dia de esa
+    cuenta alcanza su umbral vigente (un % de SU limite SEMANAL). Aceptar +10% sube el umbral del dia
+    de la cuenta indicada y reanuda sus marcas; al cruzar el nuevo umbral vuelve a pausar. `cuenta`
+    es obligatoria y debe ser una cuenta valida (`jobspec.CUENTAS`). Devuelve el estado del gate de
+    esa cuenta ya actualizado (la misma forma que un bloque de `presupuesto.gate_diario_cuentas` de
+    `/api/actividad/cola`). El estado se LEE de ahi; este endpoint solo MUTA, por eso es admin.
     """
     if not permisos.es_admin(request):
         return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
-    return JSONResponse(await run_in_threadpool(gate_diario.aceptar_mas))
+    from ..dominio import jobspec
+
+    cuenta = (request.query_params.get("cuenta") or "").strip().lower()
+    if cuenta not in jobspec.CUENTAS:
+        return JSONResponse(
+            {"error": f"Cuenta no valida; usa una de {list(jobspec.CUENTAS)}."}, status_code=400
+        )
+    return JSONResponse(await run_in_threadpool(gate_diario.aceptar_mas, cuenta))
 
 
 RUTAS = [

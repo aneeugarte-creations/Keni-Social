@@ -48,10 +48,14 @@ export const apiActividad = {
       metodo: "POST",
       json: { gen_id: genId },
     }),
-  // Gate diario por % del límite semanal: sube el umbral del día +10% y reanuda la generación.
-  // Devuelve el estado del gate ya actualizado (la misma forma que `presupuesto.gate_diario`).
-  gateDiarioAceptar: () =>
-    peticion<GateDiarioIA>("/actividad/cola/gate-diario/aceptar", { metodo: "POST" }),
+  // Gate diario por % del límite semanal POR CUENTA: sube +10% el umbral del día de ESA cuenta y
+  // reanuda la generación de sus marcas. Devuelve el estado del gate de la cuenta ya actualizado
+  // (la misma forma que un bloque de `presupuesto.gate_diario_cuentas`).
+  gateDiarioAceptar: (cuenta: string) =>
+    peticion<GateDiarioIA>(
+      `/actividad/cola/gate-diario/aceptar${query({ cuenta })}`,
+      { metodo: "POST" },
+    ),
   // Producción del día (líneas del plan editorial) para el Monitor.
   produccionDia: (marca: string, signal?: AbortSignal) =>
     peticion<ProduccionDia>(`/produccion/dia${query({ marca })}`, { signal }),

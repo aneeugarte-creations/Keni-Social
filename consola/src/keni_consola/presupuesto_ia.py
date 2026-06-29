@@ -39,7 +39,7 @@ import threading
 import time
 from typing import Any
 
-from . import config, gate_diario
+from . import config, gate_diario, ruteo_cuentas
 from .tiempo import ahora_iso
 
 _log = logging.getLogger("keni_consola.presupuesto_ia")
@@ -283,10 +283,13 @@ def _nivel_global(marca: str = "") -> str:
     """
     if config.generacion_pausada() or (marca and config.generacion_pausada_marca(marca)):
         return NIVEL_PAUSADO
-    # Gate DIARIO por % del limite SEMANAL de la cuenta: corte TOTAL (auto y manual) cuando el
-    # consumo del dia alcanza el umbral vigente. Es GLOBAL (la cuenta es una): corta tambien el
-    # trabajo de cualquier marca. Inerte mientras su fuente del % no exista (devuelve False).
-    if gate_diario.pausado_por_pct():
+    # Gate DIARIO por % del limite SEMANAL POR CUENTA: corte TOTAL (auto y manual) de las marcas de
+    # una cuenta cuando el consumo del dia de ESA cuenta alcanza su umbral. Solo aplica con `marca`
+    # (=> cuenta concreta via `ruteo_cuentas`): asi cae en la ADMISION, donde se conoce la marca, y
+    # pausa solo las marcas de la cuenta gateada. Sin marca (gate de reclamo global, jobs sin marca)
+    # NO corta por % — no hay cuenta concreta; el kill switch global sigue aparte. Inerte mientras
+    # la fuente del % de la cuenta no exista (devuelve False).
+    if marca and gate_diario.pausado_por_pct(ruteo_cuentas.cuenta_de_marca(marca)):
         return NIVEL_PAUSADO
     margen = 1 + config.presupuesto_margen_manual_pct() / 100.0
     nivel_vigente = NIVEL_NORMAL
@@ -434,11 +437,14 @@ def estado(marca: str = "") -> dict[str, Any]:
        gastado: {tokens, tokens_in, tokens_out, coste_usd, generaciones}, restante_tokens,
        pct_usado, pct_usado_usd, proyeccion_usd_dia, pct_proyectado_usd, dia,
        por_proceso: {investigacion: {...}, produccion: {...}},
-       gate_diario: {consumo_hoy_pct, umbral_pct, aceptados_hoy, pausado_por_pct, ...}}
+       gate_diario: {cuenta, consumo_hoy_pct, umbral_pct, aceptados_hoy, pausado_por_pct, ...}|None,
+       gate_diario_cuentas: {a: {...}, b: {...}}}
 
-    `gate_diario` (GLOBAL, igual en toda marca: la cuenta de Claude es una) es el gate diario por %
-    del limite SEMANAL. `pausado_por_pct=True` ahi es la razon de un `nivel == pausado` cuando
-    `pausada` (kill switch) es False: el UI distingue asi el corte por % del kill switch manual.
+    Gate diario por % del limite SEMANAL POR CUENTA: `gate_diario` es el bloque de la CUENTA de esta
+    marca (su aviso/aceptar) cuando hay marca; None en vista global. `gate_diario_cuentas` trae las
+    DOS cuentas (para el modo "Todas" del UI). Un `pausado_por_pct=True` en la cuenta de la marca es
+    la razon de un `nivel == pausado` con `pausada` (kill switch) en False: el UI distingue asi el
+    corte por % del kill switch manual.
 
     `proyeccion_usd_dia` es el coste estimado a fin de dia (coste actual / fraccion del dia UTC
     transcurrida); None al arranque del dia (fraccion <= 1%). `pct_proyectado_usd` es esa
@@ -495,7 +501,11 @@ def estado(marca: str = "") -> dict[str, Any]:
             PROCESO_INVESTIGACION: _bloque_proceso(PROCESO_INVESTIGACION, gasto_proc, marca),
             PROCESO_PRODUCCION: _bloque_proceso(PROCESO_PRODUCCION, gasto_proc, marca),
         },
-        "gate_diario": gate_diario.estado(),
+        # Gate diario por % POR CUENTA: `gate_diario` es el bloque de la cuenta de ESTA marca (su
+        # aviso/aceptar) cuando hay marca; None en vista global (sin cuenta concreta).
+        # `gate_diario_cuentas` trae las DOS cuentas (estado_todas) para el modo "Todas" del UI.
+        "gate_diario": gate_diario.estado(ruteo_cuentas.cuenta_de_marca(marca)) if marca else None,
+        "gate_diario_cuentas": gate_diario.estado_todas(),
     }
 
 

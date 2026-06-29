@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import pytest
 
-from keni_consola import ajustes, cola, gate_diario, generaciones, presupuesto_ia, repos
+from keni_consola import ajustes, cola, gate_diario, generaciones, presupuesto_ia, repos, ruteo_cuentas
 from keni_consola.dominio import jobspec
 from keni_consola.tiempo import ahora_iso
 
@@ -869,123 +869,185 @@ def test_fraccion_dia_utc_deriva_del_reloj_canonico(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# Gate DIARIO por % del limite SEMANAL de la cuenta (gate_diario)               #
+# Gate DIARIO por % del limite SEMANAL POR CUENTA de Claude (gate_diario)        #
 # --------------------------------------------------------------------------- #
 #
-# Reparte el limite semanal en 7 dias (umbral base ~14,3 pp/dia). Al alcanzar el umbral del dia,
-# pausa TODA la generacion; aceptar +10% sube el umbral del dia y reanuda. La fuente del % vive
-# tras UN accesor (`consumo_semanal_hoy_pct`); None => NO cortar (fallback seguro).
+# Hay DOS cuentas (A=claro-sports/fundacion, B=unotv/nacion-gamer/unotv-us). Cada cuenta reparte SU
+# limite semanal en 7 dias (umbral base ~14,3 pp/dia). Al alcanzar el umbral del dia de una cuenta,
+# pausa SOLO las marcas de esa cuenta; aceptar +10% sube el umbral del dia de ESA cuenta y reanuda.
+# La fuente del % vive tras UN accesor por cuenta (`consumo_semanal_hoy_pct(cuenta)`); None => NO
+# cortar (fallback seguro). El estado del dia (umbral/aceptados) es independiente por cuenta.
 
 _BASE = 100.0 / 7.0  # umbral base del dia (~14,3 pp del semanal)
+_CUENTA_A = jobspec.CUENTA_A
+_CUENTA_B = jobspec.CUENTA_B
 
 
-def test_gate_accesor_sin_snapshot_es_none(entorno):
-    """Sin snapshot de uso persistido, la fuente del % devuelve None (gate inerte: no corta)."""
-    assert gate_diario.consumo_semanal_hoy_pct() is None
+def _patch_consumo(monkeypatch, por_cuenta: dict[str, float | None]) -> None:
+    """Fija la fuente del % POR CUENTA (sin tocar repos): consumo de hoy de cada cuenta."""
+    monkeypatch.setattr(
+        gate_diario, "consumo_semanal_hoy_pct", lambda cuenta: por_cuenta.get(cuenta)
+    )
 
 
-def test_gate_accesor_lee_delta_diario_del_snapshot(entorno):
-    """Cableado a `cuenta_uso`: consumo de hoy = semana_pct - semana_pct_inicio_dia."""
-    # Primer muestreo del dia: la base queda anclada al semana_pct actual -> consumo 0.
-    repos.guardar_uso_cuenta(conectada=True, semana_pct=40, sesion_5h_pct=10, sonnet_pct=35,
-                             dia_utc="2026-06-28")
-    assert gate_diario.consumo_semanal_hoy_pct() == pytest.approx(0.0)
-    # Mas tarde el MISMO dia UTC: semana_pct sube a 55 -> consumo de hoy = 15 pp.
-    repos.guardar_uso_cuenta(conectada=True, semana_pct=55, sesion_5h_pct=20, sonnet_pct=50,
-                             dia_utc="2026-06-28")
-    assert gate_diario.consumo_semanal_hoy_pct() == pytest.approx(15.0)
-    # Cuenta desconectada -> None (no corta).
-    repos.guardar_uso_cuenta(conectada=False, semana_pct=None, sesion_5h_pct=None, sonnet_pct=None,
-                             dia_utc="2026-06-28")
-    assert gate_diario.consumo_semanal_hoy_pct() is None
+def _encolar_marca(marca: str, prioridad: int) -> str:
+    """Encola un job de COPY de `marca` (con marca, que es donde aplica el gate por cuenta)."""
+    gen_id = generaciones.crear({"tipo": "copy", "marca": marca, "etiqueta": "X"})["id"]
+    spec = jobspec.construir(
+        prompt="p", procesar=jobspec.construir_prompt_lib(), prioridad=prioridad
+    )
+    return cola.encolar(gen_id, spec, proceso="produccion", marca=marca)
 
 
-def test_gate_umbral_base_y_escalones_de_10(entorno):
-    assert gate_diario.aceptados_hoy() == 0
-    assert gate_diario.umbral_vigente() == pytest.approx(_BASE)
-    gate_diario.aceptar_mas()
-    assert gate_diario.aceptados_hoy() == 1
-    assert gate_diario.umbral_vigente() == pytest.approx(_BASE + 10.0)
-    gate_diario.aceptar_mas()
-    assert gate_diario.umbral_vigente() == pytest.approx(_BASE + 20.0)
+def test_gate_accesor_por_cuenta_sin_snapshot_es_none(entorno):
+    """Sin snapshot de uso persistido para una cuenta, su accesor devuelve None: gate inerte
+    (no corta). Fallback seguro."""
+    assert gate_diario.consumo_semanal_hoy_pct(_CUENTA_A) is None
+    assert gate_diario.consumo_semanal_hoy_pct(_CUENTA_B) is None
 
 
-def test_gate_reset_al_cambiar_de_dia_utc(entorno, monkeypatch):
+def test_gate_accesor_lee_delta_por_cuenta(entorno):
+    """Cableado a `cuenta_uso` POR CUENTA: consumo de hoy = semana_pct - semana_pct_inicio_dia,
+    independiente por cuenta."""
+    # Cuenta A: primer muestreo ancla base=30 -> 0; mismo dia sube a 45 -> 15 pp.
+    repos.guardar_uso_cuenta(cuenta=_CUENTA_A, conectada=True, semana_pct=30,
+                             sesion_5h_pct=5, sonnet_pct=20, dia_utc="2026-06-28")
+    repos.guardar_uso_cuenta(cuenta=_CUENTA_A, conectada=True, semana_pct=45,
+                             sesion_5h_pct=8, sonnet_pct=30, dia_utc="2026-06-28")
+    # Cuenta B: base=10 -> 12 -> 2 pp; independiente de A.
+    repos.guardar_uso_cuenta(cuenta=_CUENTA_B, conectada=True, semana_pct=10,
+                             sesion_5h_pct=2, sonnet_pct=5, dia_utc="2026-06-28")
+    repos.guardar_uso_cuenta(cuenta=_CUENTA_B, conectada=True, semana_pct=12,
+                             sesion_5h_pct=3, sonnet_pct=6, dia_utc="2026-06-28")
+    assert gate_diario.consumo_semanal_hoy_pct(_CUENTA_A) == pytest.approx(15.0)
+    assert gate_diario.consumo_semanal_hoy_pct(_CUENTA_B) == pytest.approx(2.0)
+    # Cuenta B desconectada -> None (no corta sus marcas).
+    repos.guardar_uso_cuenta(cuenta=_CUENTA_B, conectada=False, semana_pct=None,
+                             sesion_5h_pct=None, sonnet_pct=None, dia_utc="2026-06-28")
+    assert gate_diario.consumo_semanal_hoy_pct(_CUENTA_B) is None
+
+
+def test_gate_umbral_y_aceptar_son_independientes_por_cuenta(entorno):
+    """El estado del dia (umbral/aceptados) es POR CUENTA: aceptar en una no toca a la otra."""
+    assert gate_diario.aceptados_hoy(_CUENTA_A) == 0
+    assert gate_diario.umbral_vigente(_CUENTA_A) == pytest.approx(_BASE)
+    gate_diario.aceptar_mas(_CUENTA_A)
+    assert gate_diario.aceptados_hoy(_CUENTA_A) == 1
+    assert gate_diario.umbral_vigente(_CUENTA_A) == pytest.approx(_BASE + 10.0)
+    # La cuenta B conserva su umbral base: el aceptar de A no la tocó.
+    assert gate_diario.aceptados_hoy(_CUENTA_B) == 0
+    assert gate_diario.umbral_vigente(_CUENTA_B) == pytest.approx(_BASE)
+    gate_diario.aceptar_mas(_CUENTA_A)
+    assert gate_diario.umbral_vigente(_CUENTA_A) == pytest.approx(_BASE + 20.0)
+
+
+def test_gate_reset_al_cambiar_de_dia_utc_por_cuenta(entorno, monkeypatch):
     monkeypatch.setattr(gate_diario, "ahora_iso", lambda: "2026-06-28T10:00:00")
-    gate_diario.aceptar_mas()
-    assert gate_diario.aceptados_hoy() == 1
+    gate_diario.aceptar_mas(_CUENTA_B)
+    assert gate_diario.aceptados_hoy(_CUENTA_B) == 1
     # Dia UTC nuevo: el contador de ayer no cuenta -> umbral vuelve a la base.
     monkeypatch.setattr(gate_diario, "ahora_iso", lambda: "2026-06-29T00:30:00")
-    assert gate_diario.aceptados_hoy() == 0
-    assert gate_diario.umbral_vigente() == pytest.approx(_BASE)
+    assert gate_diario.aceptados_hoy(_CUENTA_B) == 0
+    assert gate_diario.umbral_vigente(_CUENTA_B) == pytest.approx(_BASE)
 
 
-def test_gate_escalon_pausa_y_reanuda_con_aceptar(entorno, monkeypatch):
-    """El escalon completo: alcanzar el umbral pausa; aceptar +10% reanuda hasta el nuevo umbral."""
+def test_gate_escalon_pausa_y_reanuda_con_aceptar_por_cuenta(entorno, monkeypatch):
+    """El escalon completo de UNA cuenta: alcanzar el umbral pausa; aceptar +10% reanuda hasta el
+    nuevo umbral. Aceptar en B no afecta a A."""
     # 13% < base ~14,3 -> no pausa.
-    monkeypatch.setattr(gate_diario, "consumo_semanal_hoy_pct", lambda: 13.0)
-    assert gate_diario.pausado_por_pct() is False
+    _patch_consumo(monkeypatch, {_CUENTA_B: 13.0})
+    assert gate_diario.pausado_por_pct(_CUENTA_B) is False
     # 15% >= 14,3 -> pausa.
-    monkeypatch.setattr(gate_diario, "consumo_semanal_hoy_pct", lambda: 15.0)
-    assert gate_diario.pausado_por_pct() is True
-    # Aceptar +10% sube el umbral a ~24,3: 15% ya no pausa.
-    gate_diario.aceptar_mas()
-    assert gate_diario.pausado_por_pct() is False
-    # ...hasta cruzar el NUEVO umbral.
-    monkeypatch.setattr(gate_diario, "consumo_semanal_hoy_pct", lambda: 25.0)
-    assert gate_diario.pausado_por_pct() is True
+    _patch_consumo(monkeypatch, {_CUENTA_B: 15.0})
+    assert gate_diario.pausado_por_pct(_CUENTA_B) is True
+    # Aceptar +10% en B sube su umbral a ~24,3: 15% ya no pausa B.
+    gate_diario.aceptar_mas(_CUENTA_B)
+    assert gate_diario.pausado_por_pct(_CUENTA_B) is False
+    # ...hasta cruzar el NUEVO umbral de B.
+    _patch_consumo(monkeypatch, {_CUENTA_B: 25.0})
+    assert gate_diario.pausado_por_pct(_CUENTA_B) is True
 
 
 def test_gate_fuente_none_no_corta(entorno, monkeypatch):
-    monkeypatch.setattr(gate_diario, "consumo_semanal_hoy_pct", lambda: None)
-    assert gate_diario.pausado_por_pct() is False
-    est = gate_diario.estado()
+    _patch_consumo(monkeypatch, {_CUENTA_A: None, _CUENTA_B: None})
+    assert gate_diario.pausado_por_pct(_CUENTA_A) is False
+    est = gate_diario.estado(_CUENTA_A)
     assert est["consumo_hoy_pct"] is None and est["pausado_por_pct"] is False
 
 
 def test_gate_estado_forma(entorno, monkeypatch):
-    monkeypatch.setattr(gate_diario, "consumo_semanal_hoy_pct", lambda: 9.5)
-    est = gate_diario.estado()
+    _patch_consumo(monkeypatch, {_CUENTA_A: 9.5})
+    est = gate_diario.estado(_CUENTA_A)
     assert set(est) == {
-        "consumo_hoy_pct", "umbral_pct", "aceptados_hoy", "pausado_por_pct",
+        "cuenta", "consumo_hoy_pct", "umbral_pct", "aceptados_hoy", "pausado_por_pct",
         "base_umbral_pct", "paso_pct", "dia",
     }
+    assert est["cuenta"] == _CUENTA_A
     assert est["consumo_hoy_pct"] == pytest.approx(9.5)
     assert est["umbral_pct"] == pytest.approx(round(_BASE, 1))
     assert est["paso_pct"] == 10.0
 
 
-def test_nivel_pausado_por_gate_diario_distinto_del_kill_switch(entorno, monkeypatch):
-    """Al alcanzar el umbral, `nivel()` es PAUSADO; `estado()` lo distingue del kill switch."""
-    monkeypatch.setattr(gate_diario, "consumo_semanal_hoy_pct", lambda: 20.0)  # > base ~14,3
-    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_PAUSADO
-    est = presupuesto_ia.estado()
+def test_gate_estado_todas_trae_las_dos_cuentas(entorno, monkeypatch):
+    _patch_consumo(monkeypatch, {_CUENTA_A: 5.0, _CUENTA_B: 20.0})
+    todas = gate_diario.estado_todas()
+    assert set(todas) == set(jobspec.CUENTAS)
+    assert todas[_CUENTA_A]["pausado_por_pct"] is False  # 5 < ~14,3
+    assert todas[_CUENTA_B]["pausado_por_pct"] is True  # 20 >= ~14,3
+    assert todas[_CUENTA_B]["cuenta"] == _CUENTA_B
+
+
+def test_nivel_pausado_por_gate_de_la_cuenta_de_la_marca(entorno, monkeypatch):
+    """Con la cuenta de la marca en umbral, `nivel(marca)` es PAUSADO; `estado(marca)` lo distingue
+    del kill switch. Aceptar +10% en ESA cuenta reanuda."""
+    cuenta_unotv = ruteo_cuentas.cuenta_de_marca("unotv")
+    _patch_consumo(monkeypatch, {cuenta_unotv: 20.0})  # > base ~14,3
+    assert presupuesto_ia.nivel("unotv") == presupuesto_ia.NIVEL_PAUSADO
+    est = presupuesto_ia.estado("unotv")
     assert est["pausada"] is False  # NO es el kill switch manual
     assert est["gate_diario"]["pausado_por_pct"] is True
-    # Aceptar +10% (umbral ~24,3) reanuda: 20% ya no pausa.
-    gate_diario.aceptar_mas()
-    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_NORMAL
+    assert est["gate_diario"]["cuenta"] == cuenta_unotv
+    # Aceptar +10% en la cuenta de unotv (umbral ~24,3) reanuda: 20% ya no pausa.
+    gate_diario.aceptar_mas(cuenta_unotv)
+    assert presupuesto_ia.nivel("unotv") == presupuesto_ia.NIVEL_NORMAL
 
 
-def test_gate_diario_bloqueo_corta_auto_y_manual(entorno, monkeypatch):
-    """El corte por % diario es PAUSADO: corta el fondo Y lo manual (mismo trato del kill switch)."""
-    monkeypatch.setattr(gate_diario, "consumo_semanal_hoy_pct", lambda: 50.0)
-    assert presupuesto_ia.bloqueo_inline("", es_fondo=True) == presupuesto_ia.NIVEL_PAUSADO
-    assert presupuesto_ia.bloqueo_inline("", es_fondo=False) == presupuesto_ia.NIVEL_PAUSADO
-    # Y rechaza el encolado tanto del pipeline como de lo manual.
-    with pytest.raises(generaciones.GeneracionPausadaError):
-        _encolar(jobspec.PRIORIDAD_MANUAL)
-    with pytest.raises(generaciones.GeneracionPausadaError):
-        _encolar(jobspec.PRIORIDAD_PIPELINE)
+def test_gate_diario_pausa_solo_las_marcas_de_la_cuenta_gateada(entorno, monkeypatch):
+    """CUENTA B en umbral pausa SOLO las marcas de B: un job de unotv (B) se bloquea; uno de
+    claro-sports (A) NO. El gate por cuenta corta en la ADMISION (donde se conoce la marca)."""
+    # Solo la cuenta B alcanza su umbral; la A sigue muy por debajo.
+    _patch_consumo(monkeypatch, {_CUENTA_A: 0.0, _CUENTA_B: 50.0})
+    assert ruteo_cuentas.cuenta_de_marca("unotv") == _CUENTA_B
+    assert ruteo_cuentas.cuenta_de_marca("claro-sports") == _CUENTA_A
 
-
-def test_gate_diario_corta_tambien_por_marca(entorno, monkeypatch):
-    """La cuenta de Claude es UNA (global): el corte por % diario corta el trabajo de cualquier marca."""
-    monkeypatch.setattr(gate_diario, "consumo_semanal_hoy_pct", lambda: 50.0)
+    # nivel/bloqueo por marca: unotv (B) PAUSADO; claro-sports (A) NORMAL.
     assert presupuesto_ia.nivel("unotv") == presupuesto_ia.NIVEL_PAUSADO
+    assert presupuesto_ia.nivel("claro-sports") == presupuesto_ia.NIVEL_NORMAL
+    assert presupuesto_ia.bloqueo_inline("", "unotv", es_fondo=True) == presupuesto_ia.NIVEL_PAUSADO
+    assert presupuesto_ia.bloqueo_inline("", "unotv", es_fondo=False) == presupuesto_ia.NIVEL_PAUSADO
+    assert presupuesto_ia.bloqueo_inline("", "claro-sports", es_fondo=True) is None
+
+    # ADMISION (cola.encolar con marca): rechaza unotv (fondo y manual); deja pasar claro-sports.
+    with pytest.raises(generaciones.GeneracionPausadaError):
+        _encolar_marca("unotv", jobspec.PRIORIDAD_MANUAL)
+    with pytest.raises(generaciones.GeneracionPausadaError):
+        _encolar_marca("unotv", jobspec.PRIORIDAD_PIPELINE)
+    assert _encolar_marca("claro-sports", jobspec.PRIORIDAD_PIPELINE)
+
+
+def test_gate_diario_sin_marca_no_corta_por_pct(entorno, monkeypatch):
+    """Sin marca concreta (cuenta indeterminada), el gate por % NO corta: el global queda NORMAL y
+    un encolado sin marca pasa. El kill switch global sigue aparte."""
+    _patch_consumo(monkeypatch, {_CUENTA_A: 50.0, _CUENTA_B: 50.0})  # ambas en umbral
+    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_NORMAL  # global sin marca: no corta por %
+    assert presupuesto_ia.bloqueo_inline("", es_fondo=True) is None
+    assert _encolar(jobspec.PRIORIDAD_PIPELINE)  # encolado SIN marca: pasa
 
 
 def test_gate_diario_fuente_none_no_afecta_a_nivel(entorno):
-    """Sin cablear la fuente (None por defecto), el gate diario no cambia el nivel (NORMAL)."""
+    """Sin cablear la fuente (None por defecto), el gate diario no cambia el nivel de ninguna marca
+    (NORMAL) y ninguna cuenta figura pausada en estado_todas."""
     assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_NORMAL
-    assert presupuesto_ia.estado()["gate_diario"]["pausado_por_pct"] is False
+    assert presupuesto_ia.nivel("unotv") == presupuesto_ia.NIVEL_NORMAL
+    cuentas = presupuesto_ia.estado()["gate_diario_cuentas"]
+    assert all(g["pausado_por_pct"] is False for g in cuentas.values())
