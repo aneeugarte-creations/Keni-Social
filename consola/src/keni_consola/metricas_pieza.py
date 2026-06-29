@@ -74,6 +74,23 @@ def _clave(marca: str, red: str, id_post: str) -> str:
     return f"pieza:{marca}:{red}:{id_post}"
 
 
+def _cuenta_canonica(cuenta: str | None) -> str:
+    """Clave de marca CANÓNICA (id_metricas) desde la `cuenta` cruda de Metricool.
+
+    El histórico se parte si la misma cuenta llega con separadores distintos (la fuente
+    emite `nacion-gamer` y `nacion_gamer` para una sola cuenta). Aquí se unifica: las marcas
+    del catálogo se reconocen por su id canónico (slug-guion) y se traducen a su `id_metricas`
+    (guion_bajo); las cuentas fuera del catálogo (p. ej. ediciones regionales como `unotv_us`)
+    se normalizan al separador guion_bajo, la convención de `id_metricas`. No funde cuentas
+    distintas: solo colapsa las variantes guion/guion_bajo de UNA misma cuenta.
+    """
+    c = (cuenta or "").strip()
+    if not c:
+        return ""
+    canonica = marcas.id_metricas_de(c)
+    return canonica if canonica != c else c.replace("-", "_")
+
+
 def _es_fresca(generado_en: str, ahora: datetime) -> bool:
     """True si `generado_en` (ISO) esta dentro del TTL respecto a `ahora`."""
     if not generado_en:
@@ -282,7 +299,7 @@ def _registrar_historico(
     """
     try:
         repos.registrar_snapshot_pieza(
-            id_post, marca, red, payload.get("formato") or "", ts, payload
+            id_post, _cuenta_canonica(marca), red, payload.get("formato") or "", ts, payload
         )
     except Exception:  # noqa: BLE001 -- el histórico es best-effort; nunca rompe el refresco
         _log.exception(
@@ -307,7 +324,7 @@ def registrar_snapshots_de_listado(piezas: list[dict[str, Any]], ts: str) -> int
     filas = [
         {
             "pieza_id": pieza_id,
-            "marca": p.get("cuenta") or "",
+            "marca": _cuenta_canonica(p.get("cuenta")),
             "red": p.get("red") or p.get("plataforma") or "",
             "formato": p.get("formato") or "",
             "metricas": p,

@@ -345,6 +345,42 @@ def test_recalcular_no_escribe_historico_si_no_encontrado(pg, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# Canonicalización de la cuenta (no parte la misma marca en variantes guion)   #
+# --------------------------------------------------------------------------- #
+
+
+def test_cuenta_canonica_unifica_variantes():
+    # Marca del catálogo por su id canónico (slug-guion) -> id_metricas (guion_bajo).
+    assert metricas_pieza._cuenta_canonica("nacion-gamer") == "nacion_gamer"
+    assert metricas_pieza._cuenta_canonica("claro-sports") == "claro_sports"
+    # Ya canónicas (id_metricas) -> intactas.
+    assert metricas_pieza._cuenta_canonica("nacion_gamer") == "nacion_gamer"
+    assert metricas_pieza._cuenta_canonica("unotv") == "unotv"
+    # Cuenta fuera del catálogo (edición regional): el separador se normaliza a guion_bajo,
+    # juntando la variante guion con la guion_bajo de LA MISMA cuenta. No se funde con `unotv`.
+    assert metricas_pieza._cuenta_canonica("unotv-us") == "unotv_us"
+    assert metricas_pieza._cuenta_canonica("unotv_us") == "unotv_us"
+    assert metricas_pieza._cuenta_canonica("") == ""
+    assert metricas_pieza._cuenta_canonica(None) == ""
+
+
+def test_registrar_snapshots_de_listado_canoniza_cuenta(pg):
+    # Dos piezas de la MISMA cuenta que llegan con separadores distintos (`nacion-gamer` y
+    # `nacion_gamer`) quedan bajo la marca canónica única; la variante guion no deja filas.
+    ts = "2026-06-22T08:00:00"
+    piezas = [
+        {"id": "ng-1", "red": "instagram", "cuenta": "nacion-gamer", "visualizaciones": 1},
+        {"id": "ng-2", "red": "instagram", "cuenta": "nacion_gamer", "visualizaciones": 2},
+        {"id": "us-1", "red": "facebook", "cuenta": "unotv-us", "visualizaciones": 3},
+    ]
+    assert metricas_pieza.registrar_snapshots_de_listado(piezas, ts) == 3
+    bajo_canon = {s["pieza_id"] for s in db.listar_snapshots_piezas(marca="nacion_gamer")}
+    assert bajo_canon == {"ng-1", "ng-2"}
+    assert db.listar_snapshots_piezas(marca="nacion-gamer") == []
+    assert {s["pieza_id"] for s in db.listar_snapshots_piezas(marca="unotv_us")} == {"us-1"}
+
+
+# --------------------------------------------------------------------------- #
 # Tope / downsampling de la serie temporal (cota de puntos para las gráficas)  #
 # --------------------------------------------------------------------------- #
 
