@@ -3,6 +3,7 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 
 import { CuentaUsuario } from "@/components/layout/CuentaUsuario";
+import { IndicadorUso } from "@/components/layout/IndicadorUso";
 import { rutaVisibleParaMarca } from "@/components/layout/gating-marca";
 import { subPestanasDe } from "@/components/layout/hub-tabs";
 import { iconoDe } from "@/components/layout/navegacion";
@@ -127,7 +128,8 @@ export function Sidebar({
           ))}
         </div>
 
-        <div className="flex justify-center border-t border-border py-3">
+        <div className="flex flex-col items-center gap-2 border-t border-border py-3">
+          <IndicadorUso colapsado />
           <Tooltip label="Expandir barra" side="right">
             <button
               type="button"
@@ -185,9 +187,10 @@ export function Sidebar({
         ))}
       </div>
 
-      {/* Toggle del rail (colapsar toda la barra a solo iconos). */}
+      {/* Pie: indicador sutil de uso de la cuenta + toggle del rail (colapsar a solo iconos). */}
       {onToggleColapsar && (
-        <div className="border-t border-border px-3 py-2">
+        <div className="space-y-1 border-t border-border px-3 py-2">
+          <IndicadorUso />
           <button
             type="button"
             aria-label="Colapsar barra"
