@@ -315,6 +315,12 @@ MIGRACIONES_PRE_DDL: tuple[Migracion, ...] = (
         re_aplicar_si_cambia=True,
     ),
     Migracion("0051-fts-catalogo-media", _migrar_fts_catalogo_media, re_aplicar_si_cambia=True),
+    # USO POR CUENTA: `cuenta_uso` deja de ser singleton y pasa a una fila por CUENTA de Claude
+    # (A/B). PRE-DDL como 0049: la columna `cuenta` que anade la usa el indice unico declarativo
+    # del DDL (`idx_cuenta_uso_cuenta`), que el DDL crea sobre una tabla preexistente -> debe
+    # existir ANTES. Rebautiza la fila `id='global'` como la cuenta A. One-shot e idempotente;
+    # conserva la lectura previa como cuenta A. Ver `_migrar_cuenta_uso_por_cuenta` y `db_cuenta_uso`.
+    Migracion("0066-cuenta-uso-por-cuenta", _migrar_cuenta_uso_por_cuenta),
 )
 
 # POST-DDL: ALTER/backfill sobre tablas que el DDL ya garantiza (anaden columnas a BDs
@@ -581,11 +587,6 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # traen del DDL). One-shot e idempotente (`CREATE TABLE IF NOT EXISTS`); sin backfill (el
     # muestreo es prospectivo). Ver `db_cuenta_uso`.
     Migracion("0065-tabla-cuenta-uso", _migrar_tabla_cuenta_uso),
-    # USO POR CUENTA: `cuenta_uso` deja de ser singleton y pasa a una fila por CUENTA de Claude
-    # (A/B). Anade la columna `cuenta` (def 'a'), rebautiza la fila `id='global'` como la cuenta A
-    # y crea el indice unico por `cuenta` (target del UPSERT). One-shot e idempotente; conserva la
-    # lectura previa como cuenta A. Ver `_migrar_cuenta_uso_por_cuenta` y `db_cuenta_uso`.
-    Migracion("0066-cuenta-uso-por-cuenta", _migrar_cuenta_uso_por_cuenta),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

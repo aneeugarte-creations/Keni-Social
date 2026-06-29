@@ -424,6 +424,47 @@ def test_columna_fuente_se_anade_antes_del_indice_ddl(pg):
     assert "grupo" in cols
 
 
+def test_cuenta_uso_cuenta_se_anade_antes_del_indice_ddl(pg):
+    """0066 va en PRE-DDL: en una BD vieja con `cuenta_uso` SINGLETON (sin `cuenta`), asegurar el
+    esquema NO debe caer al crear el indice declarativo `idx_cuenta_uso_cuenta`.
+
+    El indice vive en `_DDL_ESQUEMA` (paso 3, SIEMPRE) y la columna la anade la migracion 0066.
+    Si 0066 corriera en POST-DDL (paso 4) el indice se crearia ANTES que la columna y Postgres
+    lanzaria UndefinedColumn (fallo real de deploy: el Postgres hosted preexiste sin la columna).
+    Reproducimos esa BD vieja soltando indice+columna y dejando la fila singleton `id='global'`;
+    re-asegurar debe anadir `cuenta` y rebautizar la fila como la cuenta A (`id='a'`, `cuenta='a'`).
+    """
+    db.listar_swaps_turno()  # primer asegurado: crea cuenta_uso (con cuenta) y journaliza 0066
+    con = motor_db.conectar_cruda()
+    try:
+        con.execute("DROP INDEX IF EXISTS idx_cuenta_uso_cuenta")
+        con.execute("ALTER TABLE cuenta_uso DROP COLUMN IF EXISTS cuenta")
+        con.execute("DELETE FROM cuenta_uso")
+        con.execute("INSERT INTO cuenta_uso (id) VALUES ('global')")  # singleton legado
+        con.execute("DELETE FROM schema_migraciones WHERE id LIKE ?", ("0066-%",))
+        con.commit()
+    finally:
+        con.close()
+
+    db._esquemas_asegurados.clear()
+    db.listar_swaps_turno()  # re-asegura: 0066 (PRE-DDL) anade la columna antes del indice del DDL
+
+    con = motor_db.conectar_cruda()
+    try:
+        cols = {
+            fila["column_name"]
+            for fila in con.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = ?",
+                ("cuenta_uso",),
+            ).fetchall()
+        }
+        filas = con.execute("SELECT id, cuenta FROM cuenta_uso").fetchall()
+    finally:
+        con.close()
+    assert "cuenta" in cols
+    assert [(f["id"], f["cuenta"]) for f in filas] == [("a", "a")]  # singleton rebautizado a cuenta A
+
+
 def test_drop_fosiles_renombrado_quita_fosiles_y_conserva_canonicos(pg):
     """0061: dropea un FK/CHECK/índice fósil del renombre conservando el canónico paralelo."""
     from keni_consola._db_core.migraciones_integridad import _drop_fosiles_renombrado
