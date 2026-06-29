@@ -71,9 +71,13 @@ export default function DetalleHistoriaPagina() {
 
   const usarMut = useMutation({
     mutationFn: () => api.noticias.usarHistoria(id, { generar: true }),
-    onSuccess: () => {
+    onSuccess: (res) => {
       invalidar();
-      toast.success("Copy en marcha — aparecerá en el Feed para imagen y aprobación.");
+      toast.success(
+        res?.duplicada
+          ? "Esta historia ya estaba en el feed; se enlazó al tema existente."
+          : "Copy en marcha — aparecerá en el Feed para imagen y aprobación.",
+      );
       navigate(RUTA_MESA);
     },
     onError: (e) => toast.error(mensajeError(e)),

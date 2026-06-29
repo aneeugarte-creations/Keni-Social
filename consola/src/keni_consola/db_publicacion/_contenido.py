@@ -522,6 +522,24 @@ def titulos_recientes_marca(marca: str, desde_iso: str) -> list[str]:
     return [(f["titulo"] or "") for f in filas]
 
 
+def id_titulos_recientes_marca(marca: str, desde_iso: str) -> list[dict[str, str]]:
+    """`{id, titulo}` del contenido reciente de `marca` (más nuevo primero).
+
+    Variante de `titulos_recientes_marca` que ADEMÁS trae el id, para el dedup que necesita
+    VINCULAR al tema existente (no solo saber que hay duplicado), como el «usar» manual.
+    """
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT id, titulo FROM publicacion "
+            "WHERE marca = ? AND clase = 'contenido' AND creado >= ? ORDER BY creado DESC",
+            (marca, desde_iso),
+        ).fetchall()
+    finally:
+        con.close()
+    return [{"id": f["id"], "titulo": f["titulo"] or ""} for f in filas]
+
+
 def resumen_plan_por_categoria(marca: str, desde_iso: str) -> dict[str, dict[str, int]]:
     """GENERADOS y PUBLICADOS por LÍNEA del plan desde `desde_iso`: {cat: {generados, publicados}}.
 

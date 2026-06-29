@@ -118,6 +118,11 @@ def titulos_recientes_marca(marca: str, desde_iso: str) -> list[str]:
     return db.titulos_recientes_marca(marca, desde_iso)
 
 
+def id_titulos_recientes_marca(marca: str, desde_iso: str) -> list[dict[str, str]]:
+    """`{id, titulo}` del contenido reciente de una marca (dedup que vincula). Delegado en `db.py`."""
+    return db.id_titulos_recientes_marca(marca, desde_iso)
+
+
 def listar_publicaciones_origenes(
     origenes: list[str], *, excluir_estado: str | None = None
 ) -> list[dict[str, Any]]:

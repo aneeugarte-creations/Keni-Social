@@ -537,6 +537,23 @@ def test_usar_idempotente_si_ya_usada(cliente):
     assert segundo["contenido"]["id"] == primero["contenido"]["id"]
 
 
+def test_usar_dedup_vincula_al_tema_existente_sin_duplicar(cliente):
+    # Dos clusters distintos de la MISMA noticia (mismo título): el segundo «usar» NO crea un tema
+    # nuevo; vincula la historia al tema ya existente (dedup por título, como el pipeline).
+    _inicializar_cluster("c1", titulo="Incendio en Ghana")
+    pid1 = cliente.post(
+        "/api/noticias/historias/c1/usar", json={"generar": False}
+    ).json()["contenido"]["id"]
+    _inicializar_cluster("c2", titulo="Incendio en Ghana")
+    r2 = cliente.post("/api/noticias/historias/c2/usar", json={"generar": False})
+    assert r2.status_code == 200, r2.text
+    cuerpo = r2.json()
+    assert cuerpo.get("duplicada") is True
+    assert cuerpo["contenido"]["id"] == pid1  # mismo tema, no uno nuevo
+    c2 = repos.obtener_noticia_cluster("c2")
+    assert c2["estado"] == "usado" and c2["publicacion_id"] == pid1
+
+
 def test_usar_inexistente_404(cliente):
     assert cliente.post("/api/noticias/historias/nope/usar", json={}).status_code == 404
 

@@ -50,6 +50,7 @@ __all__ = [
     "caducar_temas_viejos",
     "caducar_verificacion_clusters_en_curso",
     "_claves_dedup_marca",
+    "_tema_existente_por_titulo",
     "_nota_de_cluster",
     "_fetch_cuerpo",
 ]
@@ -1298,6 +1299,29 @@ def _claves_dedup_marca(marca: str, *, dias: int = _DIAS_DEDUP) -> set[str]:
         _log.warning("pipeline: no se pudieron leer títulos para dedup (%s)", marca, exc_info=True)
         return set()
     return {k for t in titulos if (k := dedup.clave(t))}
+
+
+def _tema_existente_por_titulo(marca: str, titulo: str, *, dias: int = _DIAS_DEDUP) -> str | None:
+    """Id del tema reciente de `marca` cuyo título coincide (normalizado) con `titulo`, o None.
+
+    Mismo criterio de dedup que el pipeline (`dedup.clave`), pero DEVUELVE el id para poder VINCULAR
+    en vez de solo detectar: lo usa el «usar» manual de una historia para no crear un tema duplicado
+    cuando ya existe uno para esa misma noticia. El más reciente gana. Best-effort: None si falla.
+    """
+    from datetime import timedelta
+
+    clave = dedup.clave(titulo)
+    if not clave:
+        return None
+    desde = (hoy_utc() - timedelta(days=dias)).isoformat()
+    try:
+        filas = repos.id_titulos_recientes_marca(marca, desde)
+    except Exception:  # noqa: BLE001 -- sin títulos legibles, no dedup (no rompe el «usar»)
+        return None
+    for f in filas:
+        if dedup.clave(f.get("titulo") or "") == clave:
+            return f.get("id") or None
+    return None
 
 
 def _fetch_cuerpo(enlace: str) -> str:

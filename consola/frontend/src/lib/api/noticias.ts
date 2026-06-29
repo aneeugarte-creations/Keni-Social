@@ -165,7 +165,7 @@ export const apiNoticias = {
       id: string,
       body: { redes?: string[]; generar?: boolean } = {},
     ) =>
-      peticion<{ ok: boolean; publicacion_id: string }>(
+      peticion<{ contenido?: { id: string }; copy_en_proceso?: boolean; duplicada?: boolean }>(
         `/noticias/historias/${encodeURIComponent(id)}/usar`,
         { metodo: "POST", json: body, muestrear: false },
       ),

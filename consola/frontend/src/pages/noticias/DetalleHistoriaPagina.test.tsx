@@ -82,7 +82,7 @@ beforeEach(() => {
   });
   mockUsar = vi
     .spyOn(apiMod.api.noticias, "usarHistoria")
-    .mockResolvedValue({ ok: true, publicacion_id: "c-1" });
+    .mockResolvedValue({ contenido: { id: "c-1" }, copy_en_proceso: true });
   mockDescartar = vi
     .spyOn(apiMod.api.noticias, "descartarHistoria")
     .mockResolvedValue({ ok: true });

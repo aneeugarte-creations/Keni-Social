@@ -835,6 +835,23 @@ def _materializar_usar(
     titulo = _pc_ingesta._titulo_es(cluster) or (items[0]["url"] if items else "")
     if not titulo:
         return 400, {"error": "La historia no tiene título ni enlace."}
+
+    # DEDUP cross-origen: si la marca ya tiene un tema reciente para esta misma noticia (otro
+    # cluster, el pipeline, otra vía…), NO creamos un duplicado: vinculamos la historia al tema
+    # existente y la sacamos del pool. Mismo criterio que el pipeline (`dedup.clave`).
+    existente_id = (
+        _pc_ingesta._tema_existente_por_titulo(marca, titulo) if marca else None
+    )
+    if existente_id:
+        repos.actualizar_noticia_cluster(cluster_id, estado="usado", publicacion_id=existente_id)
+        repos.marcar_items_cluster_usados(cluster_id, existente_id)
+        existente = repos.obtener_publicacion(existente_id) or {"id": existente_id}
+        return 200, {
+            "contenido": {**existente, "plataformas": repos.listar_piezas_fila(existente_id)},
+            "copy_en_proceso": False,
+            "duplicada": True,
+        }
+
     descripcion = _pc_ingesta._resumen_es(cluster)
     # Enlaces corroborantes en la nota, para trazar las fuentes de la historia.
     fuentes = [it.get("url") for it in items if it.get("url")][:_MAX_ENLACES_HISTORIA]
