@@ -182,6 +182,17 @@ export const apiNoticias = {
       ),
 
     /**
+     * Devuelve una historia al pool (inverso de «usar»): borra el tema huérfano del tablero y
+     * reabre el cluster, para rescatar una noticia cuyo copy se quedó atascado/en error.
+     * POST /api/noticias/historias/{id}/devolver
+     */
+    devolverHistoria: (id: string) =>
+      peticion<{ historia: unknown }>(
+        `/noticias/historias/${encodeURIComponent(id)}/devolver`,
+        { metodo: "POST", muestrear: false },
+      ),
+
+    /**
      * Descarta VARIAS historias de una (papelera estilo correo: seleccionar + descartar).
      * POST /api/noticias/historias/descartar-lote  →  { descartadas: n }
      */

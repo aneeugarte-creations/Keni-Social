@@ -951,6 +951,42 @@ async def descartar_historia(request: Request) -> Response:
     return JSONResponse(cuerpo, status_code=status)
 
 
+def _devolver_historia(cluster_id: str) -> tuple[int, dict[str, Any]]:
+    cluster = repos.obtener_noticia_cluster(cluster_id)
+    if cluster is None:
+        return 404, {"error": "Esa historia ya no existe."}
+    # Solo se devuelve lo que se PROMOVIÓ pero aún NO tiene copy en el feed (en_cola/generando, p. ej.
+    # un tema cuyo copy se quedó en error): así una noticia atascada vuelve al pool en vez de perderse.
+    # Con copy real ('en_feed') no se borra (se perdería trabajo válido); 'en_pool' no hay nada que devolver.
+    estado_pieza = _pieza_estado_de(cluster)
+    if estado_pieza == "en_feed":
+        return 409, {"error": "La historia ya tiene copy en el feed; no se devuelve al pool."}
+    if estado_pieza not in ("en_cola", "generando"):
+        return 409, {"error": "La historia no está promovida; no hay nada que devolver."}
+    pub_id = cluster.get("publicacion_id") or ""
+    # Borra el tema huérfano (para que el barrido no lo re-coja) y reabre el cluster + sus items.
+    if pub_id:
+        repos.borrar_publicacion(pub_id)
+    repos.actualizar_noticia_cluster(cluster_id, estado="nuevo", publicacion_id="")
+    repos.desmarcar_items_cluster_usados(cluster_id)
+    historia = _historia_a_dict(
+        {**cluster, "estado": "nuevo", "publicacion_id": ""}, [], pieza_estado="en_pool"
+    )
+    return 200, {"historia": historia}
+
+
+async def devolver_historia(request: Request) -> Response:
+    """POST /api/noticias/historias/{id}/devolver: DEVUELVE la historia al pool (inverso de «usar»).
+
+    Para rescatar una historia promovida cuyo copy se quedó atascado/en error: borra el tema huérfano
+    del tablero, reabre el cluster a `nuevo` y desliga sus items, de modo que reaparece en la página de
+    Noticias para decidir de nuevo. Solo aplica si aún no hay copy real en el feed (si no, 409).
+    """
+    cluster_id = request.path_params["cluster_id"]
+    status, cuerpo = await run_in_threadpool(_devolver_historia, cluster_id)
+    return JSONResponse(cuerpo, status_code=status)
+
+
 # Tope de ids por lote, para que un cuerpo enorme no dispare un barrido de updates sin control.
 _MAX_LOTE_DESCARTE = 500
 

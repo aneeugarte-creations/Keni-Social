@@ -225,6 +225,43 @@ def test_pieza_estado_en_listado_batch(cliente):
 
 
 # --------------------------------------------------------------------------- #
+# devolver — rescatar una historia promovida que se quedó sin copy             #
+# --------------------------------------------------------------------------- #
+
+
+def test_devolver_rescata_al_pool_una_historia_atascada(cliente):
+    # Promovida sin copy en el feed (en_cola): devolver borra el tema huérfano, reabre el cluster
+    # y sus items, y la historia reaparece en el pool para decidir de nuevo.
+    _inicializar_cluster("c1")
+    cont = _usar_sin_pieza("c1")
+    repos.marcar_items_cluster_usados("c1", cont["id"])
+    assert _pieza_estado(cliente, "c1") == "en_cola"
+    r = cliente.post("/api/noticias/historias/c1/devolver")
+    assert r.status_code == 200
+    assert r.json()["historia"]["pieza_estado"] == "en_pool"
+    assert _pieza_estado(cliente, "c1") == "en_pool"
+    assert repos.obtener_publicacion(cont["id"]) is None
+    assert all(it["estado"] == "nuevo" for it in repos.items_de_cluster("c1"))
+
+
+def test_devolver_no_toca_una_historia_ya_en_el_feed(cliente):
+    _inicializar_cluster("c1")
+    cont = _usar_sin_pieza("c1")
+    _anadir_pieza(cont["id"], falta_copy=False)  # con copy real -> en_feed
+    assert cliente.post("/api/noticias/historias/c1/devolver").status_code == 409
+    assert repos.obtener_publicacion(cont["id"]) is not None
+
+
+def test_devolver_409_si_sigue_en_el_pool(cliente):
+    _inicializar_cluster("c1")  # 'nuevo': nada que devolver
+    assert cliente.post("/api/noticias/historias/c1/devolver").status_code == 409
+
+
+def test_devolver_404_si_no_existe(cliente):
+    assert cliente.post("/api/noticias/historias/noexiste/devolver").status_code == 404
+
+
+# --------------------------------------------------------------------------- #
 # detalle                                                                       #
 # --------------------------------------------------------------------------- #
 

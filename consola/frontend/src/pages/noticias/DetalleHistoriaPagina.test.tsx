@@ -72,6 +72,8 @@ let mockHistoria: any;
 let mockUsar: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockDescartar: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let mockDevolver: any;
 
 beforeEach(() => {
   mockHistoria = vi.spyOn(apiMod.api.noticias, "historia").mockResolvedValue({
@@ -84,6 +86,9 @@ beforeEach(() => {
   mockDescartar = vi
     .spyOn(apiMod.api.noticias, "descartarHistoria")
     .mockResolvedValue({ ok: true });
+  mockDevolver = vi
+    .spyOn(apiMod.api.noticias, "devolverHistoria")
+    .mockResolvedValue({ historia: historia() });
   vi.mocked(confirmar).mockResolvedValue(true);
 });
 
@@ -123,6 +128,23 @@ describe("DetalleHistoriaPagina", () => {
     fireEvent.click(await screen.findByTestId("btn-descartar"));
     await waitFor(() => expect(confirmar).toHaveBeenCalled());
     expect(mockDescartar).not.toHaveBeenCalled();
+  });
+
+  it("una historia atascada (en_cola) ofrece Devolver a Noticias", async () => {
+    mockHistoria.mockResolvedValue({
+      historia: historia({ estado: "usado", publicacion_id: "c-1", pieza_estado: "en_cola" }),
+      items: [],
+    });
+    renderPagina(historia());
+    fireEvent.click(await screen.findByTestId("btn-devolver"));
+    await waitFor(() => expect(confirmar).toHaveBeenCalled());
+    await waitFor(() => expect(mockDevolver).toHaveBeenCalledWith("h-1"));
+  });
+
+  it("una historia en el pool no ofrece Devolver", async () => {
+    renderPagina(historia());
+    await screen.findByTestId("btn-empujar");
+    expect(screen.queryByTestId("btn-devolver")).toBeNull();
   });
 
   it("una pieza ya en el feed no ofrece empujar/descartar", async () => {

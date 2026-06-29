@@ -406,6 +406,10 @@ def marcar_items_cluster_usados(cluster_id: str, publicacion_id: str) -> None:
     return db.marcar_items_cluster_usados(cluster_id, publicacion_id)
 
 
+def desmarcar_items_cluster_usados(cluster_id: str) -> None:
+    return db.desmarcar_items_cluster_usados(cluster_id)
+
+
 def descartar_cluster(cluster_id: str) -> bool:
     return db.descartar_cluster(cluster_id)
 

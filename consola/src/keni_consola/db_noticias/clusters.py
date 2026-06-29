@@ -1003,6 +1003,21 @@ def marcar_items_cluster_usados(cluster_id: str, publicacion_id: str) -> None:
         con.close()
 
 
+def desmarcar_items_cluster_usados(cluster_id: str) -> None:
+    """Inverso de `marcar_items_cluster_usados`: devuelve los items `usado` a `nuevo` y desliga su
+    `publicacion_id`, para que la historia vuelva al pool. No toca los `descartado` (lápidas)."""
+    con = _conectar()
+    try:
+        con.execute(
+            "UPDATE noticias_items SET estado = 'nuevo', publicacion_id = '' "
+            "WHERE cluster_id = ? AND estado = 'usado'",
+            (cluster_id,),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
 def descartar_cluster(cluster_id: str) -> bool:
     """DESCARTE definitivo de una historia: BORRA la fila del cluster y deja sus items como lápida.
 

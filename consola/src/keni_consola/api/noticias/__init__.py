@@ -49,6 +49,7 @@ from .historias import (
     descartar_historia,
     descartar_historias_lote,
     detalle_historia,
+    devolver_historia,
     listar_historias,
     mesa,
     mesa_linea,
@@ -87,6 +88,7 @@ __all__ = [
     "detalle_historia",
     "usar_historia",
     "descartar_historia",
+    "devolver_historia",
     "descartar_historias_lote",
     "borrar_historias_lote",
     "borrar_todas_historias",
@@ -126,6 +128,7 @@ RUTAS = [
     Route("/api/noticias/historias/{cluster_id}", detalle_historia, methods=["GET"]),
     Route("/api/noticias/historias/{cluster_id}/usar", usar_historia, methods=["POST"]),
     Route("/api/noticias/historias/{cluster_id}/descartar", descartar_historia, methods=["POST"]),
+    Route("/api/noticias/historias/{cluster_id}/devolver", devolver_historia, methods=["POST"]),
     Route("/api/noticias/{item_id}/usar", usar, methods=["POST"]),
     Route("/api/noticias/{item_id}/descartar", descartar, methods=["POST"]),
 ]

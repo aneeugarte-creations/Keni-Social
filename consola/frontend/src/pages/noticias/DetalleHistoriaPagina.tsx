@@ -22,6 +22,7 @@ import {
   Newspaper,
   Sparkles,
   Trash2,
+  Undo2,
   Zap,
 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -88,6 +89,16 @@ export default function DetalleHistoriaPagina() {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  const devolverMut = useMutation({
+    mutationFn: () => api.noticias.devolverHistoria(id),
+    onSuccess: () => {
+      invalidar();
+      toast.success("Historia devuelta a Noticias.");
+      navigate(RUTA_MESA);
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
   const volver = (
     <Button variant="ghost" size="sm" asChild>
       <Link to={RUTA_MESA}>
@@ -134,8 +145,11 @@ export default function DetalleHistoriaPagina() {
   const fuente =
     nombreFuente(historia.primera_fuente_nombre, historia.primera_fuente_id) ||
     historia.marca_nombre;
-  const enCurso = usarMut.isPending || descartarMut.isPending;
+  const enCurso = usarMut.isPending || descartarMut.isPending || devolverMut.isPending;
   const estado = estadoCorroboracion(historia);
+  // Promovida pero aún SIN copy en el feed (en_cola/generando, p. ej. un copy en error): se puede
+  // rescatar devolviéndola al pool para decidir de nuevo, en vez de perderla atascada.
+  const puedeDevolver = piezaEstado === "en_cola" || piezaEstado === "generando";
 
   const onDescartar = async () => {
     if (
@@ -147,6 +161,19 @@ export default function DetalleHistoriaPagina() {
       })
     )
       descartarMut.mutate();
+  };
+
+  const onDevolver = async () => {
+    if (
+      await confirmar({
+        titulo: "Devolver a Noticias",
+        mensaje:
+          "Quita esta historia del tablero y la devuelve al pool de Noticias para decidir de nuevo. " +
+          "Se descarta el copy a medio hacer (útil si se quedó atascado o en error).",
+        textoConfirmar: "Devolver",
+      })
+    )
+      devolverMut.mutate();
   };
 
   const badgeEstado =
@@ -346,6 +373,23 @@ export default function DetalleHistoriaPagina() {
                 Descartar
               </Button>
             </div>
+          )}
+
+          {puedeDevolver && (
+            <Button
+              variant="outline"
+              className="h-10 w-full justify-center gap-2 bg-card text-sm font-medium shadow-sm transition hover:bg-card hover:shadow-md"
+              onClick={onDevolver}
+              disabled={enCurso}
+              data-testid="btn-devolver"
+            >
+              {devolverMut.isPending ? (
+                <Spinner className="h-4 w-4" />
+              ) : (
+                <Undo2 className="h-4 w-4" />
+              )}
+              Devolver a Noticias
+            </Button>
           )}
         </aside>
       </div>
