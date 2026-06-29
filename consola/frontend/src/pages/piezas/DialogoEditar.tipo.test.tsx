@@ -96,16 +96,16 @@ describe("DialogoEditar — lógica de tipo de plantilla", () => {
 // --- Puente al Estudio de video ---
 /** Espejo del destino de navegación del botón "Estudio de video". */
 function rutaVideo(publicacionId: string): string {
-  return `/publicaciones/video?contenido=${encodeURIComponent(publicacionId)}`;
+  return `/contenido/video?contenido=${encodeURIComponent(publicacionId)}`;
 }
 
 describe("DialogoEditar — puente al Estudio de video", () => {
   it("navega a /contenido/video con el publicacion_id de la pieza", () => {
-    expect(rutaVideo("cont-42")).toBe("/publicaciones/video?contenido=cont-42");
+    expect(rutaVideo("cont-42")).toBe("/contenido/video?contenido=cont-42");
   });
 
   it("escapa ids con caracteres especiales en el query param", () => {
-    expect(rutaVideo("a/b c")).toBe("/publicaciones/video?contenido=a%2Fb%20c");
+    expect(rutaVideo("a/b c")).toBe("/contenido/video?contenido=a%2Fb%20c");
   });
 });
 

@@ -16,7 +16,9 @@ import type { AppCatalogo, RolUsuario } from "@/types";
 /**
  * Catálogo de prueba. `navegacion` es lo que pinta el sidebar (bloques de flujo ya
  * agrupados y etiquetados por el backend); `apps` se conserva para los helpers de
- * `apps-scope` (paleta de comandos) que siguen consumiéndolo.
+ * `apps-scope` (paleta de comandos) que siguen consumiéndolo. Las rutas con prefijo
+ * de bloque (`/operacion`, `/equipo`, `/contenido`, `/maquina`, `/datos`) reflejan la
+ * correspondencia 1:1 bloque↔prefijo de la app real.
  */
 const CATALOGO = {
   apps: [
@@ -26,14 +28,14 @@ const CATALOGO = {
       icono: "Sparkles",
       descripcion: "Copy, clips, imágenes y verificación",
       permisos: ["editor", "admin"],
-      rutas_frontend: ["/publicaciones/imagen", "/maquina/investigacion", "/maquina/computo"],
+      rutas_frontend: ["/contenido/imagen", "/operacion/investigacion", "/maquina/agentes"],
       nav: [
-        { ruta: "/publicaciones/imagen", etiqueta: "Imagen", icono: "Palette", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 10 },
-        { ruta: "/publicaciones/texto", etiqueta: "Texto", icono: "Library", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 20 },
-        // Bloque «Máquina»: dos cockpits (los agentes IA) + el hub de la sala de máquinas («Agentes»).
-        { ruta: "/maquina/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "", grupo: "maquina", grupo_orden: 25, orden: 10 },
-        { ruta: "/maquina/produccion", etiqueta: "Producción", icono: "Wand2", descripcion: "", grupo: "maquina", grupo_orden: 25, orden: 20 },
-        { ruta: "/maquina/computo", etiqueta: "Agentes", icono: "Bot", descripcion: "", grupo: "maquina", grupo_orden: 25, orden: 30 },
+        // Investigación es trabajo cotidiano → bloque «Operación» (es un hub: Noticias/Fuentes/…).
+        { ruta: "/operacion/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 10 },
+        { ruta: "/contenido/imagen", etiqueta: "Imagen", icono: "Image", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 10 },
+        // Bloque «Máquina»: Contexto (página plana) + Agentes (hub: Cómputo/Economía/Actividad).
+        { ruta: "/maquina/contexto", etiqueta: "Contexto", icono: "Layers", descripcion: "", grupo: "maquina", grupo_orden: 25, orden: 10 },
+        { ruta: "/maquina/agentes", etiqueta: "Agentes", icono: "Bot", descripcion: "", grupo: "maquina", grupo_orden: 25, orden: 30 },
       ],
     },
     {
@@ -53,47 +55,49 @@ const CATALOGO = {
       icono: "Send",
       descripcion: "Rota, parrilla y publicación",
       permisos: ["editor", "admin"],
-      rutas_frontend: ["/operacion/feed", "/operacion/programacion", "/operacion/turnos"],
+      rutas_frontend: ["/operacion/feed", "/operacion/programa", "/equipo/trabajo", "/equipo/calendario"],
       nav: [
         { ruta: "/operacion/feed", etiqueta: "Feed", icono: "LayoutGrid", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 20 },
-        { ruta: "/operacion/programacion", etiqueta: "Programación", icono: "CalendarDays", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 25 },
-        { ruta: "/operacion/turnos", etiqueta: "Turnos", icono: "CalendarClock", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 28 },
+        { ruta: "/operacion/programa", etiqueta: "Programa", icono: "CalendarDays", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 25 },
+        { ruta: "/equipo/trabajo", etiqueta: "Trabajo", icono: "ClipboardList", descripcion: "", grupo: "equipo", grupo_orden: 15, orden: 10 },
+        { ruta: "/equipo/calendario", etiqueta: "Calendario", icono: "CalendarClock", descripcion: "", grupo: "equipo", grupo_orden: 15, orden: 20 },
       ],
     },
   ],
-  // Bloques de flujo tal como los entrega el backend (`entradas_nav_activas`):
-  // Feed (red social interna) encabeza "Operación", seguido de Programación y Turnos (páginas
-  // planas). Los hubs que quedan van como UNA entrada (su sub-nav es in-page). El bloque vive
-  // también en el path.
+  // Bloques de flujo tal como los entrega el backend (`entradas_nav_activas`): cada bloque vive
+  // también en el path (1:1). Los hubs van como UNA entrada (su sub-nav es in-page).
   navegacion: [
     {
       etiqueta: "Operación",
       items: [
+        { ruta: "/operacion/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "Pool de noticias" },
         { ruta: "/operacion/feed", etiqueta: "Feed", icono: "LayoutGrid", descripcion: "Feed del equipo" },
-        { ruta: "/operacion/programacion", etiqueta: "Programación", icono: "CalendarDays", descripcion: "Calendario de piezas" },
-        { ruta: "/operacion/turnos", etiqueta: "Turnos", icono: "CalendarClock", descripcion: "Rota de cobertura" },
+        { ruta: "/operacion/programa", etiqueta: "Programa", icono: "CalendarDays", descripcion: "Calendario y plan" },
       ],
     },
     {
-      etiqueta: "Publicacion",
+      etiqueta: "Equipo",
       items: [
-        { ruta: "/publicaciones/imagen", etiqueta: "Imagen", icono: "Palette", descripcion: "Lienzo de imagen" },
-        { ruta: "/publicaciones/texto", etiqueta: "Texto", icono: "Library", descripcion: "Prompts, editorial y plantillas" },
+        { ruta: "/equipo/trabajo", etiqueta: "Trabajo", icono: "ClipboardList", descripcion: "Eventos y cobertura" },
+        { ruta: "/equipo/calendario", etiqueta: "Calendario", icono: "CalendarClock", descripcion: "Rota de turnos" },
+      ],
+    },
+    {
+      etiqueta: "Contenido",
+      items: [
+        { ruta: "/contenido/imagen", etiqueta: "Imagen", icono: "Image", descripcion: "Lienzo de imagen" },
       ],
     },
     {
       etiqueta: "Máquina",
       items: [
-        { ruta: "/maquina/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "Cockpit de investigación" },
-        { ruta: "/maquina/produccion", etiqueta: "Producción", icono: "Wand2", descripcion: "Cockpit de producción" },
-        { ruta: "/maquina/computo", etiqueta: "Agentes", icono: "Bot", descripcion: "Cómputo, economía y actividad" },
+        { ruta: "/maquina/contexto", etiqueta: "Contexto", icono: "Layers", descripcion: "La máquina como estructura" },
+        { ruta: "/maquina/agentes", etiqueta: "Agentes", icono: "Bot", descripcion: "Cómputo, economía y actividad" },
       ],
     },
     {
       etiqueta: "Datos",
       items: [
-        // Tras la consolidación de nav, «Datos» queda solo con Analíticas (la medición que cierra
-        // el loop). Investigación vive en su cockpit y el feed de Producción, en Agentes.
         { ruta: "/datos/analiticas", etiqueta: "Analíticas", icono: "BarChart3", descripcion: "Medición" },
       ],
     },
@@ -222,38 +226,38 @@ describe("Sidebar · bloques de flujo", () => {
   it("pinta los bloques de flujo con su encabezado", async () => {
     renderSidebar("editor", "/operacion/feed");
     expect(await screen.findByText("Operación")).toBeInTheDocument();
-    expect(screen.getByText("Publicacion")).toBeInTheDocument();
+    expect(screen.getByText("Equipo")).toBeInTheDocument();
+    expect(screen.getByText("Contenido")).toBeInTheDocument();
     expect(screen.getByText("Máquina")).toBeInTheDocument();
     expect(screen.getByText("Datos")).toBeInTheDocument();
   });
 
-  it("Programación y Turnos se ven en cualquier marca (ambas son por marca, sin gating)", async () => {
-    // Ambas son por marca: cada marca ve su Programación y sus Turnos.
+  it("Feed y Programa se ven en cualquier marca (ambos son por marca, sin gating)", async () => {
     renderSidebar("editor", "/operacion/feed", {}, "unotv");
-    expect(await screen.findByRole("link", { name: /programación/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /turnos/i })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /feed/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /programa/i })).toBeInTheDocument();
   });
 
   it("cada entrada es un enlace; los hubs van como UNA sola entrada (sin hojas sueltas)", async () => {
     renderSidebar("editor", "/operacion/feed");
-    // Bloque "Operación": Feed, Programación y Turnos, los checkpoints diarios.
-    expect(await screen.findByRole("link", { name: /feed/i })).toHaveAttribute("href", "/operacion/feed");
-    expect(screen.getByRole("link", { name: /programación/i })).toHaveAttribute("href", "/operacion/programacion");
-    expect(screen.getByRole("link", { name: /turnos/i })).toHaveAttribute("href", "/operacion/turnos");
-    // Bloque "Publicacion".
-    expect(screen.getByRole("link", { name: /imagen/i })).toHaveAttribute("href", "/publicaciones/imagen");
-    expect(screen.getByRole("link", { name: /texto/i })).toHaveAttribute("href", "/publicaciones/texto");
-    // Bloque "Máquina": dos cockpits (los agentes IA) + el hub de la sala de máquinas («Agentes»).
-    expect(screen.getByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/maquina/investigacion");
-    expect(screen.getByRole("link", { name: /producción/i })).toHaveAttribute("href", "/maquina/produccion");
-    expect(screen.getByRole("link", { name: /agentes/i })).toHaveAttribute("href", "/maquina/computo");
+    // Bloque "Operación": Investigación (hub), Feed (hub), Programa (hub).
+    expect(await screen.findByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/operacion/investigacion");
+    expect(screen.getByRole("link", { name: /feed/i })).toHaveAttribute("href", "/operacion/feed");
+    expect(screen.getByRole("link", { name: /programa/i })).toHaveAttribute("href", "/operacion/programa");
+    // Bloque "Equipo".
+    expect(screen.getByRole("link", { name: /trabajo/i })).toHaveAttribute("href", "/equipo/trabajo");
+    expect(screen.getByRole("link", { name: /calendario/i })).toHaveAttribute("href", "/equipo/calendario");
+    // Bloque "Contenido".
+    expect(screen.getByRole("link", { name: /imagen/i })).toHaveAttribute("href", "/contenido/imagen");
+    // Bloque "Máquina": Contexto (página plana) + Agentes (hub).
+    expect(screen.getByRole("link", { name: /contexto/i })).toHaveAttribute("href", "/maquina/contexto");
+    expect(screen.getByRole("link", { name: /agentes/i })).toHaveAttribute("href", "/maquina/agentes");
     // Bloque "Datos": solo Analíticas.
     expect(screen.getByRole("link", { name: /analíticas/i })).toHaveAttribute("href", "/datos/analiticas");
     // Las pestañas internas de un hub NO viven en el sidebar (van in-page).
     expect(screen.queryByRole("link", { name: /^fuentes$/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /^termómetro$/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /^editorial$/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /^comercial$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^algoritmos$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^economía$/i })).not.toBeInTheDocument();
   });
 
   it("marca activa la entrada del hub aun estando en una de sus sub-rutas", async () => {
@@ -292,11 +296,11 @@ describe("Sidebar · rail colapsable", () => {
     renderSidebar("editor", "/operacion/feed", { colapsado: true, onToggleColapsar: () => {} });
     // Cada entrada sigue siendo un enlace, ahora solo-icono (nombre por aria-label).
     expect(await screen.findByRole("link", { name: /feed/i })).toHaveAttribute("href", "/operacion/feed");
-    expect(screen.getByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/maquina/investigacion");
+    expect(screen.getByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/operacion/investigacion");
     // Botón para volver a expandir la barra.
     expect(screen.getByRole("button", { name: /expandir barra/i })).toBeInTheDocument();
     // En rail no se pintan los encabezados de bloque (solo iconos).
-    expect(screen.queryByText("Publicacion")).not.toBeInTheDocument();
+    expect(screen.queryByText("Contenido")).not.toBeInTheDocument();
   });
 
   it("el toggle (colapsar / expandir) invoca onToggleColapsar", async () => {
@@ -324,8 +328,8 @@ describe("apps-scope · helpers", () => {
   const apps = CATALOGO.apps as AppCatalogo[];
 
   it("rutaPrimaria es la PRIMERA HOJA (aplana hubs a su 1ª sub-pestaña)", () => {
-    // Producción: 1ª entrada /contenido/imagen no es hub → se queda igual.
-    expect(rutaPrimaria(apps[0])).toBe("/publicaciones/imagen");
+    // Producción: 1ª entrada /operacion/investigacion ES hub → resuelve a su 1ª sub-pestaña.
+    expect(rutaPrimaria(apps[0])).toBe("/operacion/investigacion/noticias");
     // Métricas: 1ª entrada /datos/analiticas ES hub → resuelve a su 1ª sub-pestaña.
     expect(rutaPrimaria(apps[1])).toBe("/datos/analiticas/metricas");
     // Operación: 1ª entrada /operacion/feed ES hub → resuelve a su 1ª sub-pestaña.
@@ -335,15 +339,17 @@ describe("apps-scope · helpers", () => {
   it("hojasDeApp aplana hubs a sub-pestañas y conserva las no-hub", () => {
     const hojas = hojasDeApp(apps[0]).map((h) => h.ruta);
     expect(hojas).toEqual([
-      "/publicaciones/imagen",
-      // /contenido/texto (hub) → sus sub-pestañas
-      "/publicaciones/texto/documentos",
-      "/publicaciones/texto/estrategia",
-      // Bloque «Máquina»: los cockpits Investigación/Producción son páginas planas; Cómputo es la
-      // entrada del hub «sala de máquinas» → se aplana a sus pestañas (Cómputo/Economía/Actividad/Controles).
-      "/maquina/investigacion",
-      "/maquina/produccion",
-      "/maquina/computo",
+      // /operacion/investigacion (hub) → sus 4 pestañas
+      "/operacion/investigacion/noticias",
+      "/operacion/investigacion/fuentes",
+      "/operacion/investigacion/algoritmos",
+      "/operacion/investigacion/publicaciones",
+      // /contenido/imagen no es hub → se queda igual
+      "/contenido/imagen",
+      // /maquina/contexto no es hub → se queda igual
+      "/maquina/contexto",
+      // /maquina/agentes (hub) → sus pestañas (Cómputo/Economía/Actividad/Controles)
+      "/maquina/agentes",
       "/maquina/economia",
       "/maquina/actividad",
       "/maquina/controles",
@@ -351,8 +357,8 @@ describe("apps-scope · helpers", () => {
   });
 
   it("appDeRuta resuelve por prefijo más largo", () => {
-    expect(appDeRuta(apps, "/publicaciones/imagen")?.id).toBe("produccion");
-    expect(appDeRuta(apps, "/operacion/turnos")?.id).toBe("operacion");
+    expect(appDeRuta(apps, "/contenido/imagen")?.id).toBe("produccion");
+    expect(appDeRuta(apps, "/equipo/calendario")?.id).toBe("operacion");
     // Fuera de toda app (raíz / shell): undefined.
     expect(appDeRuta(apps, "/")).toBeUndefined();
     expect(appDeRuta(apps, "/configuracion")).toBeUndefined();
@@ -361,14 +367,13 @@ describe("apps-scope · helpers", () => {
   it("gruposDeApp respeta los bloques visuales por orden", () => {
     const grupos = gruposDeApp(apps[0]);
     const rutas = grupos.flatMap((g) => g.items.map((i) => i.ruta));
-    // Ordenado por (grupo_orden, orden): contenido(20: /imagen,/texto) · maquina(25: /investigacion,
-    // /produccion, /computo). Producción solo aporta entradas a "maquina", no a "operacion" ni "datos".
+    // Ordenado por (grupo_orden, orden): operacion(10: /investigacion) · contenido(20: /imagen) ·
+    // maquina(25: /contexto, /agentes).
     expect(rutas).toEqual([
-      "/publicaciones/imagen",
-      "/publicaciones/texto",
-      "/maquina/investigacion",
-      "/maquina/produccion",
-      "/maquina/computo",
+      "/operacion/investigacion",
+      "/contenido/imagen",
+      "/maquina/contexto",
+      "/maquina/agentes",
     ]);
   });
 });

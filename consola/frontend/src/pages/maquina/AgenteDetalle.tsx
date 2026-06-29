@@ -232,7 +232,7 @@ function Analizar({ latido }: { latido: LatidoDaemon }) {
       realce
       onPrimaria={
         latido.motor
-          ? () => navigate(`/maquina/computo?proceso=${latido.motor}`)
+          ? () => navigate(`/maquina/agentes?proceso=${latido.motor}`)
           : undefined
       }
       acciones={[]}

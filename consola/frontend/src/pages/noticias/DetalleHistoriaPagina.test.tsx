@@ -53,13 +53,13 @@ function renderPagina(h: Historia) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[`/maquina/investigacion/historia/${h.id}`]}>
+      <MemoryRouter initialEntries={[`/operacion/investigacion/historia/${h.id}`]}>
         <Routes>
           <Route
-            path="/maquina/investigacion/historia/:id"
+            path="/operacion/investigacion/historia/:id"
             element={<DetalleHistoriaPagina />}
           />
-          <Route path="/maquina/investigacion" element={<div>Mesa</div>} />
+          <Route path="/operacion/investigacion/noticias" element={<div>Mesa</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,

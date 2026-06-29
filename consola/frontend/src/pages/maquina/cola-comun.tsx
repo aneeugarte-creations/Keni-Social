@@ -1,5 +1,5 @@
 /**
- * Piezas COMPARTIDAS de la sala de máquinas entre Cómputo (`/maquina/computo`) y Economía
+ * Piezas COMPARTIDAS de la sala de máquinas entre Cómputo (`/maquina/agentes`) y Economía
  * (`/maquina/economia`): la tarjeta KPI, la tabla de jobs activos (con sus acciones admin) y el
  * panel de presupuesto + parada de emergencia. Viven aquí para que ambas superficies reusen el
  * mismo render y el mismo contrato sin duplicarlo (Cómputo usa Kpi/TablaJobs; Economía, el panel

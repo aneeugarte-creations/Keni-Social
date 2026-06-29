@@ -36,7 +36,7 @@ export const CATALOGO: Catalogo = {
       etiqueta: "Operación",
       items: [
         {
-          ruta: "/maquina/investigacion",
+          ruta: "/operacion/investigacion",
           etiqueta: "Investigación",
           icono: "Search",
           descripcion:
@@ -56,12 +56,24 @@ export const CATALOGO: Catalogo = {
           descripcion:
             "Calendario de publicaciones y el plan de líneas (hashtag y keywords), por marca.",
         },
+      ],
+    },
+    {
+      etiqueta: "Equipo",
+      items: [
         {
-          ruta: "/operacion/trabajo",
+          ruta: "/equipo/trabajo",
           etiqueta: "Trabajo",
           icono: "ClipboardList",
           descripcion:
             "Eventos y tareas del equipo con su cobertura: qué hay que cubrir y quién lo coge, por marca.",
+        },
+        {
+          ruta: "/equipo/calendario",
+          etiqueta: "Calendario",
+          icono: "CalendarClock",
+          descripcion:
+            "El horario de turnos del equipo: tu calendario y el del equipo, semana o mes, por marca.",
         },
       ],
     },
@@ -89,6 +101,13 @@ export const CATALOGO: Catalogo = {
           descripcion:
             "Gestor de audio→texto: sube cualquier audio o vídeo, extrae la voz y genera la transcripción con timestamps; límpiala, resúmela o corrígela con agentes de Claude.",
         },
+        {
+          ruta: "/contenido/galeria",
+          etiqueta: "Galería",
+          icono: "Camera",
+          descripcion:
+            "Descarga la herramienta local y procesa las fotos de un partido en tu equipo.",
+        },
       ],
     },
     {
@@ -102,7 +121,7 @@ export const CATALOGO: Catalogo = {
             "La máquina en una página: el pipeline de Investigación y Producción como estructura — cada fase con su prompt, el contexto editorial que inyecta, sus logs y su interruptor on/off.",
         },
         {
-          ruta: "/maquina/computo",
+          ruta: "/maquina/agentes",
           etiqueta: "Agentes",
           icono: "Bot",
           descripcion:
@@ -119,18 +138,6 @@ export const CATALOGO: Catalogo = {
           icono: "BarChart3",
           descripcion:
             "Rendimiento de las cuentas y seguimiento de campañas. Pestañas Métricas / Campañas.",
-        },
-      ],
-    },
-    {
-      etiqueta: "",
-      items: [
-        {
-          ruta: "/operacion/turnos",
-          etiqueta: "Calendario",
-          icono: "CalendarClock",
-          descripcion:
-            "El horario de turnos del equipo: tu calendario y el del equipo, semana o mes, por marca.",
         },
       ],
     },

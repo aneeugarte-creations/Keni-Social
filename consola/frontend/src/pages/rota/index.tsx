@@ -33,7 +33,7 @@ import { useTiempoLibreActivo } from "./useConfigRota";
 
 /** Valores válidos de pestaña (orden = el de la barra). «Horario» (el calendario MENSUAL de turnos)
  *  es la home (default). «Gestión» es admin-only. El TRABAJO (eventos/tareas/cobertura) vive en su
- *  propio destino del sidebar (`/operacion/trabajo`); el resumen del día «Hoy» se retiró. */
+ *  propio destino del sidebar (`/equipo/trabajo`); el resumen del día «Hoy» se retiró. */
 const VALORES_PESTANA = ["calendario", "gestion", "cambios-ausencias"];
 
 /** Normaliza el `?tab=`. El legacy `mis-turnos` (antigua pestaña «Mi jornada») cae en «Horario»,
@@ -183,7 +183,7 @@ export default function Rota() {
             senales={senalesCoord.senales}
             cargando={senalesCoord.cargando}
             onIr={(destino) => {
-              if (destino === "cobertura") navigate("/operacion/trabajo");
+              if (destino === "cobertura") navigate("/equipo/trabajo");
               else if (destino === "cambios-ausencias") setVerCambios(true);
               else setPestania(destino);
             }}

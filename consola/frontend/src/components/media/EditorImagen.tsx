@@ -325,7 +325,7 @@ export function EditorImagen({
                 Abrir en Estudio
               </span>
             ) : (
-              <Link to="/publicaciones/estudio" state={{ piezaId, red, copy, imagen: imagen || undefined }}>
+              <Link to="/contenido/imagen" state={{ piezaId, red, copy, imagen: imagen || undefined }}>
                 <Wand2 className="mr-1 h-3.5 w-3.5" />
                 Abrir en Estudio
               </Link>

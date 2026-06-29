@@ -115,7 +115,7 @@ def _metricas_run(metricas: dict[str, Any] | None) -> dict[str, Any]:
 _URL_RESULTADO_POR_TIPO = {
     "copy": "/operacion/feed/lista",
     "rss": "/operacion/feed/lista",
-    "imagen": "/contenido/estudio",
+    "imagen": "/contenido/imagen",
     # La aprobación (revisión editorial + verificación) vive en línea en el Feed, no en una
     # página Revisión aparte, así que los resultados de verificación enlazan ahí.
     "verificacion": "/operacion/feed",
@@ -124,7 +124,7 @@ _URL_RESULTADO_POR_TIPO = {
     # "insumos" NO enlaza: navegar al cajón pierde el resultado del parseo. La fila de
     # Actividad abre el VISOR EN VIVO (popup con stream + prompt + métricas), que SÍ muestra
     # el resultado del lote. Sin `resultado_url`, el SPA cae a ese visor (ver Actividad.tsx).
-    "investigacion": "/datos/investigacion/agentes",
+    "investigacion": "/operacion/investigacion/noticias",
     "import-calendario": "/operacion/feed",
     # El carrusel se hornea en las piezas del post: enlaza a la Lista del Feed, donde el post
     # vive y se abre el editor para ver las placas (slides) generadas.

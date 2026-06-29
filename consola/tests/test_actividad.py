@@ -94,7 +94,7 @@ def test_normalizar_generacion_resultado_url_por_tipo():
     casos = {
         "copy": "/operacion/feed/lista",
         "rss": "/operacion/feed/lista",
-        "imagen": "/contenido/estudio",
+        "imagen": "/contenido/imagen",
         "verificacion": "/operacion/feed",
         "revision": "/operacion/feed",
     }

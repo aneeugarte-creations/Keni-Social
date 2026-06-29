@@ -40,11 +40,11 @@ TIPO_CAMBIO_TURNO = "cambio_turno"
 # ausencia<->turno). El front cae al icono de campana si no lo conoce.
 TIPO_AUSENCIA_DESCUBIERTO = "ausencia_descubierto"
 
-# Deep-link a la pestana de cambios/ausencias (el shell de Turnos la abre por `?tab=`).
-ENLACE_CAMBIOS = "/operacion/turnos?tab=cambios-ausencias"
+# Deep-link a la pestana de cambios/ausencias (el shell de Calendario la abre por `?tab=`).
+ENLACE_CAMBIOS = "/equipo/calendario?tab=cambios-ausencias"
 
 # Deep-link al Calendario: la rejilla donde el coordinador reasigna el turno descubierto.
-ENLACE_CALENDARIO = "/operacion/turnos?tab=calendario"
+ENLACE_CALENDARIO = "/equipo/calendario?tab=calendario"
 
 
 def _ids_admin() -> set[str]:

@@ -72,7 +72,7 @@ function docConBase(): ComposicionVideo {
   };
 }
 
-function renderVideo(rutaInicial = "/publicaciones/video") {
+function renderVideo(rutaInicial = "/contenido/video") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
@@ -178,7 +178,7 @@ describe("Video", () => {
       .mockResolvedValue({
         composicion: { id: "comp-7", documento: docConBase(), titulo: "Mi clip", estado: "borrador" },
       });
-    renderVideo("/publicaciones/video?composicion=comp-7");
+    renderVideo("/contenido/video?composicion=comp-7");
     // Tras cargar, abre la sección Base con el clip ya presente: el reencuadre (que exige base)
     // y las secciones que requieren base quedan habilitadas.
     await waitFor(() => expect(composicion).toHaveBeenCalledWith("comp-7"));
@@ -191,7 +191,7 @@ describe("Video", () => {
     vi.spyOn(apiMod.api.video, "composicion").mockResolvedValue({
       composicion: { id: "comp-7", documento: docConBase(), titulo: "Mi clip", estado: "borrador" },
     });
-    renderVideo("/publicaciones/video?composicion=comp-7");
+    renderVideo("/contenido/video?composicion=comp-7");
     // El timeline vive bajo el preview: playhead accesible y asas de trim del clip base.
     await waitFor(() =>
       expect(screen.getByLabelText("Línea de tiempo de la composición")).toBeInTheDocument(),
@@ -218,7 +218,7 @@ describe("Video", () => {
       ],
     });
     const crear = vi.spyOn(apiMod.api.video, "crearComposicion");
-    renderVideo("/publicaciones/video?contenido=cont-5");
+    renderVideo("/contenido/video?contenido=cont-5");
     await waitFor(() =>
       expect(listar).toHaveBeenCalledWith({ marca: "unotv", publicacion_id: "cont-5" }),
     );
@@ -234,7 +234,7 @@ describe("Video", () => {
     const crear = vi
       .spyOn(apiMod.api.video, "crearComposicion")
       .mockResolvedValue({ id: "comp-nueva" });
-    renderVideo("/publicaciones/video?contenido=cont-9");
+    renderVideo("/contenido/video?contenido=cont-9");
     await waitFor(() => expect(crear).toHaveBeenCalledTimes(1));
     // La nueva composición se crea LIGADA a la pieza (publicacion_id) y con título por defecto.
     expect(crear.mock.calls[0][0]).toMatchObject({
@@ -269,7 +269,7 @@ describe("Video", () => {
           <ProveedorEncabezado
             value={{ slotInicio: null, slotAcciones: slot, registrarTitulo: () => () => {} }}
           >
-            <MemoryRouter initialEntries={["/publicaciones/video"]}>
+            <MemoryRouter initialEntries={["/contenido/video"]}>
               <Video />
             </MemoryRouter>
           </ProveedorEncabezado>
@@ -308,7 +308,7 @@ describe("Video", () => {
       .mockImplementation(
         () => new Promise<never>((res) => { resolverPut = () => res({} as never); }),
       );
-    renderVideo("/publicaciones/video?composicion=comp-7");
+    renderVideo("/contenido/video?composicion=comp-7");
     const asa = await screen.findByRole("button", { name: /recortar fin del clip/i });
     // jsdom no tiene layout: banda de 100px (1px = 1% del eje de 30 s).
     const banda = screen.getByLabelText("Línea de tiempo de la composición");
@@ -358,7 +358,7 @@ describe("Video", () => {
       composicion: { id: "comp-7", documento: docPip, titulo: "T", estado: "borrador" },
     });
     const put = vi.spyOn(apiMod.api.video, "guardarComposicion").mockResolvedValue({} as never);
-    renderVideo("/publicaciones/video?composicion=comp-7");
+    renderVideo("/contenido/video?composicion=comp-7");
     const tabPip = await screen.findByRole("button", { name: /^pip$/i });
     await waitFor(() => expect(tabPip).not.toBeDisabled());
     fireEvent.click(tabPip);
@@ -387,7 +387,7 @@ describe("Video", () => {
     const actualizar = vi
       .spyOn(apiMod.api.video, "actualizarComposicion")
       .mockResolvedValue({ composicion: { id: "comp-7", titulo: "T", estado: "listo" } });
-    renderVideo("/publicaciones/video?composicion=comp-7");
+    renderVideo("/contenido/video?composicion=comp-7");
     const boton = await screen.findByRole("button", { name: /marcar listo/i });
     fireEvent.click(boton);
     await waitFor(() => expect(actualizar).toHaveBeenCalledWith("comp-7", { estado: "listo" }));

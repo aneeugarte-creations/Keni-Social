@@ -26,7 +26,7 @@ export function AvisoSalud() {
   return (
     <Aviso className="mb-3" data-testid="aviso-salud">
       {errores} fuente{errores !== 1 ? "s" : ""} con fallas —{" "}
-      <Link to="/datos/investigacion/fuentes" className="underline">
+      <Link to="/operacion/investigacion/fuentes" className="underline">
         revisar en Fuentes
       </Link>
     </Aviso>

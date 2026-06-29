@@ -74,29 +74,17 @@ rutas_frontend = [
   "/contenido/imagen",
   "/contenido/video",
   "/contenido/audio",
-  "/contenido/texto",
-  "/contenido/texto/documentos",
-  "/contenido/texto/estrategia",
-  # Algoritmos (inteligencia de plataforma) pasó de Investigación a la página de Texto.
-  "/contenido/texto/algoritmos",
-  "/datos/investigacion",
-  "/datos/investigacion/plan",
-  "/datos/investigacion/descubrimiento",
-  "/datos/investigacion/fuentes",
-  "/datos/investigacion/cajones",
-  "/datos/produccion",
-  # Sección «Máquina»: dos cockpits de trabajo (Investigación/Producción) + el hub «sala de
-  # máquinas» (Agentes y sus pestañas Cómputo/Economía/Actividad).
+  # Cockpit operativo de Investigación: hub con pestañas Noticias/Fuentes/Algoritmos/Publicaciones
+  # (y el detalle de una historia). Vive en el bloque «Operación» (trabajo cotidiano del equipo).
+  "/operacion/investigacion",
+  # Sección «Máquina»: «Contexto» (la máquina como estructura: el pipeline de cada motor) y
+  # «Agentes» (la sala de máquinas: Cómputo —pestaña de aterrizaje—, Economía, Actividad y Controles).
   "/maquina",
   "/maquina/contexto",
-  "/maquina/investigacion",
-  "/maquina/produccion",
   "/maquina/agentes",
-  "/maquina/computo",
   "/maquina/economia",
   "/maquina/actividad",
-  # Ruta vieja de la página Agentes (antes «Workers»/Cola): redirige a /maquina/agentes.
-  "/maquina/cola",
+  "/maquina/controles",
 ]
 
 # Entradas de navegación de esta app (mismo orden/aspecto que el sidebar actual).
@@ -141,30 +129,16 @@ grupo = "contenido"
 grupo_orden = 20
 orden = 30
 
-# (La página «Texto»/Prompts se RETIRÓ del bloque Contenido: los prompts viven ahora dentro de
-# cada fase del pipeline en «Contexto» —Máquina—, y el contexto editorial se inyecta desde ahí.
-# `/contenido/texto*` redirige a `/maquina/contexto`.)
+# Los prompts no tienen entrada de nav propia: viven dentro de cada fase del pipeline en «Contexto»
+# (Máquina), y el contexto editorial se inyecta desde ahí. El bloque «Datos» lo aporta `metricas.toml`
+# (Analíticas); esta app no pone entradas ahí.
 
-# Consolidación de navegación: cada motor sale UNA sola vez, en el bloque «Máquina».
-# Las entradas viejas del bloque «datos» (Investigación `/datos/investigacion` y Producción
-# `/datos/produccion`) se RETIRARON del menú:
-#   - Investigación se absorbió en el cockpit de Investigación (`/maquina/investigacion`); su
-#     ruta vieja redirige allí (Mesa/Fuentes/Algoritmos/Contenidos son sus pestañas).
-#   - Producción (el FEED de actividad: runs del pipeline + actividad suelta) se PLEGÓ como la
-#     sección «Actividad» del dashboard de Workers (`/maquina/cola`); su ruta índice
-#     `/datos/produccion` redirige allí y los detalles (pipelines/:id, actividad/:id) siguen vivos.
-# El bloque «datos» queda solo con Analíticas (lo aporta `metricas.toml`). Las rutas siguen en
-# `rutas_frontend` (los redirects y las sub-rutas vivas pertenecen a esta app).
-
-# (Antes existía una entrada "Activos" propia; se fusionó como pestaña "Plantillas"
-# de la página Texto y dejó de ser una entrada de nav.)
-
-# Cockpit OPERATIVO de Investigación: el pool de noticias que el equipo revisa a diario (Noticias,
-# Fuentes, Algoritmos, Contenidos). Es trabajo cotidiano, así que su entrada vive en el bloque
-# «Operación», ENCIMA del Feed (orden 10 < Feed 20). El pipeline de investigación (recolectar→
-# verificar) NO vive aquí: se enciende y se vigila en «Contexto» (Máquina).
+# Cockpit OPERATIVO de Investigación: el pool de noticias que el equipo revisa a diario (hub con
+# pestañas Noticias, Fuentes, Algoritmos y Publicaciones). Es trabajo cotidiano, así que su entrada
+# vive en el bloque «Operación», ENCIMA del Feed (orden 10 < Feed 20). El pipeline de investigación
+# (recolectar→verificar) NO vive aquí: se enciende y se vigila en «Contexto» (Máquina).
 [[nav]]
-ruta = "/maquina/investigacion"
+ruta = "/operacion/investigacion"
 etiqueta = "Investigación"
 icono = "Search"
 descripcion = "El pool de noticias que alimenta la máquina: Noticias, Fuentes, Algoritmos y Contenidos. El pipeline (descubrir/verificar) se controla en Contexto."
@@ -186,7 +160,7 @@ grupo_orden = 25
 orden = 10
 
 [[nav]]
-ruta = "/maquina/computo"
+ruta = "/maquina/agentes"
 etiqueta = "Agentes"
 icono = "Bot"
 descripcion = "La «sala de máquinas» (observabilidad y control de los agentes): Cómputo (la cola en vivo) y, en pestañas hermanas, la Economía (presupuesto + coste) y la Actividad (la traza completa)."

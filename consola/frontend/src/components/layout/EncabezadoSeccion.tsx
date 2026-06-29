@@ -32,7 +32,9 @@ export function EncabezadoSeccion({
     ?.filter((p) => rutaVisibleParaMarca(p.ruta, marcaActiva, marcaActivaEsNoticias))
     // El panel de investigación se llama según la marca activa (p.ej. "Curiosidades"); "Noticias" por defecto.
     .map((p) =>
-      p.ruta === "/datos/investigacion" ? { ...p, etiqueta: etiquetaInvestigacion ?? "Noticias" } : p,
+      p.ruta === "/operacion/investigacion/noticias"
+        ? { ...p, etiqueta: etiquetaInvestigacion ?? "Noticias" }
+        : p,
     );
   // Hub solo si quedan 2+ pestañas tras el gating por marca (si no, no hay nada que conmutar).
   const hayTabs = !!pestanas && pestanas.length >= 2;

@@ -1,8 +1,8 @@
 /**
- * Página CÓMPUTO Y COLA (`/maquina/computo`): la cola de generación POR DENTRO. Enseña el estado
+ * Página CÓMPUTO Y COLA (`/maquina/agentes`): la cola de generación POR DENTRO. Enseña el estado
  * en vivo (en curso / en cola / workers) y deja al humano PRIORIZAR, cancelar, reintentar y purgar
- * la cola in-place. `?proceso=` enfoca a un motor. Es la pestaña de aterrizaje del hub de la
- * máquina; el presupuesto y la economía viven en su pestaña hermana «Economía».
+ * la cola in-place. `?proceso=` enfoca a un motor. Es la pestaña de aterrizaje del hub «Agentes»;
+ * el presupuesto y la economía viven en su pestaña hermana «Economía».
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Clock, Cpu, type LucideIcon, Trash2, Users } from "lucide-react";
@@ -184,7 +184,7 @@ export default function Computo() {
         <p className="text-sm text-muted-foreground">
           Enfocado a{" "}
           <strong className={PROC_META[proceso].texto}>{PROC_META[proceso].etiqueta}</strong>.{" "}
-          <Link to="/maquina/computo" className="underline-offset-2 hover:underline">
+          <Link to="/maquina/agentes" className="underline-offset-2 hover:underline">
             Ver ambos motores
           </Link>
         </p>

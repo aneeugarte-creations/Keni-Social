@@ -38,35 +38,25 @@ modulos_backend = [
 ]
 
 rutas_frontend = [
-  # El antiguo hub "Parrilla" se separó en "Feed" (Feed de ideación + Lista de contenido) y,
-  # luego, el hub "Calendario" se separó a su vez en DOS páginas planas: "Programación"
-  # (publicaciones) y "Turnos" (rota). Las rutas legacy (/parrilla/* y /operacion/calendario/*)
-  # se conservan en el scope para que sus redirecciones (ver router.tsx) resuelvan dentro de la app.
-  "/publicaciones",
-  "/operacion/tareas",
-  "/operacion/parrilla",
+  # Bloque «Operación»: «Feed» (hub: Feed de ideación + Portal + Lista de contenido) y «Programa»
+  # (hub: Programación + Plan), por marca activa.
   "/operacion/feed",
   "/operacion/feed/feed",
+  "/operacion/feed/portal",
   "/operacion/feed/lista",
-  # «Programa» (hub) con dos pestañas: «Programación» (calendario) y «Plan» (líneas: su hashtag y
-  # los keywords del clasificador). La ruta plana legacy `/operacion/programacion` se conserva para
-  # que su redirección (ver router.tsx) resuelva dentro de la app.
   "/operacion/programa",
   "/operacion/programa/programacion",
   "/operacion/programa/plan",
-  "/operacion/programacion",
-  "/operacion/turnos",
-  "/operacion/trabajo",
-  "/operacion/calendario",
-  "/operacion/calendario/turnos",
-  "/operacion/calendario/calendario",
+  # Bloque «Equipo»: «Trabajo» (eventos/tareas y su cobertura) y «Calendario» (el horario de turnos).
+  "/equipo/trabajo",
+  "/equipo/calendario",
   # Webhooks salientes (admin; sin nav, se entra por URL directa). Ver router.tsx.
   "/webhooks",
 ]
 
-# Dos destinos hermanos en el bloque «Equipo»: «Trabajo» (`/operacion/trabajo`) = eventos/tareas y
-# su cobertura (la demanda); «Calendario» (`/operacion/turnos`) = el horario de turnos del equipo
-# (la capacidad: Yo/Equipo, Semana/Mes). La ruta vieja `/operacion/tareas` redirige a «Trabajo».
+# Dos destinos hermanos en el bloque «Equipo»: «Trabajo» (`/equipo/trabajo`) = eventos/tareas y
+# su cobertura (la demanda); «Calendario» (`/equipo/calendario`) = el horario de turnos del equipo
+# (la capacidad: Yo/Equipo, Semana/Mes).
 
 # Feed: la superficie diaria del equipo (red social interna + lista de contenido).
 [[nav]]
@@ -99,7 +89,7 @@ orden = 25
 
 # Trabajo: eventos editoriales y tareas con su cobertura (qué hay que hacer y quién lo coge), por marca.
 [[nav]]
-ruta = "/operacion/trabajo"
+ruta = "/equipo/trabajo"
 etiqueta = "Trabajo"
 icono = "ClipboardList"
 descripcion = "Eventos y tareas del equipo con su cobertura: qué hay que cubrir y quién lo coge, por marca."
@@ -109,7 +99,7 @@ orden = 10
 
 # Calendario: el horario de turnos del equipo (capacidad). Yo/Equipo · Semana/Mes, por marca activa.
 [[nav]]
-ruta = "/operacion/turnos"
+ruta = "/equipo/calendario"
 etiqueta = "Calendario"
 icono = "CalendarClock"
 descripcion = "El horario de turnos del equipo: tu calendario y el del equipo, semana o mes, por marca."

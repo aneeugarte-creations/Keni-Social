@@ -29,7 +29,7 @@ type Lente = "panorama" | "mias" | "equipo";
 
 /**
  * TABLERO de Tareas del equipo: la lista compartida que sustituye al WhatsApp. Cuerpo reutilizable
- * (sin título) para montarlo en su página suelta (`/operacion/tareas`) o dentro de Turnos
+ * (sin título) para montarlo en su página suelta (`/equipo/trabajo`) o dentro de Turnos
  * (pestaña «Cobertura»). La derivación de datos vive en `useTablero` (compartida con la home «Hoy»).
  *
  * `acciones`: dónde va «Añadir». "barra" lo portaliza arriba; "inline" lo pinta junto al segmento.
@@ -224,7 +224,7 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
   );
 }
 
-/** Página suelta `/operacion/tareas`: el tablero con su título en la barra superior. */
+/** Página suelta `/equipo/trabajo`: el tablero con su título en la barra superior. */
 export default function Tareas() {
   return (
     <>

@@ -717,7 +717,7 @@ function DialogoEditarInterno({
                 type="button"
                 onClick={() =>
                   navigate(
-                    `/publicaciones/video?contenido=${encodeURIComponent(pieza.publicacion_id)}`,
+                    `/contenido/video?contenido=${encodeURIComponent(pieza.publicacion_id)}`,
                   )
                 }
                 className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent/60"

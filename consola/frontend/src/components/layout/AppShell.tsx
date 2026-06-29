@@ -47,8 +47,8 @@ export function AppShell() {
   // del JSX más abajo; el color/cromo es idéntico (decisión de diseño: chrome sobrio, el naranja
   // queda como acento puntual, no como campo).
   const enEditor =
-    location.pathname.startsWith("/publicaciones/imagen") ||
-    location.pathname.startsWith("/publicaciones/video");
+    location.pathname.startsWith("/contenido/imagen") ||
+    location.pathname.startsWith("/contenido/video");
 
   // Detecta un deploy nuevo y recarga en la siguiente navegación (sin pedirlo a mano).
   useDetectorActualizacion();

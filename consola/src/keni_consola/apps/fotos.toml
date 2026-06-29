@@ -18,12 +18,12 @@ permisos = ["editor", "admin"]
 # Router propio (`api/fotos.py`): info del lanzador + descarga del bundle. App propia, sin cruces.
 modulos_backend = ["fotos"]
 
-rutas_frontend = ["/fotos"]
+rutas_frontend = ["/contenido/galeria"]
 
 # Bloque CONTENIDO (grupo_orden 20): herramientas para crear/editar a mano (Imagen·Video·Audio).
-# Fotos es la cuarta, tras Audio (orden 30): produce el archivo fotográfico original de un partido.
+# Galería es la cuarta, tras Audio (orden 30): produce el archivo fotográfico original de un partido.
 [[nav]]
-ruta = "/fotos"
+ruta = "/contenido/galeria"
 etiqueta = "Galería"
 icono = "Camera"
 descripcion = "Descarga la herramienta local y procesa las fotos de un partido en tu equipo."

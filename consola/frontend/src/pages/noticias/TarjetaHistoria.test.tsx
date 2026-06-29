@@ -51,7 +51,7 @@ function renderTarjeta(
   props: Partial<Parameters<typeof TarjetaHistoria>[0]> = {},
 ) {
   return render(
-    <MemoryRouter initialEntries={["/maquina/investigacion"]}>
+    <MemoryRouter initialEntries={["/operacion/investigacion"]}>
       <Routes>
         <Route path="*" element={<TarjetaHistoria historia={h} {...props} />} />
       </Routes>
@@ -82,7 +82,7 @@ describe("TarjetaHistoria · tarjeta limpia", () => {
     renderTarjeta(historia({ id: "h-42" }));
     fireEvent.click(screen.getByTestId("btn-detalle"));
     expect(screen.getByTestId("ubicacion").textContent).toBe(
-      "/maquina/investigacion/historia/h-42",
+      "/operacion/investigacion/historia/h-42",
     );
   });
 
@@ -97,7 +97,7 @@ describe("TarjetaHistoria · tarjeta limpia", () => {
     fireEvent.click(screen.getByRole("checkbox"));
     expect(marcado).toBe(true);
     // Sin navegación: seguimos en la mesa.
-    expect(screen.getByTestId("ubicacion").textContent).toBe("/maquina/investigacion");
+    expect(screen.getByTestId("ubicacion").textContent).toBe("/operacion/investigacion");
   });
 
   it("una extranjera sin traducir muestra «Traduciendo…» en vez del titular original", () => {

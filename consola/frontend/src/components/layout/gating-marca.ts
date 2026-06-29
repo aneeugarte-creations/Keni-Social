@@ -21,13 +21,12 @@ const RUTAS_RESTRINGIDAS_POR_MARCA: ReadonlyArray<{ ruta: string; marca: string 
 
 /**
  * Rutas del PANEL DE NOTICIAS, visibles solo para marcas de noticias (`tipo='noticias'`). Las
- * marcas de contenido propio (`tipo='propio'`) se saltan la investigación, así que estas rutas
- * se ocultan de su nav. `exacta` = solo la ruta literal (sin subrutas): el índice del hub de
- * Investigación ("Noticias") se oculta sin tocar a sus hermanas (Publicaciones, Fuentes).
+ * marcas de contenido propio (`tipo='propio'`) se saltan la investigación, así que el hub de
+ * Investigación (su entrada de nav y todas sus pestañas) se oculta de su nav. `exacta` = solo la
+ * ruta literal (sin subrutas).
  */
 const RUTAS_SOLO_NOTICIAS: ReadonlyArray<{ ruta: string; exacta?: boolean }> = [
-  { ruta: "/datos/investigacion", exacta: true }, // pestaña "Noticias" del hub Investigación
-  { ruta: "/maquina/investigacion" }, // cockpit de Investigación (la Mesa)
+  { ruta: "/operacion/investigacion" }, // hub Investigación (entrada de nav + todas sus pestañas)
 ];
 
 /**

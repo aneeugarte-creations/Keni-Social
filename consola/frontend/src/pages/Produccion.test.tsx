@@ -56,7 +56,7 @@ const SUELTA = {
   cluster: null,
   metricas: { items: 1, tokens: 12345, coste_usd: 0.038, duration_ms: 4200 },
   piezas: [],
-  resultado_url: "/datos/investigacion/cajones",
+  resultado_url: "/operacion/investigacion/fuentes",
 };
 
 const LISTA = {

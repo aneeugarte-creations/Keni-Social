@@ -46,8 +46,8 @@ import { BadgeVerificacionFuente, ChipMarca } from "./BadgesInvestigacion";
 import { CalculoScore } from "./CalculoScore";
 import { TimelineFuentes } from "./TimelineFuentes";
 
-/** Vuelta a la Mesa (la vista de Candidatas vive en el cockpit de Investigación). */
-const RUTA_MESA = "/maquina/investigacion?seccion=mesa";
+/** Vuelta a la Mesa (la pestaña Noticias del hub de Investigación). */
+const RUTA_MESA = "/operacion/investigacion/noticias";
 
 const CLAVE_HISTORIA = (id: string) => ["noticias", "historia", id] as const;
 

@@ -208,11 +208,11 @@ describe("AppShell · sidebar siempre presente", () => {
         <SesionContexto.Provider value={sesion}>
           <MarcaActivaProvider>
           <FiltrosPublicacionProvider>
-          <MemoryRouter initialEntries={["/publicaciones/imagen"]}>
+          <MemoryRouter initialEntries={["/contenido/imagen"]}>
             <Routes>
               <Route path="/" element={<AppShell />}>
                 <Route
-                  path="publicaciones/imagen"
+                  path="contenido/imagen"
                   element={
                     <div>
                       editor imagen

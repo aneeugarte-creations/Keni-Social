@@ -1,6 +1,6 @@
 /**
  * Página ECONOMÍA (`/maquina/economia`): la CONTABILIDAD de la máquina de contenido, separada de
- * la operación de la cola (`/maquina/computo`). Reúne el gasto: el presupuesto + la parada de
+ * la operación de la cola (`/maquina/agentes`). Reúne el gasto: el presupuesto + la parada de
  * emergencia (POR MARCA si hay marca activa; GLOBAL en "todas"), un AGREGADO de todas las pestañas
  * y la economía de tokens de las 4 PESTAÑAS de Contexto, dispuestas en parejas paralelas
  * (Investigación ‖ Producción arriba, Herramientas ‖ Desarrollo debajo). Cada pestaña trae sus

@@ -188,7 +188,7 @@ function Cuerpo({
   }, [opciones.categorias, marcaActiva]);
 
   // `usuario` solo para avisar al editor sin marca asignada (abajo). El reparto de TAREAS
-  // (coger/asignar) se mudó a su propia página (/operacion/tareas): el Feed es SOLO piezas.
+  // (coger/asignar) se mudó a su propia página (/equipo/trabajo): el Feed es SOLO piezas.
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
 
   // Usuario (no admin) sin marca asignada: cae a la vista agregada sin saber por qué.

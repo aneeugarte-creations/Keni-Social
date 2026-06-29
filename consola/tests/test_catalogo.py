@@ -2,8 +2,9 @@
 
 Verifican el contrato de `apps/registro.py` (ADR 0005) SIN red ni BD:
   - las 3 apps de producto + el shell se cargan de sus manifests TOML,
-  - el catálogo agrupa la nav por MOMENTO DEL FLUJO (Operación / Contenido / Datos),
-    con encabezado de bloque visible, en el orden y con las etiquetas esperadas,
+  - el catálogo agrupa la nav por MOMENTO DEL FLUJO (Operación / Equipo / Contenido /
+    Máquina / Datos), con encabezado de bloque visible, en el orden y etiquetas esperadas,
+    y cada bloque vive también en el prefijo de la URL (1:1),
   - desactivar el flag de una app la OCULTA del catálogo sin romper nada,
   - el shell NO figura como app de catálogo ni aporta entradas de nav.
 
@@ -30,7 +31,7 @@ _SIDEBAR_BLOQUES = [
     ["Trabajo", "Calendario"],
     # "Contenido": páginas planas por tipo de contenido — Imagen (editor por capas + IA), Video
     # (estudio de video), Audio (gestor audio→texto: transcripción whisper + agentes de Claude) y
-    # Fotos (lanzador de la herramienta local keni-fotos: archivo fotográfico por partido). La
+    # Galería (lanzador de la herramienta local keni-fotos: archivo fotográfico por partido). La
     # página «Texto»/Prompts se retiró: los prompts viven en cada fase del pipeline en «Contexto».
     ["Imagen", "Video", "Audio", "Galería"],
     # "Máquina": «Contexto» (la máquina en una página — el pipeline de cada motor como estructura,
@@ -84,9 +85,9 @@ def test_cada_app_lleva_descripcion_y_nav_para_la_tarjeta():
     # flujo (grupo_orden, orden).
     # La 1ª entrada de `produccion` por bloque de flujo es ahora Investigación (operación 10/10),
     # por delante de Imagen (contenido 20/10).
-    assert porid["produccion"]["nav"][0]["ruta"] == "/maquina/investigacion"
+    assert porid["produccion"]["nav"][0]["ruta"] == "/operacion/investigacion"
     assert porid["metricas"]["nav"][0]["ruta"] == "/datos/analiticas"
-    # La app "operacion" aporta CUATRO entradas (Feed, Programación, Trabajo, Calendario); el
+    # La app "operacion" aporta CUATRO entradas (Feed, Programa, Trabajo, Calendario); el
     # `nav` por app va ordenado por bloque de flujo (grupo_orden, orden), así que la 1ª es Feed.
     assert porid["operacion"]["nav"][0]["ruta"] == "/operacion/feed"
 
@@ -104,23 +105,23 @@ def test_iconos_de_nav_son_strings_lucide():
     iconos = {i["ruta"]: i["icono"] for g in cat["navegacion"] for i in g["items"]}
     assert iconos["/contenido/imagen"] == "Image"
     assert iconos["/contenido/video"] == "Clapperboard"
-    # Fotos (lanzador de la herramienta local) cierra el bloque Contenido.
-    assert iconos["/fotos"] == "Camera"
+    # Galería (lanzador de la herramienta local) cierra el bloque Contenido.
+    assert iconos["/contenido/galeria"] == "Camera"
     assert iconos["/datos/analiticas"] == "BarChart3"
     assert iconos["/operacion/feed"] == "LayoutGrid"
     assert iconos["/operacion/programa"] == "CalendarDays"
-    assert iconos["/operacion/turnos"] == "CalendarClock"
-    assert iconos["/operacion/trabajo"] == "ClipboardList"
+    # «Trabajo» y «Calendario» viven en el bloque «Equipo», con su propio prefijo /equipo.
+    assert iconos["/equipo/calendario"] == "CalendarClock"
+    assert iconos["/equipo/trabajo"] == "ClipboardList"
     # Investigación (el cockpit operativo del pool) vive en «Operación»; «Contexto» (el pipeline de
-    # ambos motores) en «Máquina». La vieja entrada «Producción» se retiró (su pipeline está en
-    # Contexto); `/maquina/produccion` redirige a `/maquina/contexto`.
-    assert iconos["/maquina/investigacion"] == "Search"
+    # ambos motores) en «Máquina».
+    assert iconos["/operacion/investigacion"] == "Search"
     assert iconos["/maquina/contexto"] == "Layers"
-    assert "/maquina/produccion" not in iconos
-    # El hub de la sala de máquinas se llama «Agentes» (icono Bot), ruta /maquina/computo.
-    assert iconos["/maquina/computo"] == "Bot"
-    # No hay entrada de nav con ruta /maquina/agentes (la lista se retiró; solo existe el detalle).
-    assert "/maquina/agentes" not in iconos
+    # El hub de la sala de máquinas se llama «Agentes» (icono Bot), ruta /maquina/agentes.
+    assert iconos["/maquina/agentes"] == "Bot"
+    # Las rutas viejas (prefijo de bloque equivocado) ya no figuran en el nav.
+    assert "/maquina/investigacion" not in iconos
+    assert "/maquina/computo" not in iconos
     assert "/datos/investigacion" not in iconos
     assert "/datos/produccion" not in iconos
 
@@ -151,7 +152,7 @@ def test_shell_no_es_app_ni_aporta_nav():
     cat = registro.catalogo(_entorno())
     assert "shell" not in [a["id"] for a in cat["apps"]]
     primer_bloque = cat["navegacion"][0]["items"]
-    assert primer_bloque[0]["ruta"] == "/maquina/investigacion"
+    assert primer_bloque[0]["ruta"] == "/operacion/investigacion"
     rutas = [i["ruta"] for g in cat["navegacion"] for i in g["items"]]
     assert "/panel" not in rutas
 

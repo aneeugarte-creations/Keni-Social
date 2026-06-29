@@ -56,7 +56,7 @@ export function TarjetaHistoria({
     nombreFuente(historia.primera_fuente_nombre, historia.primera_fuente_id) ||
     historia.marca_nombre;
 
-  const abrir = () => navigate(`/maquina/investigacion/historia/${encodeURIComponent(historia.id)}`);
+  const abrir = () => navigate(`/operacion/investigacion/historia/${encodeURIComponent(historia.id)}`);
 
   // Indicador de estado DISCRETO: solo cuando la historia ya no está plana en el pool.
   const indicadorEstado =
