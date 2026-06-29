@@ -126,7 +126,7 @@ def test_admin_logout_b_anota_ruta(entorno, monkeypatch):
     monkeypatch.setattr(
         api_sistema.cuenta,
         "_llamar_control",
-        lambda metodo, ruta, json=None: capturado.setdefault("ruta", ruta) or (200, {"ok": True}),
+        lambda metodo, ruta, json=None: (capturado.__setitem__("ruta", ruta), (200, {"ok": True}))[1],
     )
     r = _cli_como("admin").post("/api/sistema/cuenta/logout?cuenta=b", headers=_ORIGIN)
     assert r.status_code == 200

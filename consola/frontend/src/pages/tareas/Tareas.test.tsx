@@ -333,6 +333,10 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
   });
 
   it("KPI: «N hechas» (gris, sin barra) resume el trabajo de hoy ya resuelto, junto a la cobertura", async () => {
+    // Reloj fijo a mediodía CDMX: así el evento de las 01:00 de hoy queda inequívocamente
+    // «pasado». Con el reloj real el KPI es flaky (de madrugada CDMX las 01:00 aún son futuro).
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-15T18:00:00Z")); // 12:00 CDMX
     const hoy = hoyCDMX();
     renderTareas(
       [

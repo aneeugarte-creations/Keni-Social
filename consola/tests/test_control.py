@@ -118,7 +118,7 @@ def test_logout_ok(monkeypatch):
 
 def test_logout_propaga_cuenta_b(monkeypatch):
     visto: dict = {}
-    monkeypatch.setattr(control.cuenta_claude, "logout", lambda cuenta="a": visto.setdefault("c", cuenta) or {"ok": True})
+    monkeypatch.setattr(control.cuenta_claude, "logout", lambda cuenta="a": (visto.__setitem__("c", cuenta), {"ok": True})[1])
     c = _cli(monkeypatch)
     assert c.post("/control/cuenta/logout?cuenta=b", headers=_auth()).status_code == 200
     assert visto["c"] == "b"
