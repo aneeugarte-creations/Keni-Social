@@ -188,7 +188,7 @@ def construir_argv_claude_json(
     ]
     if not sin_tools:
         argv += ["--add-dir", dir_permitido]
-    argv += [*stream.arg_skip_permisos()]
+    argv += [*stream.arg_skip_permisos(), *stream.arg_excluir_secciones_dinamicas()]
     if json_schema is not None:
         argv += ["--json-schema", json.dumps(json_schema, ensure_ascii=False)]
         # La validación de la salida estructurada gasta un turno extra (tool_use interno):

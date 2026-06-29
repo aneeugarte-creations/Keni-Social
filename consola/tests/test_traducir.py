@@ -467,6 +467,9 @@ def test_argv_sin_json_schema_no_lleva_el_flag():
 
     argv = traducir.construir_argv_claude_json("P", "/tmp/x", "haiku")
     assert "--json-schema" not in argv
+    # El path inline excluye las secciones dinámicas (def ON) igual que el worker, para que el
+    # prefijo del system prompt sea byte-idéntico entre llamadas y se LEA caché en vez de re-escribirla.
+    assert "--exclude-dynamic-system-prompt-sections" in argv
     _ = _json  # silencia el linter si no se usa abajo
 
 
