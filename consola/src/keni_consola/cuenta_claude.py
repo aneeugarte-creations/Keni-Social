@@ -138,13 +138,15 @@ _RE_MEDIDOR = re.compile(
     re.IGNORECASE,
 )
 
-# Componentes de la frase de reset del CLI: "Jun 15 at 7:39pm (America/Mexico_City)" o
-# "Jun 25, 2:39am (UTC)". El separador dia->hora puede ser " at " o ", "; la zona entre
-# parentesis es la que el CLI uso para formatear (la del servidor, que corre en UTC). El ano
-# no aparece: lo infiere `_reset_a_iso`. Sin zona explicita se asume UTC.
+# Componentes de la frase de reset del CLI: "Jun 15 at 7:39pm (America/Mexico_City)",
+# "Jun 25, 2:39am (UTC)" o la forma semanal SIN minutos "Jul 1, 7am (UTC)". El separador
+# dia->hora puede ser " at " o ", "; los minutos son opcionales (la ventana semanal resetea
+# en hora redonda); la zona entre parentesis es la que el CLI uso para formatear (la del
+# servidor, que corre en UTC). El ano no aparece: lo infiere `_reset_a_iso`. Sin zona
+# explicita se asume UTC.
 _RE_RESET = re.compile(
     r"(?P<mes>[A-Za-z]{3,9})\s+(?P<dia>\d{1,2})(?:,|\s+at)?\s+"
-    r"(?P<hora>\d{1,2}):(?P<min>\d{2})\s*(?P<ampm>[ap]m)"
+    r"(?P<hora>\d{1,2})(?::(?P<min>\d{2}))?\s*(?P<ampm>[ap]m)"
     r"(?:\s*\((?P<zona>[^)]+)\))?",
     re.IGNORECASE,
 )
@@ -196,7 +198,7 @@ def _reset_a_iso(reset: str | None, ahora: datetime | None = None) -> str | None
         ahora = datetime.now(timezone.utc)
     anio = ahora.astimezone(tz).year
     try:
-        local = datetime(anio, mes, int(m.group("dia")), hora, int(m.group("min")), tzinfo=tz)
+        local = datetime(anio, mes, int(m.group("dia")), hora, int(m.group("min") or 0), tzinfo=tz)
         if local.astimezone(timezone.utc) < ahora - timedelta(days=2):
             local = local.replace(year=anio + 1)
     except ValueError:

@@ -65,6 +65,7 @@ def main() -> int:
 
     from .alertas_rendimiento import iniciar_alertas_rendimiento
     from .algoritmos_refresco import iniciar_refresco_algoritmos
+    from .cuenta_uso_daemon import iniciar_muestreo_uso
     from .recolectar_daemon import iniciar_ingesta
     from .media_gc_daemon import iniciar_media_gc
     from .metricas_piezas_refresco import iniciar_refresco_piezas
@@ -112,6 +113,11 @@ def main() -> int:
     # proceso hosted corre `__main__`; sin esto el recolector no correria en produccion y los
     # sueltos quedarian "ejecutando" para siempre.
     iniciar_limpiador()
+    # MUESTREO DE USO de la cuenta de Claude (SIEMPRE activo): corre `claude -p /usage` cada N
+    # min y persiste el snapshot en `cuenta_uso`, para que el indicador de la barra lateral y el
+    # gate diario lean de la BD sin ejecutar `claude`. Vive aqui (no en el back) porque solo el
+    # `daemons` tiene `claude`. Mantenimiento: NO gateado por KENI_MAQUINA.
+    iniciar_muestreo_uso()
 
     # LISTENER DE CONTROL (gestion de la cuenta de Claude desde el panel admin): solo se
     # monta si hay `KENI_CONTROL_BEARER`. Vive aqui (no en el back) porque cambiar la cuenta

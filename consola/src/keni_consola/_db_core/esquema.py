@@ -1790,6 +1790,27 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_tunel_rpc_estado ON tunel_rpc (estado)",
+    # USO de la cuenta de Claude (medidor de la suscripcion): ULTIMO snapshot del muestreo de
+    # fondo (`cuenta_uso_daemon` corre `claude -p /usage` y persiste aqui), para que el indicador
+    # de la barra lateral y el gate diario lean de la BD sin ejecutar `claude`. Tabla SINGLETON
+    # (una fila, `id='global'`). Los `*_pct` son NULL cuando no hay lectura (cuenta desconectada o
+    # cold start): el front los pinta como "sin dato". Para derivar "consumo de HOY" se guarda el
+    # `semana_pct` al INICIO del dia UTC (`semana_pct_inicio_dia` + `dia_utc`): consumo_hoy =
+    # semana_pct - semana_pct_inicio_dia. `actualizado_ts` es epoch (segundos) del ultimo muestreo.
+    """
+    CREATE TABLE IF NOT EXISTS cuenta_uso (
+        id                     TEXT PRIMARY KEY,
+        conectada              INTEGER NOT NULL DEFAULT 0,
+        semana_pct             INTEGER,
+        sesion_5h_pct          INTEGER,
+        sonnet_pct             INTEGER,
+        reset_semana_iso       TEXT NOT NULL DEFAULT '',
+        reset_semana_txt       TEXT NOT NULL DEFAULT '',
+        semana_pct_inicio_dia  INTEGER,
+        dia_utc                TEXT NOT NULL DEFAULT '',
+        actualizado_ts         DOUBLE PRECISION
+    )
+    """,
 )
 
 

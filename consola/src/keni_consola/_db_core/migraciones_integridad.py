@@ -374,6 +374,23 @@ def _migrar_tabla_daemon_barridos(con: Any) -> None:
     )
 
 
+def _migrar_tabla_cuenta_uso(con: Any) -> None:
+    """Crea la tabla `cuenta_uso` (singleton; ultimo snapshot del uso de la cuenta de Claude).
+
+    El DDL declarativo ya la trae para BDs virgenes; esta migracion la garantiza en las hosted
+    existentes. One-shot e idempotente (`CREATE TABLE IF NOT EXISTS`); sin backfill (el muestreo
+    es prospectivo: lo llena `cuenta_uso_daemon`). Ver `db_cuenta_uso`.
+    """
+    con.execute(
+        "CREATE TABLE IF NOT EXISTS cuenta_uso ("
+        "id TEXT PRIMARY KEY, conectada INTEGER NOT NULL DEFAULT 0, "
+        "semana_pct INTEGER, sesion_5h_pct INTEGER, sonnet_pct INTEGER, "
+        "reset_semana_iso TEXT NOT NULL DEFAULT '', reset_semana_txt TEXT NOT NULL DEFAULT '', "
+        "semana_pct_inicio_dia INTEGER, dia_utc TEXT NOT NULL DEFAULT '', "
+        "actualizado_ts DOUBLE PRECISION)"
+    )
+
+
 def _migrar_tablas_tunel(con: Any) -> None:
     """Crea las tablas del túnel keni-fotos multi-worker (BDs ya creadas; registro compartido).
 

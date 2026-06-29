@@ -11,10 +11,12 @@ from ._config_comun import (
     ENV_MEDIA_GC_ANTIGUEDAD_HORAS,
     ENV_MEDIA_GC_INTERVALO_HORAS,
     ENV_LIMPIADOR_INTERVALO_MIN,
+    ENV_USO_MUESTREO_MIN,
     GENERACIONES_TTL_HORAS_DEF,
     MEDIA_GC_ANTIGUEDAD_HORAS_DEF,
     MEDIA_GC_INTERVALO_HORAS_DEF,
     LIMPIADOR_INTERVALO_MIN_DEF,
+    USO_MUESTREO_MIN_DEF,
     _crudo,
     _entero,
 )
@@ -104,6 +106,11 @@ def generaciones_ttl_seg() -> int:
 def limpiador_intervalo_seg() -> int:
     """Cada cuanto barre el recolector de generaciones (`KENI_LIMPIADOR_INTERVALO_MIN`, def 10, min 1)."""
     return _entero(ENV_LIMPIADOR_INTERVALO_MIN, LIMPIADOR_INTERVALO_MIN_DEF, minimo=1) * 60
+
+
+def uso_muestreo_intervalo_seg() -> int:
+    """Cada cuanto muestrea el daemon el uso de la cuenta (`KENI_USO_MUESTREO_MIN`, def 20, min 1)."""
+    return _entero(ENV_USO_MUESTREO_MIN, USO_MUESTREO_MIN_DEF, minimo=1) * 60
 
 
 def consola_url_publica() -> str | None:

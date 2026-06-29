@@ -386,6 +386,11 @@ ENV_CRITICA_IA = "KENI_CRITICA_IA"
 ENV_GENERACIONES_TTL_HORAS = "KENI_GENERACIONES_TTL_HORAS"
 ENV_LIMPIADOR_INTERVALO_MIN = "KENI_LIMPIADOR_INTERVALO_MIN"
 
+# Muestreo de fondo del USO de la cuenta de Claude: un daemon de mantenimiento sondea
+# `claude -p /usage` cada N minutos y persiste el snapshot, para que el indicador de la barra
+# lateral y el gate diario no dependan de que un admin abra el panel. SIEMPRE activo.
+ENV_USO_MUESTREO_MIN = "KENI_USO_MUESTREO_MIN"
+
 # Verificar la FUENTE (verificación pre-copy del pipeline): es un filtro PERMISIVO, no redaccion, asi
 # que corre BARATO por defecto: modelo rapido (Haiku), esfuerzo bajo y timeout corto. Cada
 # una es configurable; vacia ("") = se usa el global correspondiente.
@@ -730,6 +735,10 @@ PIPELINE_TEMA_TTL_HORAS_DEF = 24
 GENERACIONES_TTL_HORAS_DEF = 1
 LIMPIADOR_INTERVALO_MIN_DEF = 10
 
+# Cadencia del muestreo de uso de la cuenta (def 20 min): suficiente para alimentar el
+# indicador y el gate sin aporrear `claude -p /usage` (cada lectura es un roundtrip a Anthropic).
+USO_MUESTREO_MIN_DEF = 20
+
 # Recoleccion de basura de media suelta (Estudio §5). Barre 1 vez al dia (no urge: el
 # almacen crece lento) y solo borra objetos mas viejos que ANTIGUEDAD (def 24h), para NO
 # tocar las variantes recien generadas que el usuario aun esta revisando en el Estudio.
@@ -1005,6 +1014,7 @@ __all__ = [
     'ENV_VERIFICACION_FUENTE_TIMEOUT',
     'ENV_RAIZ',
     'ENV_LIMPIADOR_INTERVALO_MIN',
+    'ENV_USO_MUESTREO_MIN',
     'ENV_RENDIMIENTO_MIN_PIEZAS',
     'ENV_RENDIMIENTO_RANKING',
     'ENV_RENDIMIENTO_TOP_N',
@@ -1087,6 +1097,7 @@ __all__ = [
     'PORT_DEF',
     'Path',
     'LIMPIADOR_INTERVALO_MIN_DEF',
+    'USO_MUESTREO_MIN_DEF',
     'RENDIMIENTO_MIN_PIEZAS_DEF',
     'RENDIMIENTO_TOP_N_DEF',
     'S3_BUCKET_DEF',

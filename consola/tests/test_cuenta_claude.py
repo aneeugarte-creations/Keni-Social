@@ -45,6 +45,22 @@ def test_reset_a_iso_zona_utc_y_separador_coma():
     assert cc._reset_a_iso("Jul 1 at 1:00pm (UTC)", _AHORA) == "2026-07-01T13:00:00Z"
 
 
+def test_reset_a_iso_hora_sin_minutos():
+    # La ventana SEMANAL resetea en hora redonda y el CLI la imprime sin minutos
+    # ("Jul 1, 7am (UTC)"): se interpreta como :00 y rellena reset_iso.
+    assert cc._reset_a_iso("Jul 1, 7am (UTC)", _AHORA) == "2026-07-01T07:00:00Z"
+    assert cc._reset_a_iso("Jul 1 at 12pm (UTC)", _AHORA) == "2026-07-01T12:00:00Z"
+    assert cc._reset_a_iso("Jul 1, 12am (UTC)", _AHORA) == "2026-07-01T00:00:00Z"
+
+
+def test_parsear_uso_semana_sin_minutos_rellena_reset_iso():
+    # Medidor semanal real con hora redonda sin minutos: reset_iso debe quedar relleno (no null).
+    salida = "Current week (all models): 67% used · resets Jul 1, 7am (UTC)\n"
+    r = cc.parsear_uso(salida, ahora=_AHORA)
+    assert r["disponible"] is True
+    assert r["medidores"][0]["reset_iso"] == "2026-07-01T07:00:00Z"
+
+
 def test_reset_a_iso_infiere_vuelta_de_ano():
     # Reset en enero leido a fin de diciembre: el ano que viene (el reset siempre es futuro).
     fin_anio = datetime(2026, 12, 31, 23, 0, tzinfo=timezone.utc)

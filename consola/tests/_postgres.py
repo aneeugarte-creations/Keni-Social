@@ -117,6 +117,9 @@ _TABLAS = (
     # Historial por barrido de daemons (observabilidad): sin truncar, las filas de un test
     # contaminan el listado/purga del siguiente.
     "daemon_barridos",
+    # Último snapshot del uso de la cuenta de Claude (singleton): sin truncar, la base del
+    # consumo de hoy de un test contaminaría las aserciones del siguiente.
+    "cuenta_uso",
     # Piezas y solicitudes de la Prompts de Texto (modelo "versión publicada").
     # Sin truncar, un puntero de producción de un test contaminaría el `produccion`/
     # `sin_publicar` (y el ensamblaje) del siguiente.

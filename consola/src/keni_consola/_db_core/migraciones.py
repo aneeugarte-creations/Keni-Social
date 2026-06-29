@@ -95,6 +95,7 @@ from .migraciones_integridad import (
     _migrar_fks_hub,
     _migrar_indice_generaciones,
     _migrar_indice_pieza_estado_marca,
+    _migrar_tabla_cuenta_uso,
     _migrar_tabla_daemon_barridos,
     _migrar_tablas_tunel,
     _migrar_tipos_fecha,
@@ -574,6 +575,11 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # DOCUMENTACIÓN: `COMMENT` aclarando que `metricas_pieza_snapshots.pieza_id` guarda el id de
     # Metricool, NO un `pieza.id` (por eso no lleva FK). One-shot e idempotente. Ver `_comentar_pieza_id_snapshots`.
     Migracion("0064-comment-pieza-id-snapshots", _comentar_pieza_id_snapshots),
+    # USO DE LA CUENTA: tabla `cuenta_uso` (singleton; ultimo snapshot del medidor de la
+    # suscripcion de Claude que muestrea `cuenta_uso_daemon`) para BDs existentes (las nuevas la
+    # traen del DDL). One-shot e idempotente (`CREATE TABLE IF NOT EXISTS`); sin backfill (el
+    # muestreo es prospectivo). Ver `db_cuenta_uso`.
+    Migracion("0065-tabla-cuenta-uso", _migrar_tabla_cuenta_uso),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

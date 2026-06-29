@@ -1,0 +1,108 @@
+"""Muestreo de fondo del USO de la cuenta de Claude: persiste un snapshot cada N minutos.
+
+PROBLEMA QUE RESUELVE
+=====================
+El medidor de la suscripción (`cuenta_claude.uso()` -> `claude -p /usage`) solo se refrescaba
+cuando un admin abría el panel Sistema→Cuenta. El indicador siempre-visible de la barra lateral
+y el gate diario por porcentaje necesitan el dato SIN intervención: este daemon lo muestrea en
+background y lo deja en la tabla `cuenta_uso` (último snapshot + base del consumo de hoy).
+
+DÓNDE CORRE: en el proceso `daemons` (la imagen con Node + `claude`); el `back` NO ejecuta
+`claude`. El endpoint admin (`api/sistema/uso`) solo LEE la tabla.
+
+SIEMPRE ACTIVO (no es una feature gateada): es mantenimiento/observabilidad de la cuenta, igual
+que el limpiador de generaciones. Vive en `daemons.main()` (servidor real), NO en `crear_app`,
+para no arrancarlo en los tests. El muestreo es best-effort: un fallo se loguea y NO mata el hilo.
+"""
+
+from __future__ import annotations
+
+import logging
+import threading
+import time
+
+from . import config, cuenta_claude, daemon_util, repos
+
+_log = logging.getLogger("keni_consola.cuenta_uso_daemon")
+
+
+def _extraer_medidores(uso: dict) -> dict:
+    """Mapea el dict de `cuenta_claude.uso()` a los campos del snapshot (PURA).
+
+    Reconoce los tres medidores por su etiqueta (la que da el CLI): "Current session" ->
+    `sesion_5h_pct`; "Current week (all models)" -> `semana_pct` (+ su reset); "Current week
+    (Sonnet only)" -> `sonnet_pct`. Cada `*_pct` es None si su medidor no aparece. `conectada`
+    refleja si la lectura trae medidor (incluido el cacheado); `actualizado_ts` es el epoch que
+    `uso()` adjunta (o el instante actual si no lo trae).
+    """
+    conectada = bool(uso.get("disponible"))
+    semana_pct: int | None = None
+    sesion_5h_pct: int | None = None
+    sonnet_pct: int | None = None
+    reset_semana_iso = ""
+    reset_semana_txt = ""
+    for medidor in uso.get("medidores") or []:
+        etiqueta = (medidor.get("etiqueta") or "").lower()
+        pct = medidor.get("pct")
+        if "session" in etiqueta:
+            sesion_5h_pct = pct
+        elif "week" in etiqueta and "sonnet" in etiqueta:
+            sonnet_pct = pct
+        elif "week" in etiqueta:
+            semana_pct = pct
+            reset_semana_iso = medidor.get("reset_iso") or ""
+            reset_semana_txt = medidor.get("reset") or ""
+    return {
+        "conectada": conectada,
+        "semana_pct": semana_pct,
+        "sesion_5h_pct": sesion_5h_pct,
+        "sonnet_pct": sonnet_pct,
+        "reset_semana_iso": reset_semana_iso,
+        "reset_semana_txt": reset_semana_txt,
+        "actualizado_ts": uso.get("actualizado") if uso.get("actualizado") is not None else time.time(),
+    }
+
+
+def ejecutar_barrido() -> dict:
+    """Un muestreo: lee el uso (`claude -p /usage`) y persiste el snapshot. Devuelve la fila.
+
+    El valor devuelto alimenta el resumen del barrido (`_resumen_barrido`).
+    """
+    datos = cuenta_claude.uso()
+    campos = _extraer_medidores(datos)
+    return repos.guardar_uso_cuenta(**campos)
+
+
+def _resumen_barrido(fila: dict) -> str:
+    """Resumen corto del muestreo para el historial del daemon."""
+    if not fila or not fila.get("conectada"):
+        return "cuenta sin medidor"
+    semana = fila.get("semana_pct")
+    return f"semana {semana}%" if semana is not None else "muestreado"
+
+
+def iniciar_muestreo_uso(intervalo_segundos: float | None = None) -> threading.Thread:
+    """Arranca el hilo demonio del muestreo de uso (SIEMPRE activo). Muestrea al arrancar y cada N min.
+
+    Pensado para el servidor real (`daemons.main()`), NO para `crear_app` (los tests no lo
+    arrancan). El hilo es daemon; un fallo de muestreo se loguea y NO lo mata.
+    """
+    intervalo = (
+        intervalo_segundos
+        if intervalo_segundos is not None
+        else float(config.uso_muestreo_intervalo_seg())
+    )
+
+    def bucle() -> None:
+        daemon_util.bucle_gateado(
+            activo_fn=lambda: True,  # mantenimiento: siempre activo
+            intervalo_seg_fn=lambda: intervalo,
+            sweep_fn=ejecutar_barrido,
+            log=_log,
+            resumen_fn=_resumen_barrido,
+        )
+
+    hilo = threading.Thread(target=bucle, name="cuenta-uso-daemon", daemon=True)
+    hilo.start()
+    _log.info("Muestreo de uso de la cuenta ACTIVO cada %.0f min.", intervalo / 60.0)
+    return hilo

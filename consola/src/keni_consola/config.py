@@ -240,6 +240,7 @@ from ._config_comun import (  # noqa: F401
     ENV_RALPH_URL,
     ENV_PRIORIZAR_PERFIL_IA,
     ENV_LIMPIADOR_INTERVALO_MIN,
+    ENV_USO_MUESTREO_MIN,
     ENV_RENDIMIENTO_MIN_PIEZAS,
     ENV_RENDIMIENTO_RANKING,
     ENV_RENDIMIENTO_TOP_N,
@@ -550,6 +551,7 @@ from .config_produccion import (  # noqa: F401
     media_gc_antiguedad_horas,
     media_gc_intervalo_horas,
     limpiador_intervalo_seg,
+    uso_muestreo_intervalo_seg,
 )
 from .config_programadores import (  # noqa: F401
     alertas_rendimiento_activas,
