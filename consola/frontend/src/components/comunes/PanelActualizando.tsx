@@ -22,11 +22,50 @@ const DURACION_ESTIMADA_MS = 22000;
 const INTERVALO_SONDEO_MS = 2000;
 
 /**
- * `deploy`: actualización transitoria, vuelve sola -> barra de progreso (lenguaje calmado).
- * `incidente`: avería real, NO vuelve sin intervención -> SIN barra (una barra prometería un
- * retorno automático que no va a pasar) + aviso honesto de que el equipo ya lo sabe.
+ * `deploy`: actualización transitoria, vuelve sola -> barra de progreso que avanza hacia un fin.
+ * `incidente`: avería real, NO vuelve sin intervención -> hilo INDETERMINADO (un cometa que barre
+ * y vuelve sin avanzar a un 100%: dice "se está trabajando" sin prometer un retorno automático) +
+ * aviso honesto de que el equipo ya lo sabe.
  */
 export type VariantePanel = "deploy" | "incidente";
+
+/**
+ * Hilo de avería: un cometa (cabeza sólida + cola que se desvanece) que barre el panel de lado a
+ * lado en bucle, SIN avanzar hacia un final. Indeterminado a propósito —una avería no vuelve sola—:
+ * solo comunica que se está trabajando, sin la promesa de retorno de la barra de `deploy`.
+ * Decorativo (`aria-hidden`): el estado ya lo anuncia el `role="status"` del panel y su texto. Con
+ * `prefers-reduced-motion` el cometa se queda quieto y respira en opacidad.
+ */
+function HiloIncidente() {
+  return (
+    <div className="h-px w-full overflow-hidden bg-border text-foreground" aria-hidden>
+      <style>{`
+        @keyframes keni-cometa-barrido {
+          0%   { transform: translateX(-100%); }
+          100% { transform: translateX(220%); }
+        }
+        @keyframes keni-cometa-respira {
+          0%, 100% { opacity: 0.35; }
+          50%      { opacity: 0.85; }
+        }
+        .keni-cometa {
+          height: 100%;
+          width: 45%;
+          background: linear-gradient(to right, transparent 0%, currentColor 88%, currentColor 100%);
+          animation: keni-cometa-barrido 1.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+          will-change: transform;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .keni-cometa {
+            transform: none;
+            animation: keni-cometa-respira 2.4s ease-in-out infinite;
+          }
+        }
+      `}</style>
+      <div className="keni-cometa" />
+    </div>
+  );
+}
 
 export function PanelActualizando({
   // Por defecto `deploy`: preserva el comportamiento previo (todo uso existente es un deploy).
@@ -107,10 +146,14 @@ export function PanelActualizando({
       </div>
 
       {esIncidente ? (
-        // Avería: ni hilo ni promesa de retorno automático. Decimos la verdad y que ya se sabe.
-        <p className="text-xs text-muted-foreground">
-          El equipo ya ha sido avisado y está trabajando en ello.
-        </p>
+        // Avería: no vuelve sola, así que nada de barra (prometería un retorno automático). Un hilo
+        // indeterminado que solo dice "se está trabajando", y el aviso honesto de que ya se sabe.
+        <>
+          <HiloIncidente />
+          <p className="text-xs text-muted-foreground">
+            El equipo ya ha sido avisado y está trabajando en ello.
+          </p>
+        </>
       ) : (
         <div
           className="h-px w-full overflow-hidden bg-border"
