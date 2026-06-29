@@ -48,6 +48,8 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         # (Recolectar/Verificar/Redactar/Ilustrar/Stock; Ilustrar siempre tuvo interruptor propio).
         config.ENV_INVESTIGACION, config.ENV_PRODUCCION,
         config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
+        # Traducir + Admitir: etapas físicas con toggle propio (ON por defecto).
+        config.ENV_PIPELINE_TRADUCIR, config.ENV_PIPELINE_ADMITIR,
         # Google Trends: fuente de ingesta del pool (con Investigación, no con los automatismos).
         config.ENV_TRENDS,
         # Clasificar marca con IA: modo IA (Haiku) del paso Clasificar (global, no per-marca).
@@ -108,6 +110,8 @@ _MAESTROS_ENV = {
     # Virtuales de proceso (fan-out) + etapas físicas de la tira «Pipeline en vivo».
     config.ENV_INVESTIGACION, config.ENV_PRODUCCION,
     config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
+    # Traducir + Admitir: etapas físicas con toggle propio (ON por defecto).
+    config.ENV_PIPELINE_TRADUCIR, config.ENV_PIPELINE_ADMITIR,
     # Google Trends: fuente de ingesta del pool, paso del flujo de Investigación (no automatismo).
     config.ENV_TRENDS,
     # Clasificar marca con IA: modo IA del paso Clasificar (grupo `maestros_investigacion`).
@@ -135,11 +139,16 @@ def test_maestros_son_investigacion_produccion_y_arte(store):
     ]
     claves = {a.clave for a in maestros}
     assert claves == _MAESTROS_ENV
+    # Nacen OFF salvo las seguras/ya-en-marcha que arrancan ON: Stock (ayuda visual atenuada),
+    # Traducir y Admitir (continúan el flujo actual; def ON en sus gate fns).
+    on_por_defecto = {
+        config.ENV_PIPELINE_STOCK,
+        config.ENV_PIPELINE_TRADUCIR,
+        config.ENV_PIPELINE_ADMITIR,
+    }
     for a in maestros:
         assert a.tipo == "bool"
-        # Las etapas nacen OFF salvo «Stock»: es ayuda visual segura (atenuada, nunca publicable
-        # sin autorizar) y arranca ON por defecto (ver `config_noticias.stock_busca_activo`).
-        assert a.defecto is (a.clave == config.ENV_PIPELINE_STOCK)
+        assert a.defecto is (a.clave in on_por_defecto)
     etiquetas = {a.clave: a.etiqueta for a in maestros}
     assert etiquetas[config.ENV_INVESTIGACION] == "Investigación"
     assert etiquetas[config.ENV_PRODUCCION] == "Producción"
@@ -203,7 +212,9 @@ def test_toggles_por_marca_por_fase(store):
     assert investigacion == {
         config.ENV_INVESTIGACION,  # maestro virtual del proceso (fan-out)
         config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_FUSIONAR,
+        config.ENV_PIPELINE_TRADUCIR,
         config.ENV_PRIORIZAR_PERFIL_IA, config.ENV_PIPELINE_VERIFICAR,
+        config.ENV_PIPELINE_ADMITIR,
     }
     assert produccion == {
         config.ENV_PRODUCCION,  # maestro virtual del proceso (fan-out)

@@ -85,6 +85,30 @@ def test_etapa_activa_critica_y_hashtags_por_marca(monkeypatch):
     assert config.etapa_activa(config.ENV_PIPELINE_SUGERIR_HASHTAGS, "nacion-gamer") is True  # intacta
 
 
+def test_etapa_activa_traducir_y_admitir_por_marca(monkeypatch):
+    """Traducir y Admitir (ON por defecto) honran global + `::marca` vía `config.etapa_activa`."""
+    _store(monkeypatch, {})
+    assert config.traducir_activo() is True
+    assert config.admitir_activo() is True
+    assert config.etapa_activa(config.ENV_PIPELINE_TRADUCIR, "unotv") is True
+    assert config.etapa_activa(config.ENV_PIPELINE_ADMITIR, "unotv") is True
+    # Override falsy por marca: apaga solo esa marca.
+    _store(
+        monkeypatch,
+        {
+            config.clave_por_marca(config.ENV_PIPELINE_TRADUCIR, "unotv"): "0",
+            config.clave_por_marca(config.ENV_PIPELINE_ADMITIR, "unotv"): "0",
+        },
+    )
+    assert config.etapa_activa(config.ENV_PIPELINE_TRADUCIR, "unotv") is False
+    assert config.etapa_activa(config.ENV_PIPELINE_ADMITIR, "unotv") is False
+    assert config.etapa_activa(config.ENV_PIPELINE_ADMITIR, "nacion-gamer") is True  # intacta
+    # Global OFF explícito: apaga la etapa entera.
+    _store(monkeypatch, {config.ENV_PIPELINE_TRADUCIR: "0", config.ENV_PIPELINE_ADMITIR: "0"})
+    assert config.traducir_activo() is False
+    assert config.admitir_activo() is False
+
+
 def test_catalogo_expone_publicacion_por_marca():
     claves = {a.clave for a in ajustes_catalogo.catalogo()}
     assert config.clave_por_marca(config.ENV_PUBLICAR_REAL, "fundacion") in claves

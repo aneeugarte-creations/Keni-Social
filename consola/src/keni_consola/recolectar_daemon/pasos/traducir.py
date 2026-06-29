@@ -66,6 +66,9 @@ def paso_traducir() -> dict[str, Any]:
     encolados = 0
     marcas_encoladas = 0
     for marca, clusters in por_marca.items():
+        # Respeta el toggle por marca: una marca con Traducir apagado no encola traducción.
+        if not config.etapa_activa(config.ENV_PIPELINE_TRADUCIR, marca):
+            continue
         ids = [str(c["id"]) for c in clusters]
         # IDEMPOTENCIA: marca el lote ANTES de encolar; solo entran al job los que esta llamada
         # marcó (los que seguían `traducido=0` sin job en curso). Si otro barrido ya marcó alguno,

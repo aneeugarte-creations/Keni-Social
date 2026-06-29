@@ -161,6 +161,9 @@ def _ejecutar_portal() -> dict[str, Any]:
     for marca in marcas.noticias():
         if not config.etapa_activa(config.ENV_PIPELINE_RECOLECTAR, marca):
             continue
+        # ADMITIR es ADITIVO sobre Recolectar: la admisión (portal propio) necesita AMBAS encendidas.
+        if not config.etapa_activa(config.ENV_PIPELINE_ADMITIR, marca):
+            continue
         try:
             temas.extend(_admitir.promover_portal(marca, maximo=maximo))
         except Exception:  # noqa: BLE001 -- una marca problemática no aborta el barrido del Portal
@@ -224,6 +227,10 @@ def _ejecutar_investigacion() -> dict[str, Any]:
     for marca in marcas.noticias():
         # FUENTE ÚNICA de verdad (config.etapa_activa): maestro global ON y marca no excluida.
         if not config.etapa_activa(config.ENV_PIPELINE_RECOLECTAR, marca):
+            continue
+        # ADMITIR es ADITIVO sobre Recolectar: la admisión necesita AMBAS encendidas para la marca
+        # (permite pausar la mesa sin parar la ingesta).
+        if not config.etapa_activa(config.ENV_PIPELINE_ADMITIR, marca):
             continue
         # SERIAL POR MARCA: no metas más historias si esta marca ya tiene cola en curso (sin copy).
         cupo = config.pipeline_en_proceso_max() - _admitir.temas_en_proceso(marca)

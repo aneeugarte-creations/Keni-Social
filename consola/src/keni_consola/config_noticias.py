@@ -44,6 +44,8 @@ from ._config_comun import (
     ENV_PERFIL_EDITORIAL_TTL_HORAS,
     ENV_PIPELINE_ILUSTRAR,
     ENV_PIPELINE_DECISOR,
+    ENV_PIPELINE_TRADUCIR,
+    ENV_PIPELINE_ADMITIR,
     ENV_PIPELINE_SUGERIR_HASHTAGS,
     ENV_PIPELINE_REVISAR,
     ENV_PIPELINE_REDACTAR,
@@ -902,6 +904,33 @@ def decisor_activo() -> bool:
     return _crudo(ENV_PIPELINE_DECISOR).lower() in _VERDADEROS
 
 
+def traducir_activo() -> bool:
+    """True si la ETAPA de Traducir debe traducir (`KENI_PIPELINE_TRADUCIR`).
+
+    Def ON: el daemon de Recolectar encola la traducción a ES de los clusters extranjeros recientes
+    sin traducir. Se apaga con un valor falsy explícito (`KENI_PIPELINE_TRADUCIR=0`, global o
+    `::marca`): los clusters de esa marca se quedan sin traducir (`paso_traducir` respeta `etapa_activa`).
+    """
+    crudo = _crudo(ENV_PIPELINE_TRADUCIR).strip().lower()
+    if not crudo:
+        return True
+    return crudo in _VERDADEROS
+
+
+def admitir_activo() -> bool:
+    """True si la ETAPA de Admitir debe materializar temas (`KENI_PIPELINE_ADMITIR`).
+
+    Def ON: la admisión promueve las historias verificadas del pool a temas (con copy pendiente).
+    Es ADITIVA sobre Recolectar: el barrido admite para una marca solo si Recolectar Y Admitir
+    están encendidas para ella (`etapa_activa`). Se apaga con un valor falsy explícito (global o
+    `::marca`).
+    """
+    crudo = _crudo(ENV_PIPELINE_ADMITIR).strip().lower()
+    if not crudo:
+        return True
+    return crudo in _VERDADEROS
+
+
 def sugerir_hashtags_activo() -> bool:
     """True si la ETAPA de Sugerir hashtags debe proponer (`KENI_PIPELINE_SUGERIR_HASHTAGS`).
 
@@ -962,6 +991,8 @@ def _accesor_global_de_etapa(env_flag: str):
             ENV_PIPELINE_SUGERIR_HASHTAGS: sugerir_hashtags_activo,
             ENV_PIPELINE_REDACTAR: pipeline_activo,
             ENV_PIPELINE_DECISOR: decisor_activo,
+            ENV_PIPELINE_TRADUCIR: traducir_activo,
+            ENV_PIPELINE_ADMITIR: admitir_activo,
             ENV_PIPELINE_ILUSTRAR: ilustrar_activo,
             ENV_PIPELINE_STOCK: stock_busca_activo,
             ENV_CRITICA_IA: critica_ia_activa,

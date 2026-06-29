@@ -352,6 +352,13 @@ ENV_PIPELINE_SUGERIR_HASHTAGS = "KENI_PIPELINE_SUGERIR_HASHTAGS"
 # Redactar usa el prompt del camino (foto o carrusel). CONSERVADOR por defecto (OFF): sin el flag,
 # Redactar decide el formato dentro de su propio prompt (comportamiento de hoy).
 ENV_PIPELINE_DECISOR = "KENI_PIPELINE_DECISOR"
+# Etapa de Traducir (investigación): traduce a ES-MX los clusters extranjeros recientes. Toggle
+# propio (`KENI_PIPELINE_TRADUCIR`, global + `::marca`), def ON.
+ENV_PIPELINE_TRADUCIR = "KENI_PIPELINE_TRADUCIR"
+# Etapa de Admitir (investigación→producción): promueve las historias verificadas del pool a temas
+# en la mesa. Toggle propio (`KENI_PIPELINE_ADMITIR`, global + `::marca`), def ON; ADITIVO sobre
+# Recolectar (admite solo si Recolectar Y Admitir están encendidas para la marca).
+ENV_PIPELINE_ADMITIR = "KENI_PIPELINE_ADMITIR"
 
 # Etapa de Revisar del COPY del pipeline: "Revisar" (`KENI_PIPELINE_REVISAR`, toggle de etapa).
 # ANTES de que un borrador completo avance solo a la cola de revisión (etapa AVANCE), la IA "hacia
@@ -905,6 +912,8 @@ __all__ = [
     'ENV_PIXABAY_API_KEY',
     'ENV_PIPELINE_SUGERIR_HASHTAGS',
     'ENV_PIPELINE_DECISOR',
+    'ENV_PIPELINE_TRADUCIR',
+    'ENV_PIPELINE_ADMITIR',
     'ENV_AUTOGEN_ARTE_MAX',
     'ENV_AUTO_PREAPROBACION',
     'ENV_PROMPTS_DIR',

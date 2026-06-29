@@ -306,7 +306,7 @@ def ejecutar_barrido() -> dict[str, Any]:
         # carril de la cuenta de la marca). Best-effort: un fallo se loguea y NO invalida el barrido.
         # Sin tope artificial: cada barrido encola un lote del backlog.
         trad_resumen: dict[str, Any] = {"encolados": 0, "marcas": 0, "candidatos": 0}
-        if not ia_bloqueada:
+        if not ia_bloqueada and config.traducir_activo():
             try:
                 trad_resumen = _pkg.paso_traducir()
             except Exception:  # noqa: BLE001 -- el traducir es aditivo; nunca tumba la recolección

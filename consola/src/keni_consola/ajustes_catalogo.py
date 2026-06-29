@@ -147,6 +147,24 @@ def _maestros_etapa() -> list[Ajuste]:
             defecto=False,
         ),
         Ajuste(
+            clave=config.ENV_PIPELINE_TRADUCIR,
+            tipo="bool",
+            etiqueta="Traducir",
+            ayuda="Etapa física: traduce a español de México los clusters extranjeros recientes "
+            "antes de admitirlos. ON por defecto.",
+            grupo="maestros_investigacion",
+            defecto=True,
+        ),
+        Ajuste(
+            clave=config.ENV_PIPELINE_ADMITIR,
+            tipo="bool",
+            etiqueta="Admitir",
+            ayuda="Etapa física: promueve las historias verificadas del pool a temas en la mesa de "
+            "redacción. ADITIVA sobre Recolectar (necesita ambas). ON por defecto.",
+            grupo="maestros_investigacion",
+            defecto=True,
+        ),
+        Ajuste(
             clave=config.ENV_CLASIFICAR_MARCA_IA,
             tipo="bool",
             etiqueta="Clasificar marca con IA",
@@ -224,8 +242,10 @@ def _global_de_etapa(env_flag: str) -> bool:
 _FASES_MARCA_INVESTIGACION: tuple[tuple[str, str], ...] = (
     (config.ENV_PIPELINE_RECOLECTAR, "Recolectar"),
     (config.ENV_PIPELINE_FUSIONAR, "Fusionar"),
+    (config.ENV_PIPELINE_TRADUCIR, "Traducir"),
     (config.ENV_PRIORIZAR_PERFIL_IA, "Priorizar"),
     (config.ENV_PIPELINE_VERIFICAR, "Verificar"),
+    (config.ENV_PIPELINE_ADMITIR, "Admitir"),
 )
 _FASES_MARCA_PRODUCCION: tuple[tuple[str, str], ...] = (
     (config.ENV_PIPELINE_REDACTAR, "Redactar"),
