@@ -34,6 +34,7 @@ name: keni-social
 #   ────────   ───────────────   ─────────────────────   ─────────
 #   db         8g                DB_MEM_LIMIT            (reserva: sin tope de CPU)
 #   worker     20g               WORKER_MEM_LIMIT        WORKER_CPUS (def 6)
+#   worker-b   6g                WORKER_B_MEM_LIMIT      WORKER_B_CPUS (def 2)
 #   back       3g                BACK_MEM_LIMIT          3.0
 #   files      3g                FILES_MEM_LIMIT         2.0
 #   daemons    2g                DAEMONS_MEM_LIMIT       2.0
@@ -43,8 +44,9 @@ name: keni-social
 #
 # El worker corre KENI_MAX_JOBS (def 6) jobs `claude -p` EN PARALELO. Cada job
 # ~1.5–2.5 GiB en pico => 6 × 2.5 + margen ≈ 18–20 GiB. Ver la nota junto al servicio
-# `worker`. Suma de defaults ≈ 37.8 GiB sobre 61 GiB: deja ~23 GiB para host + CI +
-# learn-postgres.
+# `worker`. `worker-b` (cuenta B de Claude, solo investigacion Haiku) va MODESTO (6g, 2
+# jobs): dos workers a 20g NO caben. Suma de defaults ≈ 43.8 GiB sobre 61 GiB: deja ~17
+# GiB para host + CI + learn-postgres.
 # Los `cpus` son TOPES (no reservas): si keni esta ocioso, el CI usa los 12 nucleos.
 #
 # PARTICION DE NUCLEOS (cpuset, 12 vCPU = 0-11). Aparte de los TOPES `cpus`, fijamos
@@ -604,7 +606,13 @@ services:
       ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
       # Config/credenciales de `claude` en el volumen COMPARTIDO /data (ADR 0013): el login
       # desde el panel (lo corre el daemons) escribe aquí y el worker lo usa sin reiniciar.
+      # Esta es la cuenta A (la cuenta por defecto): worker-b monta su propia /data/claude-cfg-b.
       CLAUDE_CONFIG_DIR: /data/claude-cfg
+      # CARRILES de cola que reclama ESTE worker (cuenta A): inferencia + proceso + la
+      # investigacion de la cuenta A. NO incluye `cuenta-b` (lo reclama worker-b con su propia
+      # cuenta de Claude). Fijado EXPLICITO porque el default del binario reclama TODOS los
+      # carriles de contenido (perfil de una sola maquina), lo que pisaria a worker-b.
+      KENI_WORKER_CARRILES: ${KENI_WORKER_CARRILES:-inferencia,proceso,cuenta-a}
       # Cola compartida (Postgres) + media (S3/Garage): el worker LEE la cola de Postgres y
       # ESCRIBE el post-procesado (historial/borradores/media) en la misma persistencia.
       # DATABASE_URL es OPCIONAL: si se deja en blanco, el worker la DERIVA de POSTGRES_* (con
@@ -678,6 +686,89 @@ services:
     # nucleos quedan para el resto del stack/CI.
     cpus: ${WORKER_CPUS:-6}
     cpuset: "3-11"  # fuera de los nucleos del back (0-2)
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 1024
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  worker-b:
+    # Worker de la CUENTA B de Claude: misma imagen y misma cola que `worker`, pero monta SU
+    # PROPIO CLAUDE_CONFIG_DIR (/data/claude-cfg-b, credenciales aisladas) y reclama SOLO el carril
+    # `cuenta-b`. Así el gasto/medidor de la cuenta B (unotv + nacion-gamer + unotv-us) queda
+    # separado del de la cuenta A. Solo procesa INVESTIGACION (claude, gasta tokens); NO lleva
+    # carril de proceso (KENI_MAX_JOBS_PROCESO=0: sin ffmpeg/whisper, eso es del worker A).
+    build:
+      context: ..
+      dockerfile: deploy/worker/Dockerfile
+    image: keni-social/worker:${WORKER_VERSION:-latest}
+    restart: unless-stopped
+    labels:
+      - autoheal=true
+    environment:
+      XDG_CONFIG_HOME: /data
+      KENI_DATA_DIR: /data
+      KENI_CONSOLA_AJUSTES: /data/ajustes.toml
+      IS_SANDBOX: "1"
+      OPENROUTER_IMAGE_MODEL: ${OPENROUTER_IMAGE_MODEL:-}
+      # Investigacion (Haiku) de UNA cuenta: volumen MUCHO menor que el copy del worker A. Pocos
+      # jobs en paralelo bastan; default modesto para no duplicar la huella de RAM del worker A.
+      KENI_MAX_JOBS: ${WORKER_B_MAX_JOBS:-2}
+      # SIN carril de proceso: worker-b solo hace investigacion `claude`. El render/ASR es del
+      # worker A (un solo motor ffmpeg/whisper basta para todo el stack).
+      KENI_MAX_JOBS_PROCESO: "0"
+      # Reclama SOLO el carril de la cuenta B (no toca inferencia/proceso/cuenta-a del worker A).
+      KENI_WORKER_CARRILES: ${KENI_WORKER_B_CARRILES:-cuenta-b}
+      ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
+      # Credenciales de Claude AISLADAS de la cuenta A: su propio subdir bajo /data. El login de
+      # la cuenta B (panel) escribe aquí; worker-b lo usa sin reiniciar.
+      CLAUDE_CONFIG_DIR: /data/claude-cfg-b
+      DATABASE_URL: ${DATABASE_URL}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB: ${POSTGRES_DB}
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_REGION: ${S3_REGION}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_ACCESS_KEY_FILE: /run/secrets/s3_access_key
+      S3_SECRET_KEY_FILE: /run/secrets/s3_secret_key
+    volumes:
+      - keni-data:/data
+    secrets:
+      - postgres_password
+      - s3_access_key
+      - s3_secret_key
+      - anthropic_api_key
+    networks:
+      - internal
+      - data
+    depends_on:
+      db:
+        condition: service_healthy
+      files:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - >-
+          python -c "import os,glob,sys;
+          sys.exit(0 if any('keni_consola.worker' in open(p).read().replace(chr(0),' ')
+          for p in glob.glob('/proc/[0-9]*/cmdline')) else 1)"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    # APAGADO LIMPIO: igual que el worker A (re-encola los jobs en curso al recibir SIGTERM).
+    stop_grace_period: 30s
+    # MODESTO a proposito: dos workers a 20g NO caben con holgura sobre 61 GiB (ver cabecera). La
+    # investigacion (Haiku, lotes cortos) consume mucho menos que el copy del worker A; 6 GiB y 2
+    # CPU bastan para KENI_MAX_JOBS=2. Comparte el cpuset del worker A (3-11), fuera del back.
+    mem_limit: ${WORKER_B_MEM_LIMIT:-6g}
+    cpus: ${WORKER_B_CPUS:-2}
+    cpuset: "3-11"
     security_opt:
       - no-new-privileges:true
     pids_limit: 1024
