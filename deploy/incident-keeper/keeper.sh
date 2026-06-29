@@ -40,7 +40,25 @@ LOCK=/tmp/keni-incident-keeper.lock
 CI_ULTIMO=/tmp/keni-keeper.ci-ultimo      # nº del último pipeline rojo ya intentado
 CI_INTENTOS=/tmp/keni-keeper.ci-intentos  # marcas de tiempo de intentos recientes
 
+# Estado global para la PARADA CON GRACIA (trap de SIGTERM): un deploy recrea este contenedor y, si
+# hay una sesión en curso, sin esto el claude moriría a medias y la meta quedaría huérfana en
+# `corriendo`. El trap cierra la sesión limpia dentro del stop_grace_period (30s).
+PARAR=""; cl_pid=""; abort_flag=""
+
 log() { echo "incident-keeper: $*"; }
+
+# SIGTERM/SIGINT (parada o deploy): mata el claude en curso marcando la razón `shutdown` (la sesión
+# se cerrará como `interrumpido`, no huérfana) y pide salir del bucle. EXIT: suelta el lock siempre.
+parar() {
+  PARAR=1
+  if [ -n "$cl_pid" ] && kill -0 "$cl_pid" 2>/dev/null; then
+    log "SIGTERM (parada/deploy): cierro con gracia la sesión en curso"
+    [ -n "$abort_flag" ] && printf shutdown > "$abort_flag" 2>/dev/null
+    kill -TERM "$cl_pid" 2>/dev/null; sleep 2; kill -KILL "$cl_pid" 2>/dev/null
+  fi
+}
+trap parar TERM INT
+trap 'rm -f "$LOCK" 2>/dev/null' EXIT
 
 # Lanza UNA sesión claude -p en un worktree limpio desde origin/main. $1 = texto del incidente.
 correr_keeper() {  # $1 = texto ; $2 = trigger (etiqueta UI) ; $3 = nº pipeline CI (vacío=incidente prod)
@@ -62,7 +80,7 @@ correr_keeper() {  # $1 = texto ; $2 = trigger (etiqueta UI) ; $3 = nº pipeline
   git -C "$REPO" worktree remove --force "$wt" >/dev/null 2>&1 || true
   rm -rf "$wt" 2>/dev/null || true
 
-  estado=error; commit_sha=""; commit_msg=""
+  estado=error; commit_sha=""; commit_msg=""; razon=""
   if git -C "$REPO" worktree add -b "$rama" "$wt" origin/main >/dev/null 2>&1; then
     prompt="$(cat "$ROL" 2>/dev/null)
 
@@ -113,8 +131,8 @@ diagnóstico claro y el plan para un humano."
       commit_sha="$head"; commit_msg="$(git -C "$wt" log -1 --format=%s 2>/dev/null)"; estado=resuelto
     elif [ "$razon" = verde ]; then
       estado=abortado      # un pipeline más nuevo salió verde mientras arreglaba: el rojo ya no existía
-    elif [ "$razon" = timeout ]; then
-      estado=interrumpido  # la sesión se colgó y se cortó por tiempo
+    elif [ "$razon" = timeout ] || [ "$razon" = shutdown ]; then
+      estado=interrumpido  # se cortó por tiempo (cuelgue) o por parada del keeper (deploy)
     else
       estado=escalado      # terminó sin commitear: o escaló, o no había nada que arreglar
     fi
@@ -129,10 +147,14 @@ diagnóstico claro y el plan para un humano."
   # Meta final: estado + commit + coste/tokens (sesion.py parsea el `result` del jsonl). Si el
   # jsonl trae is_error, sesion.py lo marca y la UI lo pinta.
   nota=""
-  case "$estado" in
-    abortado) nota="Abortado: un pipeline más nuevo salió verde; el rojo ya estaba resuelto." ;;
-    interrumpido) nota="Interrumpido: la sesión superó el límite de tiempo (${TIMEOUT}s) y se cortó." ;;
-  esac
+  if [ "$estado" = abortado ]; then
+    nota="Abortado: un pipeline más nuevo salió verde; el rojo ya estaba resuelto."
+  elif [ "$estado" = interrumpido ]; then
+    case "$razon" in
+      timeout) nota="Interrumpido: la sesión superó el límite de tiempo (${TIMEOUT}s) y se cortó." ;;
+      *)       nota="Interrumpido: el keeper se detuvo (p. ej. un deploy) durante la sesión." ;;
+    esac
+  fi
   python3 "$KEEPER_DIR/sesion.py" "$meta" "$jsonl" estado="$estado" \
     fin="$(date -u +%Y-%m-%dT%H:%M:%SZ)" commit_sha="$commit_sha" commit_msg="$commit_msg" \
     ${nota:+"nota=$nota"} 2>/dev/null || true
@@ -180,6 +202,7 @@ mkdir -p "$DATA" 2>/dev/null || true
 reconciliar_huerfanas
 
 while :; do
+  [ -n "$PARAR" ] && { log "parada limpia"; exit 0; }   # SIGTERM recibido (deploy/stop): salir
   : > "$LATIDO" 2>/dev/null || true   # latido para el healthcheck
   # Heartbeat de vigilancia para guardian-ui: estado de la vigilancia + último pipeline visto.
   python3 "$CI_WATCH" --heartbeat "$ESTADO_VIGILANCIA" "$CI" 2>/dev/null || true
