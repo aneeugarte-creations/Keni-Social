@@ -35,6 +35,7 @@ import { toast } from "sonner";
 
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { VisorFoto } from "@/components/media/biblioteca/VisorFoto";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -88,6 +89,7 @@ function deCandidata(c: CandidataStock): FotoVista {
     thumb: c.thumb || c.url,
     url: c.url || c.thumb,
     etiquetas: c.etiquetas ?? [],
+    grupo: c.grupo,
     galeria_id: c.galeria_id,
     archivo: c.archivo,
     dispositivo: c.dispositivo,
@@ -123,6 +125,9 @@ function CeldaFoto({ foto, onAbrir }: { foto: FotoVista; onAbrir: () => void }) 
   );
 }
 
+const CLASES_REJILLA =
+  "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6";
+
 function RejillaFotos({
   fotos,
   onAbrir,
@@ -131,9 +136,85 @@ function RejillaFotos({
   onAbrir: (indice: number) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+    <div className={CLASES_REJILLA}>
       {fotos.map((foto, i) => (
         <CeldaFoto key={foto.clave} foto={foto} onAbrir={() => onAbrir(i)} />
+      ))}
+    </div>
+  );
+}
+
+/** Un bloque de resultados de la misma carpeta de origen (biblioteca o una galería en vivo). */
+interface GrupoOrigen {
+  clave: string;
+  etiqueta: string;
+  dispositivo?: string;
+  enVivo: boolean;
+  items: { foto: FotoVista; indice: number }[];
+}
+
+/** Agrupa las fotos por carpeta de origen conservando el orden (índice global para el visor):
+ *  biblioteca por su `grupo` (partido guardado), túnel por galería viva. */
+function agruparPorOrigen(fotos: FotoVista[]): GrupoOrigen[] {
+  const orden: string[] = [];
+  const mapa = new Map<string, GrupoOrigen>();
+  fotos.forEach((foto, indice) => {
+    const enVivo = foto.origen === "tunel";
+    const clave = enVivo ? `tun:${foto.galeria_id ?? ""}` : `bib:${foto.grupo ?? ""}`;
+    let grupo = mapa.get(clave);
+    if (!grupo) {
+      grupo = {
+        clave,
+        etiqueta: foto.grupo || (enVivo ? foto.dispositivo || "Galería en vivo" : "Fotografías"),
+        dispositivo: enVivo ? foto.dispositivo : undefined,
+        enVivo,
+        items: [],
+      };
+      mapa.set(clave, grupo);
+      orden.push(clave);
+    }
+    grupo.items.push({ foto, indice });
+  });
+  return orden.map((c) => mapa.get(c)!);
+}
+
+/** Rejilla de resultados separada por un encabezado/divisor por carpeta de origen. Con una sola
+ *  carpeta cae a una rejilla plana (no hay nada que separar). El `onAbrir` usa el índice GLOBAL
+ *  para que el visor recorra todos los resultados en orden. */
+function ResultadosAgrupados({
+  fotos,
+  onAbrir,
+}: {
+  fotos: FotoVista[];
+  onAbrir: (indice: number) => void;
+}) {
+  const grupos = React.useMemo(() => agruparPorOrigen(fotos), [fotos]);
+  if (grupos.length <= 1) {
+    return <RejillaFotos fotos={fotos} onAbrir={onAbrir} />;
+  }
+  return (
+    <div className="space-y-5">
+      {grupos.map((grupo) => (
+        <section key={grupo.clave} className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-foreground">{grupo.etiqueta}</span>
+            {grupo.enVivo && (
+              <Badge variant="ok" className="px-1.5 py-0 text-[10px]">
+                en vivo
+              </Badge>
+            )}
+            {grupo.dispositivo && (
+              <span className="truncate text-xs text-muted-foreground">· {grupo.dispositivo}</span>
+            )}
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground">{grupo.items.length}</span>
+          </div>
+          <div className={CLASES_REJILLA}>
+            {grupo.items.map(({ foto, indice }) => (
+              <CeldaFoto key={foto.clave} foto={foto} onAbrir={() => onAbrir(indice)} />
+            ))}
+          </div>
+        </section>
       ))}
     </div>
   );
@@ -213,7 +294,7 @@ function BuscadorUnificado({
         ) : fotos.length === 0 ? (
           <EstadoVacio icono={ImageOff} texto="Sin resultados. Prueba otra búsqueda." />
         ) : (
-          <RejillaFotos fotos={fotos} onAbrir={(i) => onVisor(fotos, i)} />
+          <ResultadosAgrupados fotos={fotos} onAbrir={(i) => onVisor(fotos, i)} />
         )}
       </div>
     </div>
@@ -532,7 +613,11 @@ export default function Fotos() {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const dispositivosOnline = dispositivos.filter((d) => d.online !== false).length;
+  // Conectados RELEVANTES a la marca activa: mismo filtro que las galerías vivas de las carpetas
+  // (un dispositivo conectado que no comparte la marca activa no cuenta aquí).
+  const dispositivosOnline = dispositivos.filter(
+    (d) => d.online !== false && (!marca || !d.marcas || d.marcas.includes(marca)),
+  ).length;
 
   return (
     <>

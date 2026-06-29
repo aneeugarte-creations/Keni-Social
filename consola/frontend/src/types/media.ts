@@ -136,6 +136,8 @@ export interface CandidataStock {
   // identifican la foto original en la app de escritorio para adjuntarla por el túnel, no por URL.
   /** Id de la galería (partido) en la app de escritorio. */
   galeria_id?: string;
+  /** Nombre del partido (galería): agrupa las candidatas por carpeta de origen en el buscador. */
+  grupo?: string;
   /** Nombre del archivo original dentro de la galería. */
   archivo?: string;
   /** Dispositivo conectado que sirvió la candidata. */

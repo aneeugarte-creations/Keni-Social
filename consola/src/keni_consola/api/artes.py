@@ -732,6 +732,8 @@ def _candidato_propio(crudo: dict) -> dict:
         "licencia": "Propio",
         "credito_url": "",
         "titulo": " · ".join(partes),
+        # Nombre del partido (galería): agrupa los resultados por carpeta de origen en el buscador.
+        "grupo": crudo.get("nombre") or "",
         # Etiquetas IA (de keni-fotos): se conservan al guardar para que la foto sea buscable por ellas.
         "etiquetas": _etiquetas_de_label(crudo.get("label")),
         "galeria_id": crudo.get("galeria_id") or "",

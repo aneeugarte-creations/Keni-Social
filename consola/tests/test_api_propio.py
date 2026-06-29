@@ -425,6 +425,7 @@ def test_buscar_propio_con_dispositivo_devuelve_candidatos(entorno):
     assert cand["archivo"] == "f0.jpg"
     assert cand["dispositivo"] == "Mac de Ale"
     assert cand["titulo"] == "Colombia vs Uzbekistán · in-game · portero"
+    assert cand["grupo"] == "Colombia vs Uzbekistán"
 
 
 # --------------------------------------------------------------------------- #
@@ -507,11 +508,13 @@ def test_candidato_propio_conserva_etiquetas_del_label():
     cand = artes._candidato_propio(crudo)
     assert "atajada" in cand["etiquetas"]
     assert "Colombia" in cand["etiquetas"]
+    assert cand["grupo"] == "Colombia"
 
 
 def test_candidato_propio_sin_label_etiquetas_vacias():
     cand = artes._candidato_propio({"galeria_id": "g1", "archivo": "k.jpg"})
     assert cand["etiquetas"] == []
+    assert cand["grupo"] == ""
 
 
 # --------------------------------------------------------------------------- #
