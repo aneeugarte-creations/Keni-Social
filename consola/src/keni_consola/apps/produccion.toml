@@ -84,7 +84,6 @@ rutas_frontend = [
   "/maquina/agentes",
   "/maquina/economia",
   "/maquina/actividad",
-  "/maquina/controles",
 ]
 
 # Entradas de navegación de esta app (mismo orden/aspecto que el sidebar actual).

@@ -295,12 +295,6 @@ export const router = createBrowserRouter([
           { path: "agentes/:agente", element: <AgenteDetalle /> },
           { path: "economia", element: <Economia /> },
           { path: "actividad", element: <Actividad /> },
-          // Controles vive como pestaña de «Contexto» (mando único de la máquina); esta ruta
-          // antigua redirige ahí para no romper enlaces.
-          {
-            path: "controles",
-            element: <Navigate to="/maquina/contexto?proceso=controles" replace />,
-          },
           // Detalle desde la traza: una run del pipeline y un trabajo suelto (generación). Las
           // tarjetas del feed de Actividad enlazan aquí.
           { path: "actividad/pipelines/:id", element: <PipelineDetalle /> },

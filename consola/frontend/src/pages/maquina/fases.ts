@@ -233,21 +233,6 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
     ayuda: "Adjunta una foto de stock como referencia sin licencia para los temas sin imagen",
     // Su subpágina son los TOGGLES de fuentes de stock por marca (no Prompt · Contexto · Logs).
     panel: "stock",
-    // Stock y Foto licenciada son las dos vías MANUALES de foto (banco gratuito vs. agencia con
-    // licencia): comparten fila horizontal (mismo `paralelo` id), como las ramas del Decisor.
-    paralelo: "imagen-manual",
-  },
-  {
-    // Vía MANUAL paralela a Stock: el equipo adjunta una foto LICENCIADA de agencia (AFP),
-    // publicable directamente PERO con crédito/byline obligatorio, para temas que la merezcan. Es
-    // un flujo manual (lo dispara el editor desde el buscador de agencia), no un daemon: no encola
-    // jobs ni deja runs, por eso no tiene `queue`, `etapa` ni `panel`.
-    nombre: "Foto licenciada",
-    es_ia: false,
-    claves: ["KENI_PIPELINE_FOTO_LICENCIADA", MAESTRO_PRODUCCION],
-    ayuda:
-      "Adjunta una foto licenciada de agencia (AFP), publicable con crédito, para temas que la merezcan",
-    paralelo: "imagen-manual",
   },
   {
     // Nivel de revisión IA de la pieza terminada: corre DENTRO de la cadena de aprobación (tras
