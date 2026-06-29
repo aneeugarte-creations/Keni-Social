@@ -1,13 +1,13 @@
-// Controles de ENCUADRE + zoom en una BARRA INFERIOR estilo Canva: franja delgada (~36 px) a lo
-// ancho del área del lienzo, FUERA de la foto para no tapar el campo visual. Imán, rejilla
-// (+ tamaño de celda), "dentro del marco" y "zonas seguras" son toggles INDEPENDIENTES; sus
-// preferencias se guardan en localStorage en el componente padre. Presentacional: recibe el
-// estado y los setters/handlers por props.
+// Controles de ENCUADRE + zoom en una BARRA INFERIOR: píldora delgada (~36 px) recortada a su
+// contenido y CENTRADA horizontalmente, FUERA de la foto para no tapar el campo visual ni la
+// burbuja del asistente que flota en la esquina. Imán, rejilla (+ tamaño de celda), "dentro del
+// marco" y "zonas seguras" son toggles INDEPENDIENTES; sus preferencias se guardan en localStorage
+// en el componente padre. Presentacional: recibe el estado y los setters/handlers por props.
 //
-// Colocación (como Canva): a la IZQUIERDA los toggles de encuadre (en pantallas estrechas se
-// pliegan en un menú "⋯"); a la DERECHA el bloque de zoom: slider compacto (md+), −/+, el botón
-// del PORCENTAJE —que abre el menú de niveles (10–300 %, "Ajustar" y "100 %" = 1 px del documento
-// : 1 px de pantalla)— y "ajustar a la pantalla". Todos los iconos llevan tooltip con su atajo.
+// Colocación: los toggles de encuadre a la izquierda (en pantallas estrechas se pliegan en un menú
+// "⋯"), un separador, y el bloque de zoom: slider compacto (md+), −/+, el botón del PORCENTAJE
+// —que abre el menú de niveles (10–300 %, "Ajustar" y "100 %" = 1 px del documento : 1 px de
+// pantalla)— y "ajustar a la pantalla". Todos los iconos llevan tooltip con su atajo.
 
 import { Check, Frame, Grid3x3, Magnet, Maximize, Minus, MoreHorizontal, Plus, Shield } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
@@ -141,7 +141,7 @@ export function ControlesEncuadre({
   );
 
   return (
-    <div className="mt-1.5 flex h-9 w-full shrink-0 items-center justify-between gap-2 rounded-md border border-border bg-popover/90 px-1.5 shadow">
+    <div className="mt-1.5 flex h-9 w-fit max-w-full shrink-0 items-center gap-1.5 self-center rounded-md border border-border bg-popover/90 px-1.5 shadow">
       {/* IZQUIERDA: toggles de encuadre, en línea (sm+). */}
       <div className="hidden min-w-0 items-center gap-0.5 sm:flex">{toggles}</div>
 
@@ -171,6 +171,9 @@ export function ControlesEncuadre({
           </>
         )}
       </div>
+
+      {/* Separador entre los toggles de encuadre y el bloque de zoom. */}
+      <div aria-hidden className="h-5 w-px shrink-0 bg-border" />
 
       {/* DERECHA: bloque de zoom (slider compacto md+, −/%, +, ajustar). El menú de niveles se
           abre HACIA ARRIBA, anclado a este bloque. */}
