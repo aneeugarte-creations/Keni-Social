@@ -210,9 +210,9 @@ def test_lanzar_prompt_piezas_con_redes_crea_spec_copy(encolado):
     # La política de emojis vive en el prompt de copy + editorial, NO en un hardcode del lanzamiento.
     assert "No uses emojis en el copy." not in encolado["prompt"]
     # El camino COPY (piezas) es SALIDA ESTRUCTURADA (se parsea a piezas por red; el usuario no
-    # ve la salida cruda), así que NO veta la web por-callsite. El `endurecer` del spec queda en
-    # None; la única veta es la GLOBAL `Bash Write Edit` (en `_argv_claude`).
-    assert encolado["spec"]["endurecer"] is None
+    # ve la salida cruda), así que NO veta la web por-callsite. El `endurecer` del spec solo rutea
+    # el modelo de copy (sonnet); la veta de herramientas es la GLOBAL `Bash Write Edit` (en `_argv_claude`).
+    assert "disallowed_tools" not in encolado["spec"]["endurecer"]
 
 
 def test_lanzar_piezas_titulo_contenido_titula_los_borradores(encolado):
