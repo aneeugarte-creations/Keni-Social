@@ -12,7 +12,6 @@ from ._config_comun import (
     ENV_AFP_BASE_URL,
     ENV_AFP_CLIENT_ID,
     ENV_AFP_CLIENT_SECRET,
-    ENV_AUTO_PROGRAMAR,
     ENV_CRITICA_IA,
     ENV_CLASIFICAR_MARCA_IA,
     ENV_MARCAS_ACTIVAS,
@@ -647,7 +646,7 @@ def fusionar_semantica_activo() -> bool:
     título)—, así que va encendida por defecto (en la era de la IA el léxico a medias sobra: o
     apagado o encendido). `KENI_PIPELINE_FUSIONAR=0`/`no`/`off` la apaga. Conservador: ante duda no
     fusiona. Mismo idiom default-ON que `recolectar`/`verificar` no usan (esos son def OFF); aquí
-    seguimos el patrón de `ingesta_filtro_activo`/`auto_programar_activo` (vacío → True).
+    seguimos el patrón de `ingesta_filtro_activo` (vacío → True).
     """
     crudo = _crudo(ENV_PIPELINE_FUSIONAR).lower()
     if not crudo:
@@ -988,19 +987,6 @@ def etapa_activa(env_flag: str, marca: str) -> bool:
     from .config_produccion import marca_apagada  # local: evita ciclo de import en el barrel
 
     return etapa_global_activa(env_flag) and not marca_apagada(env_flag, marca)
-
-
-def auto_programar_activo() -> bool:
-    """True si una pieza con sus 2 OK debe encolarse SOLA a su próximo hueco (`KENI_AUTO_PROGRAMAR`).
-
-    Def ON (a diferencia de las demás etapas auto, que son OFF): programar no gasta recursos ni
-    publica —solo asigna un hueco, reversible—, y "2 OK => programado" es el flujo deseado.
-    Respeta precedencia store>env>defecto; `KENI_AUTO_PROGRAMAR=0`/`no`/`off` lo apaga.
-    """
-    crudo = _crudo(ENV_AUTO_PROGRAMAR).lower()
-    if not crudo:
-        return True
-    return crudo not in _FALSOS
 
 
 def critica_ia_activa() -> bool:

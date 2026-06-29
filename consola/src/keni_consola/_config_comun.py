@@ -368,13 +368,6 @@ ENV_PIPELINE_REVISAR = "KENI_PIPELINE_REVISAR"
 # KENI_MAQUINA. «Borrador» dejó de ser un estado donde descanse una pieza completa, así que no
 # hay toggle (`KENI_PIPELINE_AVANCE`) ni exclusión por marca que la apaguen.
 
-# Auto-programación: una pieza con sus 2 OK (cerrada toda su cadena humana) pasa SOLA a
-# `programado` en su próximo hueco de franja. A diferencia del resto de etapas de auto-producción
-# (que gastan `claude -p` o podrían postear), programar es bookkeeping interno, reversible y NO
-# publica (el posteo sigue gated por KENI_PUBLICAR_REAL), así que su default es ON: el OK humano es
-# el gate; 2 OK => programado es el flujo deseado. `KENI_AUTO_PROGRAMAR=0` lo apaga (kill switch).
-ENV_AUTO_PROGRAMAR = "KENI_AUTO_PROGRAMAR"
-
 # Crítica IA: un nivel automático "Crítica IA" se AÑADE AL FINAL de la cadena del feed (detrás
 # de los dos OK humanos). Cuando los humanos cierran su parte, un `claude -p` con VISIÓN critica
 # la pieza (arte sintético en marca periodística, coherencia imagen↔texto, sustancia, rigor,
@@ -914,7 +907,6 @@ __all__ = [
     'ENV_PIPELINE_DECISOR',
     'ENV_AUTOGEN_ARTE_MAX',
     'ENV_AUTO_PREAPROBACION',
-    'ENV_AUTO_PROGRAMAR',
     'ENV_PROMPTS_DIR',
     'ENV_PROMPTS_DIR_LEGACY',
     'ENV_CLAUDE_DISALLOWED_TOOLS',

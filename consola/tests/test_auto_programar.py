@@ -243,12 +243,3 @@ def test_no_resucita_si_dejo_de_estar_aprobada(cliente, ahora_fijo, monkeypatch)
     despues = repos.obtener_pieza(pid)
     assert despues["estado"] == "borrador"  # sigue en el estado nuevo, NO resucitada
     assert despues["fecha_programada"] == ""  # ni le pisó la fecha
-
-
-def test_flag_off_no_programa(cliente, ahora_fijo, monkeypatch):
-    # Kill switch: con KENI_AUTO_PROGRAMAR falsy, la auto-programación síncrona no programa.
-    monkeypatch.setenv("KENI_AUTO_PROGRAMAR", "0")
-    cliente.post("/api/franjas", json={"dia_semana": 2, "hora": "15:00"})
-    pid = _crear_aprobada(cliente)
-    assert auto_programar.programar_si_aprobada(pid) is None
-    assert repos.obtener_pieza(pid)["estado"] == "en_revision"

@@ -140,12 +140,6 @@ const ETAPAS_AVANZADO: EtapaConfig[] = [
     ayuda: "Revisión final de la pieza antes de aprobar",
   },
   {
-    clave: "KENI_AUTO_PROGRAMAR",
-    nombre: "Auto-programar",
-    es_ia: false,
-    ayuda: "Programa la publicación automáticamente según el horario definido",
-  },
-  {
     clave: "KENI_AUTO_PREAPROBACION",
     nombre: "Pre-aprobación",
     es_ia: false,

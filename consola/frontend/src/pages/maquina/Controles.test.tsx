@@ -78,7 +78,7 @@ vi.mock("@/lib/api", () => {
           aj("KENI_CLASIFICAR_MARCA_IA", "Clasificar"),
           aj("KENI_PRIORIZAR_PERFIL_IA", "Priorizar"),
           aj("KENI_PIPELINE_DECISOR", "Decisor"),
-          // KENI_PIPELINE_REVISAR y KENI_AUTO_PROGRAMAR están ausentes → filas "vía env".
+          // KENI_PIPELINE_REVISAR está ausente → fila "vía env".
         ],
       },
     ],
@@ -231,7 +231,7 @@ describe("Controles · Sección Avanzado", () => {
     await waitFor(() => {
       expect(screen.getByText("Revisar")).toBeInTheDocument();
     });
-    // Claves ausentes (REVISAR, AUTO_PROGRAMAR, AUTO_PREAPROBACION) → info-env, no switch.
+    // Claves ausentes (REVISAR, AUTO_PREAPROBACION) → info-env, no switch.
     expect(screen.getAllByTestId("info-env").length).toBeGreaterThan(0);
     expect(
       screen.queryByRole("switch", { name: /Revisar \(KENI_PIPELINE_REVISAR\)/ }),

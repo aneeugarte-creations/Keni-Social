@@ -533,9 +533,9 @@ def _decidir_nivel(
         if estado_pieza is not None:
             repos.actualizar_pieza_fila(pieza_id, {"estado": estado_pieza})
         if estado_global == "aprobado":
-            # 2 OK => programado: la pieza se encola SOLA a su próximo hueco (def ON,
-            # `KENI_AUTO_PROGRAMAR`), respetando los gates de la programación manual. Sin franja
-            # se queda en revisión. NO publica. Best-effort: un fallo aquí no tumba la aprobación.
+            # 2 OK => programado: la pieza se encola SOLA a su próximo hueco, respetando los
+            # gates de la programación. Sin franja se queda en revisión. NO publica. Best-effort:
+            # un fallo aquí no tumba la aprobación.
             from .. import auto_programar
 
             try:

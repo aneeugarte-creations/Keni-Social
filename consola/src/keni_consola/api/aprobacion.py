@@ -197,7 +197,7 @@ def _responder_aprobada(
     """Auto-programa si la cadena juntó sus 2 likes y devuelve la pieza (estado final).
 
     2 likes => programado: si la cadena quedó aprobada, encola SOLA al próximo hueco (mismos
-    gates que `programar`; def ON `KENI_AUTO_PROGRAMAR`). Best-effort; no publica. Lo comparten la
+    gates que `programar`; siempre activa). Best-effort; no publica. Lo comparten la
     decisión normal (`_decidir`) y el override (`forzar`). No hay estado de reposo `aprobado`: se
     mira el estado de la CADENA, no el `estado` de la pieza (que sigue `en_revision` hasta que la
     auto-programación encuentre hueco).

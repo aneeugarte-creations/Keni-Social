@@ -17,9 +17,9 @@ NO publica: deja la pieza en `programado` con su `fecha_programada`; el programa
 prepara (DRY-RUN) al vencer, y el posteo real sigue gated por `KENI_PUBLICAR_REAL`.
 
 Se invoca SÍNCRONO en la ruta de aprobación (justo tras registrarse el último like), no desde un
-daemon: la aprobación ocurre por la UI, así que encolar ahí es inmediato. Gateado por
-`KENI_AUTO_PROGRAMAR` (def ON; ver `config.auto_programar_activo`). No crea esquema: solo cambia
-`estado`/`fecha_programada`, como el encolado manual.
+daemon: la aprobación ocurre por la UI, así que encolar ahí es inmediato. Siempre activa: no hay
+programación manual, así que reunir los likes SIEMPRE encola al hueco. No crea esquema: solo cambia
+`estado`/`fecha_programada`.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from typing import Any
 
 from keni_shared import marcas as _km
 
-from . import config, repos
+from . import repos
 from .dominio import colaboracion, licencia_imagen
 from .estados import ESTADO_EN_REVISION
 
@@ -40,13 +40,10 @@ def programar_si_aprobada(pieza_id: str) -> dict[str, Any] | None:
     """Si la pieza está `en_revision` con sus 2 likes y pasa los gates, la encola a su hueco.
 
     Devuelve la publicación ya `programado` si la encoló; `None` si no aplicaba (no está en
-    revisión, le faltan likes, flag apagado, comentario sin resolver o sin franja/hueco).
+    revisión, le faltan likes, comentario sin resolver o sin franja/hueco).
     Idempotente y best-effort: solo actúa sobre piezas `en_revision` con el mínimo de likes,
     así que reinvocarla no reprograma una ya programada.
     """
-    if not config.auto_programar_activo():
-        return None
-
     pub = repos.obtener_pieza(pieza_id)
     if pub is None or pub.get("estado") != ESTADO_EN_REVISION:
         return None
