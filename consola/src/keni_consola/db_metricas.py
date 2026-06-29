@@ -245,8 +245,9 @@ def serie_pieza(pieza_id: str, *, limite: int | None = None) -> list[dict[str, A
                 (pieza_id,),
             ).fetchall()
         else:
-            # Últimos N (DESC + LIMIT, barato con `idx_metricas_pieza_snapshots_pieza`) reinvertidos
-            # a ASC: el último punto, del que cuelga la "velocidad", queda garantizado en el recorte.
+            # Últimos N (DESC + LIMIT, barato por el prefijo `pieza_id` del UNIQUE compuesto
+            # `idx_metricas_pieza_snapshots_pieza_ts`) reinvertidos a ASC: el último punto, del que
+            # cuelga la "velocidad", queda garantizado en el recorte.
             filas = con.execute(
                 f"SELECT {_SELECT_PIEZA_SNAPSHOT} FROM metricas_pieza_snapshots "
                 "WHERE pieza_id = ? ORDER BY ts DESC LIMIT ?",
