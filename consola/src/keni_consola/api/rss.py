@@ -194,14 +194,29 @@ def _categorias_validas() -> frozenset[str]:
     return frozenset([*fuentes_presets.CATEGORIAS_VALIDAS, "breaking"])
 
 
-def _validar_categoria(valor: Any) -> tuple[str | None, str | None]:
-    """Valida la categoría del cuerpo: '' o una de la allowlist. `(categoria, error)`."""
+def _validar_categoria(valor: Any, marca: str) -> tuple[str | None, str | None]:
+    """Valida la categoría del cuerpo contra el plan de SU MARCA. `(categoria, error)`.
+
+    '' (sin categoría) y 'breaking' (señal del motor) son válidos para cualquier marca. Un slug
+    temático solo se admite si pertenece al plan de la marca (`slugs_categoria_de_marca`): así una
+    fuente de fundación NO puede etiquetarse «entretenimiento» (que es de unotv). Las marcas sin
+    plan de slugs declarado caen al vocabulario editorial global (comportamiento anterior).
+    """
+    from .. import bootstrap_categorias
+
     if valor is None:
         valor = ""
     if not isinstance(valor, str):
         return None, "La categoría debe ser texto."
     valor = valor.strip().lower()
-    if valor and valor not in _categorias_validas():
+    if not valor or valor == "breaking":
+        return valor, None
+    permitidas = bootstrap_categorias.slugs_categoria_de_marca(marca)
+    if permitidas:
+        if valor not in permitidas:
+            return None, "Esa categoría no pertenece al plan de la marca."
+        return valor, None
+    if valor not in _categorias_validas():
         return None, "Categoría no permitida."
     return valor, None
 
@@ -273,7 +288,7 @@ def _crear_fuente(datos: dict) -> tuple[int, dict]:
     redes_def, error = _validar_redes_def(datos.get("redes_def"))
     if error is not None:
         return 400, {"error": error}
-    categoria, error = _validar_categoria(datos.get("categoria"))
+    categoria, error = _validar_categoria(datos.get("categoria"), marca or "")
     if error is not None:
         return 400, {"error": error}
     linea_id, error = _validar_linea_id(datos.get("linea_id"), marca or "")
@@ -355,7 +370,9 @@ def _actualizar_fuente(fuente_id: str, datos: dict) -> tuple[int, dict]:
     if "propia" in datos:
         campos["propia"] = bool(datos.get("propia"))
     if "categoria" in datos:
-        categoria, error = _validar_categoria(datos.get("categoria"))
+        # Contra la marca RESULTANTE (la nueva si se cambia, o la actual): el plan es por marca.
+        marca_ref = str(campos.get("marca", actual.get("marca") or ""))
+        categoria, error = _validar_categoria(datos.get("categoria"), marca_ref)
         if error is not None:
             return 400, {"error": error}
         campos["categoria"] = categoria

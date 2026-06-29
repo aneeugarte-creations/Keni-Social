@@ -191,6 +191,58 @@ def test_crear_fuente_categoria_invalida_400(cliente):
     assert r.status_code == 400
 
 
+def test_crear_fuente_categoria_fuera_del_plan_de_marca_400(cliente):
+    """Una categoría que existe globalmente pero NO en el plan de la marca se rechaza:
+    «entretenimiento» es de unotv, no de fundación."""
+    r = cliente.post(
+        "/api/rss/fuentes",
+        json={
+            "nombre": "Espectáculos",
+            "url": _URL_OK,
+            "marca": "fundacion",
+            "categoria": "entretenimiento",
+        },
+    )
+    assert r.status_code == 400
+    assert "plan de la marca" in r.json()["error"]
+
+
+def test_crear_fuente_categoria_del_plan_de_marca_ok(cliente):
+    """Una categoría que SÍ pertenece al plan de la marca se acepta."""
+    r = cliente.post(
+        "/api/rss/fuentes",
+        json={"nombre": "Salud Fund", "url": _URL_OK, "marca": "fundacion", "categoria": "salud"},
+    )
+    assert r.status_code == 200
+    assert r.json()["fuente"]["categoria"] == "salud"
+
+    # La MISMA categoría sí es válida para la marca a la que pertenece.
+    r2 = cliente.post(
+        "/api/rss/fuentes",
+        json={
+            "nombre": "Espectáculos UnoTV",
+            "url": "https://93.184.216.35/feed.xml",
+            "marca": "unotv",
+            "categoria": "entretenimiento",
+        },
+    )
+    assert r2.status_code == 200
+    assert r2.json()["fuente"]["categoria"] == "entretenimiento"
+
+
+def test_categoria_para_marca_normaliza_fuera_de_plan():
+    """El helper PURO: un slug ajeno al plan de la marca cae a '' (lo usa el alta por presets);
+    el del plan se conserva; las marcas sin plan de slugs no se restringen."""
+    from keni_consola import bootstrap_categorias as bc
+
+    assert bc.categoria_para_marca("fundacion", "entretenimiento") == ""
+    assert bc.categoria_para_marca("fundacion", "salud") == "salud"
+    assert bc.categoria_para_marca("unotv", "entretenimiento") == "entretenimiento"
+    assert bc.categoria_para_marca("fundacion", "breaking") == "breaking"
+    # Marca sin plan de slugs declarado (claro-sports): no se restringe (vocabulario global).
+    assert bc.categoria_para_marca("claro-sports", "otros-deportes") == "otros-deportes"
+
+
 def test_crear_fuente_con_peso_y_editarlo(cliente):
     """El peso editorial (pondera la corroboración del ranking) se crea, expone y edita."""
     r = cliente.post(

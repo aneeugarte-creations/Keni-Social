@@ -31,7 +31,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import agencias, marcas, repos
+from .. import agencias, bootstrap_categorias, marcas, repos
 from .._http_json import leer_json
 from ..db_noticias import _TIPOS_FUENTE
 from ..dominio import fuentes_pesos, fuentes_presets, http_feed
@@ -237,10 +237,12 @@ def _activar_presets(ids_raw: list, marca_override: str | None) -> dict[str, Any
             excluir="",
             redes_def="",
             # La CATEGORÍA del preset manda la CADENCIA de sondeo del motor (deportes ~180s,
-            # gaming ~1800s…) y alimenta la cobertura/huecos de /salud. Antes solo se devolvía
-            # cosmética en la respuesta y la fuente nacía sin categoría: cadencia por defecto
-            # para todo y categoría «—» en Salud.
-            categoria=preset.get("categoria", "") or "",
+            # gaming ~1800s…) y alimenta la cobertura/huecos de /salud. Se NORMALIZA al plan de la
+            # marca destino: un preset «entretenimiento» colgado de fundación cae a '' (genérica) en
+            # vez de etiquetar la fuente —y sus piezas— con una categoría ajena a esa marca.
+            categoria=bootstrap_categorias.categoria_para_marca(
+                marca, preset.get("categoria", "") or ""
+            ),
             # Cadencia PROPIA del preset (fuentes que rate-limitan, p. ej. GDELT): el motor
             # la respeta por encima del default de la categoría. 0 = sin override.
             intervalo_min=int(preset.get("intervalo_min") or 0),

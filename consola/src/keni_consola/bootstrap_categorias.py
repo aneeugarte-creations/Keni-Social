@@ -393,6 +393,33 @@ _CATEGORIA_A_LINEA: dict[str, dict[str, str]] = {
 #   - 'evergreen' = flujo de reciclaje (lo llena su automatismo diario).
 _CLAVES_NO_LINEA: frozenset[str] = frozenset({"", "breaking", "evergreen"})
 
+
+def slugs_categoria_de_marca(marca: str) -> frozenset[str]:
+    """Slugs de categoría que PERTENECEN al plan editorial de una marca (claves de `_CATEGORIA_A_LINEA`).
+
+    Es la allowlist por marca: «entretenimiento» pertenece a unotv pero NO a fundación. Vacío si la
+    marca no declara plan de slugs: el llamante no restringe entonces (cae al vocabulario global).
+    PURA.
+    """
+    return frozenset(_CATEGORIA_A_LINEA.get(marca, {}))
+
+
+def categoria_para_marca(marca: str, slug: str) -> str:
+    """Normaliza un slug de categoría al plan de la marca: '' si NO pertenece a su plan.
+
+    Las señales del motor ('', 'breaking', 'evergreen') pasan tal cual. Un slug temático que no
+    está en el plan de la marca (p. ej. «entretenimiento» en fundación) cae a '' (genérica), para
+    que una pieza nunca herede una categoría ajena a su marca. Si la marca no declara plan de slugs
+    (`slugs_categoria_de_marca` vacío), se devuelve el slug sin tocar (vocabulario global). PURA.
+    """
+    slug = (slug or "").strip().lower()
+    if slug in _CLAVES_NO_LINEA:
+        return slug
+    permitidas = slugs_categoria_de_marca(marca)
+    if permitidas and slug not in permitidas:
+        return ""
+    return slug
+
 # ÚNICA fuente de verdad del nombre legible de las señales del motor (las claves de plan que
 # NO son una categoría editorial). El nombre del resto de categorías —ids de categoría— lo da la BD
 # (la etiqueta categoria). La consume cualquier superficie que muestre una categoría de plan
