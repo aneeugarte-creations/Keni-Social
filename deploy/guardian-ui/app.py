@@ -38,6 +38,40 @@ TOKEN = Path(os.environ.get("KENI_WOODPECKER_TOKEN_FILE", "/secrets/woodpecker_t
 # Tipos de bloque del stream-json de claude -> etiqueta para la UI.
 _TIPO = {"text": "texto", "thinking": "razonamiento", "tool_use": "accion"}
 
+# Herramienta -> clave de su input con el dato legible (el comando de Bash, la ruta de Read…). Así
+# la acción se ve como "🔧 Bash: git rebase…" en vez de un "🔧 Bash" pelado e inútil.
+_TOOL_ARG = {
+    "Bash": "command", "Read": "file_path", "Edit": "file_path", "Write": "file_path",
+    "NotebookEdit": "notebook_path", "Grep": "pattern", "Glob": "pattern",
+    "WebFetch": "url", "WebSearch": "query", "Task": "description",
+}
+
+
+def _resumen_tool(nombre: str, datos: dict) -> str:
+    """Resumen legible del input de una herramienta (comando/ruta/patrón…), compacto a una línea."""
+    if not isinstance(datos, dict):
+        return ""
+    valor = datos.get(_TOOL_ARG.get(nombre, ""))
+    if not isinstance(valor, str) or not valor.strip():
+        valor = next((v for v in datos.values() if isinstance(v, str) and v.strip()), "")
+    return " ".join(valor.split())[:300]
+
+
+def _cerrar_bloque(actual: dict | None) -> dict | None:
+    """Finaliza el bloque en curso: si es una herramienta con input acumulado, le pega el resumen
+    (el comando) y limpia las claves internas. Para text/razonamiento lo devuelve tal cual."""
+    if actual and actual.get("_tool"):
+        try:
+            datos = json.loads(actual["_json"]) if actual.get("_json", "").strip() else {}
+        except ValueError:
+            datos = {}
+        resumen = _resumen_tool(actual["_tool"], datos)
+        if resumen:
+            actual["texto"] = "🔧 " + actual["_tool"] + ": " + resumen
+        actual.pop("_tool", None)
+        actual.pop("_json", None)
+    return actual
+
 
 def _leer_json(ruta: Path):
     try:
@@ -109,21 +143,29 @@ def _transcript(jsonl: Path) -> list[dict]:
                     btipo = bloque.get("type", "text")
                     actual = {"tipo": _TIPO.get(btipo, "texto"), "texto": ""}
                     if btipo == "tool_use":
-                        actual["texto"] = "🔧 " + (bloque.get("name") or "herramienta")
+                        nombre = bloque.get("name") or "herramienta"
+                        actual["texto"] = "🔧 " + nombre
+                        actual["_tool"] = nombre  # el input llega luego en input_json_delta
+                        actual["_json"] = ""
                 elif tipo_ev == "content_block_delta":
                     if actual is None:
                         actual = {"tipo": "texto", "texto": ""}
                     d = e.get("delta") or {}
-                    if d.get("type") == "text_delta":
+                    dt = d.get("type")
+                    if dt == "text_delta":
                         actual["texto"] += d.get("text") or ""
-                    elif d.get("type") == "thinking_delta":
+                    elif dt == "thinking_delta":
                         actual["texto"] += d.get("thinking") or ""
+                    elif dt == "input_json_delta" and "_json" in actual:
+                        actual["_json"] += d.get("partial_json") or ""
                 elif tipo_ev == "content_block_stop":
+                    actual = _cerrar_bloque(actual)
                     if actual and actual["texto"].strip():
                         items.append(actual)
                     actual = None
     except OSError:
         return items
+    actual = _cerrar_bloque(actual)
     if actual and actual["texto"].strip():
         actual["vivo"] = True
         items.append(actual)

@@ -27,6 +27,7 @@ CI_WATCH="${KENI_KEEPER_CI_WATCH:-/keeper/ci_watch.py}"
 CI_MAX="${KENI_KEEPER_CI_MAX:-3}"        # tope de sesiones de fix de CI por ventana
 CI_VENTANA_MIN="${KENI_KEEPER_CI_VENTANA_MIN:-30}"
 CI_ABORT_INTERVALO="${KENI_KEEPER_CI_ABORT_INTERVALO:-20}"  # cada cuánto comprueba el watchdog de aborto
+TIMEOUT="${KENI_KEEPER_TIMEOUT:-1800}"   # máx duración de una sesión claude -p (corta cuelgues)
 # Rastro de sesiones para la UI INDEPENDIENTE (guardian-ui): el keeper deja aquí, en el volumen
 # compartido /data, el stream-json de cada sesión + su meta + un heartbeat de vigilancia. La UI
 # (otro contenedor) sólo LEE esto; no depende del back/db.
@@ -82,33 +83,40 @@ diagnóstico claro y el plan para un humano."
         --output-format stream-json --verbose --include-partial-messages \
         --dangerously-skip-permissions --model "$MODELO" ) > "$jsonl" 2>&1 &
     cl_pid=$!
-    # Watchdog de ABORTO (solo en fix de CI): si mientras arreglamos aparece un pipeline MÁS NUEVO en
-    # verde, el rojo ya lo resolvió otro commit -> matamos el claude para no arreglar lo ya arreglado.
-    wd_pid=""
-    if [ -n "$ci_num" ]; then
-      ( while kill -0 "$cl_pid" 2>/dev/null; do
-          sleep "$CI_ABORT_INTERVALO"
-          if python3 "$CI_WATCH" --verde-despues "$ci_num" >/dev/null 2>&1; then
-            log "CI #$ci_num: pipeline VERDE más nuevo -> aborto el fix (ya resuelto por otro commit)"
-            : > "$abort_flag"
-            kill -TERM "$cl_pid" 2>/dev/null; sleep 5; kill -KILL "$cl_pid" 2>/dev/null
-            break
-          fi
-        done ) &
-      wd_pid=$!
-    fi
+    # Watchdog: corre SIEMPRE en paralelo y mata el claude por dos motivos (escribe la razón en el
+    # flag): (1) TIMEOUT — supera $TIMEOUT s (un cuelgue no debe quedarse eterno reteniendo el lock);
+    # (2) VERDE — solo en fix de CI: apareció un pipeline más nuevo en verde, el rojo ya lo resolvió
+    # otro commit (no arreglar lo ya arreglado).
+    deadline=$(( $(date +%s) + TIMEOUT ))
+    ( while kill -0 "$cl_pid" 2>/dev/null; do
+        sleep "$CI_ABORT_INTERVALO"
+        if [ "$(date +%s)" -ge "$deadline" ]; then
+          log "sesión supera ${TIMEOUT}s sin terminar -> la corto (posible cuelgue)"
+          printf timeout > "$abort_flag"
+          kill -TERM "$cl_pid" 2>/dev/null; sleep 5; kill -KILL "$cl_pid" 2>/dev/null; break
+        fi
+        if [ -n "$ci_num" ] && python3 "$CI_WATCH" --verde-despues "$ci_num" >/dev/null 2>&1; then
+          log "CI #$ci_num: pipeline VERDE más nuevo -> aborto el fix (ya resuelto por otro commit)"
+          printf verde > "$abort_flag"
+          kill -TERM "$cl_pid" 2>/dev/null; sleep 5; kill -KILL "$cl_pid" 2>/dev/null; break
+        fi
+      done ) &
+    wd_pid=$!
     wait "$cl_pid" 2>/dev/null
-    [ -n "$wd_pid" ] && kill "$wd_pid" 2>/dev/null
+    kill "$wd_pid" 2>/dev/null
 
-    # ¿Commiteó/pusheó? El HEAD del worktree distinto de la base = fix promovido (gana al aborto: si
-    # llegó a commitear, el fix es real). Si no commiteó pero el watchdog abortó -> `abortado`.
+    # ¿Commiteó/pusheó? El HEAD del worktree distinto de la base = fix promovido (gana al watchdog: si
+    # llegó a commitear, el fix es real). Si no, la razón del flag decide el estado.
     head="$(git -C "$wt" rev-parse HEAD 2>/dev/null)"
+    razon="$(cat "$abort_flag" 2>/dev/null)"
     if [ -n "$head" ] && [ "$head" != "$base" ]; then
       commit_sha="$head"; commit_msg="$(git -C "$wt" log -1 --format=%s 2>/dev/null)"; estado=resuelto
-    elif [ -f "$abort_flag" ]; then
-      estado=abortado   # un pipeline más nuevo salió verde mientras arreglaba: el rojo ya no existía
+    elif [ "$razon" = verde ]; then
+      estado=abortado      # un pipeline más nuevo salió verde mientras arreglaba: el rojo ya no existía
+    elif [ "$razon" = timeout ]; then
+      estado=interrumpido  # la sesión se colgó y se cortó por tiempo
     else
-      estado=escalado   # terminó sin commitear: o escaló, o no había nada que arreglar
+      estado=escalado      # terminó sin commitear: o escaló, o no había nada que arreglar
     fi
     rm -f "$abort_flag"
     git -C "$REPO" worktree remove --force "$wt" >/dev/null 2>&1 || true
@@ -121,7 +129,10 @@ diagnóstico claro y el plan para un humano."
   # Meta final: estado + commit + coste/tokens (sesion.py parsea el `result` del jsonl). Si el
   # jsonl trae is_error, sesion.py lo marca y la UI lo pinta.
   nota=""
-  [ "$estado" = abortado ] && nota="Abortado: un pipeline más nuevo salió verde; el rojo ya estaba resuelto."
+  case "$estado" in
+    abortado) nota="Abortado: un pipeline más nuevo salió verde; el rojo ya estaba resuelto." ;;
+    interrumpido) nota="Interrumpido: la sesión superó el límite de tiempo (${TIMEOUT}s) y se cortó." ;;
+  esac
   python3 "$KEEPER_DIR/sesion.py" "$meta" "$jsonl" estado="$estado" \
     fin="$(date -u +%Y-%m-%dT%H:%M:%SZ)" commit_sha="$commit_sha" commit_msg="$commit_msg" \
     ${nota:+"nota=$nota"} 2>/dev/null || true
@@ -143,12 +154,30 @@ ci_intentos_recientes() {
   fi
 }
 
+# Reconcilia sesiones HUÉRFANAS: una meta en `corriendo` al ARRANCAR significa que un keeper previo
+# se cayó/reinició (p. ej. un deploy recrea el contenedor) y mató el claude sin cerrar la sesión.
+# Como acabamos de arrancar (no hay sesión viva), cualquier `corriendo` es un fantasma: lo marcamos
+# `interrumpido` para que la UI no lo muestre eternamente "corriendo".
+reconciliar_huerfanas() {
+  for meta in "$DATA"/*.meta.json; do
+    [ -f "$meta" ] || continue
+    est="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('estado',''))" "$meta" 2>/dev/null)"
+    if [ "$est" = corriendo ]; then
+      log "sesión huérfana $(basename "$meta" .meta.json): marco interrumpida (el keeper se reinició durante la sesión)"
+      python3 "$KEEPER_DIR/sesion.py" "$meta" - estado=interrumpido \
+        fin="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        nota="Interrumpido: el keeper se reinició (p. ej. un deploy) mientras la sesión corría." 2>/dev/null || true
+    fi
+  done
+}
+
 # Credencial de git via la cuenta gh de /data/gh (idempotente, best-effort; igual que worker_dev).
 gh auth setup-git >/dev/null 2>&1 || log "aviso: gh auth setup-git falló (¿gh sin login en /data/gh?); el push podría fallar"
 
 log "arranca (repo=$REPO modelo=$MODELO intervalo=${INTERVALO}s CI=$CI)"
 
 mkdir -p "$DATA" 2>/dev/null || true
+reconciliar_huerfanas
 
 while :; do
   : > "$LATIDO" 2>/dev/null || true   # latido para el healthcheck

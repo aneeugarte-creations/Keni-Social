@@ -27,7 +27,7 @@
   .hora { color: var(--apag); font-size: 11.5px; margin-left: auto; }
   .ses .meta2 { display: flex; gap: 10px; align-items: center; margin-top: 5px; color: var(--apag); font-size: 12px; flex-wrap: wrap; }
   .estado { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
-  .e-corriendo { color: var(--azul); } .e-resuelto { color: var(--verde); } .e-escalado { color: var(--ambar); } .e-error { color: var(--rojo); } .e-bloqueado-limite { color: var(--rojo); } .e-abortado { color: var(--apag); }
+  .e-corriendo { color: var(--azul); } .e-resuelto { color: var(--verde); } .e-escalado { color: var(--ambar); } .e-error { color: var(--rojo); } .e-bloqueado-limite { color: var(--rojo); } .e-abortado { color: var(--apag); } .e-interrumpido { color: var(--apag); }
   .banner { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 16px; padding: 11px 14px; border-radius: 8px; background: rgba(255,92,92,.1); border: 1px solid rgba(255,92,92,.3); color: var(--txt); font-size: 13px; }
   .banner b { color: var(--rojo); } .banner .sub { color: var(--apag); display: block; margin-top: 3px; font-size: 12px; }
   .banner.info { background: rgba(79,134,255,.08); border-color: rgba(79,134,255,.3); } .banner.info b { color: var(--azul); }
@@ -85,7 +85,7 @@ const esc = s => (s ?? "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"
 const fmtHora = iso => { if (!iso) return ""; try { return new Date(iso).toLocaleString("es-ES", {day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}); } catch { return iso; } };
 const fmtCoste = m => m.coste_usd != null ? "$" + Number(m.coste_usd).toFixed(4) : "—";
 const fmtTok = m => (m.tokens_in != null || m.tokens_out != null) ? `${(m.tokens_in||0)+(m.tokens_out||0)} tok` : "";
-const ESTADO_LBL = { "bloqueado-limite": "límite", "abortado": "abortado" };
+const ESTADO_LBL = { "bloqueado-limite": "límite", "abortado": "abortado", "interrumpido": "interrumpido" };
 const lblEstado = e => ESTADO_LBL[e] || e || "";
 
 function pintarVig(v) {
@@ -131,7 +131,9 @@ function pintarDetalle(d) {
       ${m.bloqueo_reset_iso ? `<span class="sub">Se restablece el ${fmtHora(m.bloqueo_reset_iso)}.</span>` : ""}
       ${m.bloqueo_mensaje ? `<span class="sub">${esc(m.bloqueo_mensaje)}</span>` : ""}</div></div>`
     : m.estado === "abortado" ? `
-    <div class="banner info">✋<div><b>Fix abortado.</b> ${esc(m.nota || "Apareció un pipeline más nuevo en verde mientras arreglaba: el rojo ya estaba resuelto.")}</div></div>` : "";
+    <div class="banner info">✋<div><b>Fix abortado.</b> ${esc(m.nota || "Apareció un pipeline más nuevo en verde mientras arreglaba: el rojo ya estaba resuelto.")}</div></div>`
+    : m.estado === "interrumpido" ? `
+    <div class="banner info">⚠️<div><b>Sesión interrumpida.</b> ${esc(m.nota || "La sesión se cortó antes de terminar (reinicio del keeper o límite de tiempo).")}</div></div>` : "";
   el.innerHTML = `
     <div class="cab"><h2>${esc(m.trigger||"incidente")}</h2>
       <span class="estado e-${m.estado} ${corr?'blink':''}">${esc(lblEstado(m.estado))}</span>
