@@ -1345,7 +1345,8 @@ services:
       # worker/daemons (`/data/claude-cfg`). guardian-ui hace el login/logout sobre este mismo dir.
       CLAUDE_CONFIG_DIR: /claude-cfg
     volumes:
-      - keni-data:/data                # credencial gh (/data/gh) + rastro del keeper (/data/keeper)
+      - keni-data:/data                # credencial gh (/data/gh)
+      - keeper-trace:/data/keeper      # rastro de sesiones (volumen propio; guardian-ui lo BORRA desde el panel)
       - guardian-claude-cfg:/claude-cfg  # cuenta de Claude del guardián (rw; la fija guardian-ui)
       - keni-repo:/repo                # clon git (worktrees del fix)
       - ./incident-keeper:/keeper:ro   # ROL.md + keeper.sh + ci_watch.py (bind-mount; sin imagen propia)
@@ -1378,8 +1379,9 @@ services:
 
   # UI INDEPENDIENTE de observación del incident-keeper. Sirve en su subdominio guardian.kenitech.io
   # las detecciones, el razonamiento en streaming, el coste y los commits del keeper. CLAVE: NO depende
-  # del back/db/front — sólo de Traefik (ingress) y del rastro que el keeper deja en /data/keeper
-  # (montado read-only). Así, cuando la app está caída y el keeper la arregla, esta UI SIGUE arriba.
+  # del back/db/front — sólo de Traefik (ingress) y del rastro que el keeper deja en `keeper-trace`
+  # (volumen DEDICADO, montado en /data/keeper; rw para poder BORRAR el historial desde el panel, sin
+  # ver el resto de keni-data). Así, cuando la app está caída y el keeper la arregla, esta UI SIGUE arriba.
   # Reusa la imagen del worker (trae starlette+uvicorn + el CLI `claude`) con app.py bind-montado;
   # sin build propio. Además GESTIONA la cuenta de Claude del guardián (login/logout sobre
   # `guardian-claude-cfg`, el mismo dir que usa el keeper), tras el basicauth propio de Traefik.
@@ -1394,7 +1396,7 @@ services:
       # el keeper lee. Independiente de la del worker/daemons (`/data/claude-cfg`).
       CLAUDE_CONFIG_DIR: /claude-cfg
     volumes:
-      - keni-data:/data:ro              # SOLO lectura del rastro del keeper
+      - keeper-trace:/data/keeper       # rw: lee el rastro del keeper Y BORRA el historial desde el panel
       - guardian-claude-cfg:/claude-cfg  # rw: el panel fija aquí la cuenta de Claude del guardián
       - ./guardian-ui:/guardian-ui:ro   # app.py + index.html (bind-mount; sin imagen propia)
       - keeper-secrets:/secrets         # rw: el panel escribe/ROTA el PAT de Woodpecker aqui
@@ -1578,6 +1580,10 @@ volumes:
   # PAT de Woodpecker para el keeper: lo escribe guardian-ui (rw), lo lee incident-keeper (ro).
   # Volumen propio y aislado (no toca keni-data con las credenciales de claude/gh).
   keeper-secrets:
+  # Rastro de sesiones del keeper (meta + jsonl + heartbeat) montado en /data/keeper. Volumen PROPIO
+  # (no un subdir de keni-data) para que guardian-ui pueda montarlo rw y BORRAR el historial desde el
+  # panel SIN ver el resto de keni-data (media, secretos, claude-cfg del worker). Lo escribe el keeper.
+  keeper-trace:
   # Cuenta de Claude del GUARDIÁN (config/credenciales del CLI `claude`): la fija guardian-ui con
   # `claude auth login` y la lee el incident-keeper. INDEPENDIENTE de `/data/claude-cfg` (worker/
   # daemons): un límite de uso o un logout del guardián no afecta a la máquina de contenido.

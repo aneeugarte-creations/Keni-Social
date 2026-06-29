@@ -190,6 +190,42 @@ async def sesion(request: Request) -> JSONResponse:
     return JSONResponse({"meta": meta, "transcript": _transcript(DATA / f"{sid}.jsonl")})
 
 
+def _borrar_sesion(sid: str) -> bool:
+    """Borra los ficheros (meta + jsonl) de una sesión. True si borró algo."""
+    ok = False
+    for f in (DATA / f"{sid}.meta.json", DATA / f"{sid}.jsonl"):
+        try:
+            f.unlink()
+            ok = True
+        except OSError:
+            pass
+    return ok
+
+
+async def historial_borrar(_request: Request) -> JSONResponse:
+    """Borra TODO el historial de detecciones, salvo una sesión `corriendo` (activa)."""
+    borradas = 0
+    if DATA.is_dir():
+        for meta in list(DATA.glob("*.meta.json")):
+            m = _leer_json(meta)
+            if isinstance(m, dict) and m.get("estado") == "corriendo":
+                continue  # no borrar una sesión en marcha
+            if _borrar_sesion(meta.name[: -len(".meta.json")]):
+                borradas += 1
+    return JSONResponse({"borradas": borradas})
+
+
+async def sesion_borrar(request: Request) -> JSONResponse:
+    """Borra UNA detección por id (no si está `corriendo`)."""
+    sid = request.path_params["id"]
+    if not sid.isdigit():  # los id son epochs; evita traversal
+        return JSONResponse({"error": "id inválido"}, status_code=400)
+    m = _leer_json(DATA / f"{sid}.meta.json")
+    if isinstance(m, dict) and m.get("estado") == "corriendo":
+        return JSONResponse({"error": "la sesión está en marcha"}, status_code=409)
+    return JSONResponse({"borrada": _borrar_sesion(sid)})
+
+
 def _token_puesto() -> bool:
     try:
         return bool(TOKEN.read_text(encoding="utf-8").strip())
@@ -280,6 +316,8 @@ app = Starlette(
     routes=[
         Route("/", indice),
         Route("/api/sesiones", sesiones),
+        Route("/api/historial/borrar", historial_borrar, methods=["POST"]),
+        Route("/api/sesiones/{id}/borrar", sesion_borrar, methods=["POST"]),
         Route("/api/sesiones/{id}", sesion),
         Route("/api/token", token, methods=["GET", "POST"]),
         # Cuenta de Claude del guardián (rutas específicas antes que la genérica del login).

@@ -92,13 +92,14 @@ RUN chmod +x /usr/local/bin/keni-worker-entrypoint.sh
 # y un HOME propio (config/cache de `claude` y npm). Mismo aviso de volumen EXISTENTE que el
 # back: re-chown una sola vez en el host (ver deploy/README.md).
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin keni \
- && mkdir -p /data /claude-cfg \
+ && mkdir -p /data /data/keeper /claude-cfg \
  && chown -R keni:keni /app /data /claude-cfg
 USER keni
 
-# /claude-cfg se CREA con dueño keni (no se declara VOLUME para no generar volúmenes anónimos en
-# worker/daemons, que no lo usan): cuando guardian-ui/incident-keeper montan ahí el volumen named
-# `guardian-claude-cfg`, Docker hereda el uid de este dir, así keni puede escribir la cuenta.
+# /claude-cfg y /data/keeper se CREAN con dueño keni (sin declarar VOLUME, para no generar volúmenes
+# anónimos en worker/daemons que no los usan): cuando guardian-ui/incident-keeper montan ahí sus
+# volúmenes named (`guardian-claude-cfg`, `keeper-trace`), Docker hereda el uid de estos dirs, así
+# keni puede escribir la cuenta y el rastro.
 VOLUME ["/data"]
 
 # El worker NO publica puertos ni sirve HTTP: solo consume la cola. Corre el bucle hasta

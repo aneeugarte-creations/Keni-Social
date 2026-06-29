@@ -1,4 +1,5 @@
 """Tests de guardian-ui app.py: el respaldo de transcript cuando no hay stream_event."""
+import asyncio
 import json
 import sys
 from pathlib import Path
@@ -11,6 +12,20 @@ def _jsonl(tmp_path, lineas):
     ruta = tmp_path / "s.jsonl"
     ruta.write_text("\n".join(json.dumps(o) for o in lineas), encoding="utf-8")
     return ruta
+
+
+def _sesion(dir_, sid, estado):
+    (dir_ / f"{sid}.meta.json").write_text(json.dumps({"id": sid, "estado": estado}), encoding="utf-8")
+    (dir_ / f"{sid}.jsonl").write_text("{}", encoding="utf-8")
+
+
+class _Req:  # request mínimo para los handlers (solo usan path_params)
+    def __init__(self, **pp):
+        self.path_params = pp
+
+
+def _body(resp):
+    return json.loads(resp.body)
 
 
 def test_transcript_respaldo_cuando_no_hay_stream(tmp_path):
@@ -85,6 +100,38 @@ def test_resumen_tool():
     assert app._resumen_tool("Read", {"file_path": "/repo/x.py"}) == "/repo/x.py"
     assert app._resumen_tool("Grep", {"pattern": "FAILED"}) == "FAILED"
     assert app._resumen_tool("Bash", {}) == ""
+
+
+def test_borrar_historial_respeta_corriendo(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "DATA", tmp_path)
+    _sesion(tmp_path, "100", "escalado")
+    _sesion(tmp_path, "200", "corriendo")
+    out = _body(asyncio.run(app.historial_borrar(None)))
+    assert out["borradas"] == 1
+    assert not (tmp_path / "100.meta.json").exists()
+    assert (tmp_path / "200.meta.json").exists()  # la sesión activa sobrevive
+
+
+def test_borrar_sesion_una(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "DATA", tmp_path)
+    _sesion(tmp_path, "100", "escalado")
+    out = _body(asyncio.run(app.sesion_borrar(_Req(id="100"))))
+    assert out["borrada"] is True
+    assert not (tmp_path / "100.meta.json").exists()
+    assert not (tmp_path / "100.jsonl").exists()
+
+
+def test_borrar_sesion_corriendo_409(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "DATA", tmp_path)
+    _sesion(tmp_path, "200", "corriendo")
+    resp = asyncio.run(app.sesion_borrar(_Req(id="200")))
+    assert resp.status_code == 409
+    assert (tmp_path / "200.meta.json").exists()
+
+
+def test_borrar_sesion_id_invalido(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "DATA", tmp_path)
+    assert asyncio.run(app.sesion_borrar(_Req(id="abc"))).status_code == 400
 
 
 def test_texto_evento():

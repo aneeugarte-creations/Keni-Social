@@ -25,6 +25,8 @@
   .ses .fila { display: flex; align-items: center; gap: 8px; }
   .trig { font-weight: 600; font-size: 13px; }
   .hora { color: var(--apag); font-size: 11.5px; margin-left: auto; }
+  .ses .borrar { color: var(--apag); font-size: 16px; line-height: 1; padding: 0 2px; cursor: pointer; opacity: 0; transition: opacity .12s; }
+  .ses:hover .borrar { opacity: .6; } .ses .borrar:hover { opacity: 1; color: var(--rojo); }
   .ses .meta2 { display: flex; gap: 10px; align-items: center; margin-top: 5px; color: var(--apag); font-size: 12px; flex-wrap: wrap; }
   .estado { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
   .e-corriendo { color: var(--azul); } .e-resuelto { color: var(--verde); } .e-escalado { color: var(--ambar); } .e-error { color: var(--rojo); } .e-bloqueado-limite { color: var(--rojo); } .e-abortado { color: var(--apag); } .e-interrumpido { color: var(--apag); }
@@ -71,6 +73,7 @@
   <div class="vig" id="vig">…</div>
   <button id="bcuenta" class="pill off" style="cursor:pointer;border:none;font:inherit;margin-left:14px" title="Cuenta de Claude del guardián (estado / cambiar)">cuenta</button>
   <button id="btok" class="pill off" style="cursor:pointer;border:none;font:inherit;margin-left:8px" title="Token de Woodpecker (poner / rotar)">token</button>
+  <button id="blimpiar" class="pill off" style="cursor:pointer;border:none;font:inherit;margin-left:8px" title="Borrar todo el historial de detecciones">🗑 limpiar</button>
 </header>
 <main>
   <div id="lista"></div>
@@ -87,6 +90,10 @@ const fmtCoste = m => m.coste_usd != null ? "$" + Number(m.coste_usd).toFixed(4)
 const fmtTok = m => (m.tokens_in != null || m.tokens_out != null) ? `${(m.tokens_in||0)+(m.tokens_out||0)} tok` : "";
 const ESTADO_LBL = { "bloqueado-limite": "límite", "abortado": "abortado", "interrumpido": "interrumpido" };
 const lblEstado = e => ESTADO_LBL[e] || e || "";
+const CI_BASE = "https://ci-social.kenitech.io";
+const CIPIPE = n => `${CI_BASE}/repos/1/pipeline/${n}`;
+// "CI #42" -> el #42 enlazado a su pipeline; "incidente prod" (sin #N) -> texto plano.
+const trigHTML = t => { const m = /^(.*?)#(\d+)(.*)$/.exec(t || ""); return m ? `${esc(m[1])}#<a href="${CIPIPE(m[2])}" target="_blank" rel="noopener">${esc(m[2])}</a>${esc(m[3])}` : esc(t || "incidente"); };
 
 function pintarVig(v) {
   const el = document.getElementById("vig");
@@ -96,7 +103,7 @@ function pintarVig(v) {
   let pipe = "";
   if (v.ultimo_pipeline) {
     const p = v.ultimo_pipeline, rojo = p.status==="failure"||p.status==="error";
-    pipe = `<span>último pipeline <a href="https://ci-social.kenitech.io" target="_blank">#${p.number}</a> <b style="color:${rojo?'var(--rojo)':'var(--verde)'}">${esc(p.status)}</b></span>`;
+    pipe = `<span>último pipeline <a href="${CIPIPE(p.number)}" target="_blank" rel="noopener">#${p.number}</a> <b style="color:${rojo?'var(--rojo)':'var(--verde)'}">${esc(p.status)}</b></span>`;
   }
   el.innerHTML = ci + pipe + (v.ultimo_chequeo ? `<span>chequeo ${fmtHora(v.ultimo_chequeo)}</span>` : "");
 }
@@ -109,7 +116,8 @@ function pintarLista(ses) {
     return `<div class="ses ${m.id===sel?'sel':''}" data-id="${m.id}">
       <div class="fila"><span class="trig">${esc(m.trigger||"incidente")}</span>
         <span class="estado e-${m.estado} ${corr?'blink':''}">${esc(lblEstado(m.estado))}</span>
-        <span class="hora">${fmtHora(m.inicio)}</span></div>
+        <span class="hora">${fmtHora(m.inicio)}</span>
+        ${corr ? "" : `<span class="borrar" data-del="${m.id}" title="Borrar esta detección">×</span>`}</div>
       <div class="meta2">
         <span class="coste">${fmtCoste(m)}</span><span>${fmtTok(m)}</span>
         ${m.commit_sha ? `<a href="${REPO}${m.commit_sha}" target="_blank" title="${esc(m.commit_msg)}">${m.commit_sha.slice(0,7)} ✓</a>` : ""}
@@ -117,7 +125,27 @@ function pintarLista(ses) {
       </div></div>`;
   }).join("");
   el.querySelectorAll(".ses[data-id]").forEach(d => d.onclick = () => seleccionar(d.dataset.id));
+  el.querySelectorAll(".borrar[data-del]").forEach(b => b.onclick = e => { e.stopPropagation(); borrarSesion(b.dataset.del); });
 }
+
+function olvidarDetalle(id) {
+  if (sel === id || id == null) { sel = null; if (timerDet) { clearInterval(timerDet); timerDet = null; }
+    document.getElementById("detalle").innerHTML = `<div class="vacio">Selecciona una detección para ver el razonamiento.</div>`; }
+}
+async function borrarSesion(id) {
+  if (!confirm("¿Borrar esta detección?")) return;
+  try { await fetch(`/api/sesiones/${id}/borrar`, {method:"POST"}); olvidarDetalle(id); refrescarLista(); }
+  catch { alert("Error de red al borrar."); }
+}
+async function limpiarHistorial() {
+  if (!confirm("¿Borrar TODO el historial de detecciones? No se puede deshacer.")) return;
+  try {
+    const r = await fetch("/api/historial/borrar", {method:"POST"});
+    if (r.ok) { olvidarDetalle(null); refrescarLista(); }
+    else { const e = await r.json().catch(()=>({})); alert("Error: " + (e.error || r.status)); }
+  } catch { alert("Error de red al borrar."); }
+}
+document.getElementById("blimpiar").onclick = limpiarHistorial;
 
 function pintarDetalle(d) {
   const el = document.getElementById("detalle"); const m = d.meta;
@@ -135,7 +163,7 @@ function pintarDetalle(d) {
     : m.estado === "interrumpido" ? `
     <div class="banner info">⚠️<div><b>Sesión interrumpida.</b> ${esc(m.nota || "La sesión se cortó antes de terminar (reinicio del keeper o límite de tiempo).")}</div></div>` : "";
   el.innerHTML = `
-    <div class="cab"><h2>${esc(m.trigger||"incidente")}</h2>
+    <div class="cab"><h2>${trigHTML(m.trigger)}</h2>
       <span class="estado e-${m.estado} ${corr?'blink':''}">${esc(lblEstado(m.estado))}</span>
       ${m.commit_sha ? `<a href="${REPO}${m.commit_sha}" target="_blank">${m.commit_sha.slice(0,7)} · ${esc(m.commit_msg)}</a>` : ""}</div>
     <div class="titulo">${esc(m.titulo||"")}</div>
