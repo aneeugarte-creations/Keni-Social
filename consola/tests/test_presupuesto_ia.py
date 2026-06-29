@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import pytest
 
-from keni_consola import ajustes, cola, generaciones, presupuesto_ia, repos
+from keni_consola import ajustes, cola, gate_diario, generaciones, presupuesto_ia, repos
 from keni_consola.dominio import jobspec
 from keni_consola.tiempo import ahora_iso
 
@@ -866,3 +866,126 @@ def test_fraccion_dia_utc_deriva_del_reloj_canonico(monkeypatch):
     assert presupuesto_ia._fraccion_dia_utc() == pytest.approx(0.5)
     monkeypatch.setattr(presupuesto_ia, "ahora_iso", lambda: "2026-06-21T00:00:00")
     assert presupuesto_ia._fraccion_dia_utc() == pytest.approx(0.0)
+
+
+# --------------------------------------------------------------------------- #
+# Gate DIARIO por % del limite SEMANAL de la cuenta (gate_diario)               #
+# --------------------------------------------------------------------------- #
+#
+# Reparte el limite semanal en 7 dias (umbral base ~14,3 pp/dia). Al alcanzar el umbral del dia,
+# pausa TODA la generacion; aceptar +10% sube el umbral del dia y reanuda. La fuente del % vive
+# tras UN accesor (`consumo_semanal_hoy_pct`); None => NO cortar (fallback seguro).
+
+_BASE = 100.0 / 7.0  # umbral base del dia (~14,3 pp del semanal)
+
+
+def test_gate_accesor_sin_snapshot_es_none(entorno):
+    """Sin snapshot de uso persistido, la fuente del % devuelve None (gate inerte: no corta)."""
+    assert gate_diario.consumo_semanal_hoy_pct() is None
+
+
+def test_gate_accesor_lee_delta_diario_del_snapshot(entorno):
+    """Cableado a `cuenta_uso`: consumo de hoy = semana_pct - semana_pct_inicio_dia."""
+    # Primer muestreo del dia: la base queda anclada al semana_pct actual -> consumo 0.
+    repos.guardar_uso_cuenta(conectada=True, semana_pct=40, sesion_5h_pct=10, sonnet_pct=35,
+                             dia_utc="2026-06-28")
+    assert gate_diario.consumo_semanal_hoy_pct() == pytest.approx(0.0)
+    # Mas tarde el MISMO dia UTC: semana_pct sube a 55 -> consumo de hoy = 15 pp.
+    repos.guardar_uso_cuenta(conectada=True, semana_pct=55, sesion_5h_pct=20, sonnet_pct=50,
+                             dia_utc="2026-06-28")
+    assert gate_diario.consumo_semanal_hoy_pct() == pytest.approx(15.0)
+    # Cuenta desconectada -> None (no corta).
+    repos.guardar_uso_cuenta(conectada=False, semana_pct=None, sesion_5h_pct=None, sonnet_pct=None,
+                             dia_utc="2026-06-28")
+    assert gate_diario.consumo_semanal_hoy_pct() is None
+
+
+def test_gate_umbral_base_y_escalones_de_10(entorno):
+    assert gate_diario.aceptados_hoy() == 0
+    assert gate_diario.umbral_vigente() == pytest.approx(_BASE)
+    gate_diario.aceptar_mas()
+    assert gate_diario.aceptados_hoy() == 1
+    assert gate_diario.umbral_vigente() == pytest.approx(_BASE + 10.0)
+    gate_diario.aceptar_mas()
+    assert gate_diario.umbral_vigente() == pytest.approx(_BASE + 20.0)
+
+
+def test_gate_reset_al_cambiar_de_dia_utc(entorno, monkeypatch):
+    monkeypatch.setattr(gate_diario, "ahora_iso", lambda: "2026-06-28T10:00:00")
+    gate_diario.aceptar_mas()
+    assert gate_diario.aceptados_hoy() == 1
+    # Dia UTC nuevo: el contador de ayer no cuenta -> umbral vuelve a la base.
+    monkeypatch.setattr(gate_diario, "ahora_iso", lambda: "2026-06-29T00:30:00")
+    assert gate_diario.aceptados_hoy() == 0
+    assert gate_diario.umbral_vigente() == pytest.approx(_BASE)
+
+
+def test_gate_escalon_pausa_y_reanuda_con_aceptar(entorno, monkeypatch):
+    """El escalon completo: alcanzar el umbral pausa; aceptar +10% reanuda hasta el nuevo umbral."""
+    # 13% < base ~14,3 -> no pausa.
+    monkeypatch.setattr(gate_diario, "consumo_semanal_hoy_pct", lambda: 13.0)
+    assert gate_diario.pausado_por_pct() is False
+    # 15% >= 14,3 -> pausa.
+    monkeypatch.setattr(gate_diario, "consumo_semanal_hoy_pct", lambda: 15.0)
+    assert gate_diario.pausado_por_pct() is True
+    # Aceptar +10% sube el umbral a ~24,3: 15% ya no pausa.
+    gate_diario.aceptar_mas()
+    assert gate_diario.pausado_por_pct() is False
+    # ...hasta cruzar el NUEVO umbral.
+    monkeypatch.setattr(gate_diario, "consumo_semanal_hoy_pct", lambda: 25.0)
+    assert gate_diario.pausado_por_pct() is True
+
+
+def test_gate_fuente_none_no_corta(entorno, monkeypatch):
+    monkeypatch.setattr(gate_diario, "consumo_semanal_hoy_pct", lambda: None)
+    assert gate_diario.pausado_por_pct() is False
+    est = gate_diario.estado()
+    assert est["consumo_hoy_pct"] is None and est["pausado_por_pct"] is False
+
+
+def test_gate_estado_forma(entorno, monkeypatch):
+    monkeypatch.setattr(gate_diario, "consumo_semanal_hoy_pct", lambda: 9.5)
+    est = gate_diario.estado()
+    assert set(est) == {
+        "consumo_hoy_pct", "umbral_pct", "aceptados_hoy", "pausado_por_pct",
+        "base_umbral_pct", "paso_pct", "dia",
+    }
+    assert est["consumo_hoy_pct"] == pytest.approx(9.5)
+    assert est["umbral_pct"] == pytest.approx(round(_BASE, 1))
+    assert est["paso_pct"] == 10.0
+
+
+def test_nivel_pausado_por_gate_diario_distinto_del_kill_switch(entorno, monkeypatch):
+    """Al alcanzar el umbral, `nivel()` es PAUSADO; `estado()` lo distingue del kill switch."""
+    monkeypatch.setattr(gate_diario, "consumo_semanal_hoy_pct", lambda: 20.0)  # > base ~14,3
+    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_PAUSADO
+    est = presupuesto_ia.estado()
+    assert est["pausada"] is False  # NO es el kill switch manual
+    assert est["gate_diario"]["pausado_por_pct"] is True
+    # Aceptar +10% (umbral ~24,3) reanuda: 20% ya no pausa.
+    gate_diario.aceptar_mas()
+    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_NORMAL
+
+
+def test_gate_diario_bloqueo_corta_auto_y_manual(entorno, monkeypatch):
+    """El corte por % diario es PAUSADO: corta el fondo Y lo manual (mismo trato del kill switch)."""
+    monkeypatch.setattr(gate_diario, "consumo_semanal_hoy_pct", lambda: 50.0)
+    assert presupuesto_ia.bloqueo_inline("", es_fondo=True) == presupuesto_ia.NIVEL_PAUSADO
+    assert presupuesto_ia.bloqueo_inline("", es_fondo=False) == presupuesto_ia.NIVEL_PAUSADO
+    # Y rechaza el encolado tanto del pipeline como de lo manual.
+    with pytest.raises(generaciones.GeneracionPausadaError):
+        _encolar(jobspec.PRIORIDAD_MANUAL)
+    with pytest.raises(generaciones.GeneracionPausadaError):
+        _encolar(jobspec.PRIORIDAD_PIPELINE)
+
+
+def test_gate_diario_corta_tambien_por_marca(entorno, monkeypatch):
+    """La cuenta de Claude es UNA (global): el corte por % diario corta el trabajo de cualquier marca."""
+    monkeypatch.setattr(gate_diario, "consumo_semanal_hoy_pct", lambda: 50.0)
+    assert presupuesto_ia.nivel("unotv") == presupuesto_ia.NIVEL_PAUSADO
+
+
+def test_gate_diario_fuente_none_no_afecta_a_nivel(entorno):
+    """Sin cablear la fuente (None por defecto), el gate diario no cambia el nivel (NORMAL)."""
+    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_NORMAL
+    assert presupuesto_ia.estado()["gate_diario"]["pausado_por_pct"] is False

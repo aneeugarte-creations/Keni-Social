@@ -198,6 +198,28 @@ export interface PresupuestoProcesoIA {
   nivel: string;
 }
 
+/** Gate DIARIO por % del límite SEMANAL de la cuenta de Claude (GLOBAL, igual en toda marca: la
+ *  cuenta es una). Pausa TODA la generación (auto y manual) cuando el consumo del día alcanza el
+ *  umbral vigente; aceptar +10% sube el umbral del día y reanuda. Es la razón de un `nivel ==
+ *  "pausado"` cuando `pausada` (kill switch) es false. */
+export interface GateDiarioIA {
+  /** Puntos porcentuales del límite semanal consumidos HOY (UTC). null mientras la fuente del %
+   *  no exista (rollout): con null el gate está inerte y `pausado_por_pct` es false. */
+  consumo_hoy_pct: number | null;
+  /** Umbral vigente del día (puntos porcentuales del semanal): base ~14,3 + 10 por cada aceptar. */
+  umbral_pct: number;
+  /** Cuántos "+10%" se han aceptado HOY (UTC). */
+  aceptados_hoy: number;
+  /** True si el consumo del día alcanza el umbral => generación pausada por consumo del día. */
+  pausado_por_pct: boolean;
+  /** Umbral base del día (un séptimo del semanal, ~14,3). */
+  base_umbral_pct: number;
+  /** Cuánto sube el umbral cada aceptar (10). */
+  paso_pct: number;
+  /** Día UTC del estado (YYYY-MM-DD). */
+  dia: string;
+}
+
 /** Economía de tokens (`presupuesto_ia.estado()`): presupuesto diario, gasto y nivel. */
 export interface PresupuestoIA {
   /** Ámbito del snapshot: "" = GLOBAL (todas las marcas); un id = controles PROPIOS de esa marca. */
@@ -228,6 +250,9 @@ export interface PresupuestoIA {
   /** Desglose por motor (investigación/producción): gasto in/out + tope propio. Opcional para
    *  compatibilidad con backs anteriores (durante el rollout puede no venir). */
   por_proceso?: Partial<Record<Proceso, PresupuestoProcesoIA>>;
+  /** Gate diario por % del límite semanal (GLOBAL). Opcional para compatibilidad con backs
+   *  anteriores (durante el rollout puede no venir). */
+  gate_diario?: GateDiarioIA;
 }
 
 /** Conteo del pool COMPARTIDO atribuible a un proceso (jobs en curso de ese loop). */

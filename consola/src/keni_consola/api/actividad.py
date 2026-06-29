@@ -43,6 +43,7 @@ from .. import (
     agentes,
     ajustes_catalogo,
     config,
+    gate_diario,
     generaciones,
     marcas,
     permisos,
@@ -547,6 +548,20 @@ def _cola_reencolar(gen_id: str) -> tuple[int, dict]:
     return 200, {"reencolado": True, "gen_id": gen_id}
 
 
+async def gate_diario_aceptar(request: Request) -> Response:
+    """POST /api/actividad/cola/gate-diario/aceptar: sube el umbral del dia +10%. Admin.
+
+    El gate DIARIO pausa TODA la generacion cuando el consumo del dia alcanza el umbral vigente
+    (un % del limite SEMANAL de la cuenta). Aceptar +10% sube el umbral del dia y reanuda; al
+    cruzar el nuevo umbral vuelve a pausar. Devuelve el estado del gate ya actualizado (la misma
+    forma que `presupuesto.gate_diario` de `/api/actividad/cola`). El estado se LEE de ahi; este
+    endpoint solo MUTA (sube el umbral), por eso es admin.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    return JSONResponse(await run_in_threadpool(gate_diario.aceptar_mas))
+
+
 RUTAS = [
     Route("/api/actividad/agregados", agregados, methods=["GET"]),
     Route("/api/actividad/economia", economia, methods=["GET"]),
@@ -555,5 +570,6 @@ RUTAS = [
     Route("/api/actividad/cola/purgar", cola_purgar, methods=["POST"]),
     Route("/api/actividad/cola/priorizar", cola_priorizar, methods=["POST"]),
     Route("/api/actividad/cola/reencolar", cola_reencolar, methods=["POST"]),
+    Route("/api/actividad/cola/gate-diario/aceptar", gate_diario_aceptar, methods=["POST"]),
     Route("/api/actividad/cola", cola, methods=["GET"]),
 ]

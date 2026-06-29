@@ -6,6 +6,7 @@ import type {
   ColaMonitor,
   ColaSerie,
   EconomiaPorProceso,
+  GateDiarioIA,
   ProduccionDia,
   RespuestaPriorizarCola,
   RespuestaPurgarCola,
@@ -47,6 +48,10 @@ export const apiActividad = {
       metodo: "POST",
       json: { gen_id: genId },
     }),
+  // Gate diario por % del límite semanal: sube el umbral del día +10% y reanuda la generación.
+  // Devuelve el estado del gate ya actualizado (la misma forma que `presupuesto.gate_diario`).
+  gateDiarioAceptar: () =>
+    peticion<GateDiarioIA>("/actividad/cola/gate-diario/aceptar", { metodo: "POST" }),
   // Producción del día (líneas del plan editorial) para el Monitor.
   produccionDia: (marca: string, signal?: AbortSignal) =>
     peticion<ProduccionDia>(`/produccion/dia${query({ marca })}`, { signal }),

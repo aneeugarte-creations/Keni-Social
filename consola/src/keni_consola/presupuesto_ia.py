@@ -39,7 +39,7 @@ import threading
 import time
 from typing import Any
 
-from . import config
+from . import config, gate_diario
 from .tiempo import ahora_iso
 
 _log = logging.getLogger("keni_consola.presupuesto_ia")
@@ -283,6 +283,11 @@ def _nivel_global(marca: str = "") -> str:
     """
     if config.generacion_pausada() or (marca and config.generacion_pausada_marca(marca)):
         return NIVEL_PAUSADO
+    # Gate DIARIO por % del limite SEMANAL de la cuenta: corte TOTAL (auto y manual) cuando el
+    # consumo del dia alcanza el umbral vigente. Es GLOBAL (la cuenta es una): corta tambien el
+    # trabajo de cualquier marca. Inerte mientras su fuente del % no exista (devuelve False).
+    if gate_diario.pausado_por_pct():
+        return NIVEL_PAUSADO
     margen = 1 + config.presupuesto_margen_manual_pct() / 100.0
     nivel_vigente = NIVEL_NORMAL
     presupuesto_usd = config.presupuesto_usd_dia()
@@ -428,7 +433,12 @@ def estado(marca: str = "") -> dict[str, Any]:
       {marca, nivel, pausada, presupuesto_tokens_dia, presupuesto_usd_dia, margen_manual_pct,
        gastado: {tokens, tokens_in, tokens_out, coste_usd, generaciones}, restante_tokens,
        pct_usado, pct_usado_usd, proyeccion_usd_dia, pct_proyectado_usd, dia,
-       por_proceso: {investigacion: {...}, produccion: {...}}}
+       por_proceso: {investigacion: {...}, produccion: {...}},
+       gate_diario: {consumo_hoy_pct, umbral_pct, aceptados_hoy, pausado_por_pct, ...}}
+
+    `gate_diario` (GLOBAL, igual en toda marca: la cuenta de Claude es una) es el gate diario por %
+    del limite SEMANAL. `pausado_por_pct=True` ahi es la razon de un `nivel == pausado` cuando
+    `pausada` (kill switch) es False: el UI distingue asi el corte por % del kill switch manual.
 
     `proyeccion_usd_dia` es el coste estimado a fin de dia (coste actual / fraccion del dia UTC
     transcurrida); None al arranque del dia (fraccion <= 1%). `pct_proyectado_usd` es esa
@@ -485,6 +495,7 @@ def estado(marca: str = "") -> dict[str, Any]:
             PROCESO_INVESTIGACION: _bloque_proceso(PROCESO_INVESTIGACION, gasto_proc, marca),
             PROCESO_PRODUCCION: _bloque_proceso(PROCESO_PRODUCCION, gasto_proc, marca),
         },
+        "gate_diario": gate_diario.estado(),
     }
 
 

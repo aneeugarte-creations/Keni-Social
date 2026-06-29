@@ -241,6 +241,21 @@ def test_chequeo_pausa_por_kill_switch(entorno, sondas_sanas, monkeypatch):
     assert ch["siguiente_paso"]
 
 
+def test_chequeo_pausa_por_gate_diario(entorno, sondas_sanas, monkeypatch):
+    """Pausa por % del consumo del día (no kill switch): el chequeo `maquina:pausa` lo distingue."""
+    est = {
+        **_presupuesto_sano(),
+        "nivel": presupuesto_ia.NIVEL_PAUSADO,
+        "pausada": False,
+        "gate_diario": {"consumo_hoy_pct": 16.0, "umbral_pct": 14.3, "pausado_por_pct": True},
+    }
+    monkeypatch.setattr(presupuesto_ia, "estado", lambda: est)
+    ch = _chequeos(_cliente().get("/api/estado").json())["maquina:pausa"]
+    assert ch["estado"] == "aviso"
+    assert "consumo del día" in ch["detalle"]
+    assert "+10%" in ch["siguiente_paso"]
+
+
 def test_chequeo_daemons_atrasado_es_error(entorno, sondas_sanas, monkeypatch):
     sonda = {
         "daemons": [

@@ -284,6 +284,48 @@ def test_purgar_requiere_admin(entorno):
     assert repos.contar_jobs_activos() == 1
 
 
+# --------------------------------------------------------------------------- #
+# Gate DIARIO por % del limite semanal: estado expuesto + aceptar +10% (admin)  #
+# --------------------------------------------------------------------------- #
+
+
+def test_cola_expone_gate_diario(entorno):
+    """El snapshot trae el gate diario bajo `presupuesto.gate_diario`. Sin cablear la fuente del
+    %, `consumo_hoy_pct` es None y no pausa (rollout: gate inerte)."""
+    gate = _cli_token().get("/api/actividad/cola").json()["presupuesto"]["gate_diario"]
+    assert {"consumo_hoy_pct", "umbral_pct", "aceptados_hoy", "pausado_por_pct"} <= set(gate)
+    assert gate["consumo_hoy_pct"] is None
+    assert gate["pausado_por_pct"] is False
+    assert gate["aceptados_hoy"] == 0
+
+
+def test_gate_diario_aceptar_sube_umbral_admin(entorno):
+    r = _cli_como("admin").post("/api/actividad/cola/gate-diario/aceptar", headers=_ORIGIN)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["aceptados_hoy"] == 1
+    # Umbral base ~14,3 + 10 = 24,3 (redondeado a 1 decimal).
+    assert body["umbral_pct"] == round(100.0 / 7.0 + 10.0, 1)
+
+
+def test_gate_diario_aceptar_requiere_admin(entorno):
+    assert (
+        _cli_como("editor")
+        .post("/api/actividad/cola/gate-diario/aceptar", headers=_ORIGIN)
+        .status_code
+        == 403
+    )
+    assert (
+        _cli_token()
+        .post("/api/actividad/cola/gate-diario/aceptar", headers=_ORIGIN)
+        .status_code
+        == 403
+    )
+    # Ningun aceptar caló: el umbral sigue en la base.
+    gate = _cli_token().get("/api/actividad/cola").json()["presupuesto"]["gate_diario"]
+    assert gate["aceptados_hoy"] == 0
+
+
 def test_lanzar_urgente_encola_con_prioridad_breaking(entorno, monkeypatch):
     """`dominio.generar.lanzar(urgente=True)` en tipo de FONDO encola a PRIORIDAD_BREAKING.
 

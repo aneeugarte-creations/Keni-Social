@@ -143,12 +143,23 @@ def _chequeos_presupuesto() -> list[dict]:
         salida.append(_chequeo(
             "maquina:presupuesto", "Presupuesto de IA", "ok", detalle, admin=False,
         ))
+    gate = est.get("gate_diario") or {}
     if bool(est.get("pausada")):
         salida.append(_chequeo(
             "maquina:pausa", "Generación con IA", "aviso",
             "Generación PAUSADA por el kill switch: no se encola ni se ejecuta nada nuevo.",
             admin=False,
             siguiente_paso="Reactívala en el Monitor (ajuste «Generación con IA: pausada»).",
+        ))
+    elif bool(gate.get("pausado_por_pct")):
+        consumo = gate.get("consumo_hoy_pct")
+        umbral = gate.get("umbral_pct")
+        salida.append(_chequeo(
+            "maquina:pausa", "Generación con IA", "aviso",
+            f"Generación PAUSADA por consumo del día: {consumo}% del límite semanal hoy "
+            f"(umbral {umbral}%). No se encola ni se ejecuta nada nuevo.",
+            admin=False,
+            siguiente_paso="Un administrador puede aceptar +10% en el Monitor (Economía) para reanudar.",
         ))
     else:
         salida.append(_chequeo(

@@ -5,14 +5,17 @@
  * mismo render y el mismo contrato sin duplicarlo (Cómputo usa Kpi/TablaJobs; Economía, el panel
  * de presupuesto).
  */
-import { ArrowUp, Coins, type Cpu, RotateCcw, XCircle } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ArrowUp, Coins, type Cpu, PauseCircle, RotateCcw, XCircle } from "lucide-react";
 import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 import { ChipNivelPresupuesto } from "@/components/comunes/ChipEstado";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,12 +28,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { api, mensajeError } from "@/lib/api";
 import { haceSegundos } from "@/lib/fecha";
 import { costeUsd, numeroCompacto } from "@/lib/formato";
 import { cn } from "@/lib/utils";
 import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
 import { PROC_META } from "@/pages/monitor/comun";
-import type { ColaJob, PresupuestoIA, PresupuestoProcesoIA, Proceso } from "@/types";
+import type { ColaJob, GateDiarioIA, PresupuestoIA, PresupuestoProcesoIA, Proceso } from "@/types";
 
 /** Tarjeta KPI: icono, valor grande y subtítulo. `tono` colorea el valor ante alerta. Si se
  *  pasa `href`, la tarjeta ENTERA es un enlace con realce naranja al hover, en vez de un botón
@@ -378,6 +382,72 @@ function PanelMotor({
   );
 }
 
+/** Gate DIARIO por % del límite SEMANAL de la cuenta de Claude (GLOBAL). Cuando el consumo del día
+ *  alcanza el umbral vigente, TODA la generación (auto y manual) se pausa y aparece la pantalla
+ *  «Aceptar continuar (+10%)» (solo admin: sube el umbral del día y reanuda). A un no-admin solo le
+ *  aparece que la generación está pausada por el presupuesto del día. Muy claro pero no intrusivo:
+ *  sin pausa NO pinta nada (devuelve null); con datos del % sin pausa, una línea discreta de estado.
+ *  Hooks siempre al tope (el componente siempre se monta), por eso decide qué pintar al final. */
+function BloqueGateDiario({ gate, esAdmin }: { gate: GateDiarioIA | undefined; esAdmin: boolean }) {
+  const qc = useQueryClient();
+  const aceptar = useMutation({
+    mutationFn: () => api.gateDiarioAceptar(),
+    onSuccess: () => {
+      toast.success("Generación reanudada: +10% para hoy.");
+      void qc.invalidateQueries({ queryKey: ["actividad", "cola"] });
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  // Sin datos del % (la fuente aún no existe / rollout) no hay nada que decir.
+  if (!gate || gate.consumo_hoy_pct == null) return null;
+  const consumo = gate.consumo_hoy_pct;
+
+  // No pausado: una línea discreta de consumo del día (informativa, no intrusiva).
+  if (!gate.pausado_por_pct) {
+    return (
+      <p className="text-xs text-muted-foreground tabular-nums">
+        Consumo de hoy: {consumo.toFixed(1)}% del límite semanal · umbral del día{" "}
+        {gate.umbral_pct.toFixed(1)}%
+        {gate.aceptados_hoy > 0 && ` · +${gate.aceptados_hoy * gate.paso_pct}% aceptado`}
+      </p>
+    );
+  }
+
+  // Pausado por consumo del día: aviso prominente. Admin ve «Aceptar continuar (+10%)».
+  return (
+    <div className="space-y-3 rounded-lg border border-amber-500/50 bg-amber-50 p-4 dark:bg-amber-950/30">
+      <div className="flex items-start gap-2">
+        <PauseCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" aria-hidden="true" />
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+            Generación pausada por el consumo del día
+          </p>
+          <p className="text-xs text-amber-800 dark:text-amber-300/90 tabular-nums">
+            Hoy se ha consumido {consumo.toFixed(1)}% del límite semanal de la cuenta (umbral del
+            día {gate.umbral_pct.toFixed(1)}%). No se encola ni se ejecuta nada nuevo —ni automático
+            ni manual— hasta reanudar.
+          </p>
+        </div>
+      </div>
+      {esAdmin ? (
+        <Button
+          size="sm"
+          onClick={() => aceptar.mutate()}
+          disabled={aceptar.isPending}
+          className="bg-amber-600 hover:bg-amber-700"
+        >
+          Aceptar continuar (+10%)
+        </Button>
+      ) : (
+        <p className="text-xs text-amber-800 dark:text-amber-300/90">
+          Un administrador puede aceptar +10% para reanudar la generación de hoy.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** PRESUPUESTO + gasto de HOY + PARADA DE EMERGENCIA. Su ÁMBITO lo fija `presupuesto.marca`: con
  *  marca activa edita los controles PROPIOS de esa marca (su cap USD `KENI_PRESUPUESTO_USD_DIA::marca`
  *  y su parada `KENI_GENERACION_PAUSADA::marca`) y muestra SU gasto; sin marca ("todas") opera los
@@ -421,6 +491,10 @@ export function PanelPresupuesto({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Gate diario por % del límite semanal (GLOBAL): el aviso/pantalla de «Aceptar +10%»
+            cuando el consumo del día pausa la generación. Va arriba para que sea lo primero que
+            se ve cuando hay pausa. */}
+        <BloqueGateDiario gate={presupuesto.gate_diario} esAdmin={esAdmin} />
         {/* Cabecera: gasto de hoy (del ámbito) + parada de emergencia (global o de la marca). */}
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <p className="text-sm">
