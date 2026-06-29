@@ -20,6 +20,7 @@ Dos fuentes, seleccionadas por entorno:
 Solo lectura e idempotente (no toca Woodpecker).
 """
 import datetime
+import hashlib
 import json
 import os
 import sqlite3
@@ -174,6 +175,14 @@ def hay_verde_despues(pipelines, number: int) -> bool:
     """¿Existe un pipeline MÁS NUEVO que `number` ya en verde (success)? (watchdog de aborto)."""
     return any(num is not None and num > number and status == "success"
                for num, status, *_ in pipelines)
+
+
+def huella_fallos(fallos) -> str:
+    """Firma ESTABLE del conjunto de fallos (independiente del nº de pipeline): mismos fallos ->
+    misma huella. Sirve para que el keeper sepa si un rojo nuevo es 'lo mismo' que ya está
+    arreglando (lag de propagación) o algo distinto."""
+    norm = sorted({(l or "").strip() for l in fallos if (l or "").strip()})
+    return hashlib.sha1("\n".join(norm).encode("utf-8")).hexdigest()[:16] if norm else ""
 
 
 def verdicto_fix(sha: str) -> str:
@@ -343,6 +352,7 @@ def main() -> None:
             fallos.append(l)
 
     print(f"PIPELINE_ROJO={number}")
+    print(f"HUELLA={huella_fallos(fallos)}")
     print(f"COMMIT={message}")
     print("FALLOS:")
     print(

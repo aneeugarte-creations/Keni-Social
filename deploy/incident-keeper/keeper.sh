@@ -28,6 +28,7 @@ CI_MAX="${KENI_KEEPER_CI_MAX:-3}"        # tope de sesiones de fix de CI por ven
 CI_VENTANA_MIN="${KENI_KEEPER_CI_VENTANA_MIN:-30}"
 CI_ABORT_INTERVALO="${KENI_KEEPER_CI_ABORT_INTERVALO:-20}"  # cada cuánto comprueba el watchdog de aborto
 TIMEOUT="${KENI_KEEPER_TIMEOUT:-1800}"   # máx duración de una sesión claude -p (corta cuelgues)
+VERIF_MAX="${KENI_KEEPER_VERIF_MAX:-2400}"  # máx espera de un `verificando` antes de darlo por perdido
 # Rastro de sesiones para la UI INDEPENDIENTE (guardian-ui): el keeper deja aquí, en el volumen
 # compartido /data, el stream-json de cada sesión + su meta + un heartbeat de vigilancia. La UI
 # (otro contenedor) sólo LEE esto; no depende del back/db.
@@ -60,18 +61,19 @@ parar() {
 trap parar TERM INT
 trap 'rm -f "$LOCK" 2>/dev/null' EXIT
 
-# Lanza UNA sesión claude -p en un worktree limpio desde origin/main. $1 = texto del incidente.
-correr_keeper() {  # $1 = texto ; $2 = trigger (etiqueta UI) ; $3 = nº pipeline CI (vacío=incidente prod)
-  texto="$1"; trigger="${2:-incidente}"; ci_num="${3:-}"
+# Lanza UNA sesión claude -p en un worktree limpio desde origin/main.
+correr_keeper() {  # $1=texto ; $2=trigger ; $3=nº pipeline CI ; $4=huella de fallos ; $5=session a RESUMIR
+  texto="$1"; trigger="${2:-incidente}"; ci_num="${3:-}"; huella="${4:-}"; resume_id="${5:-}"
   : > "$LOCK"
   mkdir -p "$DATA" 2>/dev/null || true
   sid="$(date +%s)"
   jsonl="$DATA/$sid.jsonl"
   meta="$DATA/$sid.meta.json"
   titulo="$(printf '%s' "$texto" | head -1 | cut -c1-160)"
-  # Meta inicial (estado=corriendo) para que la UI vea la sesión en cuanto arranca.
+  # Meta inicial (estado=corriendo) para que la UI vea la sesión en cuanto arranca. `huella` permite
+  # saber luego si un rojo nuevo es 'lo mismo' que esta sesión ya está arreglando.
   python3 "$KEEPER_DIR/sesion.py" "$meta" - id="$sid" trigger="$trigger" titulo="$titulo" \
-    inicio="$(date -u +%Y-%m-%dT%H:%M:%SZ)" estado=corriendo 2>/dev/null || true
+    inicio="$(date -u +%Y-%m-%dT%H:%M:%SZ)" estado=corriendo huella="$huella" 2>/dev/null || true
 
   git -C "$REPO" fetch origin -q 2>/dev/null || log "aviso: git fetch falló"
   base="$(git -C "$REPO" rev-parse origin/main 2>/dev/null)"
@@ -93,13 +95,15 @@ de incidente y actúa. Si es de código, promueve el fix con
 verde. Si debes ESCALAR (fuera de tus límites o causa no clara), NO actúes: deja aquí un
 diagnóstico claro y el plan para un humano."
 
+    [ -n "$resume_id" ] && log "RESUMO la sesión $resume_id (mismos fallos persisten)"
     log "claude -p en $wt (rama $rama)"
     abort_flag="$DATA/$sid.abort"; rm -f "$abort_flag"
     # claude con `exec`: el subshell se REEMPLAZA por claude, así $cl_pid ES el proceso claude y el
-    # watchdog puede abortarlo. La salida va al jsonl (la UI lo lee del fichero, no de stdout).
+    # watchdog puede abortarlo. La salida va al jsonl (la UI lo lee del fichero, no de stdout). Si hay
+    # `resume_id`, CONTINÚA esa conversación (el agente ya sabe qué intentó) en vez de empezar de cero.
     ( cd "$wt" && exec claude -p "$prompt" \
         --output-format stream-json --verbose --include-partial-messages \
-        --dangerously-skip-permissions --model "$MODELO" ) > "$jsonl" 2>&1 &
+        --dangerously-skip-permissions --model "$MODELO" ${resume_id:+--resume "$resume_id"} ) > "$jsonl" 2>&1 &
     cl_pid=$!
     # Watchdog: corre SIEMPRE en paralelo y mata el claude por dos motivos (escribe la razón en el
     # flag): (1) TIMEOUT — supera $TIMEOUT s (un cuelgue no debe quedarse eterno reteniendo el lock);
@@ -165,9 +169,12 @@ diagnóstico claro y el plan para un humano."
         *)       nota="Interrumpido: el keeper se detuvo (p. ej. un deploy) durante la sesión." ;;
       esac ;;
   esac
+  # session_id de claude (del evento init): para poder RESUMIR esta conversación si el mismo fallo
+  # persiste (fix-aware), en vez de empezar de cero.
+  claude_session="$(grep -o '"session_id":"[^"]*"' "$jsonl" 2>/dev/null | head -1 | cut -d'"' -f4)"
   python3 "$KEEPER_DIR/sesion.py" "$meta" "$jsonl" estado="$estado" \
     fin="$(date -u +%Y-%m-%dT%H:%M:%SZ)" commit_sha="$commit_sha" commit_msg="$commit_msg" \
-    ${nota:+"nota=$nota"} 2>/dev/null || true
+    huella="$huella" claude_session="$claude_session" ${nota:+"nota=$nota"} 2>/dev/null || true
   # Retención: conserva los $RETENCION más recientes (jsonl + meta).
   ls -1t "$DATA"/*.meta.json 2>/dev/null | tail -n +"$((RETENCION + 1))" | while read -r m; do
     rm -f "$m" "${m%.meta.json}.jsonl" 2>/dev/null || true
@@ -189,6 +196,19 @@ ci_intentos_recientes() {
 # Lee un campo de una meta (cadena vacía si no existe). $1=fichero meta, $2=clave.
 meta_get() {
   python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2],''))" "$1" "$2" 2>/dev/null
+}
+
+# Busca la sesión MÁS RECIENTE con huella=$1 y estado=$2. Devuelve 0 e imprime su claude_session
+# (puede ser vacío) si existe; 1 si no hay ninguna. Las metas van por epoch: nombre mayor = más nuevo.
+buscar_huella() {
+  [ -n "$1" ] || return 1
+  for meta in $(ls -1 "$DATA"/*.meta.json 2>/dev/null | sort -r); do
+    [ "$(meta_get "$meta" huella)" = "$1" ] || continue
+    [ "$(meta_get "$meta" estado)" = "$2" ] || continue
+    meta_get "$meta" claude_session
+    return 0
+  done
+  return 1
 }
 
 # Reconcilia sesiones HUÉRFANAS: una meta en `corriendo` al ARRANCAR significa que un keeper previo
@@ -220,7 +240,16 @@ verificar_pendientes() {
       resuelto) nota="El pipeline del fix salió VERDE." ;;
       fallido)  nota="El pipeline del fix salió ROJO: el arreglo no bastó." ;;
       abortado) nota="Otro commit dejó main verde; el fix del keeper quedó superado." ;;
-      *) continue ;;  # sigue corriendo: lo dejamos en verificando
+      *)
+        # Sigue corriendo: lo dejamos en verificando, SALVO que lleve demasiado (pipeline perdido/
+        # colgado): no debe bloquear para siempre el reintento del mismo fallo.
+        sidn="$(basename "$meta" .meta.json)"
+        case "$sidn" in *[!0-9]*) continue ;; esac
+        if [ "$(( $(date +%s) - sidn ))" -gt "$VERIF_MAX" ]; then
+          v=escalado; nota="No se pudo confirmar el verde del fix (pipeline perdido tras ${VERIF_MAX}s); revísalo."
+        else
+          continue
+        fi ;;
     esac
     log "sesión $(basename "$meta" .meta.json): $v (veredicto del pipeline del fix)"
     python3 "$KEEPER_DIR/sesion.py" "$meta" - estado="$v" \
@@ -253,17 +282,27 @@ while :; do
   if [ "$CI" = 1 ]; then
     ci="$(python3 "$CI_WATCH" 2>/dev/null)"
     num="$(printf '%s\n' "$ci" | sed -n 's/^PIPELINE_ROJO=//p' | head -1)"
-    if [ -n "$num" ] && [ "$num" != "$(cat "$CI_ULTIMO" 2>/dev/null)" ]; then
+    huella_nueva="$(printf '%s\n' "$ci" | sed -n 's/^HUELLA=//p' | head -1)"
+    if [ -z "$num" ]; then
+      :  # último completo verde / nada que arreglar
+    elif buscar_huella "$huella_nueva" verificando >/dev/null 2>&1; then
+      # FIX-AWARE: ya tengo un fix MÍO EN VERIFICACIÓN para ESTOS MISMOS fallos. El rojo nuevo es el
+      # lag de propagación de algo que ya estoy esperando: NO re-intento, espero su veredicto.
+      log "CI ROJO #$num: mismos fallos que un fix en verificación -> espero su veredicto (no re-intento)"
+    elif [ "$num" != "$(cat "$CI_ULTIMO" 2>/dev/null)" ]; then
       n="$(ci_intentos_recientes)"
       if [ "$n" -ge "$CI_MAX" ]; then
         log "CI sigue rojo tras $n intentos en ${CI_VENTANA_MIN}min: pauso el auto-fix; requiere humano"
       else
+        # ¿el MISMO fallo ya tuvo un fix que NO bastó (`fallido`)? Resume esa conversación (el agente
+        # ya sabe qué intentó) en vez de empezar de cero.
+        resume_id="$(buscar_huella "$huella_nueva" fallido 2>/dev/null)" || resume_id=""
         echo "$num" > "$CI_ULTIMO"; echo "$(date +%s)" >> "$CI_INTENTOS"
-        log "CI ROJO pipeline #$num: lanzo fix"
+        log "CI ROJO pipeline #$num: lanzo fix${resume_id:+ (resume $resume_id)}"
         correr_keeper "El pipeline #$num de \`main\` está ROJO en el CI (Woodpecker). Es un fix de
 CÓDIGO: arréglalo según la sección de CI de tu rol y promueve a main. Evidencia:
 
-$ci" "CI #$num" "$num"
+$ci" "CI #$num" "$num" "$huella_nueva" "$resume_id"
       fi
     fi
   fi

@@ -101,3 +101,13 @@ def test_verdicto_commit_no_visto_main_verde_es_abortado(monkeypatch):
 def test_verdicto_commit_no_visto_main_rojo_sigue_verificando(monkeypatch):
     _mock_api(monkeypatch, _raw((70, "failure", "otro")))
     assert ci_watch.verdicto_fix("abc123") == "verificando"
+
+
+def test_huella_estable_e_independiente_del_orden():
+    # Mismo CONJUNTO de fallos (en otro orden, con duplicados) -> misma huella.
+    h1 = ci_watch.huella_fallos(["[pytest] FAILED a", "[pytest] FAILED b"])
+    h2 = ci_watch.huella_fallos(["[pytest] FAILED b", "[pytest] FAILED a", "[pytest] FAILED a"])
+    assert h1 and h1 == h2
+    # Conjuntos distintos -> huellas distintas; vacío -> "".
+    assert ci_watch.huella_fallos(["FAILED x"]) != ci_watch.huella_fallos(["FAILED y"])
+    assert ci_watch.huella_fallos([]) == ""
