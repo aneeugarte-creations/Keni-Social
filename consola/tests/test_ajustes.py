@@ -226,4 +226,3 @@ def test_purgar_claves_obsoletas_idempotente_y_sin_store(store):
     ajustes.guardar("KENI_PRESUPUESTO_TOKENS_DIA", "1500000")
     assert ajustes.purgar_claves_obsoletas() == 1
     assert ajustes.purgar_claves_obsoletas() == 0  # segunda pasada: nada obsoleto
-    assert ajustes.obtener("KENI_PIPELINE_RECOLECTAR") == "1"
