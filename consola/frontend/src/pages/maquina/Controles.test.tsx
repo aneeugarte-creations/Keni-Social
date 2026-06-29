@@ -162,12 +162,13 @@ describe("Controles · Estado global", () => {
     ).toBeInTheDocument();
   });
 
-  it("muestra la nota sobre el empuje manual siempre", async () => {
+  it("muestra la nota: el empuje manual ignora el maestro pero la pausa lo detiene", async () => {
     renderControles();
     await screen.findByRole("switch", { name: /Máquina/ });
     const nota = screen.getByTestId("nota-manual");
     expect(nota).toBeInTheDocument();
-    expect(nota.textContent).toMatch(/empuje manual desde Noticias funciona siempre/);
+    expect(nota.textContent).toMatch(/empuje manual desde Noticias ignora/);
+    expect(nota.textContent).toMatch(/pausa de emergencia/);
   });
 });
 

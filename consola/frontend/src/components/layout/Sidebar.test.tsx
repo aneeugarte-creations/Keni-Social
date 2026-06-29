@@ -348,11 +348,10 @@ describe("apps-scope · helpers", () => {
       "/contenido/imagen",
       // /maquina/contexto no es hub → se queda igual
       "/maquina/contexto",
-      // /maquina/agentes (hub) → sus pestañas (Cómputo/Economía/Actividad/Controles)
+      // /maquina/agentes (hub) → sus pestañas (Cómputo/Economía/Actividad)
       "/maquina/agentes",
       "/maquina/economia",
       "/maquina/actividad",
-      "/maquina/controles",
     ]);
   });
 

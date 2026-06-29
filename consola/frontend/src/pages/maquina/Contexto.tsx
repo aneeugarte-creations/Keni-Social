@@ -11,7 +11,7 @@
  * pipeline, los daemons clase=maquina del motor («Servicios», solo admin).
  */
 import { useQuery } from "@tanstack/react-query";
-import { Code2, Factory, Telescope, Wrench } from "lucide-react";
+import { Code2, Factory, SlidersHorizontal, Telescope, Wrench } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { AccionesPagina, PestanasSeccion, type PestanaSeccion } from "@/components/layout/encabezado";
@@ -46,15 +46,20 @@ import {
   PanelPipeline,
 } from "@/pages/monitor/PanelPipeline";
 
-type Proceso = "investigacion" | "produccion" | "herramientas" | "desarrollo";
+import Controles from "./Controles";
+
+type Proceso = "controles" | "investigacion" | "produccion" | "herramientas" | "desarrollo";
 const PROCESOS: readonly Proceso[] = [
+  "controles",
   "investigacion",
   "produccion",
   "herramientas",
   "desarrollo",
 ];
-/** Sub-secciones de la máquina (clave `?proceso=`). La subnav vive en el topbar (como Métricas). */
+/** Sub-secciones de la máquina (clave `?proceso=`). La subnav vive en el topbar (como Métricas).
+ *  «Controles» es el mando único (maestro, pausa, etapas); las demás son los motores y catálogos. */
 const PESTANAS: PestanaSeccion[] = [
+  { valor: "controles", etiqueta: "Controles", icono: SlidersHorizontal },
   { valor: "investigacion", etiqueta: "Investigación", icono: Telescope },
   { valor: "produccion", etiqueta: "Producción", icono: Factory },
   { valor: "herramientas", etiqueta: "Herramientas", icono: Wrench },
@@ -115,28 +120,38 @@ export default function Contexto() {
       {/* El control de la máquina (maestro del proceso activo + interruptor general) y, en los
           motores, los ajustes «⋮» viven en el flanco de acciones del topbar —como el selector de
           Métricas—, no en una fila dentro del cuerpo. */}
-      <AccionesPagina>
-        <div className="flex items-center gap-2">
-          <ControlesMaquina
-            claveMaestro={
-              proceso === "investigacion"
-                ? MAESTRO_INVESTIGACION
-                : proceso === "produccion"
-                  ? MAESTRO_PRODUCCION
-                  : undefined
-            }
-            esAdmin={esAdmin}
-            marcaActiva={marcaActiva}
-          />
-          {esMotor && (
-            <MenuAcciones
-              ajustesTitulo={proceso === "produccion" ? "Ajustes de producción" : "Ajustes de investigación"}
-              ajustesAbiertoInicial={abrirAjustes}
-              ajustes={ajustes}
+      {/* La pestaña «Controles» trae su propio Estado global (maestro + pausa), así que no repite
+          el control de cabecera; las demás sí lo llevan en el flanco de acciones del topbar. */}
+      {proceso !== "controles" && (
+        <AccionesPagina>
+          <div className="flex items-center gap-2">
+            <ControlesMaquina
+              claveMaestro={
+                proceso === "investigacion"
+                  ? MAESTRO_INVESTIGACION
+                  : proceso === "produccion"
+                    ? MAESTRO_PRODUCCION
+                    : undefined
+              }
+              esAdmin={esAdmin}
+              marcaActiva={marcaActiva}
             />
-          )}
+            {esMotor && (
+              <MenuAcciones
+                ajustesTitulo={proceso === "produccion" ? "Ajustes de producción" : "Ajustes de investigación"}
+                ajustesAbiertoInicial={abrirAjustes}
+                ajustes={ajustes}
+              />
+            )}
+          </div>
+        </AccionesPagina>
+      )}
+
+      {proceso === "controles" && (
+        <div className="mt-4">
+          <Controles />
         </div>
-      </AccionesPagina>
+      )}
 
       {proceso === "investigacion" && (
         <div className="mt-4">

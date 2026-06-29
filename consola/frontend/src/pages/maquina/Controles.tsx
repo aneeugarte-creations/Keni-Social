@@ -25,7 +25,6 @@ import {
   ExcepcionesPorMarca,
   useGuardarAjuste,
 } from "@/pages/configuracion/SeccionFuncionalidad";
-import { SeccionCuentaClaude } from "@/pages/sistema/SeccionCuentaClaude";
 import type { AjusteAdmin } from "@/types";
 
 // Clave del interruptor general de la máquina.
@@ -426,21 +425,13 @@ export default function Controles() {
             className="text-xs text-muted-foreground/70"
             data-testid="nota-manual"
           >
-            El empuje manual desde Noticias funciona siempre — ignora estos
-            interruptores.
+            El empuje manual desde Noticias ignora «Encendida/apagada» (genera aunque la máquina
+            esté apagada); solo lo detiene la pausa de emergencia.
           </p>
         </CardContent>
       </Card>
 
-      {/* 2. CUENTAS (A/B) */}
-      <section>
-        <h2 className="mb-3 text-sm font-semibold tracking-tight text-muted-foreground">
-          Cuentas de Claude
-        </h2>
-        <SeccionCuentaClaude />
-      </section>
-
-      {/* 3. INVESTIGACIÓN */}
+      {/* 2. INVESTIGACIÓN */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Investigación</CardTitle>
