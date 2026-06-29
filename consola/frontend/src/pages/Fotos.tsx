@@ -131,7 +131,7 @@ function RejillaFotos({
   onAbrir: (indice: number) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
       {fotos.map((foto, i) => (
         <CeldaFoto key={foto.clave} foto={foto} onAbrir={() => onAbrir(i)} />
       ))}
@@ -550,7 +550,7 @@ export default function Fotos() {
         </Button>
       </AccionesPagina>
 
-      <div className="mx-auto w-full max-w-5xl space-y-4 py-6 pb-12">
+      <div className="w-full space-y-4 py-6 pb-12">
         <Tabs defaultValue="buscar">
           <div className="flex items-center justify-between gap-3">
             <TabsList>
