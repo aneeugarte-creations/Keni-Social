@@ -270,6 +270,40 @@ def _construir_prompt(items_json: str) -> str:
     return f"{plantilla}\n\nLista de ítems:\n{items_json}"
 
 
+def _payload_items(items: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Payload de entrada `[{id, titulo, resumen}]` recortado por ítem (truncado centralizado).
+
+    Recorta `titulo` a `_MAX_CHARS_ITEM` y el `resumen` a lo que reste, para no superar el cap de
+    contexto de entrada por ítem. PURA (no llama a claude). Compartida por el camino INLINE
+    (`traducir_items`) y por el ENCOLADO (`construir_prompt_traduccion`), para que el prompt sea
+    idéntico se traduzca en el acto o vía job.
+    """
+    payload: list[dict[str, str]] = []
+    for item in items:
+        item_id = str(item.get("id", ""))
+        titulo, _ = json_llm.truncar_avisando(
+            str(item.get("titulo", "")).strip(), _MAX_CHARS_ITEM,
+            campo=f"titulo de {item_id}", log=_log,
+        )
+        espacio_resumen = max(0, _MAX_CHARS_ITEM - len(titulo))
+        resumen, _ = json_llm.truncar_avisando(
+            str(item.get("resumen", "") or "").strip(), espacio_resumen,
+            campo=f"resumen de {item_id}", log=_log,
+        )
+        payload.append({"id": item_id, "titulo": titulo, "resumen": resumen})
+    return payload
+
+
+def construir_prompt_traduccion(items: list[dict[str, Any]]) -> str:
+    """Prompt de traducción por lotes a partir de `items` (`[{id, titulo, resumen}]`). PURO.
+
+    Lo usa el paso de Traducir del daemon para componer el prompt del JOB que ENCOLA por marca
+    (el worker lo corre con `claude -p`); el camino inline (`traducir_items`) usa el mismo
+    payload+plantilla, así el prompt es idéntico se traduzca en el acto o vía job.
+    """
+    return _construir_prompt(json.dumps(_payload_items(items), ensure_ascii=False))
+
+
 # --------------------------------------------------------------------------- #
 # Extracción tolerante del JSON de respuesta                                   #
 # --------------------------------------------------------------------------- #
@@ -360,26 +394,6 @@ def traducir_items(
 
     correr = ejecutor or _ejecutor_estructurado
 
-    # Construye el payload de entrada, recortando campos largos (truncado centralizado).
-    payload: list[dict[str, str]] = []
-    for item in items:
-        item_id = str(item.get("id", ""))
-        titulo, _ = json_llm.truncar_avisando(
-            str(item.get("titulo", "")).strip(), _MAX_CHARS_ITEM,
-            campo=f"titulo de {item_id}", log=_log,
-        )
-        # Recorta resumen para que titulo+resumen juntos no superen el cap.
-        espacio_resumen = max(0, _MAX_CHARS_ITEM - len(titulo))
-        resumen, _ = json_llm.truncar_avisando(
-            str(item.get("resumen", "") or "").strip(), espacio_resumen,
-            campo=f"resumen de {item_id}", log=_log,
-        )
-        payload.append({
-            "id": item_id,
-            "titulo": titulo,
-            "resumen": resumen,
-        })
-
     def _fallback() -> list[dict[str, Any]]:
         return [
             {
@@ -392,8 +406,7 @@ def traducir_items(
         ]
 
     try:
-        items_json = json.dumps(payload, ensure_ascii=False)
-        prompt = _construir_prompt(items_json)
+        prompt = construir_prompt_traduccion(items)
         with tempfile.TemporaryDirectory(prefix="keni-traduccion-") as carpeta:
             salida = correr(prompt, carpeta)
     except Exception as e:  # noqa: BLE001 -- best-effort: cualquier fallo -> originales
@@ -451,3 +464,51 @@ def traducir_items(
         )
 
     return resultado
+
+
+# --------------------------------------------------------------------------- #
+# Post-procesado del JOB de traducción (worker)                                 #
+# --------------------------------------------------------------------------- #
+
+
+def construir_procesar_traducir(originales: list[dict[str, Any]]):  # noqa: ANN201 -- Procesar
+    """Callback de post-procesado del JOB de traducción: parsea la salida y PERSISTE las traducciones.
+
+    `originales` es `[{id, titulo}]` de los clusters del lote (su título EXTRANJERO original, para
+    sellar `titulo_original` y mapear la respuesta por id). El worker corre `claude -p` (stream-json)
+    con el prompt que armó `construir_prompt_traduccion`; aquí parseamos el texto `result` con el
+    extractor tolerante (`_extraer_traducciones`) y, por cada traducción REAL (con `titulo_es`),
+    marcamos el cluster `traducido=1` (lo que además limpia su `traduccion_encolada`). Un cluster
+    omitido o sin `titulo_es` NO se marca: queda con su marca de encolado hasta que el limpiador de
+    atascados lo re-abra y un barrido posterior lo re-encole (reintento). Devuelve `{traducidos}`.
+    """
+    por_id_orig = {str(o.get("id") or ""): o for o in originales if o.get("id")}
+
+    def procesar(salida: str, _metricas: object) -> dict[str, object]:
+        from .. import repos
+
+        traducciones = _extraer_traducciones(salida) or []
+        guardados = 0
+        for t in traducciones:
+            if not isinstance(t, dict):
+                continue
+            cid = str(t.get("id") or "")
+            orig = por_id_orig.get(cid)
+            if orig is None:
+                continue
+            titulo_es = str(t.get("titulo_es") or "").strip()
+            if not titulo_es:
+                continue
+            try:
+                repos.marcar_cluster_traducido(
+                    cid,
+                    titulo_es=titulo_es,
+                    resumen_es=str(t.get("resumen_es") or ""),
+                    titulo_original=str(orig.get("titulo") or ""),
+                )
+                guardados += 1
+            except Exception:  # noqa: BLE001 -- persistir una traducción no aborta el resto del lote
+                _log.exception("traducir: fallo al guardar la traducción del cluster %s.", cid)
+        return {"traducidos": guardados, "candidatos": len(por_id_orig)}
+
+    return procesar

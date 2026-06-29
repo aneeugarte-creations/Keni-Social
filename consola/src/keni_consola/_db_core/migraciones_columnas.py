@@ -1342,6 +1342,10 @@ _COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("titulo_original", "TEXT NOT NULL DEFAULT ''"),
     ("idioma", "TEXT NOT NULL DEFAULT ''"),
     ("traducido", "INTEGER NOT NULL DEFAULT 0"),
+    # Marca de "traducción ENCOLADA/en curso" (ISO UTC del encolado): la fija el paso de
+    # Traducir AL ENCOLAR el job por marca y la limpia el job al completar (o el limpiador de
+    # atascados tras el TTL). Evita re-encolar un cluster cuyo job sigue pendiente. "" = sin job.
+    ("traduccion_encolada", "TEXT NOT NULL DEFAULT ''"),
     # Relevancia EXPLICABLE: la razón humana del score y su desglose por señal (JSON con
     # corroboracion/frescura/viralidad/marca/rendimiento/breaking + palabras casadas). Las
     # escribe el daemon al puntuar; la UI/el umbral de promoción las muestran al equipo.

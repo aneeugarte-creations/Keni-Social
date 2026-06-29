@@ -1497,6 +1497,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         titulo_original TEXT NOT NULL DEFAULT '',
         idioma        TEXT NOT NULL DEFAULT '',
         traducido     INTEGER NOT NULL DEFAULT 0,
+        traduccion_encolada TEXT NOT NULL DEFAULT '',
         peso_fuentes  REAL NOT NULL DEFAULT 0,
         velocidad     REAL NOT NULL DEFAULT 0,
         primera_fuente TEXT NOT NULL DEFAULT '',

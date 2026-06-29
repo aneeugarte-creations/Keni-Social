@@ -190,13 +190,84 @@ def test_construir_prompt_inserta_items_y_contrato():
     assert "traducciones" in p
 
 
+def test_construir_prompt_traduccion_lleva_los_items():
+    """El prompt ENCOLADO (job por marca) lleva los ids del lote y el contrato de traducción."""
+    p = traducir.construir_prompt_traduccion(
+        [{"id": "c1", "titulo": "Foreign", "resumen": "Body"}]
+    )
+    assert "c1" in p
+    assert "traducciones" in p
+
+
+# --------------------------------------------------------------------------- #
+# `construir_procesar_traducir`: post-procesado del JOB (worker), sin BD real   #
+# --------------------------------------------------------------------------- #
+
+
+def test_procesar_traducir_persiste_y_mapea_titulo_original(monkeypatch):
+    """El post-procesado parsea la salida del worker y marca cada cluster `traducido` con su
+    `titulo_original` (mapeado por id desde el lote)."""
+    from keni_consola import repos
+
+    guardados = []
+    monkeypatch.setattr(repos, "marcar_cluster_traducido",
+                        lambda cid, **kw: guardados.append((cid, kw)) or {"id": cid})
+    procesar = traducir.construir_procesar_traducir(
+        [{"id": "c1", "titulo": "Foreign one"}, {"id": "c2", "titulo": "Foreign two"}]
+    )
+    salida = json.dumps({"traducciones": [
+        {"id": "c1", "titulo_es": "ES uno", "resumen_es": "R uno"},
+        {"id": "c2", "titulo_es": "ES dos", "resumen_es": "R dos"},
+    ]})
+    res = procesar(salida, None)
+    assert res == {"traducidos": 2, "candidatos": 2}
+    por_id = dict(guardados)
+    assert por_id["c1"]["titulo_es"] == "ES uno"
+    assert por_id["c1"]["titulo_original"] == "Foreign one"
+    assert por_id["c2"]["resumen_es"] == "R dos"
+
+
+def test_jobspec_reconstruye_el_procesar_de_traducir(monkeypatch):
+    """El worker reconstruye el post-procesado desde el spec (`construir_traducir`)."""
+    from keni_consola import repos
+    from keni_consola.dominio import jobspec
+
+    guardados = []
+    monkeypatch.setattr(repos, "marcar_cluster_traducido",
+                        lambda cid, **kw: guardados.append(cid) or {"id": cid})
+    spec = jobspec.construir_traducir(
+        marca="unotv", originales=[{"id": "c1", "titulo": "Foreign"}]
+    )
+    procesar = jobspec.reconstruir_procesar({"procesar": spec})
+    procesar(json.dumps({"traducciones": [{"id": "c1", "titulo_es": "ES"}]}), None)
+    assert guardados == ["c1"]
+
+
+def test_procesar_traducir_omite_ids_ajenos_y_vacios(monkeypatch):
+    """No persiste traducciones de ids fuera del lote ni las que vienen sin `titulo_es` (el cluster
+    queda sin marcar -> el limpiador de atascados lo re-abrirá para reintento)."""
+    from keni_consola import repos
+
+    guardados = []
+    monkeypatch.setattr(repos, "marcar_cluster_traducido",
+                        lambda cid, **kw: guardados.append(cid) or {"id": cid})
+    procesar = traducir.construir_procesar_traducir([{"id": "c1", "titulo": "Foreign"}])
+    salida = json.dumps({"traducciones": [
+        {"id": "c1", "titulo_es": ""},            # sin titulo_es -> no se persiste
+        {"id": "ajeno", "titulo_es": "ES x"},     # id fuera del lote -> se ignora
+    ]})
+    res = procesar(salida, None)
+    assert res == {"traducidos": 0, "candidatos": 1}
+    assert guardados == []
+
+
 # --------------------------------------------------------------------------- #
 # `clusters_extranjeros_sin_traducir` toca la BD REAL (no mock)                 #
 # La fixture `cliente` (conftest) aísla el entorno y prepara el esquema de BD.   #
 # --------------------------------------------------------------------------- #
 
 
-def _inicializar_cluster_idioma(cid, *, idioma, traducido=0, estado="nuevo"):
+def _inicializar_cluster_idioma(cid, *, idioma, traducido=0, estado="nuevo", traduccion_encolada=""):
     from keni_consola import repos
 
     repos.upsert_noticia_cluster({
@@ -218,6 +289,7 @@ def _inicializar_cluster_idioma(cid, *, idioma, traducido=0, estado="nuevo"):
         "estado": estado,
         "idioma": idioma,
         "traducido": traducido,
+        "traduccion_encolada": traduccion_encolada,
     })
 
 
@@ -240,6 +312,36 @@ def test_clusters_extranjeros_sin_traducir_no_revienta_con_like(cliente):  # noq
     assert "es1" not in ids  # el `NOT LIKE 'es%'` filtra el español
     assert "en2" not in ids  # ya traducido
     assert "sin" in ids  # idioma vacío entra a la cola: el daemon lo tropicaliza, no se cuela en inglés
+
+
+def test_traduccion_encolada_excluye_y_se_re_abre_al_expirar(cliente):  # noqa: ARG001
+    """IDEMPOTENCIA del encolado: un cluster con `traduccion_encolada` no es candidato; al marcar el
+    lote queda excluido; el limpiador de atascados lo re-abre y el éxito limpia la marca."""
+    from keni_consola import repos
+
+    _inicializar_cluster_idioma("ena", idioma="en")
+    _inicializar_cluster_idioma("enb", idioma="en")
+    ventana = 24 * 365 * 100
+
+    def _ids():
+        return {c["id"] for c in repos.clusters_extranjeros_sin_traducir(ventana, limite=40)}
+
+    assert {"ena", "enb"} <= _ids()
+    # Marcar el lote (al encolar) los saca de la selección: no se re-encolan.
+    assert repos.marcar_clusters_traduccion_encolada(["ena", "enb"]) == 2
+    assert _ids().isdisjoint({"ena", "enb"})
+    # Marcar de nuevo no re-marca (ya están encolados): idempotente.
+    assert repos.marcar_clusters_traduccion_encolada(["ena", "enb"]) == 0
+    # El limpiador con un umbral FUTURO re-abre los atascados -> vuelven a ser candidatos.
+    assert repos.reparar_traduccion_encolada_atascada("2999-01-01T00:00:00") == 2
+    assert {"ena", "enb"} <= _ids()
+    # Al traducir uno con éxito, se marca `traducido=1` y se limpia la marca (sale de candidatos).
+    repos.marcar_clusters_traduccion_encolada(["ena"])
+    repos.marcar_cluster_traducido("ena", titulo_es="ES", resumen_es="r", titulo_original="Foreign")
+    refrescado = repos.obtener_noticia_cluster("ena")
+    assert refrescado["traducido"] is True
+    assert refrescado["traduccion_encolada"] == ""
+    assert "ena" not in _ids()
 
 
 

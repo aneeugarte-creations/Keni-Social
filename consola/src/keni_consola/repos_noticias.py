@@ -333,6 +333,18 @@ def clusters_extranjeros_sin_traducir(
     )
 
 
+def marcar_clusters_traduccion_encolada(ids: list[str]) -> int:
+    return db.marcar_clusters_traduccion_encolada(ids)
+
+
+def limpiar_traduccion_encolada(ids: list[str]) -> int:
+    return db.limpiar_traduccion_encolada(ids)
+
+
+def reparar_traduccion_encolada_atascada(umbral_iso: str) -> int:
+    return db.reparar_traduccion_encolada_atascada(umbral_iso)
+
+
 def marcar_cluster_marca_ia(cluster_id: str) -> None:
     return db.marcar_cluster_marca_ia(cluster_id)
 

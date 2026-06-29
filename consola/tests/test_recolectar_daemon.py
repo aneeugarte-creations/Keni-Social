@@ -14,8 +14,12 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from keni_consola import cola as _cola
 from keni_consola import config, recolectar_daemon
+from keni_consola import generaciones as _generaciones
+from keni_consola import ruteo_cuentas as _ruteo
 from keni_consola.dominio import ingesta
+from keni_consola.dominio import jobspec as _jobspec
 from keni_consola.recolectar_daemon import _comun
 
 _AHORA = datetime(2026, 6, 5, 12, 0, 0, tzinfo=UTC)
@@ -192,7 +196,7 @@ def test_barrido_sin_feeds_vencidos_corre_los_pasos_post_rss(monkeypatch):
     monkeypatch.setattr(recolectar_daemon, "paso_fusionar_semantica",
                         lambda **k: llamados.append("fusion") or {"grupos": 0, "fusionadas": 0})
     monkeypatch.setattr(recolectar_daemon, "paso_traducir",
-                        lambda: llamados.append("traducir") or {"traducidos": 0, "candidatos": 0})
+                        lambda: llamados.append("traducir") or {"encolados": 0, "marcas": 0, "candidatos": 0})
 
     resumen = recolectar_daemon.ejecutar_barrido()
     assert resumen["feeds"] == 0
@@ -218,7 +222,7 @@ def test_barrido_con_ia_bloqueada_salta_los_pasos_haiku_no_los_de_io(monkeypatch
     monkeypatch.setattr(recolectar_daemon, "paso_fusionar_semantica",
                         lambda **k: llamados.append("fusion") or {"grupos": 0, "fusionadas": 0})
     monkeypatch.setattr(recolectar_daemon, "paso_traducir",
-                        lambda: llamados.append("traducir") or {"traducidos": 0, "candidatos": 0})
+                        lambda: llamados.append("traducir") or {"encolados": 0, "marcas": 0, "candidatos": 0})
 
     recolectar_daemon.ejecutar_barrido()
     # Los Haiku inline NO corren; el resto sí.
@@ -261,7 +265,7 @@ def test_barrido_salta_feeds_de_marca_apagada(monkeypatch):
     monkeypatch.setattr(recolectar_daemon.repos, "registrar_sondeo_feed",
                         lambda fid, **kw: registrados.append(fid))
     monkeypatch.setattr(recolectar_daemon, "paso_agrupar", lambda: {"items": 0, "clusters_nuevos": 0})
-    monkeypatch.setattr(recolectar_daemon, "paso_traducir", lambda: {"traducidos": 0, "candidatos": 0})
+    monkeypatch.setattr(recolectar_daemon, "paso_traducir", lambda: {"encolados": 0, "marcas": 0, "candidatos": 0})
 
     resumen = recolectar_daemon.ejecutar_barrido()
     # El feed apagado NO se sondea; el permitido y el compartido sí.
@@ -290,7 +294,7 @@ def test_barrido_aplaza_feeds_fuera_del_plan(monkeypatch):
     monkeypatch.setattr(recolectar_daemon.repos, "registrar_sondeo_feed",
                         lambda fid, **kw: registrados.setdefault(fid, kw))
     monkeypatch.setattr(recolectar_daemon, "paso_agrupar", lambda: {"items": 0, "clusters_nuevos": 0})
-    monkeypatch.setattr(recolectar_daemon, "paso_traducir", lambda: {"traducidos": 0, "candidatos": 0})
+    monkeypatch.setattr(recolectar_daemon, "paso_traducir", lambda: {"encolados": 0, "marcas": 0, "candidatos": 0})
 
     resumen = recolectar_daemon.ejecutar_barrido()
 
@@ -317,7 +321,7 @@ def _parchear_filtro(monkeypatch, *, feeds, fetcher):
     monkeypatch.setenv(config.ENV_INGESTA_FILTRO, "1")
     # Sin estos pasos (sin BD aquí), el barrido se queda en la mecánica de ingesta.
     monkeypatch.setattr(recolectar_daemon, "paso_agrupar", lambda: {"items": 0, "clusters_nuevos": 0})
-    monkeypatch.setattr(recolectar_daemon, "paso_traducir", lambda: {"traducidos": 0, "candidatos": 0})
+    monkeypatch.setattr(recolectar_daemon, "paso_traducir", lambda: {"encolados": 0, "marcas": 0, "candidatos": 0})
 
 
 def test_filtro_entrada_descarta_lo_que_no_casa_la_agenda(monkeypatch):
@@ -408,7 +412,7 @@ def test_barrido_auto_desactiva_feed_al_alcanzar_max_errores(monkeypatch):
                         lambda fid, **kw: registrados.append((fid, kw)))
     # Aislar agrupar/traducción (no relevantes aquí; sin BD).
     monkeypatch.setattr(recolectar_daemon, "paso_agrupar", lambda: {"items": 0, "clusters_nuevos": 0})
-    monkeypatch.setattr(recolectar_daemon, "paso_traducir", lambda: {"traducidos": 0, "candidatos": 0})
+    monkeypatch.setattr(recolectar_daemon, "paso_traducir", lambda: {"encolados": 0, "marcas": 0, "candidatos": 0})
 
     resumen = recolectar_daemon.ejecutar_barrido()
     assert resumen["auto_desactivados"] == 1
@@ -428,7 +432,7 @@ def test_barrido_no_desactiva_antes_del_umbral(monkeypatch):
     monkeypatch.setattr(recolectar_daemon.repos, "registrar_sondeo_feed",
                         lambda fid, **kw: registrados.append((fid, kw)))
     monkeypatch.setattr(recolectar_daemon, "paso_agrupar", lambda: {"items": 0, "clusters_nuevos": 0})
-    monkeypatch.setattr(recolectar_daemon, "paso_traducir", lambda: {"traducidos": 0, "candidatos": 0})
+    monkeypatch.setattr(recolectar_daemon, "paso_traducir", lambda: {"encolados": 0, "marcas": 0, "candidatos": 0})
 
     resumen = recolectar_daemon.ejecutar_barrido()
     # Un solo error (< umbral): NO se desactiva; no se toca `activo`.
@@ -449,7 +453,7 @@ def test_barrido_reactiva_feed_auto_desactivado_al_recuperarse(monkeypatch):
     monkeypatch.setattr(recolectar_daemon.repos, "registrar_sondeo_feed",
                         lambda fid, **kw: registrados.append((fid, kw)))
     monkeypatch.setattr(recolectar_daemon, "paso_agrupar", lambda: {"items": 0, "clusters_nuevos": 0})
-    monkeypatch.setattr(recolectar_daemon, "paso_traducir", lambda: {"traducidos": 0, "candidatos": 0})
+    monkeypatch.setattr(recolectar_daemon, "paso_traducir", lambda: {"encolados": 0, "marcas": 0, "candidatos": 0})
 
     recolectar_daemon.ejecutar_barrido()
     _fid, kw = registrados[0]
@@ -459,66 +463,127 @@ def test_barrido_reactiva_feed_auto_desactivado_al_recuperarse(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# Paso de TRADUCCIÓN (Ola D) con ejecutor falso (sin red ni BD)                #
+# Paso de TRADUCCIÓN (Ola D): ENCOLA un job POR MARCA (sin red ni BD)          #
 # --------------------------------------------------------------------------- #
 
 
-def test_paso_traducir_marca_clusters_y_guarda_es(monkeypatch):
+def _parchear_encolado(monkeypatch, *, marcados=None, encolar=None):
+    """Parchea el encolado del paso de traducir: re-abre atascados (no-op), crea registro y captura
+    `cola.encolar`. `marcados` mapea id->lo-que-devuelve `marcar_clusters_traduccion_encolada`
+    (por defecto marca TODO el lote). Devuelve `(encoladas, marcadas, limpiadas)` (listas captura)."""
+    monkeypatch.setattr(recolectar_daemon.repos, "reparar_traduccion_encolada_atascada", lambda _u: 0)
+    marcadas: list[list[str]] = []
+    limpiadas: list[list[str]] = []
+
+    def _marcar(ids):
+        marcadas.append(list(ids))
+        return marcados(ids) if marcados else len(ids)
+
+    monkeypatch.setattr(recolectar_daemon.repos, "marcar_clusters_traduccion_encolada", _marcar)
+    monkeypatch.setattr(recolectar_daemon.repos, "limpiar_traduccion_encolada",
+                        lambda ids: limpiadas.append(list(ids)) or len(ids))
+    creados = {"n": 0}
+    monkeypatch.setattr(_generaciones, "crear",
+                        lambda reg: {"id": f"gen-{creados.__setitem__('n', creados['n'] + 1) or creados['n']}"})
+    monkeypatch.setattr(_generaciones, "borrar_registro", lambda _gid: True)
+    encoladas: list[dict] = []
+
+    def _encolar(gen_id, spec, *, proceso=None, marca=None):
+        if encolar is not None:
+            encolar()
+        encoladas.append({"gen_id": gen_id, "spec": spec, "proceso": proceso, "marca": marca})
+        return f"job-{gen_id}"
+
+    monkeypatch.setattr(_cola, "encolar", _encolar)
+    return encoladas, marcadas, limpiadas
+
+
+def test_paso_traducir_encola_un_job_por_marca_ruteado_a_su_cuenta(monkeypatch):
+    """Agrupa los candidatos POR MARCA y ENCOLA un job `claude` por marca, ruteado al carril de la
+    cuenta de esa marca (claro-sports -> cuenta-a, unotv -> cuenta-b), como INVESTIGACION."""
     candidatos = [
-        {"id": "c1", "titulo": "Foreign one", "resumen": "Body one", "idioma": "en"},
-        {"id": "c2", "titulo": "Foreign two", "resumen": "Body two", "idioma": "fr"},
+        {"id": "c1", "titulo": "Foreign one", "resumen": "Body one", "idioma": "en", "marca": "claro-sports"},
+        {"id": "c2", "titulo": "Foreign two", "resumen": "Body two", "idioma": "fr", "marca": "unotv"},
+        {"id": "c3", "titulo": "Foreign three", "resumen": "Body three", "idioma": "de", "marca": "unotv"},
     ]
     monkeypatch.setattr(recolectar_daemon.repos, "clusters_extranjeros_sin_traducir",
                         lambda ventana_h, **kw: list(candidatos))
-    guardados = []
-    monkeypatch.setattr(recolectar_daemon.repos, "marcar_cluster_traducido",
-                        lambda cid, **kw: guardados.append((cid, kw)) or {"id": cid})
+    encoladas, marcadas, _limp = _parchear_encolado(monkeypatch)
 
-    # Ejecutor falso: devuelve traducciones ES deterministas para cada id (sin llamar a claude).
-    def _ejecutor_ok(prompt, _dir):
-        import json as _json
-        import re
-        cola = prompt.partition("## Lista de ítems")[2] or prompt
-        m = re.search(r"\[.*?\]", cola, re.DOTALL)
-        items = _json.loads(m.group(0)) if m else []
-        return _json.dumps({"traducciones": [
-            {"id": it["id"], "titulo_es": "ES " + it["titulo"], "resumen_es": "ES " + it["resumen"]}
-            for it in items
-        ]})
+    resumen = recolectar_daemon.paso_traducir()
+    assert resumen == {"encolados": 3, "marcas": 2, "candidatos": 3}
 
-    resumen = recolectar_daemon.paso_traducir(ejecutor=_ejecutor_ok)
-    assert resumen == {"traducidos": 2, "candidatos": 2}
-    por_id = dict(guardados)
-    assert por_id["c1"]["titulo_es"] == "ES Foreign one"
-    assert por_id["c1"]["titulo_original"] == "Foreign one"
-    assert por_id["c2"]["resumen_es"] == "ES Body two"
+    # UN job por marca (no uno global pool-wide).
+    por_marca = {e["marca"]: e for e in encoladas}
+    assert set(por_marca) == {"claro-sports", "unotv"}
+    # Ruteo por cuenta (carril en el spec) + proceso investigacion en el encolado.
+    assert _jobspec.carril(por_marca["claro-sports"]["spec"]) == _ruteo.carril_de_marca("claro-sports")
+    assert _jobspec.carril(por_marca["unotv"]["spec"]) == _ruteo.carril_de_marca("unotv")
+    assert por_marca["unotv"]["proceso"] == _generaciones.PROCESO_INVESTIGACION
+    # El spec es un job claude de kind PROC_TRADUCIR con los originales (id + título extranjero).
+    proc_unotv = por_marca["unotv"]["spec"]["procesar"]
+    assert proc_unotv["kind"] == _jobspec.PROC_TRADUCIR
+    assert {o["id"] for o in proc_unotv["originales"]} == {"c2", "c3"}
+    assert por_marca["claro-sports"]["spec"]["procesar"]["originales"][0]["titulo"] == "Foreign one"
+    # El prompt va dentro del spec (autocontenido) y lleva los ids del lote de esa marca.
+    assert "c2" in por_marca["unotv"]["spec"]["prompt"]
+    # Modelo barato (Haiku) para el parseo mecánico de traducción, como el traducir inline.
+    assert por_marca["unotv"]["spec"]["endurecer"]["modelo"] == config.insumos_modelo()
+    # Idempotencia: cada lote se MARCA encolado antes de encolar (un marcado por marca).
+    assert sorted(sorted(b) for b in marcadas) == [["c1"], ["c2", "c3"]]
 
 
-def test_paso_traducir_no_persiste_si_falla(monkeypatch):
-    """Si Haiku falla, el cluster NO se marca `traducido` con el título extranjero: queda intacto
-    para reintentarse en el próximo barrido (no se envenena con texto en idioma original)."""
-    candidatos = [{"id": "c1", "titulo": "Foreign one", "resumen": "Body one", "idioma": "en"}]
+def test_paso_traducir_no_reencola_lo_ya_en_curso(monkeypatch):
+    """IDEMPOTENCIA: si `marcar_clusters_traduccion_encolada` no marca nada (el lote ya tiene job
+    en curso), NO se encola un segundo job para esa marca."""
+    candidatos = [{"id": "c1", "titulo": "Foreign", "resumen": "Body", "idioma": "en", "marca": "unotv"}]
     monkeypatch.setattr(recolectar_daemon.repos, "clusters_extranjeros_sin_traducir",
                         lambda ventana_h, **kw: list(candidatos))
-    guardados = []
-    monkeypatch.setattr(recolectar_daemon.repos, "marcar_cluster_traducido",
-                        lambda cid, **kw: guardados.append(cid))
+    encoladas, _marcadas, _limp = _parchear_encolado(monkeypatch, marcados=lambda _ids: 0)
 
-    def _ejecutor_falla(_prompt, _dir):
-        raise RuntimeError("haiku caído")
-
-    resumen = recolectar_daemon.paso_traducir(ejecutor=_ejecutor_falla)
-    assert resumen == {"traducidos": 0, "candidatos": 1}
-    assert guardados == []  # nada persistido -> sigue siendo candidato (reintento)
+    resumen = recolectar_daemon.paso_traducir()
+    assert resumen == {"encolados": 0, "marcas": 0, "candidatos": 1}
+    assert encoladas == []  # no se encoló ningún job: el lote ya estaba en curso
 
 
-def test_paso_traducir_sin_candidatos_no_hace_nada(monkeypatch):
+def test_paso_traducir_reabre_lote_si_la_admision_rechaza(monkeypatch):
+    """Si la admisión rechaza el encolado (presupuesto/pausa -> ColaLlenaError), el lote se RE-ABRE
+    (`limpiar_traduccion_encolada`) para reintentarse en un barrido posterior."""
+    candidatos = [{"id": "c1", "titulo": "Foreign", "resumen": "Body", "idioma": "en", "marca": "unotv"}]
+    monkeypatch.setattr(recolectar_daemon.repos, "clusters_extranjeros_sin_traducir",
+                        lambda ventana_h, **kw: list(candidatos))
+
+    def _rechaza():
+        raise _generaciones.ColaLlenaError("presupuesto agotado")
+
+    encoladas, _marcadas, limpiadas = _parchear_encolado(monkeypatch, encolar=_rechaza)
+
+    resumen = recolectar_daemon.paso_traducir()
+    assert resumen == {"encolados": 0, "marcas": 0, "candidatos": 1}
+    assert limpiadas == [["c1"]]  # re-abierto para reintento
+
+
+def test_paso_traducir_reabre_atascados_antes_de_seleccionar(monkeypatch):
+    """El paso RE-ABRE primero los clusters cuyo job de traducción quedó atascado (TTL)."""
+    reabiertos = {"umbral": None}
+    monkeypatch.setattr(recolectar_daemon.repos, "reparar_traduccion_encolada_atascada",
+                        lambda umbral: reabiertos.__setitem__("umbral", umbral) or 2)
     monkeypatch.setattr(recolectar_daemon.repos, "clusters_extranjeros_sin_traducir",
                         lambda ventana_h, **kw: [])
-    def _no_guardar(*a, **k):  # noqa: ANN002, ANN003
-        raise AssertionError("no debería guardar sin candidatos")
-    monkeypatch.setattr(recolectar_daemon.repos, "marcar_cluster_traducido", _no_guardar)
-    assert recolectar_daemon.paso_traducir() == {"traducidos": 0, "candidatos": 0}
+    assert recolectar_daemon.paso_traducir() == {"encolados": 0, "marcas": 0, "candidatos": 0}
+    assert reabiertos["umbral"]  # se llamó al limpiador de atascados con un umbral ISO
+
+
+def test_paso_traducir_sin_candidatos_no_encola(monkeypatch):
+    monkeypatch.setattr(recolectar_daemon.repos, "reparar_traduccion_encolada_atascada", lambda _u: 0)
+    monkeypatch.setattr(recolectar_daemon.repos, "clusters_extranjeros_sin_traducir",
+                        lambda ventana_h, **kw: [])
+
+    def _no_encolar(*a, **k):  # noqa: ANN002, ANN003
+        raise AssertionError("no debería encolar sin candidatos")
+
+    monkeypatch.setattr(_cola, "encolar", _no_encolar)
+    assert recolectar_daemon.paso_traducir() == {"encolados": 0, "marcas": 0, "candidatos": 0}
 
 
 # --------------------------------------------------------------------------- #
@@ -650,7 +715,7 @@ def test_barrido_ingiere_agencias_y_suma_a_items_nuevos(monkeypatch):
                         lambda items: persistidos.extend(items) or len(items))
     monkeypatch.setattr(recolectar_daemon.repos, "registrar_sondeo_feed", lambda fid, **kw: None)
     monkeypatch.setattr(recolectar_daemon, "paso_agrupar", lambda: {"items": 0, "clusters_nuevos": 0})
-    monkeypatch.setattr(recolectar_daemon, "paso_traducir", lambda: {"traducidos": 0, "candidatos": 0})
+    monkeypatch.setattr(recolectar_daemon, "paso_traducir", lambda: {"encolados": 0, "marcas": 0, "candidatos": 0})
     monkeypatch.setattr(recolectar_daemon.agencias, "traer_items",
                         lambda ag: [{"titulo": "Ag", "resumen": "", "enlace": f"https://{ag}/1", "fecha": "", "fuente": ag.upper(), "clave": f"https://{ag}/1"}] if ag == "reuters" else [])
 
@@ -668,7 +733,7 @@ def test_barrido_no_aborta_si_paso_agencias_revienta(monkeypatch):
     monkeypatch.setattr(recolectar_daemon.repos, "crear_noticias_items", lambda items: len(items))
     monkeypatch.setattr(recolectar_daemon.repos, "registrar_sondeo_feed", lambda fid, **kw: None)
     monkeypatch.setattr(recolectar_daemon, "paso_agrupar", lambda: {"items": 0, "clusters_nuevos": 0})
-    monkeypatch.setattr(recolectar_daemon, "paso_traducir", lambda: {"traducidos": 0, "candidatos": 0})
+    monkeypatch.setattr(recolectar_daemon, "paso_traducir", lambda: {"encolados": 0, "marcas": 0, "candidatos": 0})
     def _revienta():
         raise RuntimeError("boom")
     monkeypatch.setattr(recolectar_daemon, "paso_agencias", _revienta)

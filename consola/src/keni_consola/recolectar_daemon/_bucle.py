@@ -299,10 +299,11 @@ def ejecutar_barrido() -> dict[str, Any]:
             except Exception:  # noqa: BLE001 -- el fusionar es aditivo; nunca tumba la recolección
                 _log.exception("recolectar_daemon: fallo en el paso de fusionar semántico.")
 
-        # Paso de TRADUCIR (Ola D): traduce a ES, por lotes, los clusters EXTRANJEROS recientes
-        # aún sin traducir. Best-effort: un fallo (subproceso, JSON, etc.) se loguea y NO invalida
-        # el barrido. Sin tope artificial: cada barrido procesa un lote del backlog.
-        trad_resumen: dict[str, Any] = {"traducidos": 0, "candidatos": 0}
+        # Paso de TRADUCIR (Ola D): ENCOLA un job de traducción a ES POR MARCA por cada lote de
+        # clusters EXTRANJEROS recientes sin traducir (la traducción la corre el worker, ruteada al
+        # carril de la cuenta de la marca). Best-effort: un fallo se loguea y NO invalida el barrido.
+        # Sin tope artificial: cada barrido encola un lote del backlog.
+        trad_resumen: dict[str, Any] = {"encolados": 0, "marcas": 0, "candidatos": 0}
         if not ia_bloqueada:
             try:
                 trad_resumen = _pkg.paso_traducir()
@@ -319,10 +320,10 @@ def ejecutar_barrido() -> dict[str, Any]:
         _log.info(
             "recolectar_daemon: barrido de %d feed(s) -> %d artículo(s) nuevo(s) (%d de agencias, "
             "%d filtrados en la entrada), %d error(es), %d auto-desactivado(s); agrupar: "
-            "%d item(s), %d historia(s) nueva(s); traducir: %d historia(s).",
+            "%d item(s), %d historia(s) nueva(s); traducir: %d historia(s) encolada(s) en %d job(s).",
             len(feeds), items_nuevos, agencias_resumen["items"], items_filtrados, errores,
             auto_desactivados, cluster_resumen["items"], cluster_resumen["clusters_nuevos"],
-            trad_resumen["traducidos"],
+            trad_resumen["encolados"], trad_resumen["marcas"],
         )
         return {
             "feeds": len(feeds),

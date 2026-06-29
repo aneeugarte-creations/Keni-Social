@@ -78,6 +78,13 @@ PROC_INVESTIGAR_EVERGREEN = "investigar-evergreen"
 # INSERTA `insumos_item`, y deja el lote en estado `listo`/`error`. El back ya NO ejecuta
 # `claude -p` (no tiene binario ni token): el WORKER corre el parseo. Mismo patron que copy.
 PROC_INSUMOS = "insumos"
+# Traducción+tropicalización a ES MX de un lote de historias EXTRANJERAS de UNA marca (Haiku): el
+# paso de Traducir del daemon ENCOLA un job por marca (ruteado al carril de su cuenta) en vez de
+# correr la traducción inline pool-wide. El worker corre `claude -p` con el prompt por lotes; el
+# post-procesado parsea el JSON `{traducciones:[...]}` y marca cada cluster `traducido=1`. Es
+# INVESTIGACION: gasta tokens (no es un kind de proceso exento). `originales` ([{id, titulo}]) viaja
+# en el spec para sellar `titulo_original` y mapear la respuesta por id.
+PROC_TRADUCIR = "traducir"
 # Importacion de CALENDARIO desde un archivo NO tabular (PDF/Word/imagen/captura): parsea el
 # JSON `{"filas":[...]}` de claude (Haiku) e IMPORTA al tablero (`importar_a_tablero`). El camino
 # tabular (.xlsx/.csv) sigue siendo SINCRONO en el back (no usa claude); solo el camino IA se
@@ -480,6 +487,27 @@ def construir_insumos(
     }
 
 
+def construir_traducir(
+    *, marca: str, originales: list[dict[str, str]]
+) -> dict[str, Any]:
+    """Spec del post-procesado del JOB de traducción por marca: persiste las traducciones del lote.
+
+    `marca` es la marca del lote (traza/economía); `originales` es `[{id, titulo}]` de los clusters
+    a traducir (el título EXTRANJERO original, para sellar `titulo_original` y mapear la respuesta
+    por id). El worker parsea `{traducciones:[...]}` y marca cada cluster `traducido=1` vía
+    `dominio.traducir.construir_procesar_traducir`.
+    """
+    return {
+        "kind": PROC_TRADUCIR,
+        "marca": marca or "",
+        "originales": [
+            {"id": str(o.get("id") or ""), "titulo": str(o.get("titulo") or "")}
+            for o in originales
+            if o.get("id")
+        ],
+    }
+
+
 def construir_import_calendario(
     *, marca_defecto: str = "", autor: dict[str, str] | None = None
 ) -> dict[str, Any]:
@@ -758,6 +786,13 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         return recibir_parse.construir_procesar_insumos(
             lote_id=p["lote_id"], cajon=p.get("cajon", ""), fecha=p.get("fecha", ""),
             marca_defecto=p.get("marca_defecto", "") or "",
+        )
+
+    if kind == PROC_TRADUCIR:
+        from . import traducir as dom_traducir
+
+        return dom_traducir.construir_procesar_traducir(
+            [o for o in (p.get("originales") or []) if isinstance(o, dict)]
         )
 
     if kind == PROC_IMPORT_CALENDARIO:

@@ -47,6 +47,7 @@ _COLS_NOTICIA_CLUSTER: tuple[str, ...] = (
     "titulo_original",
     "idioma",
     "traducido",
+    "traduccion_encolada",
     "peso_fuentes",
     "velocidad",
     "primera_fuente",
@@ -102,6 +103,10 @@ def _fila_a_noticia_cluster(fila: Any) -> dict[str, Any]:
         "titulo_original": fila["titulo_original"] or "",
         "idioma": fila["idioma"] or "",
         "traducido": bool(fila["traducido"]),
+        # Marca de traducción ENCOLADA (ISO UTC del encolado del job, "" = sin job en curso): la
+        # fija el paso de Traducir al encolar y la limpia el job al completar / el limpiador de
+        # atascados. No es público para la UI (solo coordina la idempotencia del encolado).
+        "traduccion_encolada": fila["traduccion_encolada"] or "",
         # Tracking de fuentes (ranking ponderado): masa de corroboración, velocidad, quién
         # abrió la historia y el timeline de outlets (JSON -> lista).
         "peso_fuentes": float(fila["peso_fuentes"] or 0.0),
@@ -174,6 +179,10 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
         "titulo_original": cluster.get("titulo_original") or "",
         "idioma": cluster.get("idioma") or "",
         "traducido": 1 if cluster.get("traducido") else 0,
+        # Marca de traducción encolada: valor del ALTA; en conflicto NO se pisa (`_NO_PISAR`),
+        # la sellan/limpian aparte `marcar_clusters_traduccion_encolada`/`marcar_cluster_traducido`
+        # — como `traducido`. Así un recalc del daemon no re-abre un cluster ya encolado.
+        "traduccion_encolada": cluster.get("traduccion_encolada") or "",
         # Tracking de fuentes: los recalcula el clustering en cada barrido (SÍ entran al SET
         # de conflicto, como el score: si no, explicarían una corroboración vieja).
         "peso_fuentes": float(cluster.get("peso_fuentes") or 0.0),
@@ -207,6 +216,7 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
     # 'usado' a 'nuevo' ni borrar su enlace al tema (revertirlo duplicaría el tema en el tablero).
     _NO_PISAR = (
         "id", "creado", "titulo_es", "resumen_es", "titulo_original", "idioma", "traducido",
+        "traduccion_encolada",
         "estado", "publicacion_id", "marca_clasificada_por_ia", "verificacion_fuente", "verificar_hallazgos",
         "tema_macro", "subtema",
     )
@@ -448,18 +458,21 @@ def clusters_extranjeros_sin_traducir(
 ) -> list[dict[str, Any]]:
     """Clusters EXTRANJEROS (o sin idioma detectado) recientes aún sin traducir (Ola D), para el paso de traducir.
 
-    Selecciona clusters con `traducido = 0`, `idioma` VACÍO o distinto de español (no empieza por
-    'es'), `score >= min_score`, `ultimo_visto` dentro de la ventana, y estado distinto de
-    `descartado`. Incluir el idioma vacío cierra el hueco por el que un titular en inglés sin idioma
-    declarado se quedaba fuera de la cola y se materializaba en inglés; una rara historia en español
-    sin idioma se re-tropicaliza a MX (inocuo). MÁS RELEVANTES primero (`score DESC`), `limite` acota
-    el lote por barrido (el backlog se procesa en barridos sucesivos; sin tope artificial). PURA salvo I/O.
+    Selecciona clusters con `traducido = 0`, SIN un job de traducción ya en curso
+    (`traduccion_encolada = ''`), `idioma` VACÍO o distinto de español (no empieza por 'es'),
+    `score >= min_score`, `ultimo_visto` dentro de la ventana, y estado distinto de `descartado`.
+    Excluir los `traduccion_encolada` no vacíos hace IDEMPOTENTE el encolado: un cluster cuyo job
+    sigue pendiente no se vuelve a encolar (el limpiador de atascados re-abre los que expiran).
+    Incluir el idioma vacío cierra el hueco por el que un titular en inglés sin idioma declarado se
+    quedaba fuera de la cola y se materializaba en inglés; una rara historia en español sin idioma se
+    re-tropicaliza a MX (inocuo). MÁS RELEVANTES primero (`score DESC`), `limite` acota el lote por
+    barrido (el backlog se procesa en barridos sucesivos; sin tope artificial). PURA salvo I/O.
     """
     corte = iso_utc(datetime.now(UTC) - timedelta(hours=max(1, int(ventana_h))))
     con = _conectar()
     try:
         filas = con.execute(
-            f"{_SELECT_NOTICIA_CLUSTER} WHERE traducido = 0 "
+            f"{_SELECT_NOTICIA_CLUSTER} WHERE traducido = 0 AND traduccion_encolada = '' "
             # `es%%`: el `%` literal va DOBLADO porque psycopg interpreta `%` como inicio de
             # placeholder (el shim `?`->`%s` no escapa los `%` del SQL). En Postgres `%%`->`%`
             # (un comodín LIKE); en SQLite `%%` son dos comodines contiguos (equivalentes a uno).
@@ -473,6 +486,76 @@ def clusters_extranjeros_sin_traducir(
     return [_fila_a_noticia_cluster(f) for f in filas]
 
 
+def marcar_clusters_traduccion_encolada(ids: list[str]) -> int:
+    """Marca `traduccion_encolada = ahora` un lote de clusters AL ENCOLAR su job de traducción.
+
+    Solo afecta a los que siguen `traducido = 0` y SIN marca previa (`traduccion_encolada = ''`):
+    así dos barridos solapados no pisan una marca ya puesta y el encolado es idempotente. Devuelve
+    cuántas filas marcó realmente (las que entran al job). `ids` vacío -> 0 sin tocar BD.
+    """
+    pedidos = [i for i in dict.fromkeys(ids) if i]
+    if not pedidos:
+        return 0
+    marcadores = ",".join("?" for _ in pedidos)
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE noticias_clusters SET traduccion_encolada = ?, actualizado = ? "  # noqa: S608 -- marcadores parametrizados
+            f"WHERE id IN ({marcadores}) AND traducido = 0 AND traduccion_encolada = ''",
+            (ahora_iso(), ahora_iso(), *pedidos),
+        )
+        con.commit()
+        return cur.rowcount or 0
+    finally:
+        con.close()
+
+
+def limpiar_traduccion_encolada(ids: list[str]) -> int:
+    """Limpia (`traduccion_encolada = ''`) un lote de clusters: revierte el encolado fallido.
+
+    La usa el paso de Traducir cuando el encolado del job NO llegó a ocurrir (la admisión lo
+    rechazó por presupuesto/pausa), para que el cluster vuelva a ser candidato en el próximo
+    barrido sin esperar al TTL del limpiador de atascados. `ids` vacío -> 0 sin tocar BD.
+    """
+    pedidos = [i for i in dict.fromkeys(ids) if i]
+    if not pedidos:
+        return 0
+    marcadores = ",".join("?" for _ in pedidos)
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE noticias_clusters SET traduccion_encolada = '', actualizado = ? "  # noqa: S608 -- marcadores parametrizados
+            f"WHERE id IN ({marcadores})",
+            (ahora_iso(), *pedidos),
+        )
+        con.commit()
+        return cur.rowcount or 0
+    finally:
+        con.close()
+
+
+def reparar_traduccion_encolada_atascada(umbral_iso: str) -> int:
+    """Re-abre (`traduccion_encolada = ''`) los clusters cuyo job de traducción quedó ATASCADO.
+
+    Si el job de traducción de un cluster se interrumpe (deploy/OOM/error de claude), el cluster
+    quedaría con `traduccion_encolada` puesta para siempre: ni se traduce ni se vuelve a encolar.
+    Devuelve a "" los que siguen `traducido = 0` con marca anterior a `umbral_iso`, para que el
+    barrido los re-encole. Mismo patrón que `reparar_verificacion_clusters_en_curso`. Devuelve
+    cuántos corrigió.
+    """
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "UPDATE noticias_clusters SET traduccion_encolada = '', actualizado = ? "
+            "WHERE traducido = 0 AND traduccion_encolada <> '' AND traduccion_encolada < ?",
+            (ahora_iso(), umbral_iso),
+        )
+        con.commit()
+        return cur.rowcount or 0
+    finally:
+        con.close()
+
+
 def marcar_cluster_traducido(
     cluster_id: str,
     *,
@@ -483,13 +566,14 @@ def marcar_cluster_traducido(
     """Guarda la traducción ES de un cluster y lo marca `traducido=1` (Ola D). Best-effort.
 
     Conserva `idioma` (ya fijado por el clustering) y guarda el `titulo_original` para mostrar
-    "traducido de {idioma}". No toca los agregados ni el estado. None si el cluster no existe.
+    "traducido de {idioma}". Limpia `traduccion_encolada` (el job terminó). No toca los agregados
+    ni el estado. None si el cluster no existe.
     """
     con = _conectar()
     try:
         cur = con.execute(
             "UPDATE noticias_clusters SET titulo_es = ?, resumen_es = ?, titulo_original = ?, "
-            "traducido = 1, actualizado = ? WHERE id = ?",
+            "traducido = 1, traduccion_encolada = '', actualizado = ? WHERE id = ?",
             (
                 (titulo_es or "")[:300],
                 (resumen_es or "")[:2000],
