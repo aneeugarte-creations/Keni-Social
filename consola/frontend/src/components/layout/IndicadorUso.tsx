@@ -6,10 +6,10 @@ import { cn } from "@/lib/utils";
 
 /**
  * Indicador SUTIL del uso de las cuentas de Claude del servidor, alojado en el pie del sidebar.
- * Expandido pinta, por cuenta, tres BARRAS DE PROGRESO a ANCHO COMPLETO (Semana / 24h / 5h) con su
- * %; la cabecera «Cuenta A/B» solo aparece en la vista "Todas" (varias cuentas), porque con una
- * sola es su cuenta siempre. Colapsado, un anillo fino con el % del límite que ANTES bloqueará
- * (burn rate, el resto va al tooltip).
+ * Expandido pinta, por cuenta, una FRANJA FINA con tres medidores en fila (Semana / 24h / 5h), cada
+ * uno con su % y una barra de progreso breve; la cabecera «Cuenta A/B» solo aparece en la vista
+ * "Todas" (varias cuentas), porque con una sola es su cuenta siempre. Colapsado, un anillo fino con
+ * el % del límite que ANTES bloqueará (burn rate, el resto va al tooltip).
  *
  * EL QUE PRIMERO SE AGOTA / BLOQUEA: «Semana» es el mayor de all-models vs cuota Sonnet, «24h» el
  * cupo del día del límite que primero se agota (backend `uso.dia`), y el anillo colapsado el que
@@ -103,8 +103,8 @@ function tooltipCompleto(uso: UsoCuenta): string {
   return partes.join(" · ");
 }
 
-/** Medidor: etiqueta + % en una fila y, debajo, una BARRA DE PROGRESO rellena a ANCHO COMPLETO
- *  (track tenue + relleno). */
+/** Medidor compacto (una CELDA de la franja): etiqueta + % en una fila y, debajo, una barra de
+ *  progreso fina rellena a ancho completo. Pensado para ir en fila con sus hermanos (`flex-1`). */
 function MiniMedidor({
   etiqueta,
   pct,
@@ -117,12 +117,14 @@ function MiniMedidor({
   const valor = pctEntero(pct);
   const tiene = valor != null;
   return (
-    <div className="space-y-1">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[10px] uppercase tracking-wide text-muted-foreground/70">{etiqueta}</span>
+    <div className="min-w-0 flex-1 space-y-1">
+      <div className="flex items-baseline justify-between gap-1">
+        <span className="text-[10px] uppercase leading-none tracking-wide text-muted-foreground/70">
+          {etiqueta}
+        </span>
         <span
           className={cn(
-            "text-[10px] tabular-nums",
+            "text-[10px] leading-none tabular-nums",
             rojo ? "text-destructive" : "text-muted-foreground",
           )}
         >
@@ -130,7 +132,7 @@ function MiniMedidor({
         </span>
       </div>
       <div
-        className="h-1.5 w-full overflow-hidden rounded-full bg-border"
+        className="h-1 w-full overflow-hidden rounded-full bg-border"
         role="progressbar"
         aria-label={`Uso ${etiqueta}`}
         aria-valuemin={0}
@@ -189,23 +191,26 @@ function CirculoUso({ pct, rojo }: { pct: number | null; rojo: boolean }) {
   );
 }
 
-/** Bloque expandido de UNA cuenta: sus tres medidores a ancho completo + el aviso rojo. La cabecera
- *  "Cuenta A/B" solo cuando hay VARIAS cuentas (vista "Todas"): con una sola es su cuenta siempre. */
+/** Bloque expandido de UNA cuenta: sus tres medidores en UNA FRANJA (fila) + el aviso rojo. La
+ *  cabecera "Cuenta A/B" solo cuando hay VARIAS cuentas (vista "Todas"): con una sola es su cuenta
+ *  siempre. */
 function BloqueCuenta({ uso, etiquetada }: { uso: UsoCuenta; etiquetada: boolean }) {
   const rojo = uso.alerta_roja;
   const alerta = mensajeRojo(uso);
   return (
     <Tooltip label={tooltipCompleto(uso)} side="top" className="w-full">
-      <div className="w-full space-y-1.5" aria-label={tooltipCompleto(uso)}>
+      <div className="w-full space-y-1" aria-label={tooltipCompleto(uso)}>
         {etiquetada ? (
           <p className="truncate px-0.5 text-[10px] font-medium text-muted-foreground/80">
             {etiquetaCuenta(uso)}
           </p>
         ) : null}
         {alerta ? <p className="px-0.5 text-[10px] font-medium text-destructive">{alerta}</p> : null}
-        <MiniMedidor etiqueta="Semana" pct={semanaBinding(uso).pct} rojo={rojo} />
-        <MiniMedidor etiqueta="24h" pct={dia24hPct(uso)} rojo={rojo} />
-        <MiniMedidor etiqueta="5h" pct={uso.sesion_5h_pct} rojo={rojo} />
+        <div className="flex items-end gap-2.5">
+          <MiniMedidor etiqueta="Semana" pct={semanaBinding(uso).pct} rojo={rojo} />
+          <MiniMedidor etiqueta="24h" pct={dia24hPct(uso)} rojo={rojo} />
+          <MiniMedidor etiqueta="5h" pct={uso.sesion_5h_pct} rojo={rojo} />
+        </div>
       </div>
     </Tooltip>
   );
@@ -247,7 +252,7 @@ function IndicadorUsoContenido({ colapsado }: { colapsado: boolean }) {
       );
     }
     return (
-      <div className="space-y-1">
+      <div className="flex items-end gap-2.5">
         <MiniMedidor etiqueta="Semana" pct={null} rojo={false} />
         <MiniMedidor etiqueta="24h" pct={null} rojo={false} />
         <MiniMedidor etiqueta="5h" pct={null} rojo={false} />
@@ -270,7 +275,7 @@ function IndicadorUsoContenido({ colapsado }: { colapsado: boolean }) {
   }
   const etiquetada = cuentas.length > 1;
   return (
-    <div className="w-full space-y-3">
+    <div className="w-full space-y-2">
       {cuentas.map((c) => (
         <BloqueCuenta key={c.cuenta} uso={c} etiquetada={etiquetada} />
       ))}

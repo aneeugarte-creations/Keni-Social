@@ -223,13 +223,18 @@ function renderAvatarMenu(rol: RolUsuario, esSuperadmin = false) {
 }
 
 describe("Sidebar · bloques de flujo", () => {
-  it("pinta los bloques de flujo con su encabezado", async () => {
-    renderSidebar("editor", "/operacion/feed");
-    expect(await screen.findByText("Operación")).toBeInTheDocument();
-    expect(screen.getByText("Equipo")).toBeInTheDocument();
-    expect(screen.getByText("Contenido")).toBeInTheDocument();
-    expect(screen.getByText("Máquina")).toBeInTheDocument();
-    expect(screen.getByText("Datos")).toBeInTheDocument();
+  it("agrupa la nav en bloques rotulados para a11y (sin encabezado visible), separados por un hilo", async () => {
+    const { container } = renderSidebar("editor", "/operacion/feed");
+    // El nombre del bloque ya no se pinta como texto: vive como rótulo accesible de cada lista.
+    expect(await screen.findByRole("list", { name: "Operación" })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Equipo" })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Contenido" })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Máquina" })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Datos" })).toBeInTheDocument();
+    // Y no hay texto visible de encabezado.
+    expect(screen.queryByText("Operación")).not.toBeInTheDocument();
+    // Cinco bloques → cuatro hilos separadores (sin hilo antes del primero).
+    expect(container.querySelectorAll("nav hr").length).toBe(4);
   });
 
   it("Feed y Programa se ven en cualquier marca (ambos son por marca, sin gating)", async () => {

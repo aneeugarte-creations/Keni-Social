@@ -288,18 +288,21 @@ describe("AppShell · sidebar siempre presente", () => {
   it("escritorio: el sidebar arranca en rail y se EXPANDE al pasar el ratón (sin botón)", async () => {
     renderShell("/configuracion");
     await screen.findByText("contenido config");
-    // Rail por defecto: el enlace está (por aria-label) pero el ENCABEZADO de bloque no se pinta.
+    // Rail por defecto: el enlace está (por aria-label) pero NO hay listas de bloque rotuladas (en
+    // rail los enlaces van como iconos sueltos, sin la lista expandida del bloque «Operación»).
     expect(await screen.findByRole("link", { name: /generación/i })).toBeInTheDocument();
-    expect(screen.queryByText("Operación")).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Operación" })).not.toBeInTheDocument();
     // Ya no hay botón de colapsar/expandir: lo gobierna el hover.
     expect(
       screen.queryByRole("button", { name: /expandir barra|^colapsar$/i }),
     ).not.toBeInTheDocument();
-    // Al pasar el ratón por la barra se EXPANDE (aparece el encabezado de bloque); al salir se repliega.
+    // Al pasar el ratón por la barra se EXPANDE (aparece la lista rotulada del bloque); al salir se repliega.
     const aside = screen.getByRole("complementary");
     fireEvent.mouseEnter(aside);
-    await waitFor(() => expect(screen.getByText("Operación")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("list", { name: "Operación" })).toBeInTheDocument());
     fireEvent.mouseLeave(aside);
-    await waitFor(() => expect(screen.queryByText("Operación")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole("list", { name: "Operación" })).not.toBeInTheDocument(),
+    );
   });
 });

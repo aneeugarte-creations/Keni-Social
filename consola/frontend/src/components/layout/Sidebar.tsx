@@ -36,8 +36,9 @@ function clasesIconoRail(activa: boolean) {
  * (no por dueño de app): el backend (`/api/catalogo` → `navegacion`, ADR 0005)
  * entrega los bloques ya ordenados y etiquetados — `Operación` (checkpoints diarios) ·
  * `Publicacion` (herramientas para crear/editar a mano) · `Datos` (lo que alimenta o
- * refleja la automatización). Cada bloque pinta su encabezado y, debajo,
- * sus entradas como enlaces (icono + nombre). Los hubs (Investigación, Revisión,
+ * refleja la automatización). Los bloques NO pintan encabezado visible: se separan con un
+ * hilo discreto (como el rail) y su nombre vive como rótulo accesible (`aria-label`) de la
+ * lista; cada entrada es un enlace (icono + nombre). Los hubs (Investigación, Revisión,
  * Analíticas, Parrilla) son UNA entrada; su sub-navegación vive como pestañas
  * in-page (`SubnavHub`), no en el sidebar: así la barra no lista herramientas que se
  * usan dentro de un flujo, no sueltas.
@@ -146,15 +147,13 @@ export function Sidebar({
         <CuentaUsuario onAbiertoChange={onCuentaAbierta} />
       </div>
 
-      <div className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
+      <div className="flex-1 overflow-y-auto px-3 py-4">
         {bloques.map((bloque, i) => (
-          <div key={bloque.etiqueta || i} className="space-y-0.5">
-            {bloque.etiqueta && (
-              <p className="px-3 pb-1 pt-1 text-xs font-medium tracking-wide text-muted-foreground/70">
-                {bloque.etiqueta}
-              </p>
-            )}
-            <ul className="space-y-0.5">
+          <div key={bloque.etiqueta || i}>
+            {/* Sin encabezado visible: los bloques se separan con un hilo discreto (como el rail) y
+                el nombre del bloque vive como rótulo accesible de la lista, no como texto. */}
+            {i > 0 && <hr className="my-2 border-border" aria-hidden="true" />}
+            <ul className="space-y-0.5" aria-label={bloque.etiqueta || undefined}>
               {bloque.items.map((item) => {
                 const Icono = iconoDe(item.icono);
                 return (
