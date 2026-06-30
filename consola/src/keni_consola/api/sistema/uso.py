@@ -7,8 +7,8 @@ lateral consulta un dato barato y persistido, sin ejecutar `claude` ni depender 
 
 Endpoint (bajo `/api/sistema`, CONTRATO con el frontend):
   - GET /api/sistema/uso -> {cuentas: [{cuenta, etiqueta, marcas, conectada, semana_pct,
-      sesion_5h_pct, sonnet_pct, reset_semana_iso, reset_semana_txt, actualizado_ts, al_100,
-      alerta_roja, dia: {consumo_pct, umbral_pct, limite, pausado}}, ...]}
+      sesion_5h_pct, sonnet_pct, reset_semana_iso, reset_semana_txt, reset_sesion_iso,
+      actualizado_ts, al_100, alerta_roja, dia: {consumo_pct, umbral_pct, limite, pausado}}, ...]}
     `dia` es el cupo del dia (gate diario) del limite que primero se agota -> barra «24h».
 
 Cualquier usuario AUTENTICADO lo consulta, pero solo recibe LAS CUENTAS DE SUS MARCAS (suelo de
@@ -62,6 +62,7 @@ def _forma_respuesta(fila: dict | None) -> dict:
             "sonnet_pct": None,
             "reset_semana_iso": None,
             "reset_semana_txt": None,
+            "reset_sesion_iso": None,
             "actualizado_ts": None,
             "al_100": False,
             "alerta_roja": True,
@@ -81,6 +82,7 @@ def _forma_respuesta(fila: dict | None) -> dict:
         "sonnet_pct": fila.get("sonnet_pct"),
         "reset_semana_iso": (fila.get("reset_semana_iso") or None),
         "reset_semana_txt": (fila.get("reset_semana_txt") or None),
+        "reset_sesion_iso": (fila.get("reset_sesion_iso") or None),
         "actualizado_ts": fila.get("actualizado_ts"),
         "al_100": al_100,
         "alerta_roja": alerta_roja,

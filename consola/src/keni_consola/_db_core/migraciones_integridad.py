@@ -386,6 +386,7 @@ def _migrar_tabla_cuenta_uso(con: Any) -> None:
         "id TEXT PRIMARY KEY, conectada INTEGER NOT NULL DEFAULT 0, "
         "semana_pct INTEGER, sesion_5h_pct INTEGER, sonnet_pct INTEGER, "
         "reset_semana_iso TEXT NOT NULL DEFAULT '', reset_semana_txt TEXT NOT NULL DEFAULT '', "
+        "reset_sesion_iso TEXT NOT NULL DEFAULT '', "
         "semana_pct_inicio_dia INTEGER, sonnet_pct_inicio_dia INTEGER, "
         "dia_utc TEXT NOT NULL DEFAULT '', "
         "actualizado_ts DOUBLE PRECISION)"

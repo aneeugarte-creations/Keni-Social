@@ -22,7 +22,8 @@ CLAVE = "clave-de-prueba"
 # Campos del contrato de CADA cuenta del payload (lo que consume el indicador del sidebar).
 _CAMPOS_CUENTA = {
     "cuenta", "etiqueta", "marcas", "conectada", "semana_pct", "sesion_5h_pct", "sonnet_pct",
-    "reset_semana_iso", "reset_semana_txt", "actualizado_ts", "al_100", "alerta_roja", "dia",
+    "reset_semana_iso", "reset_semana_txt", "reset_sesion_iso", "actualizado_ts", "al_100",
+    "alerta_roja", "dia",
 }
 
 

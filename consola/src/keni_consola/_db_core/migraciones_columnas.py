@@ -48,6 +48,19 @@ def _migrar_sonnet_inicio_dia(con: Any) -> None:
     con.execute("ALTER TABLE cuenta_uso ADD COLUMN IF NOT EXISTS sonnet_pct_inicio_dia INTEGER")
 
 
+def _migrar_sesion_reset(con: Any) -> None:
+    """Anade `reset_sesion_iso` a `cuenta_uso`: el instante de reset de la ventana de sesion (5h).
+
+    Lo necesita el burn rate del indicador (predecir que limite —sesion 5h, semanal o Sonnet—
+    llegara antes al 100%): sin el reset no se puede situar la ventana en el tiempo. One-shot e
+    idempotente (`ADD COLUMN IF NOT EXISTS`); el DDL la trae para BDs virgenes. Sin backfill: el
+    muestreo la llena prospectivamente (`cuenta_uso_daemon`).
+    """
+    if not _tabla_existe(con, "cuenta_uso"):
+        return
+    con.execute("ALTER TABLE cuenta_uso ADD COLUMN IF NOT EXISTS reset_sesion_iso TEXT NOT NULL DEFAULT ''")
+
+
 def _migrar_renombre_catalogo_media(con: Any) -> None:
     """Renombra la tabla `biblioteca_media` a `catalogo_media` y sus índices (idempotente).
 

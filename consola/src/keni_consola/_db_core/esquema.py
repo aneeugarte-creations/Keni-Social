@@ -1809,6 +1809,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         sonnet_pct             INTEGER,
         reset_semana_iso       TEXT NOT NULL DEFAULT '',
         reset_semana_txt       TEXT NOT NULL DEFAULT '',
+        reset_sesion_iso       TEXT NOT NULL DEFAULT '',
         semana_pct_inicio_dia  INTEGER,
         sonnet_pct_inicio_dia  INTEGER,
         dia_utc                TEXT NOT NULL DEFAULT '',

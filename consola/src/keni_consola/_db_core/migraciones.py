@@ -46,6 +46,7 @@ from .migraciones_columnas import (
     _migrar_columnas_catalogo_media,
     _migrar_cuenta_uso_por_cuenta,
     _migrar_sonnet_inicio_dia,
+    _migrar_sesion_reset,
     _migrar_columnas_origen_fuente,
     _migrar_backfill_origen_catalogo,
     _migrar_reorg_originales_a_portal,
@@ -604,6 +605,11 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # PRIMERO se agota. One-shot e idempotente (`ADD COLUMN IF NOT EXISTS`); el DDL la trae para BDs
     # virgenes. Sin backfill (muestreo prospectivo). Ver `_migrar_sonnet_inicio_dia` y `db_cuenta_uso`.
     Migracion("0068-sonnet-inicio-dia", _migrar_sonnet_inicio_dia),
+    # RESET DE LA SESIÓN 5h: columna `reset_sesion_iso` en `cuenta_uso`, para que el burn rate del
+    # indicador situe la ventana de 5h en el tiempo y prediga que limite llegara antes al 100%.
+    # One-shot e idempotente (`ADD COLUMN IF NOT EXISTS`); el DDL la trae para BDs virgenes. Sin
+    # backfill (muestreo prospectivo). Ver `_migrar_sesion_reset` y `db_cuenta_uso`.
+    Migracion("0069-reset-sesion-iso", _migrar_sesion_reset),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

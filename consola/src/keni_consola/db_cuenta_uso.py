@@ -33,6 +33,7 @@ _COLS = (
     "sonnet_pct",
     "reset_semana_iso",
     "reset_semana_txt",
+    "reset_sesion_iso",
     "semana_pct_inicio_dia",
     "sonnet_pct_inicio_dia",
     "dia_utc",
@@ -122,6 +123,7 @@ def guardar_uso_cuenta(
     sonnet_pct: int | None,
     reset_semana_iso: str = "",
     reset_semana_txt: str = "",
+    reset_sesion_iso: str = "",
     actualizado_ts: float | None = None,
     dia_utc: str | None = None,
 ) -> dict[str, Any]:
@@ -148,6 +150,7 @@ def guardar_uso_cuenta(
             "sonnet_pct": sonnet_pct,
             "reset_semana_iso": reset_semana_iso or "",
             "reset_semana_txt": reset_semana_txt or "",
+            "reset_sesion_iso": reset_sesion_iso or "",
             "semana_pct_inicio_dia": base,
             "sonnet_pct_inicio_dia": base_sonnet,
             "dia_utc": dia,

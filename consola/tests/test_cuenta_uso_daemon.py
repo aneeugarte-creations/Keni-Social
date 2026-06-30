@@ -43,6 +43,7 @@ def test_extraer_medidores_mapea_los_tres():
     assert campos["sonnet_pct"] == 2
     assert campos["reset_semana_iso"] == "2026-07-01T07:00:00Z"
     assert campos["reset_semana_txt"] == "Jul 1, 7am (UTC)"
+    assert campos["reset_sesion_iso"] == "2026-06-15T19:39:00Z"  # reset de la 5h, para el burn rate
     assert campos["actualizado_ts"] == 1750000000.0
 
 
@@ -52,6 +53,7 @@ def test_extraer_medidores_sin_medidor_es_desconectada():
     assert campos["semana_pct"] is None
     assert campos["sesion_5h_pct"] is None
     assert campos["sonnet_pct"] is None
+    assert campos["reset_sesion_iso"] == ""
     # Sin `actualizado` en la lectura, se sella el instante actual (float epoch).
     assert isinstance(campos["actualizado_ts"], float)
 
