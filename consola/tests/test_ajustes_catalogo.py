@@ -83,6 +83,8 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         # la maduración, los caps de admisión, los umbrales de alertas/GC y las caducidades del
         # pool se DEGRADARON a solo-env: tunables de ingeniería, fuera de la UI.
         config.ENV_PROMOVER_MIN_SCORE,
+        # Tope de slides del carrusel automático (panel editorial, Redactar → Decisor=carrusel).
+        config.ENV_CARRUSEL_MAX_SLIDES,
         # Esfuerzo de razonamiento de la generación (palanca calidad/coste, se edita en Economía).
         config.ENV_ESFUERZO,
         # Ritmo de producción global (%): dial gradual del gasto que escala los caps de auto-producción.
@@ -221,8 +223,10 @@ def test_noticias_reparto_en_secciones(store):
         },
         # Umbral de auto-producción (dominio.agrupar.evaluar_umbral): el score mínimo que decide
         # qué historias del pool disparan verificación+copy automáticos (coste real de tokens).
+        # Tope de slides del carrusel automático (panel editorial, Redactar → Decisor=carrusel).
         "noticias_produccion": {
             config.ENV_PROMOVER_MIN_SCORE,
+            config.ENV_CARRUSEL_MAX_SLIDES,
         },
     }
     for gid, esperadas in reparto.items():
