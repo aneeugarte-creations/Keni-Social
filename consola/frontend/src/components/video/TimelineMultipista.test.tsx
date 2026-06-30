@@ -5,10 +5,12 @@
  *  - Playhead accesible (role=slider): flechas ±1 s, Shift ±5 s.
  *  - Cuchilla: divide en el playhead → onDividirSegmento(idx, msLocal).
  *  - Asas de trim: arrastrar fija recorte_in/out_ms del segmento (commit al soltar).
+ *  - Snap de trim: al arrastrar un asa, si queda a <8px del playhead se enclava en él.
  *  - Audio base: pista separada (barra a lo largo del eje) + toggle de silenciar.
  *  - Música: «+ Música» (sin música) llama onAnadirMusica; con música hay controles y barra.
  *  - Zoom: los botones cambian el ancho del eje y los gestos siguen correctos al ancho escalado.
  *  - `disabled` apaga la edición; el seek sigue activo.
+ *  - PiP y subtítulos: clic en la barra llama onSeek con el inicio de esa barra.
  *
  * jsdom no tiene layout: posiciones por estilo (% sobre el eje) y gestos que mockean el
  * `getBoundingClientRect` del eje (su ancho en px = todo el tiempo de salida).
@@ -21,6 +23,7 @@ import {
   dividirClipBase,
   setAudioBase,
   setClipBase,
+  setClipPip,
   setMusica,
   type ComposicionVideo,
 } from "@/lib/video";
@@ -138,6 +141,28 @@ describe("TimelineMultipista", () => {
     expect(onSeek).toHaveBeenLastCalledWith(15); // el preview salta al borde recortado
   });
 
+  it("el snap del trim enclava al playhead cuando queda a <8px de él", () => {
+    const onSeek = vi.fn();
+    const onTrimSegmento = vi.fn();
+    // Playhead a 15 s (50%). Eje = 100px → umbral = 8/100 * 30000 = 2400 ms.
+    // Mover a 53px = 15900 ms; distancia al playhead (15000 ms) = 900 ms < 2400 ms → snap.
+    render(
+      <TimelineMultipista
+        doc={doc30()}
+        tiempoSeg={15}
+        onSeek={onSeek}
+        onTrimSegmento={onTrimSegmento}
+      />,
+    );
+    mockearEje();
+    const asa = screen.getByRole("button", { name: /recortar fin del segmento 1/i });
+    fireEvent.mouseDown(asa, { clientX: 100 });
+    fireEvent.mouseMove(window, { clientX: 53 }); // cerca del playhead (50px)
+    fireEvent.mouseUp(window);
+    // Debe enclavarse en el playhead (15000 ms).
+    expect(onTrimSegmento).toHaveBeenCalledWith(0, 0, 15000);
+  });
+
   it("el toggle de silenciar el audio base llama onAudioBase", () => {
     const onAudioBase = vi.fn();
     render(
@@ -250,5 +275,23 @@ describe("TimelineMultipista", () => {
       key: "ArrowLeft",
     });
     expect(onSeek).toHaveBeenLastCalledWith(14);
+  });
+
+  it("clic en la barra de PiP llama onSeek con el inicio del PiP", () => {
+    const onSeek = vi.fn();
+    const doc = setClipPip(doc30(), "videos/pip.mp4", 30000);
+    render(<TimelineMultipista doc={doc} tiempoSeg={0} onSeek={onSeek} />);
+    fireEvent.click(screen.getByRole("button", { name: /barra de pip/i }));
+    expect(onSeek).toHaveBeenCalledWith(0);
+  });
+
+  it("clic en una barra de subtítulos llama onSeek con el inicio del segmento", () => {
+    const onSeek = vi.fn();
+    const segmentos = [{ id: "s1", texto: "Hola mundo", inicio: 5, fin: 10 }];
+    render(
+      <TimelineMultipista doc={doc30()} tiempoSeg={0} onSeek={onSeek} segmentos={segmentos} />,
+    );
+    fireEvent.click(screen.getByTitle("Hola mundo"));
+    expect(onSeek).toHaveBeenCalledWith(5);
   });
 });

@@ -14,13 +14,21 @@
  *   3. AUDIO (base) — pista propia: una BARRA que abarca [0, total] reflejando volumen/silenciar
  *      (`onAudioBase`), con sus controles en la cabecera.
  *   4. MÚSICA — barra propia con su tramo, controles de volumen/silenciar/quitar, o «+ Música».
- *   5. PiP y SUBTÍTULOS — barras finas SOLO LECTURA, ancladas a sus tiempos.
+ *   5. PiP y SUBTÍTULOS — barras finas clicables (clic = seek al inicio de esa barra).
  *
  * El eje es [0, duración total de la base]. Cada segmento ocupa [inicio acumulado, +duración de
  * salida]; el render server-side concatena los segmentos en ese orden. El zoom sólo escala el
  * ancho del eje (px); las conversiones px↔ms leen el ancho REAL escalado vía
  * `getBoundingClientRect`, así los gestos quedan correctos a cualquier zoom y scroll. `disabled`
  * apaga la edición pero deja vivo el seek.
+ *
+ * Auto-scroll: cuando tiempoSeg cambia y el playhead queda fuera del viewport visible (con zoom
+ * >1x), el contenedor scrolleable lo centra automáticamente. El arrastre manual (scrub o trim)
+ * bloquea el efecto para no interferir con el gesto del usuario.
+ *
+ * Snap de trim: al arrastrar un asa, si el borde queda a <8 px (pantalla) del playhead, de un
+ * borde de otro segmento o de una marca de la regla, enclava en ese punto y pinta una guía
+ * vertical amarilla. El valor enclavado es el que se commitea al soltar.
  */
 import * as React from "react";
 import {
@@ -72,7 +80,7 @@ export interface TimelineMultipistaProps {
   onVolumenMusica?: (cambios: { volumen?: number; silenciar?: boolean }) => void;
   /** Quita la música. */
   onQuitarMusica?: () => void;
-  /** Segmentos de subtítulos (barra fina informativa, en tiempo de salida). */
+  /** Segmentos de subtítulos (barra fina clicable, en tiempo de salida). */
   segmentos?: SegmentoSub[];
   /** Desactiva la edición (el seek sigue activo). */
   disabled?: boolean;
@@ -119,16 +127,37 @@ export function TimelineMultipista({
   disabled = false,
 }: TimelineMultipistaProps) {
   const ejeRef = React.useRef<HTMLDivElement>(null);
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  // true mientras el usuario arrastra (scrub o trim): bloquea el auto-scroll.
+  const arrastrando = React.useRef(false);
+
+  // Refs a valores calculados en render: permiten leerlos dentro de handlers de drag sin
+  // stale closure (los handlers son useCallback con deps mínimas).
+  const tiempoMsRef = React.useRef(0);
+  const axisRef = React.useRef(1);
+  const offsetsRef = React.useRef<number[]>([]);
+  const segsRef = React.useRef<ClipVideo[]>([]);
+
   // Asa en arrastre (estado VISUAL del gesto): el commit va en el mouseup vía onTrimSegmento.
   const [arrastre, setArrastre] = React.useState<{ idx: number; asa: "in" | "out"; ms: number } | null>(
     null,
   );
+  // Posición (ms) de la guía de snap durante el trim; null = sin guía activa.
+  const [guiaSnap, setGuiaSnap] = React.useState<number | null>(null);
   // Zoom del eje (multiplicador del ancho). Sólo afecta a px; el modelo de tiempo no cambia.
   const [zoom, setZoom] = React.useState(1);
 
+  // Valores derivados del doc (no son hooks; pueden computarse antes del early return).
   const segs = segmentosBase(doc);
   const total = duracionBaseMs(doc);
   const axisTotal = Math.max(total, 1);
+  // tiempoMs se calcula aquí (antes del early return) para que el useEffect de auto-scroll lo use.
+  const tiempoMs = Math.min(Math.max(0, tiempoSeg * 1000), axisTotal);
+
+  // Sincronizar refs con los valores de este render para que los handlers los lean frescos.
+  tiempoMsRef.current = tiempoMs;
+  axisRef.current = axisTotal;
+  segsRef.current = segs;
 
   /** Posición X del puntero -> ms sobre el eje de salida (clamp a [0, axisTotal]). */
   const msDesdePuntero = React.useCallback(
@@ -147,9 +176,11 @@ export function TimelineMultipista({
   const iniciarScrub = React.useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
+      arrastrando.current = true;
       onSeek(msDesdePuntero(e.clientX) / 1000);
       const mover = (ev: MouseEvent) => onSeek(msDesdePuntero(ev.clientX) / 1000);
       const soltar = () => {
+        arrastrando.current = false;
         window.removeEventListener("mousemove", mover);
         window.removeEventListener("mouseup", soltar);
       };
@@ -170,35 +201,74 @@ export function TimelineMultipista({
     return acc;
   }, [segs]);
 
+  // Sincronizar ref de offsets tras el useMemo.
+  offsetsRef.current = offsets;
+
   /**
    * Arrastre de un asa de trim del segmento `idx`. Mueve el borde DENTRO de su slot (encoge):
    * el asa izquierda crece `recorte_in_ms`, la derecha encoge `recorte_out_ms`. Clampa al mínimo
    * de 1 s y sólo emite `onTrimSegmento` al soltar si hubo cambio real.
+   * Snap: si el borde queda a <8 px (pantalla) del playhead, de otro borde de segmento o de una
+   * marca de la regla, enclava en ese punto y activa la guía amarilla.
    */
   const iniciarTrim = React.useCallback(
     (idx: number, asa: "in" | "out") => (e: React.MouseEvent) => {
-      const seg = segs[idx];
+      const seg = segsRef.current[idx];
       if (disabled || !onTrimSegmento || !seg) return;
       e.preventDefault();
       e.stopPropagation();
       const rIn = seg.recorte_in_ms ?? 0;
       const rOut = seg.recorte_out_ms || seg.fin_ms || 0;
       const dur = Math.max(0, rOut - rIn);
-      const ini = offsets[idx];
+      const ini = offsetsRef.current[idx];
       const fin = ini + dur;
       const minDur = Math.min(MIN_RECORTE_MS, dur);
       const clampa = (ms: number) =>
         asa === "in" ? Math.min(Math.max(ini, ms), fin - minDur) : Math.min(Math.max(ini + minDur, ms), fin);
       let ultimo = asa === "in" ? ini : fin;
       setArrastre({ idx, asa, ms: ultimo });
+      arrastrando.current = true;
       const mover = (ev: MouseEvent) => {
-        ultimo = clampa(msDesdePuntero(ev.clientX));
+        let ms = clampa(msDesdePuntero(ev.clientX));
+        const el = ejeRef.current;
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          const axis = axisRef.current;
+          if (rect.width > 0) {
+            // Umbral de snap en ms equivalente a 8 px de pantalla a la escala actual.
+            const umbralMs = (8 / rect.width) * axis;
+            const offs = offsetsRef.current;
+            const ss = segsRef.current;
+            const paso = pasoRegla(axis);
+            // Candidatos: playhead, bordes de todos los segmentos, marcas de la regla.
+            const candidatos: number[] = [tiempoMsRef.current];
+            for (let i = 0; i < offs.length; i++) {
+              candidatos.push(offs[i]);
+              candidatos.push(offs[i] + durSegMs(ss[i]));
+            }
+            for (let m = 0; m <= axis; m += paso) candidatos.push(m);
+            let snapMs: number | null = null;
+            let minDist = Infinity;
+            for (const c of candidatos) {
+              const d = Math.abs(c - ms);
+              if (d < umbralMs && d < minDist) {
+                minDist = d;
+                snapMs = c;
+              }
+            }
+            if (snapMs !== null) ms = clampa(snapMs);
+            setGuiaSnap(snapMs !== null ? ms : null);
+          }
+        }
+        ultimo = ms;
         setArrastre({ idx, asa, ms: ultimo });
       };
       const soltar = () => {
+        arrastrando.current = false;
         window.removeEventListener("mousemove", mover);
         window.removeEventListener("mouseup", soltar);
         setArrastre(null);
+        setGuiaSnap(null);
         const nuevoIn = asa === "in" ? Math.round(rIn + (ultimo - ini)) : rIn;
         const nuevoOut = asa === "out" ? Math.round(rOut + (ultimo - fin)) : rOut;
         if (nuevoIn === rIn && nuevoOut === rOut) return; // click sin arrastre: nada que guardar
@@ -208,7 +278,7 @@ export function TimelineMultipista({
       window.addEventListener("mousemove", mover);
       window.addEventListener("mouseup", soltar);
     },
-    [disabled, onTrimSegmento, segs, offsets, msDesdePuntero, onSeek],
+    [disabled, onTrimSegmento, msDesdePuntero, onSeek],
   );
 
   /** Teclado del playhead: flechas ±1 s, Shift ±5 s, Home/End a los extremos. */
@@ -232,11 +302,24 @@ export function TimelineMultipista({
     [onSeek, axisTotal, tiempoSeg],
   );
 
+  // Auto-scroll: cuando tiempoSeg cambia y el playhead queda fuera del viewport visible (con
+  // zoom >1x), centra el contenedor en el playhead. No actúa durante el arrastre del usuario.
+  React.useEffect(() => {
+    if (arrastrando.current) return;
+    const scroll = scrollRef.current;
+    if (!scroll || zoom <= 1) return;
+    const playheadPx = (tiempoMs / axisTotal) * scroll.scrollWidth;
+    const visLeft = scroll.scrollLeft;
+    const visRight = visLeft + scroll.clientWidth;
+    if (playheadPx < visLeft || playheadPx > visRight) {
+      scroll.scrollLeft = Math.max(0, playheadPx - scroll.clientWidth / 2);
+    }
+  }, [tiempoMs, axisTotal, zoom]);
+
   // Sin segmentos no hay nada que cronometrar.
   if (segs.length === 0) return null;
 
   const pct = (ms: number) => `${(Math.min(Math.max(0, ms), axisTotal) / axisTotal) * 100}%`;
-  const tiempoMs = Math.min(Math.max(0, tiempoSeg * 1000), axisTotal);
 
   // Marcas de la regla (0, paso, 2·paso, …, ≤ total).
   const paso = pasoRegla(axisTotal);
@@ -298,8 +381,15 @@ export function TimelineMultipista({
 
   return (
     <div className="select-none space-y-1" data-testid="timeline-multipista">
-      {/* Barra de zoom del eje temporal. */}
-      <div className="flex items-center justify-end gap-1">
+      {/* Barra de zoom del eje temporal: etiquetada «Zoom» para distinguirla del zoom del lienzo. */}
+      <div
+        className="flex items-center justify-end gap-1"
+        title="Zoom temporal"
+        aria-label="Zoom temporal"
+      >
+        <span className="mr-0.5 text-[10px] font-medium text-muted-foreground" aria-hidden="true">
+          Zoom
+        </span>
         <button
           type="button"
           aria-label="Alejar"
@@ -453,7 +543,7 @@ export function TimelineMultipista({
         </div>
 
         {/* VIEWPORT con scroll horizontal: el eje escala con el zoom. */}
-        <div className="flex-1 overflow-x-auto">
+        <div ref={scrollRef} className="flex-1 overflow-x-auto">
           <div
             ref={ejeRef}
             aria-label="Pistas de la composición"
@@ -570,6 +660,14 @@ export function TimelineMultipista({
                   </div>
                 );
               })}
+              {/* Línea de corte: indica visualmente dónde dividirá la cuchilla (sigue al playhead). */}
+              {puedeDividir && (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 z-10 border-l-2 border-dashed border-orange-500/70"
+                  style={{ left: pct(tiempoMs) }}
+                />
+              )}
             </div>
 
             {/* Carril 3 · Audio (base): pista propia (barra a lo largo de todo el eje). */}
@@ -610,15 +708,19 @@ export function TimelineMultipista({
               )}
             </div>
 
-            {/* Carril 5 · PiP y subtítulos: barras finas SOLO LECTURA. */}
+            {/* Carril 5 · PiP y subtítulos: barras finas clicables (clic = seek al inicio). */}
             {hayBarras && (
-              <div className={`pointer-events-none flex ${ALTO_BARRAS} flex-col justify-center gap-1`}>
+              <div className={`flex ${ALTO_BARRAS} flex-col justify-center gap-1`}>
                 {barPip && (
                   <div className="relative h-1.5">
                     <div
-                      title="PiP"
+                      title="PiP — clic para buscar"
                       aria-label="Barra de PiP"
-                      className="absolute inset-y-0 rounded-full bg-sky-400/70"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onSeek(barPip.ini / 1000)}
+                      onKeyDown={(e) => e.key === "Enter" && onSeek(barPip.ini / 1000)}
+                      className="absolute inset-y-0 cursor-pointer rounded-full bg-sky-400/70 hover:bg-sky-400/90"
                       style={{ left: pct(barPip.ini), width: pct(Math.max(0, barPip.fin - barPip.ini)) }}
                     />
                   </div>
@@ -629,7 +731,11 @@ export function TimelineMultipista({
                       <div
                         key={s.id}
                         title={s.texto}
-                        className="absolute inset-y-0 rounded-full bg-amber-400/70"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => onSeek(s.inicio)}
+                        onKeyDown={(e) => e.key === "Enter" && onSeek(s.inicio)}
+                        className="absolute inset-y-0 cursor-pointer rounded-full bg-amber-400/70 hover:bg-amber-400/90"
                         style={{
                           left: pct(s.inicio * 1000),
                           width: pct(Math.max(0, (s.fin - s.inicio) * 1000)),
@@ -659,11 +765,30 @@ export function TimelineMultipista({
                 iniciarScrub(e);
               }}
               onKeyDown={onTeclaPlayhead}
-              className="absolute top-0 z-20 flex h-5 w-3 -translate-x-1/2 cursor-ew-resize items-start justify-center outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              className="absolute top-0 z-20 flex h-5 w-5 -translate-x-1/2 cursor-ew-resize items-start justify-center outline-none focus-visible:ring-1 focus-visible:ring-ring"
               style={{ left: pct(tiempoMs) }}
             >
-              <span className="mt-0.5 block h-2.5 w-2.5 rounded-sm bg-red-500 shadow" />
+              {/* Triángulo prominente (18px de alto) apuntando hacia abajo: indica posición exacta. */}
+              <span
+                style={{
+                  display: "block",
+                  width: 0,
+                  height: 0,
+                  borderLeft: "9px solid transparent",
+                  borderRight: "9px solid transparent",
+                  borderTop: "18px solid #ef4444",
+                }}
+              />
             </div>
+
+            {/* Guía de snap: línea vertical amarilla visible durante el arrastre de un asa de trim. */}
+            {guiaSnap !== null && (
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-y-0 z-10 w-px bg-amber-400"
+                style={{ left: pct(guiaSnap) }}
+              />
+            )}
           </div>
         </div>
       </div>
