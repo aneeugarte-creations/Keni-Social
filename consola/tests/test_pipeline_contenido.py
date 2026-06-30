@@ -1810,11 +1810,12 @@ def test_temas_para_copy_incluye_verificacion_saltada(entorno):
 # --------------------------------------------------------------------------- #
 
 
-def test_temas_autogen_sin_copy_selecciona_origenes_de_noticias(entorno):
+def test_temas_autogen_sin_copy_selecciona_origenes_de_noticias(entorno, monkeypatch):
     """La etapa de copy también redacta los temas del news-pool (orígenes de noticias) sin copy.
 
     Un tema con origen en `ORIGENES_AUTOGEN`, con marca y sin copy entra; el de origen "" no.
     """
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")  # «Generar copy» POR MARCA: sin la etapa ON, temas_autogen_sin_copy filtra todo
     bueno = repos.crear_publicacion(
         clase="contenido", titulo="Noticia rss", marca="unotv", origen="rss",
     )
@@ -1845,10 +1846,11 @@ def test_temas_autogen_sin_copy_salta_temas_sin_piezas(entorno):
     assert sin_piezas["id"] not in ids
 
 
-def test_temas_autogen_sin_copy_incluye_temas_con_piezas_vacias(entorno):
+def test_temas_autogen_sin_copy_incluye_temas_con_piezas_vacias(entorno, monkeypatch):
     """Las altas que PRE-CREAN piezas vacías (botón Crear post/`aportar`, Radar) siguen siendo
     redactables: la selección mira el copy REAL, no la mera existencia de filas. Un tema cuyas
     piezas ya tienen copy NO se reselecciona (no se reescribe lo ya redactado)."""
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")  # «Generar copy» POR MARCA: sin la etapa ON, temas_autogen_sin_copy filtra todo
     sin_copy = repos.crear_publicacion(
         clase="contenido", titulo="Aporte del equipo", marca="unotv", origen="equipo",
     )
@@ -1889,7 +1891,10 @@ def test_ejecutar_cd_salta_pool_de_marca_apagada(entorno, monkeypatch):
     monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")  # etapa Redactar activa; la exclusión es por marca, no global
     from keni_consola import autogen_redactar
 
-    monkeypatch.setattr(pc.config, "marca_apagada", lambda env, marca: marca == "unotv")
+    # «Generar copy» es POR MARCA (`etapa_activa`): se apaga con su override `::marca` falsy en el
+    # store (precedencia store>env: gana al global REDACTAR=1 de arriba para esa marca).
+    overrides = {config.clave_por_marca(config.ENV_PIPELINE_REDACTAR, "unotv"): "0"}
+    monkeypatch.setattr("keni_consola.ajustes.obtener", lambda clave: overrides.get(clave))
     lanzadas: list[str] = []
     monkeypatch.setattr(
         autogen_redactar, "lanzar_para_topic",

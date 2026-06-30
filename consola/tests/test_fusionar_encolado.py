@@ -126,7 +126,9 @@ def test_paso_salta_marca_apagada(monkeypatch):
     recientes = [dict(c, estado="nuevo") for c in _CLUSTERS]
     monkeypatch.setattr(recolectar_daemon.repos, "clusters_recientes",
                         lambda ventana_h, *a, **k: [dict(c) for c in recientes])
-    monkeypatch.setattr(recolectar_daemon.config, "marca_apagada", lambda flag, marca: marca == "unotv")
+    # Fusionar es POR MARCA (`etapa_activa`): se apaga con su override `::marca` falsy en el store.
+    overrides = {config.clave_por_marca(config.ENV_PIPELINE_FUSIONAR, "unotv"): "0"}
+    monkeypatch.setattr("keni_consola.ajustes.obtener", lambda clave: overrides.get(clave))
     encolados: list[str] = []
     monkeypatch.setattr(paso, "_encolar_fusion", lambda m, c, **k: encolados.append(m))
 

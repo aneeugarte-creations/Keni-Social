@@ -37,6 +37,16 @@ def _reset_throttle_fusionar():
     _comun._ultimo_fusionar = 0.0
     _comun._ultima_huella_fusionar = None
 
+
+@pytest.fixture(autouse=True)
+def _etapa_recolectar_on(monkeypatch):
+    """Recolectar es POR MARCA (`etapa_activa(ENV_PIPELINE_RECOLECTAR, marca)`): el barrido sondea
+    el feed de una marca solo si la etapa está encendida para ella; sin override por marca cae al
+    default de fábrica (OFF en CI/tests, ON en prod por deploy). Estas pruebas ejercitan el barrido,
+    que solo corre con Recolectar ON, así que fijamos el default ON (como en prod). Un test concreto
+    APAGA una marca con su override `::marca` en el store (precedencia store>env)."""
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
+
 _FEED_OK = """<?xml version="1.0"?>
 <rss version="2.0"><channel>
   <item><title>Nota uno</title><link>https://example.com/1</link><guid>1</guid></item>

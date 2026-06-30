@@ -8,7 +8,18 @@ ningun test toca la red ni la base de datos.
 
 from __future__ import annotations
 
+import pytest
+
 from keni_consola import autogen_ilustrar as aa
+
+
+@pytest.fixture(autouse=True)
+def _etapa_ilustrar_on(monkeypatch):
+    """«Generar arte» es POR MARCA (`etapa_activa(ENV_PIPELINE_ILUSTRAR, marca)`): `topics_sin_arte`
+    salta los temas de una marca con la etapa apagada. Estas pruebas verifican la SELECCIÓN (copy
+    sin imagen, dedup, cap, orden), así que asumen la etapa ENCENDIDA para la marca de prueba; sin
+    override por marca cae a su default de fábrica (OFF) y filtraría todo. La ponemos ON."""
+    monkeypatch.setenv("KENI_PIPELINE_ILUSTRAR", "1")
 
 
 def _item(**kw):
