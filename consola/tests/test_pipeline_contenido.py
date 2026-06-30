@@ -1174,6 +1174,24 @@ def test_falta_traduccion_idioma_vacio_decide_por_texto():
     ) is False
 
 
+def test_traducir_par_ahora_respeta_el_gate_de_economia(entorno, monkeypatch):
+    """La traducción EN EL ACTO corre `claude` FUERA de la cola; aun así pasa por el gate de
+    economía (`bloqueo_inline`): con el kill switch activo NO llama a Haiku y devuelve None (el par
+    queda sin traducir y se reintenta al reabrir el gate), en vez de gastar tokens saltándose el gate."""
+    from keni_consola import presupuesto_ia
+    from keni_consola.dominio import traducir as _traducir
+    from keni_consola.pipeline_contenido import _admitir
+
+    def _no_debe_llamar(*_a, **_k):
+        raise AssertionError("traducir_items NO debe ejecutarse con el gate bloqueado")
+
+    monkeypatch.setattr(_traducir, "traducir_items", _no_debe_llamar)
+    monkeypatch.setenv("KENI_GENERACION_PAUSADA", "1")
+    presupuesto_ia.invalidar_cache()
+
+    assert _admitir.traducir_par_ahora("Markets tumble as the Fed signals", "Summary", marca="unotv") is None
+
+
 def test_crear_tema_tropicaliza_titulo_ingles_con_idioma_vacio(entorno, monkeypatch):
     """RED DE SEGURIDAD (Hueco A): un cluster con título en INGLÉS e `idioma` vacío y sin `titulo_es`
     se tropicaliza EN EL ACTO al materializar el tema — el feed nunca recibe el título en inglés."""

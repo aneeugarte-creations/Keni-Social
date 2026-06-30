@@ -249,7 +249,15 @@ def traducir_par_ahora(titulo: str, resumen: str, *, marca: str = "") -> tuple[s
     Registra su gasto bajo la etapa «Traducir» (igual que el paso Traducir del daemon): esta
     traducción en el acto es una llamada Haiku real cuyo coste, antes, se descartaba —quedaba
     invisible en la economía—."""
+    from .. import presupuesto_ia
     from ..dominio import actividad_pool, traducir as _traducir
+
+    # GATE de economía (mismo helper y criterio que el pre-check de la ingesta, `bloqueo_inline`):
+    # esta traducción corre `claude` FUERA de la cola, así que sin esto se saltaría el kill switch,
+    # el presupuesto y la parada de la marca. Si el gate bloquea, NO se ejecuta: el par queda sin
+    # traducir (se reintenta cuando el gate reabra), en vez de gastar tokens ignorando la economía.
+    if presupuesto_ia.bloqueo_inline(presupuesto_ia.PROCESO_INVESTIGACION, marca) is not None:
+        return None
 
     res = _traducir.traducir_items([{"id": "x", "titulo": titulo or "", "resumen": resumen or ""}])
     actividad_pool.registrar_actividad_pool(marca, "Traducir en el acto", etapa="Traducir")
