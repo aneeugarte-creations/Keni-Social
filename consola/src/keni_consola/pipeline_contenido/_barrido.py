@@ -233,7 +233,7 @@ def _ejecutar_investigacion() -> dict[str, Any]:
         if not config.etapa_activa(config.ENV_PIPELINE_ADMITIR, marca):
             continue
         # SERIAL POR MARCA: no metas más historias si esta marca ya tiene cola en curso (sin copy).
-        cupo = config.pipeline_en_proceso_max() - _admitir.temas_en_proceso(marca)
+        cupo = config.pipeline_en_proceso_max(marca) - _admitir.temas_en_proceso(marca)
         if cupo <= 0:
             continue
         # VOLUMEN: el PLAN EDITORIAL DIARIO por marca es EL GATE. Sin plan, la marca NO
@@ -289,7 +289,6 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
     if autor is None:
         autor = _ref._autor_pipeline()
     verificados: list[dict[str, Any]] = []
-    en_proceso_max = config.pipeline_en_proceso_max()
     for marca in marcas.noticias():
         # La verificación solo tiene sentido si la admisión de la marca está activa (solo verificamos lo que
         # admitiríamos). El override por marca de Selección excluye la marca aquí también.
@@ -303,7 +302,7 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
         except Exception:  # noqa: BLE001 -- sin contador fiable, no verificamos esta marca este tick
             _log.warning("pipeline: no se pudo contar el admision de verificación (%s)", marca, exc_info=True)
             continue
-        presupuesto = en_proceso_max - admision
+        presupuesto = config.pipeline_en_proceso_max(marca) - admision
         if presupuesto <= 0:
             continue
         pendientes = clusters_pendientes_verificar(marca, maximo=presupuesto)

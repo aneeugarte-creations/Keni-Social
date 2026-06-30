@@ -1577,6 +1577,34 @@ def test_admitir_serial_promueve_solo_hasta_el_cupo(entorno, monkeypatch):
     assert res["temas"][0]["titulo"] == "Hist 1"  # la de mayor score
 
 
+def test_admitir_gate_usa_el_tope_escalado_por_el_ritmo(entorno, monkeypatch):
+    """El gate SERIAL respeta el RITMO: con ritmo 50 el tope 4 baja a 2, así 2 en proceso lo agotan.
+
+    Sin escalado el cupo sería 4-2=2 (entraría 1 historia); con el ritmo a la mitad el tope
+    efectivo es 2 y el cupo cae a 0, frenando la verificación/admisión de la marca.
+    """
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
+    monkeypatch.setenv("KENI_PIPELINE_MAX", "3")
+    monkeypatch.setenv("KENI_PIPELINE_EN_PROCESO_MAX", "4")  # tope de fábrica 4
+    monkeypatch.setenv("KENI_RITMO", "50")  # ritmo global a la mitad -> tope efectivo 2
+    from keni_consola import bootstrap_categorias
+    bootstrap_categorias.inicializar_categorias()
+    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", f"{nacional['id']}:50")  # plan = gate de volumen
+    # 2 en proceso == tope escalado (2): cupo 0, no entra nada (sin ritmo cabría 1).
+    pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
+    _tema_pipeline(titulo="En proceso 1", verificacion_fuente="", copy_pendiente=pend)
+    _tema_pipeline(titulo="En proceso 2", verificacion_fuente="", copy_pendiente=pend)
+    ver = pc.VERIFICACION_VERIFICADO
+    _inicializar_cluster("c1", titulo="Hist 1", score=0.9, verificacion_fuente=ver)
+
+    res = pc._ejecutar_barrido()
+
+    assert res["temas"] == []  # tope escalado agotado: el ritmo frenó la admisión
+    assert repos.obtener_noticia_cluster("c1")["estado"] == "nuevo"  # el cluster sigue disponible
+
+
 # --------------------------------------------------------------------------- #
 # Volumen: PLAN EDITORIAL DIARIO (cupos por categoría, lo mejor de cada tipo) o,    #
 # sin plan, cupo diario simple (24 h móviles).                                       #

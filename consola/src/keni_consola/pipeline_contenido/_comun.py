@@ -511,7 +511,6 @@ def admision_verificacion() -> dict[str, Any]:
     marca, para que el Monitor muestre "cuanto se esta verificando" sin tocar la cola de jobs.
     Best-effort: una marca cuyo conteo falle se omite (no tumba el snapshot).
     """
-    tope = config.pipeline_en_proceso_max()
     por_marca: list[dict[str, Any]] = []
     total = 0
     for marca in marcas.ids():
@@ -522,8 +521,8 @@ def admision_verificacion() -> dict[str, Any]:
         except Exception:  # noqa: BLE001 -- un conteo que falle no debe tumbar el Monitor
             continue
         total += n
-        por_marca.append({"marca": marca, "en_proceso": n, "tope": tope})
-    return {"en_proceso": total, "tope_por_marca": tope, "marcas": por_marca}
+        por_marca.append({"marca": marca, "en_proceso": n, "tope": config.pipeline_en_proceso_max(marca)})
+    return {"en_proceso": total, "tope_por_marca": config.pipeline_en_proceso_max(), "marcas": por_marca}
 
 
 def _autor_pipeline() -> dict[str, str] | None:

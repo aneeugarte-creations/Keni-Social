@@ -689,14 +689,19 @@ def pipeline_max() -> int:
     return _entero(ENV_PIPELINE_MAX, PIPELINE_MAX_DEF, minimo=1)
 
 
-def pipeline_en_proceso_max() -> int:
+def pipeline_en_proceso_max(marca: str = "") -> int:
     """WIP del gate SERIAL: piezas EN CURSO por marca (`KENI_PIPELINE_EN_PROCESO_MAX`, def 8, min 1).
 
     ES el regulador del flujo continuo (in=out): Admitir no admite más historias de una
     marca mientras ésta tenga >= esto sin terminar (Verificar pendiente o verificado sin copy); primero se
-    COMPLETA lo que entró, luego entran nuevas.
+    COMPLETA lo que entró, luego entran nuevas. El RITMO del ámbito (`ritmo(marca)`, marca=""=global)
+    escala el tope hacia abajo: bajar el ritmo de una marca frena también cuánta verificación
+    (la etapa cara) entra en proceso, sin apagar la etapa (ritmo 100 = tope de fábrica).
     """
-    return _entero(ENV_PIPELINE_EN_PROCESO_MAX, PIPELINE_EN_PROCESO_MAX_DEF, minimo=1)
+    from . import config_produccion  # perezoso: evita el ciclo entre submódulos de config
+
+    base = _entero(ENV_PIPELINE_EN_PROCESO_MAX, PIPELINE_EN_PROCESO_MAX_DEF, minimo=1)
+    return max(1, round(base * config_produccion.ritmo(marca) / 100))
 
 
 def pipeline_fetch_fuente() -> bool:

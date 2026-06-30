@@ -115,6 +115,30 @@ def test_autogen_arte_max_escala_con_el_ritmo_global(monkeypatch):
     assert config.autogen_arte_max() == 1  # max(1, round(0.3)) = 1 (mínimo 1)
 
 
+def test_pipeline_en_proceso_max_escala_con_el_ritmo(monkeypatch):
+    """El ritmo escala el WIP de verificación/admisión: 100 = sin regresión (8), 50 = la mitad (4)."""
+    _store(monkeypatch, {})
+    monkeypatch.delenv(config.ENV_PIPELINE_EN_PROCESO_MAX, raising=False)
+    monkeypatch.delenv(config.ENV_RITMO, raising=False)
+    assert config.pipeline_en_proceso_max("unotv") == 8  # ritmo 100: tope de fábrica
+    assert config.pipeline_en_proceso_max() == 8  # global, sin regresión
+    _store(monkeypatch, {config.ENV_RITMO: "50"})  # ritmo global a la mitad
+    assert config.pipeline_en_proceso_max("unotv") == 4  # 8 * 50%
+    assert config.pipeline_en_proceso_max() == 4  # global a la mitad
+
+
+def test_pipeline_en_proceso_max_override_por_marca_manda(monkeypatch):
+    """El ritmo PROPIO de la marca manda sobre el global al escalar su WIP."""
+    _store(monkeypatch, {
+        config.ENV_RITMO: "50",  # global
+        config.clave_por_marca(config.ENV_RITMO, "unotv"): "25",  # override unotv
+    })
+    monkeypatch.delenv(config.ENV_PIPELINE_EN_PROCESO_MAX, raising=False)
+    assert config.pipeline_en_proceso_max("unotv") == 2  # 8 * 25%
+    assert config.pipeline_en_proceso_max("nacion-gamer") == 4  # global 50%
+    assert config.pipeline_en_proceso_max() == 4  # global 50%
+
+
 def test_catalogo_expone_ritmo_editable():
     """El ritmo es editable (no peligroso): global + un override por marca, tipo int [10,100]."""
     ritmo_global = ajustes_catalogo.por_clave(config.ENV_RITMO)
