@@ -10,10 +10,12 @@
  *     'breaking'/'evergreen'), el ajuste que lee la admisión del pipeline;
  *   - los HORARIOS sincronizan las franjas editoriales de la marca (categoría = la misma clave;
  *     7 días a la misma hora; el backend guarda UTC, aquí se edita en hora CDMX).
+ * No hay botón «Guardar»: cada cambio (hora, «al día», red) se guarda solo. Las escrituras se
+ * agrupan con un debounce y se serializan; cada guardado relee las franjas para no duplicarlas.
  * Solo admin (la API de ajustes rechaza al resto).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Save, X } from "lucide-react";
+import { Check, Plus, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -34,6 +36,9 @@ const RE_HORA = /^([01]\d|2[0-3]):([0-5]\d)$/;
 /** Claves especiales del motor (no son líneas): última hora y reciclaje. */
 const CLAVE_BREAKING = "breaking";
 const CLAVE_EVERGREEN = "evergreen";
+
+/** Espera (ms) tras el último cambio antes de guardar: agrupa ráfagas en una sola escritura. */
+const ESPERA_GUARDADO = 700;
 
 /** Redes preseleccionadas cuando la marca aún no ha guardado su selección. */
 const REDES_PLAN_DEFECTO = ["facebook", "instagram"];
@@ -86,6 +91,8 @@ interface FilaPlan {
   esLinea: boolean;
 }
 
+type EstadoGuardado = "reposo" | "guardando" | "guardado";
+
 export function PanelPlan({ marca }: { marca: string }) {
   const queryClient = useQueryClient();
   const clavePlan = `KENI_PLAN_DIA::${marca}`;
@@ -124,6 +131,7 @@ export function PanelPlan({ marca }: { marca: string }) {
   const [redes, setRedes] = React.useState<Set<string>>(new Set());
   const [inicializado, setInicializado] = React.useState(false);
   const [nuevaLinea, setNuevaLinea] = React.useState("");
+  const [estadoGuardado, setEstadoGuardado] = React.useState<EstadoGuardado>("reposo");
 
   const claveLineas = ["etiquetas", "categoria", marca] as const;
   const crearLinea = useMutation({
@@ -137,7 +145,13 @@ export function PanelPlan({ marca }: { marca: string }) {
     onError: (e) => toast.error(mensajeError(e)),
   });
   const quitarLinea = useMutation({
-    mutationFn: (id: string) => api.actualizarEtiqueta(id, { activo: false }),
+    // Desactiva la etiqueta Y borra sus franjas (relee fresco para no dejar huérfanas).
+    mutationFn: async (id: string) => {
+      await api.actualizarEtiqueta(id, { activo: false });
+      const datos = await api.franjas();
+      const suyas = (datos.franjas ?? []).filter((f) => f.marca === marca && f.categoria === id);
+      await Promise.all(suyas.map((f) => api.eliminarFranja(f.id)));
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: claveLineas });
       void queryClient.invalidateQueries({ queryKey: ["franjas"] });
@@ -194,60 +208,110 @@ export function PanelPlan({ marca }: { marca: string }) {
     valorPlan, valorRedes, franjasMarca, filasPlan,
   ]);
 
-  const guardar = useMutation({
-    mutationFn: async () => {
-      // 1) Valida horas de todas las filas con horario.
-      const horasPorClave: Record<string, string[]> = {};
-      for (const fila of filasPlan) {
-        if (!fila.conHorario) continue;
-        const horas = parsearHoras(filas[fila.clave]?.horas ?? "");
-        if (horas === null) {
-          throw new Error(
-            `Horas inválidas en «${fila.etiqueta}»: usa HH:MM separadas por comas.`,
-          );
-        }
-        horasPorClave[fila.clave] = horas;
-      }
-      // 2) Plan (cantidad por clave): escribe el ajuste que lee la admisión.
-      const partes = filasPlan
-        .map((fila) => [fila.clave, Number(filas[fila.clave]?.cupo)] as const)
-        .filter(([, n]) => Number.isInteger(n) && n > 0)
-        .map(([clave, n]) => `${clave}:${n}`);
-      await api.guardarAjuste({ clave: clavePlan, valor: partes.join(",") });
-      // 2b) Redes esperadas por el plan (CSV de ids, orden canónico): solo declara qué redes
-      //     pinta el calendario como huecos; no cambia cómo se generan las piezas.
-      const redesCsv = ORDEN_REDES.filter((id) => redes.has(id)).join(",");
-      await api.guardarAjuste({ clave: claveRedes, valor: redesCsv });
-      // 3) Limpia franjas de claves que ya no son filas del plan (líneas borradas).
-      const vigentes = new Set(filasPlan.map((f) => f.clave));
-      const huerfanas = franjasMarca.filter((f) => !vigentes.has(f.categoria));
-      await Promise.all(huerfanas.map((f) => api.eliminarFranja(f.id)));
-      // 4) Horarios: sincroniza las franjas de cada clave (7 días por hora, en UTC).
-      for (const [clave, horasCdmx] of Object.entries(horasPorClave)) {
-        const objetivo = new Set(horasCdmx.map(horaCdmxAUtc));
-        const actuales = franjasMarca.filter((f) => f.categoria === clave);
-        const sobran = actuales.filter((f) => !objetivo.has(f.hora));
-        await Promise.all(sobran.map((f) => api.eliminarFranja(f.id)));
-        const existentes = new Set(actuales.map((f) => `${f.dia_semana}|${f.hora}`));
-        const altas: Promise<unknown>[] = [];
-        for (const hora of objetivo) {
-          for (let dia = 0; dia < 7; dia += 1) {
-            if (!existentes.has(`${dia}|${hora}`)) {
-              altas.push(api.crearFranja({ dia_semana: dia, hora, marca, categoria: clave }));
-            }
-          }
-        }
-        await Promise.all(altas);
-      }
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["franjas"] });
-      void queryClient.invalidateQueries({ queryKey: ["ajustes"] });
-      void queryClient.invalidateQueries({ queryKey: ["produccion"] });
-      toast.success("Plan y horarios guardados.");
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : mensajeError(e)),
+  // Estado vivo para el guardado en diferido (lee siempre lo último, sin cerrar valores viejos).
+  const filasRef = React.useRef(filas);
+  const redesRef = React.useRef(redes);
+  const filasPlanRef = React.useRef(filasPlan);
+  React.useEffect(() => {
+    filasRef.current = filas;
+    redesRef.current = redes;
+    filasPlanRef.current = filasPlan;
   });
+
+  const guardandoRef = React.useRef(false);
+  const pendienteRef = React.useRef(false);
+  const debounceRef = React.useRef<number | undefined>(undefined);
+  const reposoTimerRef = React.useRef<number | undefined>(undefined);
+
+  // Guardado serializado: una escritura a la vez; si llega un cambio durante una, se reintenta al
+  // acabar. Cada vuelta relee las franjas frescas para que el diff (altas/bajas) no las duplique.
+  const ejecutarGuardado = React.useCallback(async () => {
+    if (guardandoRef.current) {
+      pendienteRef.current = true;
+      return;
+    }
+    guardandoRef.current = true;
+    try {
+      do {
+        pendienteRef.current = false;
+        if (reposoTimerRef.current) window.clearTimeout(reposoTimerRef.current);
+        setEstadoGuardado("guardando");
+        try {
+          const filasAhora = filasRef.current;
+          const redesAhora = redesRef.current;
+          const planAhora = filasPlanRef.current;
+
+          const horasPorClave: Record<string, string[]> = {};
+          for (const fila of planAhora) {
+            if (!fila.conHorario) continue;
+            const horas = parsearHoras(filasAhora[fila.clave]?.horas ?? "");
+            if (horas === null) {
+              throw new Error(`Horas inválidas en «${fila.etiqueta}»: usa HH:MM.`);
+            }
+            horasPorClave[fila.clave] = horas;
+          }
+          const partes = planAhora
+            .map((fila) => [fila.clave, Number(filasAhora[fila.clave]?.cupo)] as const)
+            .filter(([, n]) => Number.isInteger(n) && n > 0)
+            .map(([clave, n]) => `${clave}:${n}`);
+          await api.guardarAjuste({ clave: clavePlan, valor: partes.join(",") });
+          const redesCsv = ORDEN_REDES.filter((id) => redesAhora.has(id)).join(",");
+          await api.guardarAjuste({ clave: claveRedes, valor: redesCsv });
+
+          // Franjas frescas del servidor: base del diff (evita duplicar entre guardados encadenados).
+          const datos = await api.franjas();
+          const franjasFrescas = (datos.franjas ?? []).filter(
+            (f) => f.marca === marca && (f.categoria ?? "") !== "",
+          );
+          const vigentes = new Set(planAhora.map((f) => f.clave));
+          const huerfanas = franjasFrescas.filter((f) => !vigentes.has(f.categoria));
+          await Promise.all(huerfanas.map((f) => api.eliminarFranja(f.id)));
+          for (const [clave, horasCdmx] of Object.entries(horasPorClave)) {
+            const objetivo = new Set(horasCdmx.map(horaCdmxAUtc));
+            const actuales = franjasFrescas.filter((f) => f.categoria === clave);
+            const sobran = actuales.filter((f) => !objetivo.has(f.hora));
+            await Promise.all(sobran.map((f) => api.eliminarFranja(f.id)));
+            const existentes = new Set(actuales.map((f) => `${f.dia_semana}|${f.hora}`));
+            const altas: Promise<unknown>[] = [];
+            for (const hora of objetivo) {
+              for (let dia = 0; dia < 7; dia += 1) {
+                if (!existentes.has(`${dia}|${hora}`)) {
+                  altas.push(api.crearFranja({ dia_semana: dia, hora, marca, categoria: clave }));
+                }
+              }
+            }
+            await Promise.all(altas);
+          }
+
+          void queryClient.invalidateQueries({ queryKey: ["franjas"] });
+          void queryClient.invalidateQueries({ queryKey: ["ajustes"] });
+          void queryClient.invalidateQueries({ queryKey: ["produccion"] });
+          setEstadoGuardado("guardado");
+          reposoTimerRef.current = window.setTimeout(() => setEstadoGuardado("reposo"), 1500);
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : mensajeError(e));
+          setEstadoGuardado("reposo");
+        }
+      } while (pendienteRef.current);
+    } finally {
+      guardandoRef.current = false;
+    }
+  }, [marca, clavePlan, claveRedes, queryClient]);
+
+  const programarGuardado = React.useCallback(() => {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    debounceRef.current = window.setTimeout(() => {
+      void ejecutarGuardado();
+    }, ESPERA_GUARDADO);
+  }, [ejecutarGuardado]);
+
+  React.useEffect(
+    () => () => {
+      if (debounceRef.current) window.clearTimeout(debounceRef.current);
+      if (reposoTimerRef.current) window.clearTimeout(reposoTimerRef.current);
+    },
+    [],
+  );
 
   const total = filasPlan.reduce((acc, f) => acc + (Number(filas[f.clave]?.cupo) || 0), 0);
   const cargando =
@@ -257,8 +321,8 @@ export function PanelPlan({ marca }: { marca: string }) {
     <div>
       <p className="mb-5 text-xs text-muted-foreground">
         Cuántos contenidos al día publica cada línea y a qué horas (CDMX). Añade o quita líneas
-        aquí mismo. El hashtag de cada línea y sus palabras clave del clasificador se editan en la
-        pestaña «Keywords».
+        aquí mismo; los cambios se guardan solos. El hashtag de cada línea y sus palabras clave del
+        clasificador se editan en la pestaña «Keywords».
       </p>
       {/* Solo aparece si la zona de visualización del usuario difiere de la operativa (CDMX). */}
       <AvisoZonaOperativa que="Las horas del plan" className="mb-5" />
@@ -282,14 +346,15 @@ export function PanelPlan({ marca }: { marca: string }) {
                   key={id}
                   type="button"
                   aria-pressed={activa}
-                  onClick={() =>
+                  onClick={() => {
                     setRedes((prev) => {
                       const sig = new Set(prev);
                       if (sig.has(id)) sig.delete(id);
                       else sig.add(id);
                       return sig;
-                    })
-                  }
+                    });
+                    programarGuardado();
+                  }}
                   className={cn(
                     "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm transition-colors",
                     activa
@@ -330,15 +395,16 @@ export function PanelPlan({ marca }: { marca: string }) {
                   type="number"
                   min={0}
                   value={cupo}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setFilas((prev) => ({
                       ...prev,
                       [fila.clave]: {
                         ...(prev[fila.clave] ?? { cupo: "0", horas: "" }),
                         cupo: e.target.value,
                       },
-                    }))
-                  }
+                    }));
+                    programarGuardado();
+                  }}
                   aria-label={`Publicaciones al día de ${fila.etiqueta}`}
                   className={cn(
                     "h-8 w-16 justify-self-end border-0 bg-transparent px-2 text-right tabular-nums shadow-none hover:bg-muted/60 focus-visible:ring-1",
@@ -348,15 +414,16 @@ export function PanelPlan({ marca }: { marca: string }) {
                 {fila.conHorario ? (
                   <SelectorHoras
                     value={filas[fila.clave]?.horas ?? ""}
-                    onChange={(csv) =>
+                    onChange={(csv) => {
                       setFilas((prev) => ({
                         ...prev,
                         [fila.clave]: {
                           ...(prev[fila.clave] ?? { cupo: "0", horas: "" }),
                           horas: csv,
                         },
-                      }))
-                    }
+                      }));
+                      programarGuardado();
+                    }}
                     ariaLabel={`Horarios de ${fila.etiqueta} (hora CDMX)`}
                   />
                 ) : (
@@ -419,19 +486,23 @@ export function PanelPlan({ marca }: { marca: string }) {
               Total: <span className="font-medium tabular-nums text-foreground">{total}</span>{" "}
               contenidos/día
             </span>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => guardar.mutate()}
-              disabled={guardar.isPending}
+            {/* Donde antes estaba «Guardar»: el plan se guarda solo, esto solo lo confirma. */}
+            <span
+              className="flex items-center gap-1.5 text-xs text-muted-foreground"
+              aria-live="polite"
             >
-              {guardar.isPending ? (
-                <Spinner className="h-4 w-4" />
+              {estadoGuardado === "guardando" ? (
+                <>
+                  <Spinner className="h-3.5 w-3.5" /> Guardando…
+                </>
+              ) : estadoGuardado === "guardado" ? (
+                <>
+                  <Check className="h-3.5 w-3.5 text-emerald-600" /> Guardado
+                </>
               ) : (
-                <Save className="h-4 w-4" />
+                <span className="text-muted-foreground/70">Se guarda solo</span>
               )}
-              Guardar
-            </Button>
+            </span>
           </div>
         </div>
       )}
