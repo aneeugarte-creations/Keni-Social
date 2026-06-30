@@ -28,6 +28,7 @@ def guardar_uso_cuenta(
     sonnet_pct: int | None,
     reset_semana_iso: str = "",
     reset_semana_txt: str = "",
+    reset_sesion_iso: str = "",
     actualizado_ts: float | None = None,
     dia_utc: str | None = None,
 ) -> dict[str, Any]:
@@ -39,6 +40,7 @@ def guardar_uso_cuenta(
         sonnet_pct=sonnet_pct,
         reset_semana_iso=reset_semana_iso,
         reset_semana_txt=reset_semana_txt,
+        reset_sesion_iso=reset_sesion_iso,
         actualizado_ts=actualizado_ts,
         dia_utc=dia_utc,
     )
