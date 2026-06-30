@@ -18,7 +18,7 @@ import secrets
 from pathlib import Path
 from typing import Any
 
-from .. import generaciones, libprompts, limites_plataforma, marcas, redes
+from .. import config, generaciones, libprompts, limites_plataforma, marcas, redes
 from . import jobspec, prioridad
 from .placeholders import fecha_es
 
@@ -235,10 +235,14 @@ def _bloque_decision_carrusel(
     else:
         catalogo = "FOTOS DISPONIBLES: ninguna (todos los slides salen como placa de solo texto)."
     plantilla = _plantilla_envoltorio(plantilla_slug)
+    # Tope EDITORIAL (`KENI_CARRUSEL_MAX_SLIDES`, ajustable en el panel admin) recortado SIEMPRE
+    # por el tope TÉCNICO: aunque alguien configure un valor más alto, nunca se pide más de lo
+    # que IG/FB aceptan en un carrusel nativo.
+    max_slides = min(config.carrusel_max_slides(), MAX_SLIDES_CARRUSEL)
     return (
         plantilla
         .replace("{{N_NOTAS}}", str(n_notas))
-        .replace("{{MAX_SLIDES}}", str(MAX_SLIDES_CARRUSEL))
+        .replace("{{MAX_SLIDES}}", str(max_slides))
         .replace("{{CATALOGO_FOTOS}}", catalogo)
     )
 

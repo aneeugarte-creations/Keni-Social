@@ -17,6 +17,11 @@ import type {
   RespuestaPiezas,
 } from "@/types";
 
+/** Cuántos slides pedir al generar/convertir a carrusel: un preset (corto 4-5 / largo
+ *  8-9) o un número EXACTO "a tu gusto" (clamp 2..9 en el backend). La forma es la
+ *  MISMA que el body que espera la API: se manda tal cual. */
+export type LongitudCarrusel = { longitud: "corto" | "largo" } | { cantidad: number };
+
 export const apiPiezas = {
   // --- Piezas ---
   publicacionesOpciones: (signal?: AbortSignal) =>
@@ -96,12 +101,13 @@ export const apiPiezas = {
    * copy en titulares de slides y los hornea como placas de la marca, escritos en todas las piezas
    * gemelas (la portada se conserva). Responde al instante con `{generacion}` (estado "ejecutando");
    * el SPA la sondea con `useGeneracion` y recarga la pieza al terminar. El feed flip-ea el formato
-   * a carrusel ANTES de llamar. `longitud` elige corto (4-5 slides) o largo (8-9).
+   * a carrusel ANTES de llamar. `longitud` elige corto (4-5 slides), largo (8-9) o una `cantidad`
+   * EXACTA a tu gusto.
    */
-  generarCarrusel: (id: string, longitud: "corto" | "largo") =>
+  generarCarrusel: (id: string, longitud: LongitudCarrusel) =>
     peticion<RespuestaGeneracion>(`/piezas/${encodeURIComponent(id)}/generar-carrusel`, {
       metodo: "POST",
-      json: { longitud },
+      json: longitud,
     }),
 
   /**
@@ -110,10 +116,10 @@ export const apiPiezas = {
    * equipo elige cuál publica). Responde al instante con `{generacion}`; el SPA la sondea y, al
    * terminar, refresca el feed (la tarjeta carrusel nueva aparece). NO flip-ea el formato del post.
    */
-  convertirCarrusel: (id: string, longitud: "corto" | "largo") =>
+  convertirCarrusel: (id: string, longitud: LongitudCarrusel) =>
     peticion<RespuestaGeneracion>(`/piezas/${encodeURIComponent(id)}/convertir-carrusel`, {
       metodo: "POST",
-      json: { longitud },
+      json: longitud,
     }),
 
   // --- Aprobación de PIEZAS (#9): cola de revisión + decisión + programación ---

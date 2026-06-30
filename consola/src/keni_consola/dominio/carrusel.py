@@ -112,27 +112,42 @@ def _componer_prompt(
     # Inyecta el rango por CÓDIGO (no solo por placeholder del cuerpo): un equipo ya DESPLEGADO
     # tiene la versión del prompt en su store, donde el mínimo viajaba fijo, así que sustituir
     # {{MIN_SLIDES}} no le llegaría. Esta línea final MANDA y garantiza el rango de la longitud
-    # elegida (corto 4-5 / largo 8-9) en cualquier versión del prompt (semilla o store).
-    directiva = (
-        f"\n\nLONGITUD: genera entre {min_slides} y {max_slides} tarjetas (slides), sin contar la "
-        "portada. Es un requisito de formato; ajústate EXACTAMENTE a ese rango."
-    )
+    # elegida (corto 4-5 / largo 8-9, o la cantidad EXACTA a gusto) en cualquier versión del
+    # prompt (semilla o store). `min_slides == max_slides` es la cantidad personalizada: un
+    # número EXACTO en vez de un rango.
+    if min_slides == max_slides:
+        directiva = (
+            f"\n\nLONGITUD: genera EXACTAMENTE {max_slides} tarjetas (slides), sin contar la "
+            "portada. Es un requisito de formato; ajústate a ese número."
+        )
+    else:
+        directiva = (
+            f"\n\nLONGITUD: genera entre {min_slides} y {max_slides} tarjetas (slides), sin contar la "
+            "portada. Es un requisito de formato; ajústate EXACTAMENTE a ese rango."
+        )
     return cuerpo + directiva + _contexto_editorial(marca)
 
 
 def lanzar_para_pieza(
-    pieza_id: str, longitud: str = LONGITUD_DEFECTO, *, como_variante: bool = False
+    pieza_id: str,
+    longitud: str = LONGITUD_DEFECTO,
+    *,
+    cantidad: int | None = None,
+    como_variante: bool = False,
 ) -> dict[str, Any]:
     """ENCOLA la generación del carrusel a partir del copy de una pieza. Devuelve el registro.
 
     Lee el copy + el titular de portada de la pieza, compone el prompt (autocontenido) y lanza un
     `claude -p` READ-ONLY. `longitud` ∈ {corto (4-5 slides), largo (8-9)}; cae al defecto si no es
-    válida. Lanza `CarruselError` si la pieza no existe o no hay copy del que partir.
+    válida. `cantidad` (opcional, "a tu gusto"): nº EXACTO de slides; si se da, MANDA sobre
+    `longitud` (clamp 2..`MAX_SLIDES`). Lanza `CarruselError` si la pieza no existe o no hay copy
+    del que partir.
 
     `como_variante` False (legado): el post-procesado hornea los slides y los ESCRIBE en las piezas
-    existentes (sobrescribe); idempotente por `carrusel:{publicacion_id}:{longitud}`. True
+    existentes (sobrescribe); idempotente por `carrusel:{publicacion_id}:{etiqueta}`. True
     (conversión NO destructiva): crea piezas `variante='carrusel'` HERMANAS junto a las foto;
-    idempotente por `carrusel:variante:{publicacion_id}:{longitud}` (run distinto del legado).
+    idempotente por `carrusel:variante:{publicacion_id}:{etiqueta}` (run distinto del legado).
+    `etiqueta` es `longitud` (corto/largo) o, con cantidad, `n<cantidad>`.
     """
     pieza = repos.obtener_pieza(pieza_id)
     if pieza is None:
@@ -145,8 +160,16 @@ def lanzar_para_pieza(
         raise CarruselError("La pieza no está asociada a un contenido.")
     marca = str(pieza.get("marca") or "")
     copy_in = str(pieza.get("copy_in") or "")
-    longitud = longitud if longitud in LONGITUDES else LONGITUD_DEFECTO
-    min_slides, max_slides = _rango_longitud(longitud)
+    if cantidad is not None:
+        n = max(2, min(int(cantidad), MAX_SLIDES))
+        min_slides = max_slides = n
+        etiqueta = f"n{n}"
+        descripcion = f"{n} slides"
+    else:
+        longitud = longitud if longitud in LONGITUDES else LONGITUD_DEFECTO
+        min_slides, max_slides = _rango_longitud(longitud)
+        etiqueta = longitud
+        descripcion = longitud
 
     procesar_spec = jobspec.construir_carrusel(
         publicacion_id=publicacion_id, max_slides=max_slides, como_variante=como_variante,
@@ -156,10 +179,10 @@ def lanzar_para_pieza(
         copy=copy, copy_in=copy_in, marca=marca, min_slides=min_slides, max_slides=max_slides,
     )
     prefijo = "Variante carrusel" if como_variante else "Carrusel"
-    clave = f"carrusel:variante:{publicacion_id}:{longitud}" if como_variante else f"carrusel:{publicacion_id}:{longitud}"
+    clave = f"carrusel:variante:{publicacion_id}:{etiqueta}" if como_variante else f"carrusel:{publicacion_id}:{etiqueta}"
     return generar.lanzar(
         tipo="carrusel",
-        titulo=f"{prefijo} {longitud} · {pieza.get('titulo', '') or 'post'}",
+        titulo=f"{prefijo} {descripcion} · {pieza.get('titulo', '') or 'post'}",
         marca=marca,
         prompt=prompt,
         procesar=procesar,

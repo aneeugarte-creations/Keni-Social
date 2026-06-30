@@ -17,6 +17,18 @@ from ...seguridad import autor_de_peticion
 from ._comun import _publicacion_a_dict
 
 
+def _cantidad_carrusel(datos: dict) -> int | None:
+    """Cantidad EXACTA de slides del body (`{cantidad}`, "a tu gusto"); None si ausente/inválida."""
+    crudo = datos.get("cantidad")
+    if isinstance(crudo, bool):
+        return None
+    if isinstance(crudo, int):
+        return crudo
+    if isinstance(crudo, str) and crudo.strip().lstrip("-").isdigit():
+        return int(crudo.strip())
+    return None
+
+
 async def integrar_foto(request: Request) -> Response:
     """Integra una FOTO subida dentro de la plantilla de marca de la publicación.
 
@@ -259,15 +271,20 @@ async def generar_carrusel(request: Request) -> Response:
     a carrusel antes de llamar. El SPA sondea `GET /api/generaciones/{id}` hasta el estado terminal y
     recarga la pieza (los slides aparecen en el editor). `ColaLlenaError` se PROPAGA (el manejador
     central de `app.py` la traduce a 429). El cuerpo opcional `{longitud}` elige corto (4-5 slides)
-    o largo (8-9); ausente/ inválida = largo. -> `{generacion}` | 400 | 404.
+    o largo (8-9); ausente/inválida = largo. `{cantidad}` (opcional, entero) pide un número EXACTO
+    "a tu gusto" en vez del rango de `longitud`: si llega, MANDA sobre `longitud` (clamp 2..9).
+    -> `{generacion}` | 400 | 404.
     """
     from ...dominio import carrusel
 
     pieza_id = request.path_params["pieza_id"]
     datos = await leer_json(request)
     longitud = datos.get("longitud") if isinstance(datos.get("longitud"), str) else ""
+    cantidad = _cantidad_carrusel(datos)
     try:
-        gen = carrusel.lanzar_para_pieza(pieza_id, longitud or carrusel.LONGITUD_DEFECTO)
+        gen = carrusel.lanzar_para_pieza(
+            pieza_id, longitud or carrusel.LONGITUD_DEFECTO, cantidad=cantidad,
+        )
     except carrusel.CarruselError as e:
         estado = 404 if "ya no existe" in str(e) else 400
         return JSONResponse({"error": str(e)}, status_code=estado)
@@ -282,16 +299,22 @@ async def convertir_carrusel(request: Request) -> Response:
     feed muestra ambas como tarjetas hermanas y el equipo elige cuál publica). El SPA sondea
     `GET /api/generaciones/{id}` y recarga el feed (la tarjeta carrusel nueva aparece). El cuerpo
     opcional `{longitud}` elige corto (4-5 slides) o largo (8-9); ausente/inválida = largo.
-    `ColaLlenaError` se PROPAGA (manejador central -> 429). -> `{generacion}` | 400 | 404.
+    `{cantidad}` (opcional, entero) pide un número EXACTO "a tu gusto" en vez del rango de
+    `longitud`: si llega, MANDA sobre `longitud` (clamp 2..9). `ColaLlenaError` se PROPAGA
+    (manejador central -> 429). -> `{generacion}` | 400 | 404.
     """
     from ...dominio import carrusel
 
     pieza_id = request.path_params["pieza_id"]
     datos = await leer_json(request)
     longitud = datos.get("longitud") if isinstance(datos.get("longitud"), str) else ""
+    cantidad = _cantidad_carrusel(datos)
     try:
         gen = carrusel.lanzar_para_pieza(
-            pieza_id, longitud or carrusel.LONGITUD_DEFECTO, como_variante=True,
+            pieza_id,
+            longitud or carrusel.LONGITUD_DEFECTO,
+            cantidad=cantidad,
+            como_variante=True,
         )
     except carrusel.CarruselError as e:
         estado = 404 if "ya no existe" in str(e) else 400

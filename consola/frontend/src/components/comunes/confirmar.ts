@@ -52,6 +52,23 @@ export interface OpcionElegir {
   destructivo?: boolean;
 }
 
+/**
+ * Fila NUMÉRICA opcional del diálogo de ELECCIÓN: además de los botones de preset
+ * (`opciones`), deja teclear/ajustar (+/-) un número exacto "a tu gusto". Al confirmarse,
+ * `elegir` resuelve con `"numero:<n>"` (el llamante distingue este caso del de un preset
+ * comprobando el prefijo).
+ */
+export interface OpcionNumero {
+  /** Texto del botón que confirma el número elegido. */
+  etiqueta: string;
+  /** Valor con el que arranca el campo. */
+  valorInicial: number;
+  /** Cota inferior del stepper/campo. */
+  minimo: number;
+  /** Cota superior del stepper/campo. */
+  maximo: number;
+}
+
 export interface OpcionesElegir {
   /** Título del diálogo. */
   titulo?: string;
@@ -61,12 +78,16 @@ export interface OpcionesElegir {
   textoCancelar?: string;
   /** Los botones de elección (2+). El usuario elige uno o cancela (→ null). */
   opciones: OpcionElegir[];
+  /** Fila numérica opcional ("a tu gusto"), debajo de los presets. */
+  numero?: OpcionNumero;
 }
 
 export interface EstadoConfirmacion extends OpcionesConfirmar {
   id: number;
   /** Presente en modo ELECCIÓN (`elegir`): el diálogo muestra estos botones. */
   opciones?: OpcionElegir[];
+  /** Presente en modo ELECCIÓN si `elegir` lo pasó: fila numérica "a tu gusto". */
+  numero?: OpcionNumero;
   resolver: (valor: boolean | string | null) => void;
 }
 

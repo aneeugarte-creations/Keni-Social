@@ -20,7 +20,7 @@ describe("apiPiezas.generarCarrusel", () => {
     const fetchMock = vi.fn().mockResolvedValue(respuestaJson({ generacion }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const r = await apiPiezas.generarCarrusel("p1", "corto");
+    const r = await apiPiezas.generarCarrusel("p1", { longitud: "corto" });
 
     expect(r.generacion).toEqual(generacion);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -33,11 +33,21 @@ describe("apiPiezas.generarCarrusel", () => {
     const fetchMock = vi.fn().mockResolvedValue(respuestaJson({ generacion: { id: "g", estado: "ejecutando" } }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await apiPiezas.generarCarrusel("a/b", "largo");
+    await apiPiezas.generarCarrusel("a/b", { longitud: "largo" });
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/piezas/a%2Fb/generar-carrusel");
     expect(JSON.parse(init.body as string)).toEqual({ longitud: "largo" });
+  });
+
+  it("manda una cantidad EXACTA en vez de la longitud, a tu gusto", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(respuestaJson({ generacion: { id: "g", estado: "ejecutando" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiPiezas.generarCarrusel("p1", { cantidad: 6 });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ cantidad: 6 });
   });
 });
 
@@ -51,12 +61,22 @@ describe("apiPiezas.convertirCarrusel", () => {
     const fetchMock = vi.fn().mockResolvedValue(respuestaJson({ generacion }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const r = await apiPiezas.convertirCarrusel("p1", "corto");
+    const r = await apiPiezas.convertirCarrusel("p1", { longitud: "corto" });
 
     expect(r.generacion).toEqual(generacion);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/piezas/p1/convertir-carrusel");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual({ longitud: "corto" });
+  });
+
+  it("manda una cantidad EXACTA en vez de la longitud, a tu gusto", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(respuestaJson({ generacion: { id: "g", estado: "ejecutando" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiPiezas.convertirCarrusel("p1", { cantidad: 7 });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ cantidad: 7 });
   });
 });

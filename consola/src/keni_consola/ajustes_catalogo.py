@@ -22,6 +22,7 @@ from typing import Any
 
 from . import ajustes, config, marcas, preferencias
 from .dominio.agrupar import UMBRAL_MIN_SCORE_DEF as _UMBRAL_MIN_SCORE_DEF
+from .dominio.generar import MAX_SLIDES_CARRUSEL as _MAX_SLIDES_CARRUSEL
 
 # Conjuntos de verdad/falsedad para flags (mismos que `config`, fuente del parseo de bool).
 _VERDADEROS = frozenset({"1", "true", "yes", "si", "sí", "on"})
@@ -644,6 +645,21 @@ def _construir_catalogo() -> list[Ajuste]:
             defecto=_UMBRAL_MIN_SCORE_DEF,
             minimo=0,
             maximo=1,
+        ),
+        # Tope de slides del panel automático de carrusel (Redactar, camino Decisor=carrusel):
+        # cuántas tarjetas EXTRA (sin portada) pide el modelo como máximo. El tope técnico de
+        # IG/FB (`MAX_SLIDES_CARRUSEL`) es el techo: `dominio.generar` lo recorta igual aunque
+        # se configure más alto.
+        Ajuste(
+            clave=config.ENV_CARRUSEL_MAX_SLIDES,
+            tipo="int",
+            etiqueta="Slides máximos del carrusel automático",
+            ayuda="Cuántas tarjetas extra (sin contar la portada) puede pedir como máximo el "
+            "panel editorial automático; un carrusel corto se siente menos saturado.",
+            grupo="noticias_produccion",
+            defecto=config.CARRUSEL_MAX_SLIDES_DEF,
+            minimo=2,
+            maximo=_MAX_SLIDES_CARRUSEL,
         ),
         # (KENI_PROMOVER_MADURACION_MIN —minutos de maduración antes de producir— se DEGRADÓ a
         # solo-env. El VOLUMEN lo gobierna el PLAN EDITORIAL DIARIO por marca (`KENI_PLAN_DIA::marca`,

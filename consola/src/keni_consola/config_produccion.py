@@ -6,9 +6,11 @@ from ._config_comun import (
     AUTOGEN_ARTE_MAX_DEF,
     AUTOGEN_COPY_MAX_DEF,
     RITMO_DEF,
+    CARRUSEL_MAX_SLIDES_DEF,
     ENV_AUTOGEN_ARTE_MAX,
     ENV_AUTOGEN_COPY_MAX,
     ENV_RITMO,
+    ENV_CARRUSEL_MAX_SLIDES,
     ENV_CONSOLA_URL_PUBLICA,
     ENV_GENERACIONES_TTL_HORAS,
     ENV_MEDIA_GC,
@@ -144,6 +146,16 @@ def autogen_copy_max(marca: str) -> int:
             except ValueError:
                 pass
     return max(1, round(base * ritmo(marca) / 100))
+
+
+def carrusel_max_slides() -> int:
+    """Tope EDITORIAL de slides extra del panel automático de carrusel (`KENI_CARRUSEL_MAX_SLIDES`,
+    def 9, min 2: un carrusel de 1 slide no es panel).
+
+    No conoce el tope TÉCNICO de `dominio.generar.MAX_SLIDES_CARRUSEL` (evita el acoplo
+    config -> dominio); quien llama este accesor aplica el min() final con ese tope.
+    """
+    return _entero(ENV_CARRUSEL_MAX_SLIDES, CARRUSEL_MAX_SLIDES_DEF, minimo=2)
 
 
 def generaciones_ttl_seg() -> int:

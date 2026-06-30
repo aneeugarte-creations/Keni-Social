@@ -122,3 +122,4 @@ export {
 export type { ActivoMarca, PlantillaDiseno, Bloque, MotivoCaida } from "./_core";
 export type { EtiquetaPlantilla } from "./etiquetasPlantilla";
 export type { RespuestaFotosAutorizar } from "./fotos";
+export type { LongitudCarrusel } from "./piezas";

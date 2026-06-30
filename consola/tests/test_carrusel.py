@@ -12,6 +12,7 @@ import json
 import pytest
 
 from keni_consola import repos
+from keni_consola.api.piezas import composicion
 from keni_consola.dominio import carrusel as dom_carrusel
 from keni_consola.dominio import copy as dom_copy
 from keni_consola.dominio import jobspec
@@ -58,6 +59,29 @@ def test_longitudes_y_rango():
     assert dom_carrusel._rango_longitud("largo") == (8, 9)
     # Una longitud inválida cae al defecto (largo).
     assert dom_carrusel._rango_longitud("gigante") == dom_carrusel.LONGITUDES[dom_carrusel.LONGITUD_DEFECTO]
+
+
+def test_componer_prompt_cantidad_exacta_vs_rango():
+    # Con min == max (cantidad "a tu gusto") la frase pide un número EXACTO, no un rango.
+    exacto = dom_carrusel._componer_prompt(
+        copy="x", copy_in="y", marca=_MARCA, min_slides=6, max_slides=6,
+    )
+    assert "genera EXACTAMENTE 6 tarjetas" in exacto
+    assert "entre" not in exacto.split("LONGITUD:")[1]
+    # Con un rango real (longitud corto/largo) sigue la frase de rango de siempre.
+    rango = dom_carrusel._componer_prompt(
+        copy="x", copy_in="y", marca=_MARCA, min_slides=8, max_slides=9,
+    )
+    assert "genera entre 8 y 9 tarjetas" in rango
+
+
+def test_cantidad_carrusel_del_body():
+    assert composicion._cantidad_carrusel({"cantidad": 6}) == 6
+    assert composicion._cantidad_carrusel({"cantidad": "7"}) == 7
+    # bool es subtipo de int en Python: se rechaza explícitamente (no es una cantidad real).
+    assert composicion._cantidad_carrusel({"cantidad": True}) is None
+    assert composicion._cantidad_carrusel({"cantidad": "no numero"}) is None
+    assert composicion._cantidad_carrusel({}) is None
 
 
 # --------------------------------------------------------------------------- #
@@ -300,6 +324,51 @@ def test_lanzar_para_pieza_sin_copy_lanza_error(entorno):
     _pid, ids = _crear_contenido(["instagram"], "")
     with pytest.raises(dom_carrusel.CarruselError):
         dom_carrusel.lanzar_para_pieza(ids[0])
+
+
+def test_lanzar_para_pieza_cantidad_personalizada(entorno, monkeypatch):
+    # `cantidad` ("a tu gusto") pide un número EXACTO de slides, distinto del rango corto/largo.
+    captura: dict = {}
+    monkeypatch.setattr(
+        dom_carrusel.generar, "lanzar",
+        lambda **kw: captura.update(kw) or {"id": "g4", "estado": "ejecutando"},
+    )
+    pid, ids = _crear_contenido(["instagram"], "Copy de prueba")
+
+    dom_carrusel.lanzar_para_pieza(ids[0], cantidad=6)
+    assert captura["clave_idem"] == f"carrusel:{pid}:n6"
+    assert captura["procesar_spec"]["max_slides"] == 6
+    assert "genera EXACTAMENTE 6 tarjetas" in captura["prompt"]
+
+
+def test_lanzar_para_pieza_cantidad_manda_sobre_longitud(entorno, monkeypatch):
+    # Si llegan los dos, `cantidad` gana: no se usa el rango de `longitud`.
+    captura: dict = {}
+    monkeypatch.setattr(
+        dom_carrusel.generar, "lanzar",
+        lambda **kw: captura.update(kw) or {"id": "g5", "estado": "ejecutando"},
+    )
+    _pid, ids = _crear_contenido(["instagram"], "Copy de prueba")
+
+    dom_carrusel.lanzar_para_pieza(ids[0], "corto", cantidad=7)
+    assert captura["procesar_spec"]["max_slides"] == 7
+
+
+def test_lanzar_para_pieza_cantidad_se_acota_2_a_max(entorno, monkeypatch):
+    # Clamp: por debajo de 2 sube a 2; por encima del tope técnico baja a MAX_SLIDES (9).
+    captura: dict = {}
+    monkeypatch.setattr(
+        dom_carrusel.generar, "lanzar",
+        lambda **kw: captura.update(kw) or {"id": "g6", "estado": "ejecutando"},
+    )
+    pid, ids = _crear_contenido(["instagram"], "Copy de prueba")
+
+    dom_carrusel.lanzar_para_pieza(ids[0], cantidad=1)
+    assert captura["procesar_spec"]["max_slides"] == 2
+    assert captura["clave_idem"] == f"carrusel:{pid}:n2"
+
+    dom_carrusel.lanzar_para_pieza(ids[0], cantidad=99)
+    assert captura["procesar_spec"]["max_slides"] == dom_carrusel.MAX_SLIDES
 
 
 # --------------------------------------------------------------------------- #

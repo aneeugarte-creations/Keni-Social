@@ -33,7 +33,7 @@ import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { useGeneracion } from "@/hooks/use-generacion";
-import { api, mensajeError } from "@/lib/api";
+import { api, mensajeError, type LongitudCarrusel } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { parsearCarrusel, serializarCarrusel, type SlideCarrusel } from "@/lib/carrusel";
 import { capasFotoDoc, type FotoCollage } from "@/lib/placa/docPieza";
@@ -54,6 +54,21 @@ import { CLAVE_PIEZAS } from "./claves";
 import { etiquetaCategoriaPieza } from "./categoria";
 import { metaRed } from "./meta";
 import { etapaDePieza } from "@/pages/feed/etapa";
+
+// Tope TÉCNICO de slides de un carrusel (10 nativas de IG/FB - 1 de portada), igual que
+// `dominio.carrusel.MAX_SLIDES` en el backend: acota la fila "a tu gusto" del diálogo.
+const MAX_SLIDES_CARRUSEL = 9;
+
+/** Resuelve lo que devolvió `elegir()` (preset "corto"/"largo", o "numero:<n>" de la fila "a tu
+ *  gusto") a la forma que espera la API. null si se canceló sin elegir nada. */
+function resolverLongitudCarrusel(valor: string | null): LongitudCarrusel | null {
+  if (!valor) return null;
+  if (valor.startsWith("numero:")) {
+    const n = Number(valor.slice("numero:".length));
+    return Number.isFinite(n) ? { cantidad: n } : null;
+  }
+  return valor === "corto" || valor === "largo" ? { longitud: valor } : null;
+}
 
 /** Diálogo de edición de una publicación, MÍNIMO: solo contenido (copy) + hashtags + imagen. Los
  *  posts no llevan título; el formato es texto plano (sin barra de formato ni UTM). Comentarios y
@@ -172,12 +187,12 @@ function DialogoEditarInterno({
   const generandoCarruselRef = React.useRef(false);
   generandoCarruselRef.current = generandoCarrusel;
   // Longitud elegida en el diálogo «Cambiar a carrusel»: el flip la consume al completar para
-  // GENERAR ya con ella (corto/largo). null = el flip no debe auto-generar (otro formato, o slides
-  // ya presentes).
-  const longitudPendienteRef = React.useRef<"corto" | "largo" | null>(null);
+  // GENERAR ya con ella (preset o cantidad a tu gusto). null = el flip no debe auto-generar (otro
+  // formato, o slides ya presentes).
+  const longitudPendienteRef = React.useRef<LongitudCarrusel | null>(null);
 
   const lanzarCarrusel = React.useCallback(
-    async (longitud: "corto" | "largo") => {
+    async (longitud: LongitudCarrusel) => {
       if (!pieza) return;
       try {
         const r = await api.generarCarrusel(pieza.id, longitud);
@@ -195,7 +210,7 @@ function DialogoEditarInterno({
   // pieza carrusel NUEVA, no en esta —que sigue siendo foto—).
   const conversionVarianteRef = React.useRef(false);
   const convertirAVarianteCarrusel = React.useCallback(
-    async (longitud: "corto" | "largo") => {
+    async (longitud: LongitudCarrusel) => {
       if (!pieza) return;
       try {
         const r = await api.convertirCarrusel(pieza.id, longitud);
@@ -212,16 +227,18 @@ function DialogoEditarInterno({
   // `regenerar` solo cambia el texto (ya hay slides que se reemplazan).
   const pedirLongitudYGenerar = React.useCallback(
     async (regenerar: boolean) => {
-      const longitud = (await elegir({
+      const elegido = await elegir({
         titulo: regenerar ? "Regenerar carrusel" : "Generar carrusel",
         mensaje: regenerar
-          ? "Se reemplazan los slides actuales por unos nuevos a partir del copy. Elige la longitud:"
-          : "Se generará el carrusel a partir del copy del post. Elige la longitud:",
+          ? "Se reemplazan los slides actuales por unos nuevos a partir del copy. Elige la longitud, o ajusta el número de slides a tu gusto:"
+          : "Se generará el carrusel a partir del copy del post. Elige la longitud, o ajusta el número de slides a tu gusto:",
         opciones: [
           { valor: "corto", etiqueta: "Corto", descripcion: "4–5 tarjetas" },
           { valor: "largo", etiqueta: "Largo", descripcion: "8–9 tarjetas" },
         ],
-      })) as "corto" | "largo" | null;
+        numero: { etiqueta: "Usar", valorInicial: 6, minimo: 2, maximo: MAX_SLIDES_CARRUSEL },
+      });
+      const longitud = resolverLongitudCarrusel(elegido);
       if (longitud) void lanzarCarrusel(longitud);
     },
     [lanzarCarrusel],
@@ -325,20 +342,24 @@ function DialogoEditarInterno({
       return;
     }
     // Pasar a CARRUSEL sin slides: el mismo diálogo confirma el cambio Y pregunta la longitud
-    // (corto 4-5 / largo 8-9). Al elegir, flipea y genera ya con ella; Cancelar no hace nada.
+    // (corto 4-5 / largo 8-9, o una cantidad exacta a tu gusto). Al elegir, flipea y genera ya
+    // con ella; Cancelar no hace nada.
     if (nuevo === "carrusel" && slides.length === 0) {
       // NO DESTRUCTIVO: crea una VARIANTE carrusel junto a la foto (no la pisa ni la manda a
       // borrador). El feed muestra ambas como tarjetas hermanas y el equipo elige cuál publica.
-      const longitud = (await elegir({
+      const elegido = await elegir({
         titulo: "Crear carrusel",
         mensaje:
           "Se creará una VARIANTE carrusel a partir del copy del post, junto a la foto (la foto se " +
-          "conserva intacta; el feed mostrará ambas y eliges cuál publicar). Elige la longitud:",
+          "conserva intacta; el feed mostrará ambas y eliges cuál publicar). Elige la longitud, o " +
+          "ajusta el número de slides a tu gusto:",
         opciones: [
           { valor: "corto", etiqueta: "Corto", descripcion: "4–5 tarjetas" },
           { valor: "largo", etiqueta: "Largo", descripcion: "8–9 tarjetas" },
         ],
-      })) as "corto" | "largo" | null;
+        numero: { etiqueta: "Usar", valorInicial: 6, minimo: 2, maximo: MAX_SLIDES_CARRUSEL },
+      });
+      const longitud = resolverLongitudCarrusel(elegido);
       if (!longitud) return;
       void convertirAVarianteCarrusel(longitud);
       return;

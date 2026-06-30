@@ -8,6 +8,7 @@
  * del `Dialog`, NO se cierra por clic fuera —lo correcto para una confirmación—;
  * Escape sí cancela (→ `false`).
  */
+import { Minus, Plus } from "lucide-react";
 import * as React from "react";
 
 import {
@@ -24,11 +25,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 export function ContenedorConfirmacion() {
   const [estado, setEstado] = React.useState<EstadoConfirmacion | null>(null);
   const pendiente = React.useRef<EstadoConfirmacion | null>(null);
+  // Valor en edición de la fila numérica ("a tu gusto"); se resetea a `valorInicial` con
+  // cada diálogo nuevo (id cambia tanto al reabrir como al pasar de una elección a otra).
+  const [valorNumero, setValorNumero] = React.useState(0);
 
   React.useEffect(() => {
     return suscribirConfirmacion((nuevo) => {
@@ -38,6 +44,7 @@ export function ContenedorConfirmacion() {
       if (pendiente.current) pendiente.current.resolver(pendiente.current.opciones ? null : false);
       pendiente.current = nuevo;
       setEstado(nuevo);
+      if (nuevo.numero) setValorNumero(nuevo.numero.valorInicial);
     });
   }, []);
 
@@ -92,6 +99,57 @@ export function ContenedorConfirmacion() {
                       ) : null}
                     </button>
                   ))}
+                  {estado.numero && (
+                    <div className="flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-background px-4 py-2.5">
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          className="h-7 w-7 shrink-0"
+                          onClick={() =>
+                            setValorNumero((v) => Math.max(estado.numero!.minimo, v - 1))
+                          }
+                          aria-label="Restar"
+                        >
+                          <Minus className="h-3.5 w-3.5" />
+                        </Button>
+                        <Input
+                          type="number"
+                          min={estado.numero.minimo}
+                          max={estado.numero.maximo}
+                          value={valorNumero}
+                          onChange={(e) => setValorNumero(Number(e.target.value) || 0)}
+                          className="h-7 w-14 text-center"
+                          aria-label="Cantidad a tu gusto"
+                        />
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          className="h-7 w-7 shrink-0"
+                          onClick={() =>
+                            setValorNumero((v) => Math.min(estado.numero!.maximo, v + 1))
+                          }
+                          aria-label="Sumar"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          responder(
+                            `numero:${Math.min(estado.numero!.maximo, Math.max(estado.numero!.minimo, valorNumero))}`,
+                          )
+                        }
+                      >
+                        {estado.numero.etiqueta}
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <AlertDialogFooter>
                   <AlertDialogCancel onClick={() => responder(valorCancelar)}>

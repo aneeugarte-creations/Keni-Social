@@ -312,6 +312,11 @@ ENV_AUTOGEN_COPY_MAX = "KENI_AUTOGEN_COPY_MAX"
 # la mitad; 25 = un cuarto. Global (`KENI_RITMO`) y por marca (`KENI_RITMO::marca`, manda sobre el
 # global). Clamp a [10, 100]: el apagado total es otra palanca (toggles/parada), no el ritmo.
 ENV_RITMO = "KENI_RITMO"
+# Tope EDITORIAL de slides del panel automático de carrusel (Redactar, camino Decisor=carrusel):
+# cuántos slides EXTRA (sin contar portada) pide el modelo como máximo. Editable en el panel de
+# ajustes (grupo Producción); `dominio.generar` lo recorta SIEMPRE con el tope TÉCNICO
+# (`MAX_SLIDES_CARRUSEL`, 10 nativas de IG/FB - 1 portada) por si se configura más alto.
+ENV_CARRUSEL_MAX_SLIDES = "KENI_CARRUSEL_MAX_SLIDES"
 # FLUJO CONTINUO: el pipeline no barre por tandas (sin intervalo configurable: tick corto
 # constante en `pipeline_contenido._barrido`) ni tiene topes por etapa (Verificar/Redactar/Ilustrar/Revisar):
 # el volumen lo regula Admitir (gate serial en proceso por marca) + el backpressure de la cola.
@@ -734,6 +739,9 @@ AUTOGEN_COPY_MAX_DEF = 12
 # Ritmo de producción (porcentaje): 100 = sin freno (los caps de barrido valen lo de fábrica).
 # Bajarlo escala los caps proporcionalmente para recortar el gasto. Clamp a [10, 100].
 RITMO_DEF = 100
+
+# Tope editorial del panel automático de carrusel: por defecto, el tope TÉCNICO completo (9).
+CARRUSEL_MAX_SLIDES_DEF = 9
 
 # Pipeline de contenido (FLUJO CONTINUO): Admitir admite hasta este nº de historias por
 # marca en cada pasada, acotada además por el gate serial en proceso. Cada admisión acaba en
