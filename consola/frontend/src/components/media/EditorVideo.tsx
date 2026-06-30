@@ -19,6 +19,8 @@ import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { api, mensajeError, urlMedia } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { aspectoRed } from "@/pages/piezas/meta";
 
 /** Límites orientativos por red (para el aviso bajo el reproductor). */
 const LIMITES_VIDEO: Record<string, string> = {
@@ -150,14 +152,25 @@ export function EditorVideo({
                 </button>
               </div>
             ) : (
-              <div className="relative inline-block w-full max-w-sm">
-                <video
-                  src={src}
-                  controls
-                  muted
-                  className="w-full rounded-md border border-border transition-colors hover:border-keni-300 focus-within:border-keni-300"
-                  aria-label="Previsualización del video"
-                />
+              // Espejo del editor de FOTO: el clip va CENTRADO y enmarcado al formato de la red
+              // (4:5 / 9:16…), no a ancho completo. `object-contain` muestra el vídeo entero
+              // dentro del marco (barras si su relación no calza con la de la red).
+              <div className="mx-auto w-full max-w-sm">
+                <div
+                  className={cn(
+                    "relative overflow-hidden rounded-md border border-border bg-black transition-colors hover:border-keni-300 focus-within:border-keni-300",
+                    aspectoRed(red ?? ""),
+                  )}
+                >
+                  <video
+                    src={src}
+                    controls
+                    muted
+                    playsInline
+                    className="absolute inset-0 h-full w-full object-contain"
+                    aria-label="Previsualización del video"
+                  />
+                </div>
               </div>
             )}
           </FilaConAcciones>

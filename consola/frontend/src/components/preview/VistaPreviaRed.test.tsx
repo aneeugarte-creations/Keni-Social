@@ -172,3 +172,60 @@ describe("VistaPreviaRed · carrusel deslizable (feed limpio)", () => {
     expect(screen.queryByText(/1\//)).toBeNull();
   });
 });
+
+/**
+ * Vídeo en el feed (piezas formato='video'): con `video_url` la tarjeta limpia pinta un
+ * `<video>` REPRODUCIBLE (controles) en el hueco de la imagen, en vez de la foto. El clic
+ * lo controla el reproductor; el resto de la tarjeta sigue abriendo la pieza.
+ */
+describe("VistaPreviaRed · vídeo reproducible (feed limpio)", () => {
+  it("con video_url pinta un <video> con controles servido por /api/media", () => {
+    const { container } = render(
+      <VistaPreviaRed
+        red="instagram"
+        marca="UnoTV"
+        contenido="copy del vídeo"
+        video_url="clip.mp4"
+        titulo="Gol de último minuto"
+        variante="limpia"
+      />,
+    );
+    const video = container.querySelector("video");
+    expect(video).not.toBeNull();
+    expect(video).toHaveAttribute("controls");
+    expect(video).toHaveAttribute("src", "/api/media/clip.mp4");
+    // El vídeo manda: NO se pinta la imagen ni su placeholder en el hueco.
+    expect(container.querySelector("img")).toBeNull();
+    expect(screen.queryByText(/sin imagen/i)).toBeNull();
+  });
+
+  it("el hueco del vídeo NO abre el editor (lo controla el reproductor)", () => {
+    const onAbrir = vi.fn();
+    render(
+      <VistaPreviaRed
+        red="tiktok"
+        marca="UnoTV"
+        contenido="copy del vídeo"
+        video_url="videos/clip.mp4"
+        variante="limpia"
+        onAbrir={onAbrir}
+      />,
+    );
+    // A diferencia de la imagen, el área del vídeo no expone un botón "Abrir".
+    expect(screen.queryByRole("button", { name: /^Abrir/ })).toBeNull();
+  });
+
+  it("sin video_url cae a la imagen de siempre (no hay <video>)", () => {
+    const { container } = render(
+      <VistaPreviaRed
+        red="instagram"
+        marca="UnoTV"
+        contenido="copy normal"
+        imagen_url="/api/media/foto.png"
+        variante="limpia"
+      />,
+    );
+    expect(container.querySelector("video")).toBeNull();
+    expect(container.querySelector('img[src^="/api/media/foto.png"]')).not.toBeNull();
+  });
+});

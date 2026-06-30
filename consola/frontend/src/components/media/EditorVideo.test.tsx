@@ -63,6 +63,20 @@ describe("EditorVideo · Ola F", () => {
     expect(video).toHaveAttribute("src", "/api/media/clip.mp4");
   });
 
+  it("enmarca el vídeo al formato de la red (espejo del editor de foto)", () => {
+    // TikTok es vertical 9:16: el marco que contiene al <video> lleva su clase de aspecto.
+    renderEditor({ video: "clip.mp4", videoUrl: "/api/media/clip.mp4", red: "tiktok" });
+    const video = screen.getByLabelText(/previsualización del video/i);
+    expect(video.parentElement).toHaveClass("aspect-[9/16]");
+    expect(video).toHaveClass("object-contain");
+  });
+
+  it("sin red el marco cae al 4:5 por defecto", () => {
+    renderEditor({ video: "clip.mp4", videoUrl: "/api/media/clip.mp4" });
+    const video = screen.getByLabelText(/previsualización del video/i);
+    expect(video.parentElement).toHaveClass("aspect-[4/5]");
+  });
+
   it("al seleccionar archivo llama a POST /api/media/video y notifica onCambio", async () => {
     stubFetch();
     const { onCambio } = renderEditor({ video: "" });

@@ -49,6 +49,12 @@ export interface VistaPreviaRedProps {
   /** Nombre del archivo o URL de la imagen; vacío = sin imagen. */
   imagen_url?: string;
   /**
+   * Nombre del archivo o URL del VÍDEO de la pieza (formato='video'); vacío = sin vídeo. Si la
+   * pieza lleva vídeo (y no es un carrusel), el feed lo pinta REPRODUCIBLE (`<video controls>`) en
+   * el hueco de la imagen, respetando el aspecto de la red.
+   */
+  video_url?: string;
+  /**
    * Slides EXTRA de una pieza `formato='carrusel'` (JSON `[{tipo,objeto}, …]`, campo
    * `Pieza.carrusel`). Con slides, la variante LIMPIA pinta un carrusel DESLIZABLE
    * (scroll lateral con snap, como en las redes de verdad): portada + slides en orden.
@@ -707,6 +713,7 @@ export function VistaPreviaRed({
   contenido,
   copy_in,
   imagen_url,
+  video_url,
   carrusel,
   titulo,
   onAbrir,
@@ -716,6 +723,7 @@ export function VistaPreviaRed({
   overlayImagen,
 }: VistaPreviaRedProps) {
   const imagen = urlMedia(imagen_url);
+  const video = urlMedia(video_url);
   const Icono = iconoRed(red);
 
   // FEED (variante limpia): tarjeta UNIFORME para TODAS las redes — misma caja, imagen a
@@ -737,6 +745,34 @@ export function VistaPreviaRed({
             slides={slides}
             overlayPortada={overlayImagen}
           />
+          <div className="px-4 pb-1 pt-3">
+            <CopyConLeerMas
+              contenido={contenido}
+              expandido={captionExpandido}
+              onAlternar={onAlternarCaption}
+            />
+          </div>
+        </div>
+      );
+    }
+    // VÍDEO (piezas formato='video'): se pinta REPRODUCIBLE en el mismo hueco que la imagen,
+    // con sus controles. El clic controla la reproducción (no abre el editor, como los slides de
+    // vídeo del carrusel); el resto de la tarjeta sigue abriendo la pieza.
+    if (video) {
+      return (
+        <div>
+          <div className="relative aspect-[4/5] w-full overflow-hidden bg-black">
+            <video
+              src={video}
+              controls
+              muted
+              playsInline
+              loop
+              className="h-full w-full object-contain"
+              aria-label={titulo ? `Vídeo: ${titulo}` : "Vídeo de la publicación"}
+            />
+            {overlayImagen}
+          </div>
           <div className="px-4 pb-1 pt-3">
             <CopyConLeerMas
               contenido={contenido}

@@ -603,6 +603,7 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
         contenido={cuerpo}
         copy_in={pieza.copy_in}
         imagen_url={imagen || undefined}
+        video_url={pieza.video || undefined}
         carrusel={pieza.carrusel}
         titulo={pieza.titulo}
         onAbrir={() => void abrirEditor()}
