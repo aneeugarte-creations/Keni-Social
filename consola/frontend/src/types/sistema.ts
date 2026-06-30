@@ -154,6 +154,18 @@ export interface ColaJob {
   prioridad: number;
   encolado_hace_s: number | null;
   corriendo_hace_s: number | null;
+  /** Etapa legible del job (Verificar/Redactar/Ilustrar/Decisor/…). */
+  etapa: string;
+  /** Tamaño exacto del prompt en caracteres. */
+  prompt_chars: number;
+  /** Media histórica de tokens (in+out) de la etapa (null si aún no hay histórico). */
+  tokens_estimados: number | null;
+  /** Tokens IN reales EN VIVO (null si el job no corre o aún no ha reportado). */
+  tokens_in: number | null;
+  /** Tokens OUT reales EN VIVO (null si el job no corre o aún no ha reportado). */
+  tokens_out: number | null;
+  /** Coste USD real EN VIVO (null si el job no corre o aún no ha reportado). */
+  coste_usd: number | null;
   /** `true` si el job es HUÉRFANO: su generación ya no existe, así que no se procesa. Opcional
    *  para compatibilidad con backs anteriores. */
   huerfano?: boolean;
@@ -246,6 +258,10 @@ export interface PresupuestoIA {
   nivel: string;
   /** Kill switch humano (KENI_GENERACION_PAUSADA, editable en caliente). */
   pausada: boolean;
+  /** Ritmo de producción (%) del ÁMBITO de marca (10..100; 100 = normal). */
+  ritmo: number;
+  /** Ritmo de producción (%) GLOBAL (10..100; 100 = normal). */
+  ritmo_global: number;
   /** Presupuesto de tokens/día (0 = sin límite). */
   presupuesto_tokens_dia: number;
   /** Presupuesto de coste (USD)/día (0 = sin límite). Corta el más restrictivo de tokens/coste. */
@@ -358,9 +374,17 @@ export interface RespuestaReencolarCola {
   gen_id: string;
 }
 
-/** Respuesta de priorizar un job esperando (admin). */
+/** Respuesta de priorizar un job esperando (admin). Incluye la prioridad aplicada. */
 export interface RespuestaPriorizarCola {
   priorizado: boolean;
+  gen_id: string;
+  /** Prioridad aplicada al job (presente cuando el back la fija). */
+  prioridad?: number;
+}
+
+/** Respuesta de eliminar un job de la cola (admin). */
+export interface RespuestaEliminarCola {
+  eliminado: boolean;
   gen_id: string;
 }
 

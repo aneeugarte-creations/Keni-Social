@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import * as React from "react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api";
@@ -29,6 +30,8 @@ function presupuesto(parcial: Partial<PresupuestoIA> = {}): PresupuestoIA {
     marca: "",
     nivel: "normal",
     pausada: false,
+    ritmo: 100,
+    ritmo_global: 100,
     presupuesto_tokens_dia: 0,
     presupuesto_usd_dia: 0,
     margen_manual_pct: 20,
@@ -45,7 +48,11 @@ function presupuesto(parcial: Partial<PresupuestoIA> = {}): PresupuestoIA {
 
 function renderConProviders(ui: React.ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>{ui}</MemoryRouter>
+    </QueryClientProvider>,
+  );
 }
 
 // Modo "una marca": el back manda `gate_diario` (el bloque de la cuenta de esa marca).
@@ -171,5 +178,41 @@ describe("PanelPresupuesto · gate diario por % · modo Todas", () => {
       />,
     );
     expect(screen.queryByText(/consumo del día/i)).not.toBeInTheDocument();
+  });
+});
+
+// Dial de ritmo: la palanca protagonista del panel. El global siempre; el de la marca cuando hay
+// marca activa. Al pulsar un nivel escribe la clave de ajuste correcta con `guardarAjuste`.
+describe("PanelPresupuesto · dial de ritmo", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it("en vista global, pulsar 50% escribe KENI_RITMO con valor 50", async () => {
+    const guardar = vi
+      .spyOn(api, "guardarAjuste")
+      .mockResolvedValue({ ajuste: { clave: "KENI_RITMO", etiqueta: "Ritmo", valor: 50 } } as never);
+    renderConProviders(
+      <PanelPresupuesto presupuesto={presupuesto({ marca: "", ritmo_global: 100 })} esAdmin />,
+    );
+    const dial = screen.getByRole("group", { name: /Ritmo de producción \(global\)/i });
+    fireEvent.click(within(dial).getByRole("button", { name: "50%" }));
+    await waitFor(() => expect(guardar).toHaveBeenCalledWith({ clave: "KENI_RITMO", valor: 50 }));
+  });
+
+  it("con marca activa, su dial escribe KENI_RITMO::<marca>", async () => {
+    const guardar = vi
+      .spyOn(api, "guardarAjuste")
+      .mockResolvedValue({ ajuste: { clave: "KENI_RITMO::unotv", etiqueta: "Ritmo", valor: 25 } } as never);
+    renderConProviders(
+      <PanelPresupuesto
+        presupuesto={presupuesto({ marca: "unotv", ritmo: 100, ritmo_global: 100 })}
+        esAdmin
+        nombreMarca="UnoTV"
+      />,
+    );
+    const dial = screen.getByRole("group", { name: /Ritmo de UnoTV/i });
+    fireEvent.click(within(dial).getByRole("button", { name: "25%" }));
+    await waitFor(() =>
+      expect(guardar).toHaveBeenCalledWith({ clave: "KENI_RITMO::unotv", valor: 25 }),
+    );
   });
 });

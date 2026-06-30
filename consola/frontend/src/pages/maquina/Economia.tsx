@@ -439,7 +439,8 @@ export default function Economia() {
         </div>
       )}
 
-      {/* Presupuesto + parada de emergencia (GLOBAL o de la marca activa). */}
+      {/* Control de gasto: el panel ÚNICO de palancas (dial de ritmo · tope USD/día · topes de tokens
+          por motor · parada de emergencia), GLOBAL o de la marca activa según el switch. */}
       <div className="mb-6">
         {cola.isError ? (
           <BloqueError

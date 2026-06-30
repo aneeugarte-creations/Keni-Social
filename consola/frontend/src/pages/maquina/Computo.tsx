@@ -72,6 +72,7 @@ export default function Computo() {
   const [cancelandoId, setCancelandoId] = React.useState<string | null>(null);
   const [priorizandoId, setPriorizandoId] = React.useState<string | null>(null);
   const [reintentandoId, setReintentandoId] = React.useState<string | null>(null);
+  const [eliminandoId, setEliminandoId] = React.useState<string | null>(null);
 
   const cola = useQuery({
     queryKey: ["actividad", "cola", marcaActiva ?? "todas"],
@@ -120,14 +121,29 @@ export default function Computo() {
     onSettled: () => setCancelandoId(null),
   });
   const priorizar = useMutation({
-    mutationFn: (genId: string) => api.colaPriorizar(genId),
-    onMutate: (genId: string) => setPriorizandoId(genId),
-    onSuccess: () => {
-      toast.success("Job priorizado: adelanta al lote de fondo.");
+    mutationFn: ({ genId, opts }: { genId: string; opts?: { prioridad?: number; a_tope?: boolean } }) =>
+      api.colaPriorizar(genId, opts),
+    onMutate: ({ genId }: { genId: string; opts?: { prioridad?: number; a_tope?: boolean } }) =>
+      setPriorizandoId(genId),
+    onSuccess: (r) => {
+      const aplicada = r.prioridad;
+      toast.success(
+        aplicada != null ? `Prioridad fijada a ${aplicada}.` : "Job priorizado: adelanta al lote de fondo.",
+      );
       refrescar();
     },
     onError: (e) => toast.error(mensajeError(e)),
     onSettled: () => setPriorizandoId(null),
+  });
+  const eliminar = useMutation({
+    mutationFn: (genId: string) => api.colaEliminar(genId),
+    onMutate: (genId: string) => setEliminandoId(genId),
+    onSuccess: () => {
+      toast.success("Job eliminado de la cola.");
+      refrescar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+    onSettled: () => setEliminandoId(null),
   });
   const reintentar = useMutation({
     mutationFn: (genId: string) => api.colaReencolar(genId),
@@ -311,6 +327,8 @@ export default function Computo() {
             cancelandoId={cancelandoId}
             onReintentar={(id) => reintentar.mutate(id)}
             reintentandoId={reintentandoId}
+            onEliminar={(id) => eliminar.mutate(id)}
+            eliminandoId={eliminandoId}
           />
         </ColaCard>
 
@@ -327,10 +345,12 @@ export default function Computo() {
             esAdmin={esAdmin}
             onCancelar={(id) => cancelar.mutate(id)}
             cancelandoId={cancelandoId}
-            onPriorizar={(id) => priorizar.mutate(id)}
+            onPriorizar={(id, opts) => priorizar.mutate({ genId: id, opts })}
             priorizandoId={priorizandoId}
             onReintentar={(id) => reintentar.mutate(id)}
             reintentandoId={reintentandoId}
+            onEliminar={(id) => eliminar.mutate(id)}
+            eliminandoId={eliminandoId}
           />
         </ColaCard>
       </div>

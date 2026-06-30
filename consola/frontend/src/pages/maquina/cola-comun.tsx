@@ -6,12 +6,24 @@
  * de presupuesto).
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowUp, Coins, type Cpu, PauseCircle, RotateCcw, XCircle } from "lucide-react";
+import {
+  ArrowUp,
+  ArrowUpToLine,
+  Coins,
+  type Cpu,
+  Gauge,
+  PauseCircle,
+  RotateCcw,
+  SlidersHorizontal,
+  Trash2,
+  XCircle,
+} from "lucide-react";
 import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { ChipNivelPresupuesto } from "@/components/comunes/ChipEstado";
+import { confirmar, elegir } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
@@ -99,6 +111,38 @@ export function Kpi({
   return cuerpo;
 }
 
+/** Celda TOKENS de un job. Si el job ESPERA (o corre sin métricas aún) muestra el estimado de la
+ *  etapa con sufijo «est.» y, en segunda línea, el tamaño del prompt. Si CORRE y ya reportó tokens
+ *  reales, los pinta in/out + el coste USD. Vacío/0 atenuado. */
+function CeldaTokens({ job }: { job: ColaJob }) {
+  const corriendo = job.estado === "reclamado";
+  const tieneReales = corriendo && (job.tokens_in != null || job.tokens_out != null);
+  if (tieneReales) {
+    return (
+      <div className="leading-tight tabular-nums">
+        <span className="font-medium text-foreground">
+          {numeroCompacto(job.tokens_in ?? 0)} in · {numeroCompacto(job.tokens_out ?? 0)} out
+        </span>
+        {job.coste_usd != null && (
+          <span className="block text-muted-foreground">{costeUsd(job.coste_usd)}</span>
+        )}
+      </div>
+    );
+  }
+  const est = job.tokens_estimados;
+  if (est == null || est === 0) {
+    return <span className="text-muted-foreground/50">—</span>;
+  }
+  return (
+    <div className="leading-tight tabular-nums text-muted-foreground">
+      <span>~{numeroCompacto(est)} est.</span>
+      {job.prompt_chars > 0 && (
+        <span className="block text-muted-foreground/70">{numeroCompacto(job.prompt_chars)} chars</span>
+      )}
+    </div>
+  );
+}
+
 /** Tabla de jobs activos (en curso o esperando), con acciones admin in-place. */
 export function TablaJobs({
   jobs,
@@ -110,18 +154,24 @@ export function TablaJobs({
   priorizandoId,
   onReintentar,
   reintentandoId,
+  onEliminar,
+  eliminandoId,
 }: {
   jobs: ColaJob[];
   mostrarWorker: boolean;
   esAdmin: boolean;
   onCancelar: (genId: string) => void;
   cancelandoId: string | null;
-  /** Solo la tabla «Esperando»: adelanta el job al lote de fondo (prioridad manual). */
-  onPriorizar?: (genId: string) => void;
+  /** Solo la tabla «Esperando»: prioriza el job. Sin opts lo adelanta al lote de fondo (como hoy);
+   *  con `prioridad` clava ese valor (0..100); con `a_tope` lo sube por encima de todo. */
+  onPriorizar?: (genId: string, opts?: { prioridad?: number; a_tope?: boolean }) => void;
   priorizandoId?: string | null;
   /** Reintenta un job FALLIDO (lo devuelve a la cola). Solo se ofrece si gen_estado = error. */
   onReintentar?: (genId: string) => void;
   reintentandoId?: string | null;
+  /** Saca el job de la cola (cancela su árbol si corría). Admin. */
+  onEliminar?: (genId: string) => void;
+  eliminandoId?: string | null;
 }) {
   const navigate = useNavigate();
   return (
@@ -129,17 +179,18 @@ export function TablaJobs({
       <TableHeader>
         <TableRow>
           <TableHead className="pl-6">Generación</TableHead>
-          <TableHead className="hidden sm:table-cell">Tipo</TableHead>
-          <TableHead className="hidden md:table-cell">Marca</TableHead>
-          {mostrarWorker && <TableHead className="hidden lg:table-cell">Worker</TableHead>}
+          <TableHead className="hidden sm:table-cell">Etapa</TableHead>
+          <TableHead className="hidden text-right md:table-cell">Tokens</TableHead>
+          <TableHead className="hidden lg:table-cell">Marca</TableHead>
+          {mostrarWorker && <TableHead className="hidden xl:table-cell">Worker</TableHead>}
           <TableHead className="pr-6">{mostrarWorker ? "Corriendo" : "En cola"}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {jobs.map((j) => {
-          // La fila ENTERA lleva al detalle de la generación (click izquierdo). Las acciones
-          // admin (Priorizar/Reintentar/Cancelar) viven en su menú (click derecho / long-press),
-          // mismo modelo que la tabla de Servicios: sin botones inline ni kebab.
+          // La fila ENTERA lleva al detalle de la generación (click izquierdo). Las acciones admin
+          // (Priorizar/Prioridad…/Reintentar/Cancelar/Eliminar) viven en su menú (click derecho /
+          // long-press), mismo modelo que la tabla de Servicios: sin botones inline ni kebab.
           const acciones: EntradaMenuContextual[] = [];
           if (esAdmin) {
             if (onPriorizar && j.prioridad <= 0) {
@@ -147,6 +198,32 @@ export function TablaJobs({
                 etiqueta: "Priorizar",
                 icono: ArrowUp,
                 onClick: () => onPriorizar(j.gen_id),
+                deshabilitado: priorizandoId === j.gen_id,
+              });
+            }
+            if (onPriorizar) {
+              acciones.push({
+                etiqueta: "Prioridad…",
+                icono: SlidersHorizontal,
+                onClick: async () => {
+                  const valor = await elegir({
+                    titulo: "Prioridad manual",
+                    mensaje: `Fija la prioridad de «${j.etiqueta || j.gen_id}» (mayor = adelanta en la cola).`,
+                    opciones: [
+                      { valor: "25", etiqueta: "25 · baja" },
+                      { valor: "50", etiqueta: "50 · media" },
+                      { valor: "75", etiqueta: "75 · alta" },
+                      { valor: "100", etiqueta: "100 · máxima" },
+                    ],
+                  });
+                  if (valor) onPriorizar(j.gen_id, { prioridad: Number(valor) });
+                },
+                deshabilitado: priorizandoId === j.gen_id,
+              });
+              acciones.push({
+                etiqueta: "Subir a tope",
+                icono: ArrowUpToLine,
+                onClick: () => onPriorizar(j.gen_id, { a_tope: true }),
                 deshabilitado: priorizandoId === j.gen_id,
               });
             }
@@ -165,6 +242,27 @@ export function TablaJobs({
               onClick: () => onCancelar(j.gen_id),
               deshabilitado: cancelandoId === j.gen_id,
             });
+            if (onEliminar) {
+              acciones.push({
+                etiqueta: "Eliminar",
+                icono: Trash2,
+                destructivo: true,
+                onClick: async () => {
+                  if (
+                    await confirmar({
+                      titulo: "Eliminar de la cola",
+                      mensaje:
+                        "Eliminar saca el job de la cola y cancela su ejecución. ¿Seguro?",
+                      destructivo: true,
+                      textoConfirmar: "Eliminar",
+                    })
+                  ) {
+                    onEliminar(j.gen_id);
+                  }
+                },
+                deshabilitado: eliminandoId === j.gen_id,
+              });
+            }
           }
           return (
             <FilaConAcciones
@@ -192,10 +290,15 @@ export function TablaJobs({
                   )}
                 </span>
               </TableCell>
-              <TableCell className="hidden sm:table-cell text-muted-foreground">{j.tipo || "—"}</TableCell>
-              <TableCell className="hidden md:table-cell text-muted-foreground">{j.marca || "—"}</TableCell>
+              <TableCell className="hidden sm:table-cell text-muted-foreground">
+                {j.etapa || j.tipo || "—"}
+              </TableCell>
+              <TableCell className="hidden text-right text-xs md:table-cell">
+                <CeldaTokens job={j} />
+              </TableCell>
+              <TableCell className="hidden lg:table-cell text-muted-foreground">{j.marca || "—"}</TableCell>
               {mostrarWorker && (
-                <TableCell className="hidden lg:table-cell font-mono text-xs text-muted-foreground">
+                <TableCell className="hidden xl:table-cell font-mono text-xs text-muted-foreground">
                   {j.worker || "—"}
                 </TableCell>
               )}
@@ -723,6 +826,65 @@ function BloqueGateDiario({
   );
 }
 
+/** Niveles del dial de ritmo (de mayor a menor), en %. 100 = ritmo normal. */
+const NIVELES_RITMO = [100, 75, 50, 25] as const;
+
+/** DIAL DE RITMO de producción: botones segmentados (100/75/50/25 %) que escriben la clave de ajuste
+ *  del ámbito (`KENI_RITMO` global o `KENI_RITMO::<marca>`). Baja el gasto sin apagar etapas: 100% =
+ *  normal, 50% = mitad de trabajo nuevo por barrido. Solo admin lo cambia; el resto ve el % vigente. */
+function DialRitmo({
+  valor,
+  clave,
+  esAdmin,
+  etiqueta,
+  descripcion,
+}: {
+  /** % de ritmo vigente del ámbito (10..100). */
+  valor: number;
+  /** Clave de ajuste que persiste el ritmo (`KENI_RITMO` o `KENI_RITMO::<marca>`). */
+  clave: string;
+  esAdmin: boolean;
+  etiqueta: string;
+  descripcion: string;
+}) {
+  const guardar = useGuardarAjuste();
+  return (
+    <div className="space-y-2 rounded-lg border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="flex items-center gap-2 text-sm font-medium">
+          <Gauge className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          {etiqueta}
+        </span>
+        <span className="text-sm font-semibold tabular-nums">{valor}%</span>
+      </div>
+      <p className="text-xs text-muted-foreground">{descripcion}</p>
+      {esAdmin ? (
+        <div className="inline-flex overflow-hidden rounded-md border" role="group" aria-label={etiqueta}>
+          {NIVELES_RITMO.map((n) => (
+            <button
+              key={n}
+              type="button"
+              aria-pressed={valor === n}
+              disabled={guardar.isPending}
+              onClick={() => {
+                if (valor !== n) guardar.mutate({ clave, valor: n });
+              }}
+              className={cn(
+                "border-r px-3 py-1 text-xs font-medium tabular-nums transition-colors last:border-r-0",
+                valor === n ? "bg-keni text-white" : "hover:bg-muted",
+              )}
+            >
+              {n}%
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground tabular-nums">Ritmo vigente: {valor}%.</p>
+      )}
+    </div>
+  );
+}
+
 /** PRESUPUESTO + gasto de HOY + PARADA DE EMERGENCIA. Su ÁMBITO lo fija `presupuesto.marca`: con
  *  marca activa edita los controles PROPIOS de esa marca (su cap USD `KENI_PRESUPUESTO_USD_DIA::marca`
  *  y su parada `KENI_GENERACION_PAUSADA::marca`) y muestra SU gasto; sin marca ("todas") opera los
@@ -757,7 +919,7 @@ export function PanelPresupuesto({
         <div className="flex flex-wrap items-center gap-2">
           <CardTitle className="flex flex-wrap items-center gap-2 text-base">
             <Coins className="h-4 w-4 text-muted-foreground" />
-            Presupuesto y parada de emergencia
+            Control de gasto
             {marca && (
               <span className="font-normal text-muted-foreground">· {nombreMarca || marca}</span>
             )}
@@ -766,6 +928,26 @@ export function PanelPresupuesto({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* DIAL DE RITMO: la palanca protagonista. El global siempre; debajo, el de la marca activa
+            (ámbito-following, como los topes). Baja el trabajo nuevo por barrido sin apagar etapas. */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <DialRitmo
+            valor={presupuesto.ritmo_global}
+            clave="KENI_RITMO"
+            esAdmin={esAdmin}
+            etiqueta="Ritmo de producción (global)"
+            descripcion="Baja el gasto sin apagar etapas. 100% = normal, 50% = mitad de trabajo nuevo por barrido."
+          />
+          {marca && (
+            <DialRitmo
+              valor={presupuesto.ritmo}
+              clave={`KENI_RITMO::${marca}`}
+              esAdmin={esAdmin}
+              etiqueta={`Ritmo de ${nombreMarca || marca}`}
+              descripcion="Ritmo propio de la marca: limita su trabajo nuevo por barrido sin tocar el resto."
+            />
+          )}
+        </div>
         {/* Gate diario por % del límite semanal POR CUENTA: el aviso/pantalla de «Aceptar +10%»
             cuando el consumo del día de una cuenta pausa SUS marcas. Con marca activa, el de su
             cuenta; en "Todas", el de la(s) cuenta(s) gateada(s). Va arriba para que sea lo primero
@@ -853,6 +1035,14 @@ export function PanelPresupuesto({
             marca={marca}
           />
         </div>
+        {/* Apagar etapas concretas no vive aquí: son toggles por etapa en Contexto. */}
+        <p className="text-xs text-muted-foreground">
+          ¿Apagar etapas concretas?{" "}
+          <Link to="/maquina/contexto" className="underline-offset-2 hover:underline">
+            Ver Contexto
+          </Link>
+          .
+        </p>
       </CardContent>
     </Card>
   );

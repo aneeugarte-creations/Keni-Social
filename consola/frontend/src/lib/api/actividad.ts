@@ -11,6 +11,7 @@ import type {
   EconomiaPorProceso,
   GateDiarioIA,
   ProduccionDia,
+  RespuestaEliminarCola,
   RespuestaLimpiarHuerfanos,
   RespuestaPriorizarCola,
   RespuestaPurgarCola,
@@ -55,9 +56,17 @@ export const apiActividad = {
       metodo: "POST",
       json: { gen_id: genId },
     }),
-  // Adelanta un job ESPERANDO al lote de fondo (lo sube a prioridad manual).
-  colaPriorizar: (genId: string) =>
+  // Fija la prioridad de un job ESPERANDO. Sin opts mantiene el comportamiento de hoy (lo adelanta
+  // al lote de fondo, prioridad 10); con `prioridad` clava ese valor (0..100); con `a_tope` lo pone
+  // por encima de todos los pendientes.
+  colaPriorizar: (genId: string, opts: { prioridad?: number; a_tope?: boolean } = {}) =>
     peticion<RespuestaPriorizarCola>("/actividad/cola/priorizar", {
+      metodo: "POST",
+      json: { gen_id: genId, ...opts },
+    }),
+  // Saca un job de la cola (cancela su árbol si corría). Admin.
+  colaEliminar: (genId: string) =>
+    peticion<RespuestaEliminarCola>("/actividad/cola/eliminar", {
       metodo: "POST",
       json: { gen_id: genId },
     }),

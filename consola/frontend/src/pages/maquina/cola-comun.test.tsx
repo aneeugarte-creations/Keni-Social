@@ -1,9 +1,18 @@
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { MemoryRouter } from "react-router-dom";
+import { describe, expect, it, vi } from "vitest";
 
-import type { Backlog } from "@/types";
+import type { Backlog, ColaJob } from "@/types";
 
-import { TablaBacklog } from "./cola-comun";
+import { TablaBacklog, TablaJobs } from "./cola-comun";
+
+// El menú contextual dispara `confirmar`/`elegir` (diálogos imperativos): los mockeamos para
+// resolver sin montar su contenedor y poder probar el cableado de las acciones.
+vi.mock("@/components/comunes/confirmar", () => ({
+  confirmar: vi.fn().mockResolvedValue(true),
+  elegir: vi.fn().mockResolvedValue("75"),
+}));
 
 const BACKLOG: Backlog = {
   marcas: [
@@ -71,5 +80,96 @@ describe("TablaBacklog", () => {
     rerender(<TablaBacklog backlog={BACKLOG} titulo="Trabajo pendiente (backlog que costará)" />);
     expect(screen.getByText("Trabajo pendiente (backlog que costará)")).toBeInTheDocument();
     expect(screen.queryByText("Embalse del tablero (antes de la cola)")).toBeNull();
+  });
+});
+
+function job(parcial: Partial<ColaJob> = {}): ColaJob {
+  return {
+    job_id: "j1",
+    gen_id: "g1",
+    estado: "pendiente",
+    worker: "",
+    etiqueta: "Tema 1",
+    tipo: "copy",
+    marca: "unotv",
+    proceso: "produccion",
+    gen_estado: "ejecutando",
+    fase: "",
+    prioridad: 0,
+    encolado_hace_s: 30,
+    corriendo_hace_s: null,
+    etapa: "Redactar",
+    prompt_chars: 8200,
+    tokens_estimados: 12000,
+    tokens_in: null,
+    tokens_out: null,
+    coste_usd: null,
+    ...parcial,
+  };
+}
+
+function renderTabla(ui: ReactElement) {
+  return render(<MemoryRouter>{ui}</MemoryRouter>);
+}
+
+describe("TablaJobs · columnas Etapa y Tokens", () => {
+  it("un job ESPERANDO muestra la etapa legible y el estimado de tokens («est.») + chars", () => {
+    renderTabla(
+      <TablaJobs
+        jobs={[job()]}
+        mostrarWorker={false}
+        esAdmin={false}
+        onCancelar={() => {}}
+        cancelandoId={null}
+      />,
+    );
+    expect(screen.getByText("Redactar")).toBeInTheDocument();
+    expect(screen.getByText(/12\s*k est\./)).toBeInTheDocument();
+    expect(screen.getByText(/8\.2\s*k chars/)).toBeInTheDocument();
+  });
+
+  it("un job CORRIENDO con métricas muestra tokens reales in/out + coste", () => {
+    renderTabla(
+      <TablaJobs
+        jobs={[
+          job({
+            estado: "reclamado",
+            worker: "w1",
+            corriendo_hace_s: 12,
+            tokens_in: 12000,
+            tokens_out: 3000,
+            coste_usd: 0.05,
+          }),
+        ]}
+        mostrarWorker
+        esAdmin={false}
+        onCancelar={() => {}}
+        cancelandoId={null}
+      />,
+    );
+    expect(screen.getByText(/12\s*k in · 3\s*k out/)).toBeInTheDocument();
+    expect(screen.getByText(/0\.050/)).toBeInTheDocument();
+  });
+});
+
+describe("TablaJobs · acción Eliminar", () => {
+  it("la acción Eliminar (admin) llama a onEliminar con el gen_id tras confirmar", async () => {
+    const onEliminar = vi.fn();
+    renderTabla(
+      <TablaJobs
+        jobs={[job()]}
+        mostrarWorker={false}
+        esAdmin
+        onCancelar={() => {}}
+        cancelandoId={null}
+        onEliminar={onEliminar}
+        eliminandoId={null}
+      />,
+    );
+    // Abre el menú contextual de la fila (click derecho) y dispara «Eliminar».
+    fireEvent.contextMenu(screen.getByText("Tema 1"));
+    const item = await screen.findByRole("menuitem", { name: /Eliminar/i });
+    fireEvent.click(item);
+    await vi.waitFor(() => expect(onEliminar).toHaveBeenCalledWith("g1"));
   });
 });
