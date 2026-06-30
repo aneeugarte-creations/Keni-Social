@@ -11,8 +11,9 @@ from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ... import generaciones, repos
+from ... import actividad, generaciones, repos
 from ...pipeline_contenido import ORIGEN_PIPELINE, TIPO_ACTIVIDAD
+from ..actividad import _es_marcador_pipeline
 from ._comun import (
     _ORIGENES_RUN,
     _PREFIJO_POOL_EDITORIAL,
@@ -28,6 +29,27 @@ from ._metricas import (
     _runs_con_hashtags,
 )
 from ._runs import _run_de
+
+# Orden temporal de las etapas en la LÍNEA DE TIEMPO unificada. Reúne el orden de flujo del
+# catálogo de runs (`_runs._ETAPAS`) con las etapas que NO son ranuras fijas de la run y que
+# `etapa_economia` nombra aparte (Recolectar, Decisor, Revisión editorial, Carrusel): cada una
+# en su sitio del flujo. Una etapa que no esté aquí cae al final, ordenada por su fecha.
+_ORDEN_LINEA_TIEMPO = (
+    "Recolectar",
+    "Fusionar",
+    "Priorizar",
+    "Decisor",
+    "Admitir",
+    "Verificar",
+    "Revisión editorial",
+    "Redactar",
+    "Keywords",
+    "Ilustrar",
+    "Carrusel",
+    "Aprobar",
+    "Crítica",
+)
+_ORDEN_POR_ETAPA = {nombre: i for i, nombre in enumerate(_ORDEN_LINEA_TIEMPO)}
 
 
 def _generacion_publica(gen_id: str) -> dict | None:
@@ -144,6 +166,118 @@ def _actividad_y_generaciones(publicacion_id: str, gens: list[dict]) -> tuple[li
     return eventos, generaciones_por_etapa
 
 
+def _etapa_de_gen(gen: dict) -> str:
+    """Etapa legible de UNA generación real: la `etapa` que selló el job, o la derivada del par
+    (proceso, tipo) vía `etapa_economia`. Cubre TODOS los tipos (decisor, copy/autogen, imagen,
+    sugerir-hashtags, critica-ia, carrusel, verificación…), no solo las ranuras de la run."""
+    etapa = (gen.get("etapa") or "").strip()
+    if etapa:
+        return etapa
+    return repos.etapa_economia(gen.get("proceso") or "", gen.get("tipo") or "")
+
+
+def _gen_linea(gen: dict) -> dict:
+    """Forma mínima de una generación dentro de una entrada de etapa de la línea de tiempo."""
+    m = actividad.normalizar_generacion(gen)["metricas"]
+    return {
+        "gen_id": gen.get("id", "") or "",
+        "estado": gen.get("estado", "") or "",
+        "fecha": gen.get("fecha_fin") or gen.get("fecha_inicio") or "",
+        "coste_usd": m.get("coste_usd"),
+        "tokens": m.get("tokens"),
+    }
+
+
+def _mas_reciente(gens: list[dict], pred) -> dict | None:
+    """La generación más reciente (por `fecha_fin`/`fecha_inicio`) que cumple `pred`; None si ninguna."""
+    cand = [g for g in gens if pred(g)]
+    if not cand:
+        return None
+    cand.sort(key=lambda g: g.get("fecha_fin") or g.get("fecha_inicio") or "", reverse=True)
+    return cand[0]
+
+
+def _linea_tiempo(
+    pipeline_id: str,
+    marca_tema: str,
+    gens: list[dict],
+    *,
+    cluster: dict | None,
+    es_pipeline: bool,
+) -> list[dict]:
+    """LÍNEA DE TIEMPO unificada de un POST: TODA la actividad real del mismo tema, en una sola
+    secuencia por etapa con los REINTENTOS COLAPSADOS.
+
+    Reúne (a) TODAS las generaciones REALES cuyo `publicacion_id == pipeline_id` —no solo las del
+    catálogo de etapas: INCLUYE el DECISOR y cualquier otro tipo, que hoy se caían del detalle— y
+    (b) la fase PREVIA al tablero (pool Fusionar/Priorizar) cuando el tema nació de una HISTORIA
+    (`cluster` resuelto). La fase previa es de LOTE de marca (sus generaciones llevan
+    `publicacion_id=""`), así que se correla por `marca` y se marca `fase_previa=True` para que la
+    UI la pinte "antes del tablero".
+
+    Cada etapa colapsa sus reintentos en UNA entrada `{etapa, intentos, estado_final, ultima_gen_id,
+    primera_fecha, ultima_fecha, fase_previa, generaciones:[...]}`: `intentos` es el nº de
+    generaciones de ese tema+etapa, `estado_final`/`ultima_gen_id` los de la más reciente, y la
+    lista interna (orden cronológico) permite expandir intento a intento. Las etapas se ordenan por
+    el flujo del pipeline (`_ORDEN_LINEA_TIEMPO`); una etapa desconocida cae al final, por fecha.
+    """
+    # (etapa, fase_previa) -> [generaciones de ese grupo]
+    grupos: dict[tuple[str, bool], list[dict]] = {}
+
+    # (a) Generaciones REALES del propio tema (decisor, copy/autogen, imagen, hashtags, crítica,
+    # carrusel…). Se excluyen los MARCADORES de etapa (no son trabajo con coste; su gen real ya
+    # entra por su `publicacion_id`).
+    for gen in gens:
+        if _es_marcador_pipeline(gen):
+            continue
+        if (gen.get("publicacion_id") or "") != pipeline_id:
+            continue
+        etapa = _etapa_de_gen(gen)
+        if not etapa:
+            continue
+        grupos.setdefault((etapa, False), []).append(gen)
+
+    # (b) Fase PREVIA al tablero (pool de noticias): solo si el tema nació de una historia
+    # (`cluster` resuelto) y es del pipeline. El pool corre por LOTE de marca, así que se enlaza la
+    # generación más reciente de la marca por etiqueta (misma selección que el resto del detalle).
+    if es_pipeline and cluster is not None:
+        for prefijo, etapa in ((_PREFIJO_POOL_FUSION, "Fusionar"), (_PREFIJO_POOL_EDITORIAL, "Priorizar")):
+            gen = _mas_reciente(
+                gens,
+                lambda g, _pref=prefijo: (g.get("marca", "") or "") == marca_tema
+                and (g.get("tipo") or "") == "pipeline"
+                and (g.get("etiqueta", "") or "").startswith(_pref),
+            )
+            if gen is not None:
+                # La etapa la fija la ETIQUETA del lote (Fusionar/Priorizar), no `etapa_economia`:
+                # un job de pool comparte `tipo='pipeline'` con la redacción (ambigüedad que solo
+                # su etiqueta desambigua, igual que en el resto del detalle).
+                grupos.setdefault((etapa, True), []).append(gen)
+
+    entradas: list[dict] = []
+    for (etapa, fase_previa), bucket in grupos.items():
+        bucket.sort(key=lambda g: g.get("fecha_fin") or g.get("fecha_inicio") or "")
+        gens_linea = [_gen_linea(g) for g in bucket]
+        ultima = bucket[-1]
+        entradas.append(
+            {
+                "etapa": etapa,
+                "intentos": len(bucket),
+                "estado_final": ultima.get("estado", "") or "",
+                "ultima_gen_id": ultima.get("id", "") or "",
+                "primera_fecha": gens_linea[0]["fecha"],
+                "ultima_fecha": gens_linea[-1]["fecha"],
+                "fase_previa": fase_previa,
+                "generaciones": gens_linea,
+            }
+        )
+
+    # Orden de flujo del pipeline para las etapas conocidas; las desconocidas al final, por fecha.
+    desconocida = len(_ORDEN_LINEA_TIEMPO)
+    entradas.sort(key=lambda e: (_ORDEN_POR_ETAPA.get(e["etapa"], desconocida), e["primera_fecha"]))
+    return entradas
+
+
 def _detalle(pipeline_id: str) -> tuple[int, dict]:
     item = repos.obtener_publicacion(pipeline_id)
     if item is None or (item.get("origen") or "") not in _ORIGENES_RUN:
@@ -201,6 +335,12 @@ def _detalle(pipeline_id: str) -> tuple[int, dict]:
             critica_ia=pipeline_id in _runs_con_critica_ia(gens),
         ),
         "actividad": eventos,
+        # Línea de tiempo unificada del POST: TODA la actividad real del mismo tema (incluido el
+        # DECISOR y la fase previa al tablero) en una secuencia por etapa, con los reintentos
+        # colapsados (una entrada por etapa con `intentos`). Aditivo y back-compat.
+        "linea_tiempo": _linea_tiempo(
+            pipeline_id, marca_tema, gens, cluster=cluster, es_pipeline=es_pipeline
+        ),
         # Stream del agente (`claude -p`) por código de etapa. Aditivo y back-compat: vacío si
         # ninguna etapa tiene una generación correlacionada.
         "generaciones_por_etapa": generaciones_por_etapa,

@@ -375,6 +375,71 @@ def test_detalle_enlaza_haiku_del_pool_por_etapa(cliente):
     assert por_etapa["PRIORIZAR"]["salida"] == "SALIDA-PRIORIZAR"
 
 
+def _linea(cliente, tema_id: str) -> list[dict]:
+    body = cliente.get(f"/api/pipelines/{tema_id}").json()
+    assert "linea_tiempo" in body
+    return body["linea_tiempo"]
+
+
+def test_linea_tiempo_incluye_decisor_y_colapsa_reintentos(cliente):
+    """La línea de tiempo reúne TODA la actividad real del tema en una entrada por etapa con los
+    reintentos colapsados: el DECISOR (que el detalle por etapa no cosía) aparece como una etapa
+    más, con sus 3 intentos plegados y el `estado_final` de la última generación."""
+    tema = _tema_pipeline("Tema decisor")
+    # Tres intentos del DECISOR del mismo tema: dos en error, el último completado.
+    for i, estado in enumerate(
+        (generaciones.ESTADO_ERROR, generaciones.ESTADO_ERROR, generaciones.ESTADO_COMPLETADO)
+    ):
+        generaciones.crear({
+            "tipo": "decisor", "marca": "unotv", "publicacion_id": tema["id"],
+            "etiqueta": f"Decisor — intento {i}", "estado": estado,
+            "fecha_inicio": f"2026-06-30T10:0{i}:00", "fecha_fin": f"2026-06-30T10:0{i}:30",
+            "metricas": {"total_cost_usd": 0.01, "tokens_in": 100, "tokens_out": 50},
+        })
+    # Una redacción del copy del mismo tema (otra etapa de la misma línea).
+    generaciones.crear({
+        "tipo": "autogen", "marca": "unotv", "publicacion_id": tema["id"],
+        "etiqueta": "Copy — Tema decisor", "estado": generaciones.ESTADO_COMPLETADO,
+        "fecha_inicio": "2026-06-30T10:05:00",
+    })
+    linea = _linea(cliente, tema["id"])
+    por_etapa = {e["etapa"]: e for e in linea}
+    assert "Decisor" in por_etapa  # ya NO se cae del detalle
+    dec = por_etapa["Decisor"]
+    assert dec["intentos"] == 3
+    assert dec["estado_final"] == generaciones.ESTADO_COMPLETADO  # el de la ÚLTIMA generación
+    assert len(dec["generaciones"]) == 3
+    assert dec["fase_previa"] is False
+    assert dec["generaciones"][0]["coste_usd"] == pytest.approx(0.01)
+    assert dec["generaciones"][0]["tokens"] == 150
+    assert "Redactar" in por_etapa
+    # Orden de flujo: Decisor va antes que Redactar.
+    claves = [e["etapa"] for e in linea]
+    assert claves.index("Decisor") < claves.index("Redactar")
+
+
+def test_linea_tiempo_fase_previa_por_cluster(cliente):
+    """La fase PREVIA al tablero (pool Fusionar/Priorizar) se enlaza por la HISTORIA del tema
+    (cluster resuelto) y se marca `fase_previa=True`; sin cluster no aparece."""
+    tema = _tema_pipeline("Tema con pre-tablero", marca="unotv")
+    _historia_de(tema["id"])  # cluster resuelto -> hay fase previa
+    generaciones.crear({
+        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Fusionar historias — UnoTV",
+        "estado": generaciones.ESTADO_COMPLETADO, "fecha_inicio": "2026-06-30T09:00:00",
+    })
+    generaciones.crear({
+        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Priorizar historias — UnoTV",
+        "estado": generaciones.ESTADO_COMPLETADO, "fecha_inicio": "2026-06-30T09:01:00",
+    })
+    por_etapa = {e["etapa"]: e for e in _linea(cliente, tema["id"])}
+    assert por_etapa["Fusionar"]["fase_previa"] is True
+    assert por_etapa["Priorizar"]["fase_previa"] is True
+    # Sin cluster (otro tema): la fase previa NO se enlaza.
+    tema2 = _tema_pipeline("Tema sin pre-tablero", marca="unotv")
+    etapas2 = {e["etapa"] for e in _linea(cliente, tema2["id"])}
+    assert "Fusionar" not in etapas2 and "Priorizar" not in etapas2
+
+
 def test_etapa_arte_exige_evidencia_de_arte_ia(cliente, monkeypatch):
     """La etapa Ilustrar se deriva de la EVIDENCIA de arte GENERADO (generación/marcador de
     auto-arte correlacionado), no de que la pieza tenga imagen: la FOTO de la nota de una

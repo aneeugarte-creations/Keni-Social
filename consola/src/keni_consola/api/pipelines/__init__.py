@@ -22,7 +22,7 @@ Endpoints (solo lectura):
       -> `{"pipelines": [item, ...], "paginacion": {...}}`        · `feed.listar`
   - `GET /api/pipelines/problemas?marca=&limite=50` -> `{"problemas": [...], "total": n}`
       · `problemas.problemas`
-  - `GET /api/pipelines/{pipeline_id}` -> `{"pipeline": run, "actividad": [...]}`
+  - `GET /api/pipelines/{pipeline_id}` -> `{"pipeline": run, "actividad": [...], "linea_tiempo": [...]}`
       · `detalle.detalle`
 
 Estructura del paquete (extraído del monolito `pipelines.py`, ~1080 líneas):
