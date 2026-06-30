@@ -678,7 +678,7 @@ export default function Video() {
                     </span>
                   )}
                 </div>
-                <div className="flex min-h-0 flex-1 flex-col items-center gap-3 overflow-y-auto bg-muted/30 p-4">
+                <div className="flex min-h-0 flex-1 flex-col bg-muted/30 p-4">
                   <PreviewConTimeline
                     doc={doc}
                     baseUrl={baseUrl}
@@ -766,7 +766,7 @@ function PreviewConTimeline({
   const playerRef = React.useRef<PreviewPlayerHandle>(null);
   const [tiempoSeg, setTiempoSeg] = React.useState(0);
   return (
-    <>
+    <div className="flex min-h-0 w-full flex-1 flex-col gap-3">
       <PreviewComposicion
         doc={doc}
         baseUrl={baseUrl}
@@ -778,9 +778,10 @@ function PreviewConTimeline({
         onCajaPip={onCajaPip}
         reframeEditable={reframeEditable}
         onFoco={onFoco}
+        conEncuadre
       />
       {baseUrl ? (
-        <div className="w-full max-w-3xl">
+        <div className="mx-auto w-full max-w-3xl shrink-0">
           <TimelineMultipista
             doc={doc}
             tiempoSeg={tiempoSeg}
@@ -798,7 +799,7 @@ function PreviewConTimeline({
           />
         </div>
       ) : null}
-    </>
+    </div>
   );
 }
 

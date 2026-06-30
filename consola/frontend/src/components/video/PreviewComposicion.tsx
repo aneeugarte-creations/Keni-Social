@@ -38,6 +38,9 @@ import { Pause, Play } from "lucide-react";
 import * as React from "react";
 
 import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaTexto } from "@/editor/documento";
+import { ControlesEncuadre } from "@/editor/lienzo/ControlesEncuadre";
+import { useEncuadre } from "@/editor/lienzo/useEncuadre";
+import { useZoomPan } from "@/editor/lienzo/useZoomPan";
 import { urlMedia } from "@/lib/api";
 import {
   formatearDuracionMs,
@@ -93,6 +96,12 @@ export interface PreviewComposicionProps {
   reframeEditable?: boolean;
   /** Commit del foco del clip base (0..1) al soltar el gesto de reencuadre. */
   onFoco?: (foco: [number, number]) => void;
+  /**
+   * Activa la gestión de ENCUADRE/ZOOM del lienzo (igual que el editor de imagen): barra inferior
+   * de zoom (acercar/alejar/ajustar/%), pan con espacio/botón central y rueda, rejilla y zonas
+   * seguras. Sin esta prop el preview se autoajusta como antes (sin barra).
+   */
+  conEncuadre?: boolean;
 }
 
 /** Umbral de SNAP del arrastre del PiP, en px de PANTALLA (constante a cualquier escala). */
@@ -112,6 +121,7 @@ export function PreviewComposicion({
   onCajaPip,
   reframeEditable = false,
   onFoco,
+  conEncuadre = false,
 }: PreviewComposicionProps) {
   const { w, h } = doc.formato;
 
@@ -309,7 +319,8 @@ export function PreviewComposicion({
   // Atajo global: Espacio = play/pausa cuando el foco NO está en un control editable/activable
   // (input/textarea/select/botón/contenteditable). `e.repeat` evita el metralleo al mantenerla.
   React.useEffect(() => {
-    if (!atajoEspacio || !baseUrl) return;
+    // Con `conEncuadre`, la barra espaciadora la usa el PAN del lienzo: no se duplica el play.
+    if (!atajoEspacio || conEncuadre || !baseUrl) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== "Space" || e.repeat) return;
       const t = e.target as HTMLElement | null;
@@ -328,10 +339,40 @@ export function PreviewComposicion({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [atajoEspacio, baseUrl, alternar]);
+  }, [atajoEspacio, conEncuadre, baseUrl, alternar]);
 
-  // Escala: cabe en `altoMax` de alto Y en el ancho del contenedor (si ya se midió).
-  const escala = Math.min(altoMax / h, anchoDisp > 0 ? anchoDisp / w : Infinity);
+  // ENCUADRE/ZOOM (igual que el Lienzo de imagen): zoom/pan + toggles de rejilla/zonas. Los hooks
+  // se llaman SIEMPRE (reglas de hooks); su salida solo se usa con `conEncuadre`.
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const {
+    medirRef,
+    escala: escalaZoom,
+    acercar,
+    alejar,
+    ajustarPantalla,
+    zoomReal,
+    fijarEscala,
+    espacio,
+    paneando,
+    onMouseDownContenedor,
+  } = useZoomPan({ w, h, maxAncho: 600, maxAlto: altoMax, scrollRef });
+  const enc = useEncuadre();
+
+  // Zoom con ctrl/cmd + rueda (anclado al centro, como botones); la rueda sola hace scroll/pan.
+  const onRueda = React.useCallback(
+    (e: React.WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      if (e.deltaY < 0) acercar();
+      else alejar();
+    },
+    [acercar, alejar],
+  );
+
+  // Escala efectiva: con `conEncuadre`, la del zoom; si no, autoajuste por alto/ancho del contenedor.
+  const escala = conEncuadre
+    ? escalaZoom
+    : Math.min(altoMax / h, anchoDisp > 0 ? anchoDisp / w : Infinity);
   const anchoPx = w * escala;
   const altoPx = h * escala;
 
@@ -519,13 +560,23 @@ export function PreviewComposicion({
     ? "opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100"
     : "opacity-100 transition-opacity";
 
-  return (
-    <div ref={contRef} className="flex w-full flex-col items-center gap-2">
+  const lienzo = (
       <div
         className="group relative overflow-hidden rounded-md border border-border bg-black shadow-sm"
         style={{ width: anchoPx, height: altoPx }}
         aria-label="Vista previa aproximada de la composición"
       >
+        {/* Rejilla del encuadre (cosmética, no se exporta). */}
+        {conEncuadre && enc.grid && (
+          <div
+            className="pointer-events-none absolute inset-0 z-[2]"
+            style={{
+              backgroundImage:
+                "linear-gradient(to right, rgba(255,255,255,0.18) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.18) 1px, transparent 1px)",
+              backgroundSize: `${enc.paso * escala}px ${enc.paso * escala}px`,
+            }}
+          />
+        )}
         {/* Clip base */}
         {baseUrl ? (
           <video
@@ -674,14 +725,21 @@ export function PreviewComposicion({
           </div>
         )}
 
-        {/* Zonas seguras (líneas punteadas) */}
+        {/* Zonas seguras (líneas punteadas). Con el toggle `zonas` activo, además VELA las franjas
+            (patrón Canva/IG) para ver claramente dónde no debe caer texto/logos. */}
         <div
           className="pointer-events-none absolute inset-x-0 top-0 border-b border-dashed border-cyan-400/40"
-          style={{ height: preset.safe_top * escala }}
+          style={{
+            height: preset.safe_top * escala,
+            background: conEncuadre && enc.zonas ? "rgba(0,0,0,0.35)" : undefined,
+          }}
         />
         <div
           className="pointer-events-none absolute inset-x-0 bottom-0 border-t border-dashed border-cyan-400/40"
-          style={{ height: preset.safe_bottom * escala }}
+          style={{
+            height: preset.safe_bottom * escala,
+            background: conEncuadre && enc.zonas ? "rgba(0,0,0,0.35)" : undefined,
+          }}
         />
 
         {/* Controles del player (solo con clip base): botón central + barra de progreso. */}
@@ -771,9 +829,51 @@ export function PreviewComposicion({
           </>
         )}
       </div>
-      <p className="text-[11px] text-muted-foreground/70">
-        Preview aproximado
-      </p>
+  );
+
+  // Con encuadre: lienzo centrado + scroll/pan + barra inferior de zoom/encuadre (igual que el
+  // Estudio de imagen). El lienzo puede desbordar al hacer zoom y se navega con scroll/pan.
+  if (conEncuadre) {
+    return (
+      <div ref={contRef} className="flex min-h-0 w-full flex-1 flex-col gap-2">
+        <div ref={medirRef} className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+          <div
+            ref={scrollRef}
+            onWheel={onRueda}
+            onMouseDown={onMouseDownContenedor}
+            className="max-h-full max-w-full overflow-auto"
+            style={{ cursor: paneando ? "grabbing" : espacio ? "grab" : undefined }}
+          >
+            {lienzo}
+          </div>
+        </div>
+        <p className="text-center text-[11px] text-muted-foreground/70">Preview aproximado</p>
+        <ControlesEncuadre
+          iman={enc.iman}
+          setIman={enc.setIman}
+          grid={enc.grid}
+          setGrid={enc.setGrid}
+          tamCelda={enc.tamCelda}
+          setTamCelda={enc.setTamCelda}
+          dentroMarco={enc.dentroMarco}
+          setDentroMarco={enc.setDentroMarco}
+          zonas={enc.zonas}
+          setZonas={enc.setZonas}
+          escala={escala}
+          alejar={alejar}
+          acercar={acercar}
+          zoomReal={zoomReal}
+          ajustarPantalla={ajustarPantalla}
+          fijarEscala={fijarEscala}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div ref={contRef} className="flex w-full flex-col items-center gap-2">
+      {lienzo}
+      <p className="text-[11px] text-muted-foreground/70">Preview aproximado</p>
     </div>
   );
 }

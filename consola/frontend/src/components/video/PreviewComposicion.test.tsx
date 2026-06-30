@@ -424,3 +424,13 @@ describe("PreviewComposicion · capas de overlay (render fiel en DOM)", () => {
     expect(container.querySelector('img[src*="logo.png"]')).not.toBeNull();
   });
 });
+
+describe("PreviewComposicion · encuadre/zoom (conEncuadre)", () => {
+  it("muestra la barra de encuadre/zoom (igual que el editor de imagen)", () => {
+    render(<PreviewComposicion doc={docConBase()} baseUrl="videos/abc.mp4" conEncuadre />);
+    // El slider de zoom de la barra inferior está presente.
+    expect(screen.getByLabelText("Zoom")).toBeInTheDocument();
+    // El menú de opciones de encuadre (rejilla/zonas/imán) también.
+    expect(screen.getByLabelText("Opciones de encuadre")).toBeInTheDocument();
+  });
+});
