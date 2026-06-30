@@ -90,6 +90,79 @@ def test_mapa_reformato_real_apunta_a_prompts_reales_con_hash_viejo():
 
 
 # --------------------------------------------------------------------------- #
+# propagar_plataformas_claro_x: gate por hash (respeta edits) + idempotencia   #
+# --------------------------------------------------------------------------- #
+
+_CLARO_X_ID = "editorial/rrss/claro-sports/plataformas"
+_CLARO_X_VIEJO = "- Convención: gancho + dato en un tuit; emojis 1-3; el hilo para el desglose."
+_CLARO_X_NUEVO = (
+    "- Convención: gancho + dato en un tuit; 1 emoji (no los 3-4 de Facebook/Instagram); "
+    "sin hashtags; el hilo para el desglose."
+)
+
+
+def _escribir_editorial(ruta, cuerpo):
+    """Escribe un editorial mínimo (frontmatter + cuerpo) directo a disco."""
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.write_text(
+        f'---\ntitulo: "Formato"\ntipo: editorial\nclase: plataforma\nmarcas: [claro-sports]\n'
+        f"---\n\n{cuerpo}\n",
+        encoding="utf-8",
+    )
+
+
+def test_claro_x_pisa_solo_lo_no_editado_y_es_idempotente(monkeypatch, tmp_path):
+    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))
+    store = tmp_path / "texto"
+    inicial = tmp_path / "inicial"
+    ruta_rel = f"{_CLARO_X_ID}.md".split("/")
+
+    _escribir_editorial(inicial.joinpath(*ruta_rel), _CLARO_X_NUEVO)
+    _escribir_editorial(store.joinpath(*ruta_rel), _CLARO_X_VIEJO)
+    sha_viejo = hashlib.sha256(_CLARO_X_VIEJO.encode("utf-8")).hexdigest()
+    monkeypatch.setattr(_inicial, "_PLATAFORMAS_CLARO_X_V1", ((_CLARO_X_ID, sha_viejo),))
+
+    n = libprompts.propagar_plataformas_claro_x(origen=inicial)
+    assert n == 1
+    cuerpo = libprompts.obtener(_CLARO_X_ID).cuerpo
+    assert "1 emoji" in cuerpo and "sin hashtags" in cuerpo
+
+    # Idempotente: el sentinela impide una segunda pasada.
+    assert libprompts.propagar_plataformas_claro_x(origen=inicial) == 0
+
+
+def test_claro_x_respeta_ediciones_del_equipo(monkeypatch, tmp_path):
+    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))
+    store = tmp_path / "texto"
+    inicial = tmp_path / "inicial"
+    ruta_rel = f"{_CLARO_X_ID}.md".split("/")
+
+    _escribir_editorial(inicial.joinpath(*ruta_rel), _CLARO_X_NUEVO)
+    _escribir_editorial(store.joinpath(*ruta_rel), "EDITADO por el equipo")
+    # El sha registrado es el del VIEJO; el cuerpo actual (editado) no casa -> no se toca.
+    monkeypatch.setattr(
+        _inicial, "_PLATAFORMAS_CLARO_X_V1",
+        ((_CLARO_X_ID, hashlib.sha256(_CLARO_X_VIEJO.encode("utf-8")).hexdigest()),),
+    )
+
+    assert libprompts.propagar_plataformas_claro_x(origen=inicial) == 0
+    assert libprompts.obtener(_CLARO_X_ID).cuerpo == "EDITADO por el equipo"
+
+
+def test_mapa_claro_x_real_apunta_a_editorial_real_con_hash_viejo():
+    """Guarda: la entrada del mapa REAL referencia el editorial de la inicial y su hash es el del
+    cuerpo VIEJO — distinto del que hoy vive en la inicial (con 1 emoji / sin hashtags)."""
+    for doc_id, sha_viejo in _inicial._PLATAFORMAS_CLARO_X_V1:
+        doc = libprompts.obtener_inicial(doc_id)
+        assert doc is not None, f"{doc_id} no existe en la inicial"
+        assert len(sha_viejo) == 64 and all(c in "0123456789abcdef" for c in sha_viejo)
+        sha_actual = hashlib.sha256(doc.cuerpo.encode("utf-8")).hexdigest()
+        assert sha_actual != sha_viejo, (
+            f"{doc_id}: el hash registrado coincide con el cuerpo ACTUAL; debe ser el VIEJO"
+        )
+
+
+# --------------------------------------------------------------------------- #
 # publicar_linea_base: publica los sin-puntero, idempotente, ignora vacíos     #
 # --------------------------------------------------------------------------- #
 

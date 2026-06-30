@@ -13,7 +13,7 @@ Notas de formato por red propias de Claro Sports. En días de jornada/gran event
 
 ## X / Twitter
 
-- Convención: gancho + dato en un tuit; emojis 1-3; el hilo para el desglose de jornada.
+- Convención: gancho + dato en un tuit; 1 emoji (no los 3-4 de Facebook/Instagram); sin hashtags; el hilo para el desglose de jornada.
 
 ## Instagram
 

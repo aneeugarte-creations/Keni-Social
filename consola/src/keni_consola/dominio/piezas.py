@@ -19,8 +19,9 @@ re-serialicen a mano— hace explícito el seam: el cruce pasa por un símbolo P
 posee, no por las tripas de C. La capa de datos (`repos`/`estados`) es infra compartida
 (ADR 0005): este módulo la usa por dentro; los consumidores ya no.
 
-Solo depende de los catalogos `marcas`/`redes` (hoja), la fachada de datos `repos` y las
-constantes neutras `estados` (infra compartida): no importa de `api/`.
+Solo depende de los catalogos `marcas`/`redes` (hoja), la politica de hashtags por
+marca/red `hashtags_biblioteca` (hoja), la fachada de datos `repos` y las constantes
+neutras `estados` (infra compartida): no importa de `api/`.
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ import json
 import re
 from typing import Any
 
-from .. import marcas, pipeline_estado, redes, repos
+from .. import hashtags_biblioteca, marcas, pipeline_estado, redes, repos
 from ..estados import ESTADO_EN_REVISION, ESTADO_PROGRAMADO
 
 # Un hashtag en el caption: '#' + caracteres de palabra (acentos/dígitos bajo re.UNICODE).
@@ -43,12 +44,21 @@ def _cuerpos_hashtags(texto: str) -> set[str]:
     return {m.group(0).lstrip("#").lower() for m in _PAT_HASHTAG.finditer(str(texto or ""))}
 
 
+def _usa_hashtags(pub: dict[str, Any]) -> bool:
+    """¿La marca de la pieza etiqueta en SU red? False solo si la marca declara 0 ahí (Claro Sports
+    en X/YouTube): en esas redes el gate de hashtags no aplica. Ver `hashtags_biblioteca.usa_hashtags`."""
+    return hashtags_biblioteca.usa_hashtags(str(pub.get("marca") or ""), str(pub.get("red") or ""))
+
+
 def _falta_hashtags(pub: dict[str, Any]) -> bool:
     """True si al caption NO le lleva NINGÚN hashtag y por eso la pieza no puede avanzar.
 
     Los hashtags son clave para monitorizar campañas y líneas de contenido; el equipo los pone en
     la fase de revisión. El caso «tiene hashtags pero NO el de su LÍNEA editorial» es un gate
-    DISTINTO (`_falta_hashtag_editorial`): así el feed puede pedir cada cosa en su propia etapa."""
+    DISTINTO (`_falta_hashtag_editorial`): así el feed puede pedir cada cosa en su propia etapa.
+    No aplica en redes donde la marca no etiqueta (`_usa_hashtags` False): nada que exigir."""
+    if not _usa_hashtags(pub):
+        return False
     return not _cuerpos_hashtags(pub.get("contenido") or "")
 
 
@@ -57,7 +67,10 @@ def _falta_hashtag_editorial(pub: dict[str, Any]) -> bool:
 
     El de la sección es OBLIGATORIO (alimenta las métricas por línea), así que tener otros no basta.
     Solo aplica cuando YA hay algún hashtag (si no hay ninguno manda `_falta_hashtags`) y la línea
-    declara hashtag; si el contenido no tiene línea, no falta nada por este concepto."""
+    declara hashtag; si el contenido no tiene línea, no falta nada por este concepto. En redes
+    donde la marca no etiqueta (`_usa_hashtags` False) tampoco se exige el de la línea."""
+    if not _usa_hashtags(pub):
+        return False
     presentes = _cuerpos_hashtags(pub.get("contenido") or "")
     if not presentes:
         return False

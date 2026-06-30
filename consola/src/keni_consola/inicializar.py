@@ -49,6 +49,11 @@ def main() -> int:
     ff = libprompts.propagar_fusionar_fundido()
     if ff:
         print(f"Texto: {ff} prompt(s) fusionar propagados (macro-evento fundido).")
+    # Claro Sports en X: propaga el editorial con 1 emoji y sin hashtags al store, respetando ediciones
+    # del equipo (solo pisa el doc cuyo cuerpo casa con el viejo). One-shot.
+    cx = libprompts.propagar_plataformas_claro_x()
+    if cx:
+        print(f"Texto: {cx} editorial(es) de Claro Sports (X: 1 emoji, sin hashtags) propagados.")
     # Saca el contrato de salida (forma del JSON) del cuerpo editable a un placeholder gestionado
     # por codigo (`{{CONTRATO_SALIDA}}`); el editor lo muestra read-only. One-shot; re-publica los
     # que toca para no dejarlos "sin publicar". El prompt que ve el modelo queda byte-identico.

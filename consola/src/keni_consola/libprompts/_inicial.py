@@ -30,7 +30,8 @@ __all__ = [
     "migrar_nombres_prompts", "limpiar_prompts_obsoletos", "limpiar_prompts_obsoletos_v2",
     "limpiar_editoriales_duplicados",
     "migrar_descripciones_editorial",
-    "reformatear_prompts", "publicar_linea_base", "migrar_contrato_salida", "migrar_redactar_v1",
+    "reformatear_prompts", "propagar_plataformas_claro_x",
+    "publicar_linea_base", "migrar_contrato_salida", "migrar_redactar_v1",
     "migrar_parrilla_v1", "migrar_ideas_audio_v1", "migrar_titulos_prompts", "migrar_alcance_editorial",
     "migrar_descripciones_prompt",
 ]
@@ -193,6 +194,18 @@ _FUSIONAR_FUNDE_MACRO_V1: tuple[tuple[str, str], ...] = (
     ("prompt/fusionar", "1683849acaed33053a01f8803a157c7bd55ff5ee236254f951971f8844cad701"),
 )
 _SENTINELA_FUSIONAR_FUNDE_MACRO = ".fusionar-funde-macro-v1"
+
+# X DE CLARO SPORTS, 1 EMOJI Y SIN HASHTAGS: el editorial `claro-sports/plataformas` pasa a pedir 1
+# emoji (no los 3-4 de Facebook/Instagram) y sin hashtags en X, alineado con cómo publica la marca.
+# Propaga el cuerpo NUEVO al store SOLO si el cuerpo ACTUAL casa EXACTO con el VIEJO (sha256 abajo);
+# si el equipo lo editó, su hash no casa y se respeta. El sha es del CUERPO (sin frontmatter), como lo
+# devuelve `_leer(...).cuerpo` (con `strip("\n")`). Mismo mecanismo que `reformatear_prompts`,
+# sentinela PROPIO. ONE-SHOT.
+_PLATAFORMAS_CLARO_X_V1: tuple[tuple[str, str], ...] = (
+    ("editorial/rrss/claro-sports/plataformas",
+     "a37b65fe39990c6567bd82912392736983e1c01f3700b99cbccb2f24fd5d3126"),
+)
+_SENTINELA_PLATAFORMAS_CLARO_X = ".plataformas-claro-x-v1"
 _SENTINELA_CONTRATO = ".contrato-salida-v1"
 _SENTINELA_REDACTAR = ".redactar-contrato-v1"
 _SENTINELA_PARRILLA = ".parrilla-contrato-v1"
@@ -638,6 +651,43 @@ def propagar_fusionar_fundido(origen: Path | None = None) -> int:
         return 0
     n = 0
     for doc_id, sha_viejo in _FUSIONAR_FUNDE_MACRO_V1:
+        destino = destino_raiz.joinpath(*f"{doc_id}.md".split("/"))
+        if not destino.is_file():
+            continue
+        actual = _leer(destino)
+        if actual is None:
+            continue
+        if hashlib.sha256(actual.cuerpo.encode("utf-8")).hexdigest() != sha_viejo:
+            continue  # editado por el equipo: respetar
+        ruta_inicial = base.joinpath(*f"{doc_id}.md".split("/"))
+        try:
+            texto = ruta_inicial.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        escribir_atomico(destino, texto)
+        n += 1
+    sentinela.parent.mkdir(parents=True, exist_ok=True)
+    escribir_atomico(sentinela, "ok\n")
+    return n
+
+
+def propagar_plataformas_claro_x(origen: Path | None = None) -> int:
+    """Propaga al store el editorial `claro-sports/plataformas` con X a 1 emoji y sin hashtags.
+
+    Reescribe el doc con su versión de la INICIAL nueva SOLO si el cuerpo ACTUAL del store casa EXACTO
+    con el cuerpo VIEJO (sha256 de `_PLATAFORMAS_CLARO_X_V1`): si el equipo lo editó, su hash no casa
+    y se respeta. Mismo mecanismo que `reformatear_prompts`, sentinela PROPIO. Pensado para el DEPLOY.
+    Idempotente. Devuelve cuántos reescribió.
+    """
+    base = origen or dir_inicial()
+    if not base.is_dir():
+        return 0
+    destino_raiz = raiz()
+    sentinela = destino_raiz / _SENTINELA_PLATAFORMAS_CLARO_X
+    if sentinela.exists():
+        return 0
+    n = 0
+    for doc_id, sha_viejo in _PLATAFORMAS_CLARO_X_V1:
         destino = destino_raiz.joinpath(*f"{doc_id}.md".split("/"))
         if not destino.is_file():
             continue

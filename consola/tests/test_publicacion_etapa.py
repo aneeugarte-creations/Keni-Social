@@ -190,6 +190,45 @@ def test_hashtags_gatean_en_borrador():
     assert d["etapa_ia"] == "falta_hashtags"
 
 
+def test_red_sin_hashtags_de_la_marca_no_gatea():
+    # Claro Sports declara 0 hashtags en X (`conteo_por_red.x == 0`): no etiqueta ahí. Una pieza
+    # de esa marca+red sin hashtags está LISTA, no atascada en "Faltan hashtags".
+    d = pieza_a_dict(
+        _pub(
+            marca="claro-sports", red="x", estado="en_revision",
+            contenido="GOLAZO de último minuto 🦅", copy_in="TITULAR", foto="bg.png",
+        )
+    )
+    assert d["etapa_ia"] == "lista_para_revisar"
+    assert d["falta_hashtags"] is False
+
+
+def test_red_sin_hashtags_ignora_tambien_el_de_la_linea():
+    # En una red donde la marca no etiqueta, tampoco se exige el hashtag de la LÍNEA aunque la
+    # línea lo declare: el gate editorial está apagado igual que el estructural.
+    d = pieza_a_dict(
+        _pub(
+            marca="claro-sports", red="x", estado="en_revision",
+            contenido="Crónica sin etiquetas", copy_in="TITULAR", foto="bg.png",
+            linea_hashtags="ligamx",
+        )
+    )
+    assert d["etapa_ia"] == "lista_para_revisar"
+    assert d["falta_hashtag_editorial"] is False
+
+
+def test_red_que_si_etiqueta_sigue_gateando():
+    # La misma marca SÍ etiqueta en Facebook (`conteo_por_red.facebook == 1`): ahí el gate sigue
+    # exigiendo hashtags. El apagado es por red, no por marca.
+    d = pieza_a_dict(
+        _pub(
+            marca="claro-sports", red="facebook", estado="en_revision",
+            contenido="GOLAZO de último minuto 🦅", copy_in="TITULAR", foto="bg.png",
+        )
+    )
+    assert d["etapa_ia"] == "falta_hashtags"
+
+
 def test_en_revision_no_oculta_lo_que_falta():
     # «Revisión» es interno: NO manda sobre el contenido. Una pieza en revisión sin la foto real
     # (solo copy + placa) enseña la acción pendiente —"Falta imagen"—, no un "para revisar" que

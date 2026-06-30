@@ -135,6 +135,7 @@ from ._inicial import (
     migrar_titulos_prompts,
     obtener_inicial,
     propagar_fusionar_fundido,
+    propagar_plataformas_claro_x,
     publicar_linea_base,
     reformatear_prompts,
 )
@@ -246,6 +247,7 @@ __all__ = [
     "migrar_descripciones_editorial",
     "reformatear_prompts",
     "propagar_fusionar_fundido",
+    "propagar_plataformas_claro_x",
     "publicar_linea_base",
     "migrar_contrato_salida",
     "migrar_redactar_v1",

@@ -91,3 +91,21 @@ def cantidad_sugerida(marca: str, red: str) -> int:
         except (TypeError, ValueError):
             return 0
     return CANTIDAD_DEFECTO
+
+
+def usa_hashtags(marca: str, red: str) -> bool:
+    """¿`marca` usa hashtags en `red`? False SOLO si la marca lo declara EXPLÍCITAMENTE con un 0
+    en `conteo_por_red` (p. ej. Claro Sports en X o YouTube). Cualquier otro caso ⇒ True.
+
+    Distinto de `cantidad_sugerida`: una marca SIN biblioteca o una red SIN dato no se asumen
+    «sin hashtags» (devolverían 0 ahí), así que aquí caen a True. Solo una marca que mide su
+    historial y declara cero para esa red apaga la exigencia. La usa el gate `falta_hashtags`
+    (`dominio.piezas`) para no bloquear redes donde la marca, de hecho, no etiqueta.
+    """
+    conteo = biblioteca(marca).get("conteo_por_red") or {}
+    if red not in conteo:
+        return True
+    try:
+        return int(conteo[red]) > 0
+    except (TypeError, ValueError):
+        return True
