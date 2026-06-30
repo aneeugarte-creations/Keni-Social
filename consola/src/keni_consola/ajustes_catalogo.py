@@ -43,7 +43,9 @@ GRUPOS: tuple[tuple[str, str], ...] = (
     ("automatizacion_marca_investigacion", "Excepciones por marca"),
     ("maestros_produccion", "Todas las marcas"),
     ("automatizacion_marca_produccion", "Excepciones por marca"),
-    ("pipeline_topes", "Admisión del flujo"),
+    # `pipeline_topes` quedó reducido al PRESUPUESTO de tokens/coste (los caps de admisión se
+    # degradaron a solo-env); se edita en la página de Economía, no en el drawer de la máquina.
+    ("pipeline_topes", "Economía de tokens"),
     ("pieza", "Publicación"),
     ("publicacion_marca", "Excepciones por marca"),
     ("presupuesto_marca", "Presupuesto por marca"),
@@ -52,10 +54,9 @@ GRUPOS: tuple[tuple[str, str], ...] = (
     ("noticias_rendimiento", "Rendimiento en redes"),
     ("noticias_produccion", "Producción automática"),
     ("noticias_produccion_marca", "Plan diario por marca"),
-    # `noticias_tecnico` quedó reducido al TTL del perfil editorial (el resto de su contenido
-    # —batch/workers/lotes/ventanas— se degradó a solo-env); el título refleja lo que queda.
-    ("noticias_tecnico", "Perfil editorial"),
-    ("tuning", "Sistema, limpieza y alertas"),
+    # `tuning` quedó reducido al esfuerzo de razonamiento (el resto —umbrales/cadencias de
+    # barrido— se degradó a solo-env); se edita en la página de Economía (palanca calidad/coste).
+    ("tuning", "Esfuerzo de razonamiento"),
 )
 # NOTA: los grupos `noticias_orden` y `noticias_breaking` NO están en el catálogo: son solo
 # pesos/umbrales del algoritmo de ranking/clustering (tunables de ingeniería). Sus claves
@@ -75,7 +76,6 @@ GRUPOS_INVESTIGACION: tuple[str, ...] = (
     "noticias_entrada",
     "noticias_rendimiento",
     "noticias_produccion",
-    "noticias_tecnico",
 )
 
 # Grupos de la sección «Máquina de contenido» del drawer del MONITOR (proceso de PRODUCCIÓN,
@@ -519,32 +519,14 @@ def _construir_catalogo() -> list[Ajuste]:
             defecto=False,
             peligroso=True,
         ),
-        # --- Máquina de contenido · admisión del flujo continuo (grupo `pipeline_topes`) --- #
-        # Viven en el MONITOR (junto a la cola que controlan), NO en Configuración. FLUJO CONTINUO:
-        # no hay intervalo (tick corto fijo) ni topes por etapa; el volumen lo regulan estos knobs
-        # de ADMISIÓN (y `KENI_MAX_JOBS` más adelante en el flujo). In=out: solo entra lo que cabe en proceso.
-        Ajuste(
-            clave=config.ENV_PIPELINE_MAX,
-            tipo="int",
-            etiqueta="Historias admitidas por marca",
-            ayuda="Máximo de historias que Admitir admite de golpe por marca.",
-            grupo="pipeline_topes",
-            defecto=config.PIPELINE_MAX_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_PIPELINE_EN_PROCESO_MAX,
-            tipo="int",
-            etiqueta="Piezas en proceso por marca",
-            ayuda="Tope de piezas sin terminar (Verificar pendiente o sin copy) por marca; "
-            "no se admite más hasta que algo termina.",
-            grupo="pipeline_topes",
-            defecto=config.PIPELINE_EN_PROCESO_MAX_DEF,
-            minimo=1,
-        ),
-        # (KENI_AUTOGEN_ARTE_MAX —temas ilustrados por ciclo— se DEGRADÓ a solo-env: batch
-        # interno del barrido de Ilustrar, no un control de operación. Sigue leyéndose de env.)
+        # (Los CAPS de admisión del flujo continuo —KENI_PIPELINE_MAX (historias admitidas por
+        # marca) y KENI_PIPELINE_EN_PROCESO_MAX (piezas en proceso por marca)— se DEGRADARON a
+        # solo-env: topes de capacidad de ingeniería, no controles editoriales. Igual que
+        # KENI_AUTOGEN_ARTE_MAX y KENI_MAX_JOBS. Siguen leyéndose de env/defecto.)
         # --- Economía de tokens (presupuesto diario + kill switch; `presupuesto_ia.py`) --- #
+        # NOTA: estos topes de presupuesto se editan en la página de ECONOMÍA (gasto real +
+        # proyección), no en el drawer «Ajustes de la máquina»; siguen en el catálogo para que
+        # `/api/ajustes` los persista cuando Economía los guarda por clave.
         # La generación usa la MISMA suscripción `claude` que el equipo: estos knobs evitan que
         # una ráfaga de fondo agote los tokens de todos. Editables en caliente (Monitor).
         Ajuste(
@@ -644,82 +626,13 @@ def _construir_catalogo() -> list[Ajuste]:
                 for nivel in ("", *preferencias.ESFUERZOS_VALIDOS)
             ),
         ),
-        # (Los INTERVALOS de daemons —KENI_ALERTAS_INTERVALO_HORAS, KENI_MEDIA_GC_INTERVALO_HORAS,
-        # KENI_NOTICIAS_GC_INTERVALO_HORAS— y la concurrencia KENI_MAX_JOBS se DEGRADARON a
-        # solo-env: ritmo/capacidad de ingeniería, no controles de operación. El operador
-        # gobierna QUÉ corre (toggles) y los UMBRALES de alto nivel, no cada cuánto barre
-        # un hilo. Siguen leyéndose de env/defecto.)
-        Ajuste(
-            clave=config.ENV_ALERTAS_UMBRAL_ENGAGEMENT,
-            tipo="float",
-            etiqueta="Alertas: umbral de engagement (%)",
-            ayuda="Engagement (%) por debajo del cual una pieza publicada dispara una alerta de bajo "
-            "rendimiento.",
-            grupo="tuning",
-            defecto=config.ALERTAS_UMBRAL_ENGAGEMENT_DEF,
-            minimo=0.1,
-        ),
-        Ajuste(
-            clave=config.ENV_MEDIA_GC_ANTIGUEDAD_HORAS,
-            tipo="int",
-            etiqueta="Limpieza media: antigüedad mínima (horas)",
-            ayuda="Un objeto de media más nuevo que esto (horas) nunca se borra, aunque parezca "
-            "suelto.",
-            grupo="tuning",
-            defecto=config.MEDIA_GC_ANTIGUEDAD_HORAS_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_NOTICIAS_GC_SCORE_UMBRAL,
-            tipo="float",
-            etiqueta="Limpieza noticias: umbral de score",
-            ayuda="Una historia de una sola fuente con score por debajo de esto y sin actividad "
-            "reciente se purga; 0 = no purgar por score (de 0 a 1).",
-            grupo="tuning",
-            defecto=config.NOTICIAS_GC_SCORE_UMBRAL_DEF,
-            minimo=0,
-            maximo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_NOTICIAS_GC_INACTIVIDAD_HORAS,
-            tipo="int",
-            etiqueta="Limpieza noticias: inactividad mínima (horas)",
-            ayuda="Una historia más nueva que esto (horas) nunca se purga, aunque sea de baja "
-            "relevancia.",
-            grupo="tuning",
-            defecto=config.NOTICIAS_GC_INACTIVIDAD_HORAS_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_NOTICIAS_TTL_H,
-            tipo="int",
-            etiqueta="Noticias: caducidad del pool (horas)",
-            ayuda="Una historia sin actividad en estas horas caduca sola (pasa a descartada; "
-            "lo usado nunca caduca); 0 = sin caducidad.",
-            grupo="tuning",
-            defecto=config.NOTICIAS_TTL_H_DEF,
-            minimo=0,
-        ),
-        Ajuste(
-            clave=config.ENV_NOTICIAS_RETENCION_H,
-            tipo="int",
-            etiqueta="Noticias: retención de lo caducado (horas)",
-            ayuda="Lo caducado sin usar se borra definitivamente tras estas horas; "
-            "0 = no borrar nunca (solo caducar).",
-            grupo="tuning",
-            defecto=config.NOTICIAS_RETENCION_H_DEF,
-            minimo=0,
-        ),
-        Ajuste(
-            clave=config.ENV_PERFIL_EDITORIAL_TTL_HORAS,
-            tipo="int",
-            etiqueta="Refresco del perfil editorial (horas)",
-            ayuda="Cada cuántas horas la IA vuelve a leer la línea editorial de cada marca para "
-            "afinar el encaje de las noticias.",
-            grupo="noticias_tecnico",
-            defecto=config.PERFIL_EDITORIAL_TTL_HORAS_DEF,
-            minimo=1,
-        ),
+        # (Los UMBRALES y CADENCIAS de barrido —KENI_ALERTAS_UMBRAL_ENGAGEMENT,
+        # KENI_MEDIA_GC_ANTIGUEDAD_HORAS, KENI_NOTICIAS_GC_SCORE_UMBRAL,
+        # KENI_NOTICIAS_GC_INACTIVIDAD_HORAS, KENI_NOTICIAS_TTL_H, KENI_NOTICIAS_RETENCION_H,
+        # KENI_PERFIL_EDITORIAL_TTL_HORAS— se DEGRADARON a solo-env, junto a los INTERVALOS de
+        # daemon y KENI_MAX_JOBS: tunables de ingeniería, no controles de operación. El operador
+        # gobierna QUÉ corre (los toggles on/off de cada daemon), no cada umbral de su barrido.
+        # Siguen leyéndose de env/defecto.)
         # --- Producción automática (grupo `noticias_produccion`) -------------------------- #
         # UMBRAL de producción automática: el panel lista TODO el pool jerarquizado, pero promover
         # una historia a tema dispara Verificar+Redactar (claude -p: coste real de tokens). Estos dos umbrales
@@ -746,19 +659,11 @@ def _construir_catalogo() -> list[Ajuste]:
             minimo=0,
             maximo=1,
         ),
-        # MADURACIÓN + CUPOS de volumen: dedican tiempo a ELEGIR (la corroboración se acumula
-        # antes de competir por plaza) y anclan el volumen auto-producido a la cadencia real de
-        # publicación de cada marca (pocas plazas por franja → admisión selectiva, no goteo continuo).
-        Ajuste(
-            clave=config.ENV_PROMOVER_MADURACION_MIN,
-            tipo="int",
-            etiqueta="Minutos de maduración antes de producir",
-            ayuda="Una historia espera estos minutos en el pool antes de poder producirse en "
-            "automático; 0 = sin espera.",
-            grupo="noticias_produccion",
-            defecto=config.PROMOVER_MADURACION_MIN_DEF,
-            minimo=0,
-        ),
+        # (KENI_PROMOVER_MADURACION_MIN —minutos de maduración en el pool antes de producir— se
+        # DEGRADÓ a solo-env: umbral de cadencia de ingeniería, no un control editorial. El cupo
+        # y el plan diario son los knobs de VOLUMEN del operador. Sigue leyéndose de env/defecto.)
+        # CUPOS de volumen: anclan el volumen auto-producido a la cadencia real de publicación de
+        # cada marca (pocas plazas por franja → admisión selectiva, no goteo continuo).
         Ajuste(
             clave=config.ENV_CUPO_DIA,
             tipo="int",

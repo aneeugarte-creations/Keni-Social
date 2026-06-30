@@ -45,6 +45,7 @@ import { formatearDia } from "@/lib/fecha";
 import { costeUsd, numeroCompacto, numeroCompleto } from "@/lib/formato";
 import { INTERVALO_SERIE_MS, INTERVALO_VIVO_MS } from "@/lib/refresco";
 import { cn } from "@/lib/utils";
+import { PanelAjustes } from "@/pages/configuracion/SeccionFuncionalidad";
 import { PanelPresupuesto } from "@/pages/maquina/cola-comun";
 import { PROC_META } from "@/pages/monitor/comun";
 import type {
@@ -452,6 +453,16 @@ export default function Economia() {
             />
           )
         )}
+      </div>
+
+      {/* Esfuerzo de razonamiento: la palanca calidad/coste de TODA la generación. Vive con la
+          economía (más esfuerzo = mejor calidad, más lento y más caro), no en el drawer. */}
+      <div className="mb-6">
+        <PanelAjustes
+          grupos={["tuning"]}
+          titulo="Esfuerzo de razonamiento"
+          descripcion="Cuánto «piensa» la IA al generar: más esfuerzo = mejor calidad, más lento y más caro."
+        />
       </div>
 
       {/* Agregado de TODAS las pestañas (mismas tarjetas KPI que cada pestaña) + selector de ventana

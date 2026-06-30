@@ -6,6 +6,7 @@ import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { PestanasSeccion, type PestanaSeccion } from "@/components/layout/encabezado";
 import { ApiError, api } from "@/lib/api";
 
+import { SeccionImagen } from "@/pages/configuracion/SeccionImagen";
 import { SeccionMetricool } from "@/pages/configuracion/SeccionMetricool";
 import { SeccionGoogleAnalytics } from "@/pages/configuracion/SeccionGoogleAnalytics";
 import { SeccionPostproxy } from "@/pages/configuracion/SeccionPostproxy";
@@ -86,6 +87,7 @@ export default function Sistema() {
         {tab === "proveedores" && (
           <div className="space-y-6">
             <SeccionCuentaClaude />
+            <SeccionImagen />
             <SeccionGitHub />
             <SeccionMetricool />
             <SeccionGoogleAnalytics />

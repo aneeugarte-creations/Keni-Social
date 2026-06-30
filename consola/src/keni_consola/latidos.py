@@ -365,8 +365,7 @@ def descripcion_de(daemon: str) -> str:
 AJUSTES: dict[str, list[str]] = {
     "investigacion": [
         "KENI_PIPELINE_VERIFICAR", "KENI_PIPELINE_RECOLECTAR",
-        "KENI_PIPELINE_MAX", "KENI_PIPELINE_EN_PROCESO_MAX",
-        "KENI_PROMOVER_MIN_SCORE", "KENI_PROMOVER_MIN_MARCA", "KENI_PROMOVER_MADURACION_MIN",
+        "KENI_PROMOVER_MIN_SCORE", "KENI_PROMOVER_MIN_MARCA",
     ],
     "produccion": [
         "KENI_PIPELINE_REDACTAR", "KENI_PIPELINE_ILUSTRAR", "KENI_PIPELINE_STOCK",
@@ -375,12 +374,10 @@ AJUSTES: dict[str, list[str]] = {
     "ingesta": ["KENI_PIPELINE_RECOLECTAR", "KENI_INGESTA_FILTRO"],
     "trends": ["KENI_TRENDS"],
     "algoritmos": ["KENI_ALGORITMOS_AUTO"],
-    "noticias_gc": [
-        "KENI_NOTICIAS_GC", "KENI_NOTICIAS_GC_SCORE_UMBRAL", "KENI_NOTICIAS_GC_INACTIVIDAD_HORAS",
-    ],
-    "media_gc": ["KENI_MEDIA_GC", "KENI_MEDIA_GC_ANTIGUEDAD_HORAS"],
-    "patrones": ["KENI_PATRONES_AUTO", "KENI_PERFIL_EDITORIAL_TTL_HORAS"],
-    "alertas_rendimiento": ["KENI_ALERTAS_RENDIMIENTO", "KENI_ALERTAS_UMBRAL_ENGAGEMENT"],
+    "noticias_gc": ["KENI_NOTICIAS_GC"],
+    "media_gc": ["KENI_MEDIA_GC"],
+    "patrones": ["KENI_PATRONES_AUTO"],
+    "alertas_rendimiento": ["KENI_ALERTAS_RENDIMIENTO"],
 }
 
 

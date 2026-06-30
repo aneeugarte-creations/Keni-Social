@@ -24,12 +24,9 @@ import { cn } from "@/lib/utils";
 import { CLAVE_AJUSTES } from "@/pages/configuracion/lib";
 import {
   ExcepcionesPorMarca,
-  PanelAjustes,
   PanelInvestigacion,
-  PanelMaquinaPublicacion,
   useGuardarAjuste,
 } from "@/pages/configuracion/SeccionFuncionalidad";
-import { SeccionImagen } from "@/pages/configuracion/SeccionImagen";
 import { QUEUE_INVESTIGACION, QUEUE_PRODUCCION, slugFase } from "@/pages/maquina/fases";
 import { SeccionCadenaAprobacion } from "@/pages/maquina/SeccionCadenaAprobacion";
 import { ServiciosMaquina } from "@/pages/maquina/ServiciosMaquina";
@@ -351,19 +348,11 @@ export function PipelineUnificado({
 
   const ajusteMaquina = esAdmin ? porClave.get(CLAVE_MAQUINA) : undefined;
 
-  // Ajustes del «⋮» del header: los DOS motores juntos (antes uno por pestaña).
-  const ajustesDrawer = (
-    <>
-      <PanelInvestigacion />
-      <PanelMaquinaPublicacion />
-      <SeccionImagen />
-      <PanelAjustes
-        grupos={["automatismos_generales", "tuning"]}
-        titulo="Sistema"
-        descripcion="Automatismos, jobs, limpiezas, alertas y esfuerzo de razonamiento; sin reinicio."
-      />
-    </>
-  );
+  // Ajustes del «⋮» del header: los controles EDITORIALES del motor de noticias (entrada al
+  // pool, rendimiento, umbral/cupos de producción automática). El presupuesto y el esfuerzo se
+  // editan en Economía; los toggles de daemon, en el detalle de cada daemon (/sistema); la
+  // conexión de imagen, en /sistema → Conexiones.
+  const ajustesDrawer = <PanelInvestigacion />;
 
   const excepEtapaObj = excepEtapa
     ? TODAS_LAS_ETAPAS.find((e) => e.nombre === excepEtapa)

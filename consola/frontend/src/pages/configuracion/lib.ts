@@ -17,29 +17,18 @@ export const CLAVE_AJUSTES = ["ajustes"];
 /** Proveedores de imagen IA disponibles (gateway único OpenRouter). */
 export const PROVEEDORES = [{ id: "openrouter", nombre: "OpenRouter (gateway de IA)" }];
 
-/** Grupos de la sección «Máquina de contenido» del drawer del Monitor (proceso de PRODUCCIÓN,
- *  ADR 0011): el interruptor general, el maestro de Producción (Producción/Arte), sus excepciones
- *  por marca y la admisión del flujo continuo. Debe coincidir con `ajustes_catalogo.GRUPOS_MAQUINA`
- *  del backend. */
-export const GRUPOS_MAQUINA = new Set([
-  "maquina_global",
-  "maestros_produccion",
-  "automatizacion_marca_produccion",
-  "pipeline_topes",
-]);
-
-/** Grupos de la sección «Investigación» del MISMO drawer del Monitor (Fase 3: UN solo sitio para
- *  los ajustes de la máquina): el maestro del proceso, sus excepciones por marca y el motor de
- *  noticias completo. `noticias_produccion_marca` (plan diario
- *  por marca) NO se pinta: su editor único es «Plan y horarios» de Programación. Debe coincidir
- *  con `ajustes_catalogo.GRUPOS_INVESTIGACION` del backend; el orden es el de pintado. */
+/** Grupos del drawer «Ajustes de la máquina» (⋮ de la vista Pipeline): los controles EDITORIALES
+ *  del motor de noticias (entrada al pool, rendimiento, umbral/cupos de producción automática).
+ *  `noticias_produccion_marca` (plan diario por marca) NO se pinta: su editor único es «Plan y
+ *  horarios» de Programación. Debe coincidir con `ajustes_catalogo.GRUPOS_INVESTIGACION` del
+ *  backend; el orden es el de pintado. El presupuesto/esfuerzo viven en Economía y los toggles de
+ *  daemon en /sistema, no aquí. */
 export const GRUPOS_INVESTIGACION = [
   "maestros_investigacion",
   "automatizacion_marca_investigacion",
   "noticias_entrada",
   "noticias_rendimiento",
   "noticias_produccion",
-  "noticias_tecnico",
 ] as const;
 
 /**

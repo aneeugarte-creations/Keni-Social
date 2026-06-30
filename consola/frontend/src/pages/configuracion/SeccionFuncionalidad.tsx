@@ -22,7 +22,7 @@ import type { AjusteAdmin, RespuestaAjustes } from "@/types";
 
 import { useSesion } from "@/hooks/sesion-contexto";
 
-import { CLAVE_AJUSTES, GRUPOS_INVESTIGACION, GRUPOS_MAQUINA, mensajeError } from "./lib";
+import { CLAVE_AJUSTES, GRUPOS_INVESTIGACION, mensajeError } from "./lib";
 import { SeccionColapsable } from "./SeccionColapsable";
 
 /** Una fila de ajuste: toggle (bool), número (int/float) o selector (select).
@@ -569,43 +569,3 @@ export function PanelInvestigacion() {
   );
 }
 
-/** Controles de la MÁQUINA DE CONTENIDO, para el drawer del MONITOR: la admisión del flujo
- * continuo y la economía de tokens (`pipeline_topes`). El interruptor general «Máquina»
- * (`maquina_global`) vive en la cabecera de la tira «Pipeline en vivo»; los maestros de etapa
- * (`maestros_produccion`), en la propia tira; y las excepciones por marca, en el diálogo de
- * cada etapa (sin duplicar el control aquí). Mismo motor que Configuración (`/api/ajustes`);
- * aplican en caliente. */
-export function PanelMaquinaPublicacion() {
-  const { data, isPending, isError, error, refetch, isFetching, guardar } = useAjustesAdmin();
-  const grupos = (data?.grupos ?? []).filter(
-    (g) =>
-      GRUPOS_MAQUINA.has(g.id) &&
-      g.id !== "maquina_global" &&
-      g.id !== "maestros_produccion" &&
-      g.id !== "automatizacion_marca_produccion",
-  );
-
-  return (
-    <SeccionColapsable
-      titulo="Máquina de contenido"
-      abiertaInicial
-      descripcion={
-        <>
-          Admisión del flujo y economía de tokens. El maestro «Máquina», los switches de etapa y
-          sus excepciones por marca están en la tira «Pipeline en vivo». Los cambios aplican{" "}
-          <strong>en caliente</strong>.
-        </>
-      }
-    >
-      {isPending || isError ? (
-        <EstadoAjustes isError={isError} error={error} refetch={refetch} isFetching={isFetching} />
-      ) : (
-        <GruposAjustes
-          grupos={grupos}
-          onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
-          guardando={guardar.isPending}
-        />
-      )}
-    </SeccionColapsable>
-  );
-}
