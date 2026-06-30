@@ -945,12 +945,12 @@ def test_gate_umbral_y_aceptar_son_independientes_por_cuenta(entorno):
     assert gate_diario.umbral_vigente(_CUENTA_A) == pytest.approx(_BASE + 20.0)
 
 
-def test_gate_reset_al_cambiar_de_dia_utc_por_cuenta(entorno, monkeypatch):
-    monkeypatch.setattr(gate_diario, "ahora_iso", lambda: "2026-06-28T10:00:00")
+def test_gate_reset_al_cambiar_de_dia_cdmx_por_cuenta(entorno, monkeypatch):
+    monkeypatch.setattr(gate_diario, "dia_cdmx", lambda: "2026-06-28")
     gate_diario.aceptar_mas(_CUENTA_B)
     assert gate_diario.aceptados_hoy(_CUENTA_B) == 1
-    # Dia UTC nuevo: el contador de ayer no cuenta -> umbral vuelve a la base.
-    monkeypatch.setattr(gate_diario, "ahora_iso", lambda: "2026-06-29T00:30:00")
+    # Dia CDMX nuevo: el contador de ayer no cuenta -> umbral vuelve a la base.
+    monkeypatch.setattr(gate_diario, "dia_cdmx", lambda: "2026-06-29")
     assert gate_diario.aceptados_hoy(_CUENTA_B) == 0
     assert gate_diario.umbral_vigente(_CUENTA_B) == pytest.approx(_BASE)
 

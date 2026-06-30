@@ -501,9 +501,9 @@ def test_gasto_ia_economia_agrega_por_pestana_dia_y_etapa(pg):
     from datetime import timedelta
 
     from keni_consola import repos
-    from keni_consola.tiempo import hoy_utc
+    from keni_consola.tiempo import hoy_cdmx
 
-    hoy = hoy_utc()
+    hoy = hoy_cdmx()
     ayer = (hoy - timedelta(days=1)).isoformat()
     hoy_iso = hoy.isoformat()
     # Produccion: dos tipos en dias distintos y dos marcas (deben sumarse, GLOBAL).
@@ -554,9 +554,9 @@ def test_gasto_ia_economia_reclasifica_herramientas_y_desarrollo(pg):
     """dev-fase/dev-discovery -> Desarrollo; transcribir/idear/import -> Herramientas; el resto cae
     a su motor sellado (la ambiguedad de `pipeline` la resuelve la columna `proceso`)."""
     from keni_consola import repos
-    from keni_consola.tiempo import hoy_utc
+    from keni_consola.tiempo import hoy_cdmx
 
-    hoy_iso = hoy_utc().isoformat()
+    hoy_iso = hoy_cdmx().isoformat()
     # Aunque se sellen como 'produccion' en el ledger, la economia los reclasifica por su tipo.
     repos.registrar_gasto_ia("d1", dia=hoy_iso, proceso="produccion", tipo="dev-fase",
                              marca="", tokens_in=100, tokens_out=50, coste_usd=0.02)
@@ -581,9 +581,9 @@ def test_gasto_ia_economia_etapa_explicita_manda(pg):
     """Las fases inline del pool (tipo='pipeline'+investigacion) traen ETAPA explícita: la economía
     la usa en vez de colapsarlas en «Verificar» (la derivación por tipo)."""
     from keni_consola import repos
-    from keni_consola.tiempo import hoy_utc
+    from keni_consola.tiempo import hoy_cdmx
 
-    hoy_iso = hoy_utc().isoformat()
+    hoy_iso = hoy_cdmx().isoformat()
     # Mismo tipo+proceso, distinta etapa explícita: deben separarse en el desglose por etapa.
     repos.registrar_gasto_ia("f1", dia=hoy_iso, proceso="investigacion", tipo="pipeline",
                              etapa="Fusionar", marca="unotv", tokens_in=100, tokens_out=20,
@@ -606,9 +606,9 @@ def test_gasto_ia_economia_etapa_explicita_manda(pg):
 def test_gasto_ia_economia_filtra_por_marca(pg):
     """`marca` acota el desglose a sus filas; "" devuelve el AGREGADO de todas."""
     from keni_consola import repos
-    from keni_consola.tiempo import hoy_utc
+    from keni_consola.tiempo import hoy_cdmx
 
-    hoy_iso = hoy_utc().isoformat()
+    hoy_iso = hoy_cdmx().isoformat()
     repos.registrar_gasto_ia("m1", dia=hoy_iso, proceso="produccion", tipo="copy",
                              marca="unotv", tokens_in=100, tokens_out=40, coste_usd=0.01)
     repos.registrar_gasto_ia("m2", dia=hoy_iso, proceso="produccion", tipo="copy",
