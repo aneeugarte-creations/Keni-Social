@@ -89,8 +89,8 @@ MAX_TEXTO = 200_000
 # el prompt LIBREMENTE *y* la salida CRUDA se le devuelve VERBATIM. NINGÚN flujo de generación
 # de la consola cumple ese par (todos parsean la salida a artefactos estructurados), así que
 # NO se veta la web por-callsite: queda solo la veta GLOBAL `Bash Write Edit`
-# (`config.CLAUDE_DISALLOWED_TOOLS_DEF`), que SÍ aplica a todos. Los flujos de verificación/verificación
-# (`revision`, `verificacion-fuente`, auto-verificación) y de copy con auto-verificación legítimamente PUEDEN
+# (`config.CLAUDE_DISALLOWED_TOOLS_DEF`), que SÍ aplica a todos. Los flujos de verificación
+# (`revision`, `verificacion-fuente`) legítimamente PUEDEN
 # leer una fuente para corroborar datos; no se les limita. Un operador puede endurecer la web
 # de forma global con `KENI_CLAUDE_DISALLOWED_TOOLS` si lo desea.
 

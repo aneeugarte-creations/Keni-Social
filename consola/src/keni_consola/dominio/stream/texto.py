@@ -20,10 +20,10 @@ from ...tiempo import hoy_utc
 # Mapa del simbolo de veredicto (primera linea) a su valor interno estable.
 _VEREDICTO_POR_SIMBOLO = {"✅": "listo", "⚠️": "revisar", "❌": "no_publicar"}
 
-# Veredicto en PALABRAS (el formato que pide `prompt/redactar`: la salida abre
-# con "LISTO PARA APROBAR" / "REVISAR ANTES DE PUBLICAR" / "NO PUBLICAR", sin simbolo).
-# Frases COMPLETAS del contrato, no palabras sueltas: un copy cuyo primer renglon diga
-# "...esta LISTO para la final" no debe colar un veredicto.
+# Veredicto en PALABRAS, por si la primera linea trae "LISTO PARA APROBAR" /
+# "REVISAR ANTES DE PUBLICAR" / "NO PUBLICAR" sin simbolo. Frases COMPLETAS, no palabras
+# sueltas: un copy cuyo primer renglon diga "...esta LISTO para la final" no debe colar
+# un veredicto.
 _VEREDICTO_POR_TEXTO: tuple[tuple[str, str], ...] = (
     ("NO PUBLICAR", "no_publicar"),
     ("REVISAR ANTES DE PUBLICAR", "revisar"),

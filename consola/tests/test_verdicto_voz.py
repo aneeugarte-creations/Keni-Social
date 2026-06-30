@@ -22,8 +22,8 @@ def test_verdicto_por_simbolo_sigue_mandando():
 
 
 def test_verdicto_en_palabras_del_prompt_de_copy():
-    # `prompt/redactar` pide abrir con la línea de veredicto EN PALABRAS, sin
-    # símbolo: el veredicto se deriva igual del texto.
+    # Si la primera línea trae el veredicto EN PALABRAS, sin símbolo, se deriva
+    # igual del texto (tolerancia del parser).
     assert stream.derivar_verdicto("LISTO PARA APROBAR\n\nLeyenda: …") == "listo"
     assert stream.derivar_verdicto("REVISAR ANTES DE PUBLICAR\nuna cifra a confirmar") == "revisar"
     assert stream.derivar_verdicto("NO PUBLICAR\nregla legal incumplida") == "no_publicar"

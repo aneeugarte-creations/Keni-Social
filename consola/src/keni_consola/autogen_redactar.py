@@ -41,8 +41,8 @@ _log = logging.getLogger("keni_consola.autogen_redactar")
 # no auto-generamos lo que el equipo teclea sin marcar como alta.
 ORIGENES_TOPIC: frozenset[str] = frozenset(ORIGENES_AUTOGEN)
 
-# Etiqueta de origen del historial para el copy auto-generado (nota -> piezas por red, con
-# auto-verificacion). El copy va por el lanzador NEUTRO (`dominio.generar.lanzar_copy`), que
+# Etiqueta de origen del historial para el copy auto-generado (nota -> piezas por red).
+# El copy va por el lanzador NEUTRO (`dominio.generar.lanzar_copy`), que
 # compone el prompt copy-desde-nota autocontenido; este valor es solo la etiqueta de procedencia.
 ORIGEN_HISTORIAL = "copy-desde-nota"
 
