@@ -51,14 +51,22 @@ const OPCIONES: OpcionMenu[] = [
 export function CuentaUsuario({
   className,
   soloIcono = false,
+  onAbiertoChange,
 }: {
   className?: string;
   soloIcono?: boolean;
+  /** Avisa cuando el menú abre/cierra (lo usa el sidebar para no colapsar con el menú abierto). */
+  onAbiertoChange?: (abierto: boolean) => void;
 }) {
   const { usuario, cerrarSesion } = useSesion();
   const [abierto, setAbierto] = React.useState(false);
   const [cerrando, setCerrando] = React.useState(false);
   const contenedorRef = React.useRef<HTMLDivElement>(null);
+
+  // Notifica el estado del menú hacia arriba (el dock no debe colapsar mientras está abierto).
+  React.useEffect(() => {
+    onAbiertoChange?.(abierto);
+  }, [abierto, onAbiertoChange]);
 
   // Cierra el menú al pulsar fuera o con Escape.
   React.useEffect(() => {

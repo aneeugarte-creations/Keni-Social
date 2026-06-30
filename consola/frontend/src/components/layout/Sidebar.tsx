@@ -62,9 +62,12 @@ function enHubDe(ruta: string, pathname: string): boolean {
 export function Sidebar({
   onNavegar,
   colapsado = false,
+  onCuentaAbierta,
 }: {
   onNavegar?: () => void;
   colapsado?: boolean;
+  /** Avisa cuando el menú de cuenta abre/cierra: el dock no colapsa con el menú abierto. */
+  onCuentaAbierta?: (abierto: boolean) => void;
 }) {
   const { pathname } = useLocation();
   // Sidebar DATA-DRIVEN (ADR 0005): se hidrata de `/api/catalogo`. El backend ya
@@ -98,7 +101,7 @@ export function Sidebar({
         className="flex h-full w-full flex-col border-r border-border bg-background"
       >
         <div className="flex h-12 items-center justify-center border-b border-border">
-          <CuentaUsuario soloIcono />
+          <CuentaUsuario soloIcono onAbiertoChange={onCuentaAbierta} />
         </div>
 
         <div className="flex flex-1 flex-col items-center gap-1 overflow-y-auto py-3">
@@ -140,7 +143,7 @@ export function Sidebar({
       className="flex h-full w-full flex-col border-r border-border bg-background"
     >
       <div className="flex h-12 items-center border-b border-border px-2">
-        <CuentaUsuario />
+        <CuentaUsuario onAbiertoChange={onCuentaAbierta} />
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-3 py-4">

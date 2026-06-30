@@ -351,37 +351,36 @@ function SelectorMarcas({
 }) {
   const otra: Cuenta = cuenta === "a" ? "b" : "a";
   return (
-    <div className="space-y-1.5">
-      <p className="text-xs font-medium text-muted-foreground">Marcas de esta cuenta</p>
-      <p className="text-xs text-muted-foreground/70">
-        Marca activa = la sirve esta cuenta. Toca una para moverla a la otra cuenta.
-      </p>
-      <div className="flex flex-wrap gap-1.5">
-        {marcas.map((m) => {
-          const aqui = m.cuenta === cuenta;
-          const ocupada = marcaPendiente === m.id;
-          return (
-            <Button
-              key={m.id}
-              type="button"
-              size="sm"
-              variant={aqui ? "secondary" : "outline"}
-              aria-pressed={aqui}
-              disabled={marcaPendiente != null}
-              onClick={() => onMover(m.id, aqui ? otra : cuenta)}
-              title={
-                aqui
-                  ? `Mover «${m.nombre}» a la cuenta ${otra.toUpperCase()}`
-                  : `Mover «${m.nombre}» a esta cuenta`
-              }
-              className="h-7 rounded-full px-3 text-xs"
-            >
-              {ocupada && <Spinner className="mr-1.5 h-3 w-3" />}
-              {m.nombre}
-            </Button>
-          );
-        })}
-      </div>
+    <div role="group" aria-label="Marcas de esta cuenta" className="flex flex-wrap gap-1.5">
+      {marcas.map((m) => {
+        const aqui = m.cuenta === cuenta;
+        const ocupada = marcaPendiente === m.id;
+        return (
+          <Button
+            key={m.id}
+            type="button"
+            size="sm"
+            // Activo = la sirve esta cuenta: relleno sólido. Inactivo: outline apagado. El
+            // contraste deja claro de un vistazo qué marcas pertenecen a la cuenta.
+            variant={aqui ? "default" : "outline"}
+            aria-pressed={aqui}
+            disabled={marcaPendiente != null}
+            onClick={() => onMover(m.id, aqui ? otra : cuenta)}
+            title={
+              aqui
+                ? `Quitar «${m.nombre}» de esta cuenta (mover a la cuenta ${otra.toUpperCase()})`
+                : `Mover «${m.nombre}» a esta cuenta`
+            }
+            className={cn(
+              "h-7 rounded-full px-3 text-xs",
+              !aqui && "text-muted-foreground",
+            )}
+          >
+            {ocupada && <Spinner className="mr-1.5 h-3 w-3" />}
+            {m.nombre}
+          </Button>
+        );
+      })}
     </div>
   );
 }

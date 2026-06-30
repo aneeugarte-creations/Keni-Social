@@ -136,7 +136,7 @@ describe("SeccionCuentaClaude", () => {
     ).toBeInTheDocument();
 
     // El selector de marcas vive DENTRO de cada tarjeta (una por cuenta), no en un panel aparte.
-    expect(await screen.findAllByText("Marcas de esta cuenta")).toHaveLength(2);
+    expect(await screen.findAllByRole("group", { name: "Marcas de esta cuenta" })).toHaveLength(2);
     expect(screen.queryByText("Marcas por cuenta")).not.toBeInTheDocument();
 
     // Cada tarjeta pidió su cuenta por separado.
@@ -167,7 +167,7 @@ describe("SeccionCuentaClaude", () => {
   it("cada tarjeta lista las marcas como chips; togglear un chip mueve la marca de cuenta", async () => {
     renderSeccion();
     // El reparto vive en las tarjetas (chips), no en un panel "Marcas por cuenta" aparte.
-    expect(await screen.findAllByText("Marcas de esta cuenta")).toHaveLength(2);
+    expect(await screen.findAllByRole("group", { name: "Marcas de esta cuenta" })).toHaveLength(2);
     expect(screen.queryByText("Marcas por cuenta")).not.toBeInTheDocument();
 
     // La Fundación está en la cuenta B: su chip INACTIVO (tarjeta A) la mueve a la cuenta A.

@@ -60,6 +60,9 @@ export function AppShell() {
   // ratón o al recibir foco de teclado; al salir/perder el foco se repliega. El panel expandido
   // FLOTA sobre el contenido (overlay absoluto, sin reflujo). Sin botón ni persistencia.
   const [expandido, setExpandido] = React.useState(false);
+  // Con el menú de cuenta (avatar) abierto, el dock NO debe colapsar al salir el ratón: el menú es
+  // inline en la barra y se cierra solo (click fuera / Escape / selección), reanudando el colapso.
+  const [cuentaAbierta, setCuentaAbierta] = React.useState(false);
 
   // Huecos de la barra superior que las páginas rellenan por portal (vía contexto): inicio
   // (título de página plana, junto a las pestañas en `EncabezadoSeccion`) y acciones (el menú
@@ -129,10 +132,13 @@ export function AppShell() {
         <div
           className={cn(
             "absolute inset-y-0 left-0 transition-[width] duration-200 ease-out",
-            expandido ? "w-64 shadow-xl" : "w-16",
+            // Expandido: ancho ajustado a la etiqueta más larga del sidenav ("Investigación"),
+            // sin hueco sobrante. Colapsado: rail de iconos. Se mantiene expandido mientras el menú
+            // de cuenta esté abierto, aunque el ratón salga (si no, el menú quedaría suelto).
+            expandido || cuentaAbierta ? "w-48 shadow-xl" : "w-16",
           )}
         >
-          <Sidebar colapsado={!expandido} />
+          <Sidebar colapsado={!(expandido || cuentaAbierta)} onCuentaAbierta={setCuentaAbierta} />
         </div>
       </aside>
 
@@ -252,7 +258,7 @@ export function AppShell() {
               SUPERIOR (barra → primer control de la página) es ajustado (`pt-2` = 8px) para
               que TODAS las páginas respiren igual que la galería del editor (Fotos/Miniaturas
               pega bajo la barra); el inferior se mantiene holgado (`pb-4 sm:pb-6`). */}
-          <div className="w-full min-w-0 px-4 pt-2 pb-4 sm:px-6 sm:pb-6 lg:px-8">
+          <div className="w-full min-w-0 px-6 pt-2 pb-4 sm:px-8 sm:pb-6 lg:px-10">
             {/* Las páginas portalizan su título/acciones a los huecos de la barra superior vía
                 el proveedor de contexto, que envuelve al `<Outlet/>`. La cabecera de sección
                 (pestañas/título) ya se pinta en el header, no aquí. */}

@@ -195,7 +195,7 @@ function BloqueCuenta({ uso, etiquetada }: { uso: UsoCuenta; etiquetada: boolean
   const rojo = uso.alerta_roja;
   const alerta = mensajeRojo(uso);
   return (
-    <Tooltip label={tooltipCompleto(uso)} side="top">
+    <Tooltip label={tooltipCompleto(uso)} side="top" className="w-full">
       <div className="w-full space-y-1.5" aria-label={tooltipCompleto(uso)}>
         {etiquetada ? (
           <p className="truncate px-0.5 text-[10px] font-medium text-muted-foreground/80">
