@@ -363,6 +363,20 @@ def _presupuesto_por_marca() -> list[Ajuste]:
                 defecto=False,
             )
         )
+        # Ritmo PROPIO de la marca: manda sobre el global; escala los caps por barrido de «nombre».
+        salida.append(
+            Ajuste(
+                clave=config.clave_por_marca(config.ENV_RITMO, mid),
+                tipo="int",
+                etiqueta=f"{nombre} · ritmo de producción (%)",
+                ayuda=f"Escala cuánto trabajo nuevo entra por barrido para «{nombre}»; 100% = "
+                "normal, 50% = mitad, 25% = un cuarto. Baja el gasto sin apagar etapas.",
+                grupo="presupuesto_marca",
+                defecto=config.RITMO_DEF,
+                minimo=10,
+                maximo=100,
+            )
+        )
         # Topes de tokens por motor (IN/OUT) PROPIOS de la marca: 0 = sin tope (solo el global).
         for env, etapa in _TOPES_TOKENS_MARCA:
             salida.append(
@@ -572,6 +586,20 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="pipeline_topes",
             defecto=config.PRESUPUESTO_MARGEN_MANUAL_DEF,
             minimo=0,
+            maximo=100,
+        ),
+        # RITMO global de producción: dial gradual del gasto. Escala los caps por barrido de la
+        # auto-producción sin apagar etapas. Cada marca puede sobreescribirlo (ver
+        # `_presupuesto_por_marca`).
+        Ajuste(
+            clave=config.ENV_RITMO,
+            tipo="int",
+            etiqueta="Ritmo de producción (%)",
+            ayuda="Escala cuánto trabajo nuevo entra por barrido; 100% = normal, 50% = mitad, "
+            "25% = un cuarto. Baja el gasto sin apagar etapas.",
+            grupo="pipeline_topes",
+            defecto=config.RITMO_DEF,
+            minimo=10,
             maximo=100,
         ),
         # (KENI_PROMPT_MAX_CHARS —tope de contexto por generación— se DEGRADÓ a solo-env:

@@ -431,6 +431,7 @@ def estado(marca: str = "") -> dict[str, Any]:
 
     Forma (CONTRATO de `/api/actividad/cola`):
       {marca, nivel, pausada, presupuesto_tokens_dia, presupuesto_usd_dia, margen_manual_pct,
+       ritmo, ritmo_global,
        gastado: {tokens, tokens_in, tokens_out, coste_usd, generaciones}, restante_tokens,
        pct_usado, pct_usado_usd, proyeccion_usd_dia, pct_proyectado_usd, dia,
        por_proceso: {investigacion: {...}, produccion: {...}},
@@ -487,6 +488,10 @@ def estado(marca: str = "") -> dict[str, Any]:
         "presupuesto_tokens_dia": presupuesto,
         "presupuesto_usd_dia": presupuesto_usd,
         "margen_manual_pct": config.presupuesto_margen_manual_pct(),
+        # Ritmo vigente (%): el dial gradual que escala los caps por barrido del ámbito (de la
+        # marca con `marca`, global en ""); 100 = sin freno. El panel de gasto lo lee de aquí.
+        "ritmo": config.ritmo(marca),
+        "ritmo_global": config.ritmo(""),
         "gastado": gasto,
         "restante_tokens": restante,
         "pct_usado": pct,

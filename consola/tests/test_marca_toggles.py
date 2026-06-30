@@ -52,6 +52,79 @@ def test_autogen_copy_max_override_por_marca_manda(monkeypatch):
     assert config.autogen_copy_max("nacion-gamer") == 5  # sin override -> global
 
 
+def test_ritmo_default_global_sin_override(monkeypatch):
+    """Sin override por marca ni env, `ritmo` cae al default global (100 = sin freno)."""
+    _store(monkeypatch, {})
+    monkeypatch.delenv(config.ENV_RITMO, raising=False)
+    assert config.ritmo("unotv") == 100
+    assert config.ritmo("") == 100
+    _store(monkeypatch, {config.ENV_RITMO: "50"})  # global por store
+    assert config.ritmo("unotv") == 50
+    assert config.ritmo("") == 50
+
+
+def test_ritmo_override_por_marca_manda(monkeypatch):
+    """El override por marca (`KENI_RITMO::marca`) MANDA sobre el global."""
+    _store(monkeypatch, {
+        config.ENV_RITMO: "80",  # global
+        config.clave_por_marca(config.ENV_RITMO, "unotv"): "25",  # override unotv
+    })
+    assert config.ritmo("unotv") == 25  # override gana al global
+    assert config.ritmo("nacion-gamer") == 80  # sin override -> global
+    assert config.ritmo("") == 80  # global
+
+
+def test_ritmo_clamp_a_10_100(monkeypatch):
+    """El ritmo se CLAMPa a [10, 100]: nunca congela del todo ni excede el 100% de fábrica."""
+    _store(monkeypatch, {
+        config.ENV_RITMO: "500",  # > 100 -> 100
+        config.clave_por_marca(config.ENV_RITMO, "unotv"): "1",  # < 10 -> 10
+        config.clave_por_marca(config.ENV_RITMO, "claro-sports"): "-9",  # < 10 -> 10
+    })
+    assert config.ritmo("") == 100
+    assert config.ritmo("unotv") == 10
+    assert config.ritmo("claro-sports") == 10
+
+
+def test_autogen_copy_max_escala_con_el_ritmo(monkeypatch):
+    """El ritmo escala el cap por barrido: 100 = sin regresión (12), 50 = la mitad (6)."""
+    _store(monkeypatch, {})
+    monkeypatch.delenv(config.ENV_AUTOGEN_COPY_MAX, raising=False)
+    monkeypatch.delenv(config.ENV_RITMO, raising=False)
+    assert config.autogen_copy_max("unotv") == 12  # ritmo 100: cap de fábrica
+    _store(monkeypatch, {config.ENV_RITMO: "50"})  # ritmo global a la mitad
+    assert config.autogen_copy_max("unotv") == 6  # 12 * 50%
+    # El ritmo PROPIO de la marca manda sobre el global al escalar su cap.
+    _store(monkeypatch, {
+        config.ENV_RITMO: "50",
+        config.clave_por_marca(config.ENV_RITMO, "unotv"): "25",
+    })
+    assert config.autogen_copy_max("unotv") == 3  # 12 * 25%
+    assert config.autogen_copy_max("nacion-gamer") == 6  # global 50%
+
+
+def test_autogen_arte_max_escala_con_el_ritmo_global(monkeypatch):
+    """`autogen_arte_max` (GLOBAL, sin marca) responde al ritmo global: 100 = 3, 50 = 2 (round)."""
+    _store(monkeypatch, {})
+    monkeypatch.delenv(config.ENV_AUTOGEN_ARTE_MAX, raising=False)
+    monkeypatch.delenv(config.ENV_RITMO, raising=False)
+    assert config.autogen_arte_max() == 3  # ritmo 100: cap de fábrica
+    _store(monkeypatch, {config.ENV_RITMO: "50"})
+    assert config.autogen_arte_max() == 2  # round(3 * 50%) = round(1.5) = 2
+    _store(monkeypatch, {config.ENV_RITMO: "10"})
+    assert config.autogen_arte_max() == 1  # max(1, round(0.3)) = 1 (mínimo 1)
+
+
+def test_catalogo_expone_ritmo_editable():
+    """El ritmo es editable (no peligroso): global + un override por marca, tipo int [10,100]."""
+    ritmo_global = ajustes_catalogo.por_clave(config.ENV_RITMO)
+    assert ritmo_global is not None
+    assert ritmo_global.tipo == "int" and ritmo_global.peligroso is False
+    assert ritmo_global.minimo == 10 and ritmo_global.maximo == 100
+    claves = {a.clave for a in ajustes_catalogo.catalogo()}
+    assert config.clave_por_marca(config.ENV_RITMO, "unotv") in claves
+
+
 def test_clave_por_marca_formato():
     assert config.clave_por_marca("KENI_PIPELINE_REDACTAR", "unotv") == "KENI_PIPELINE_REDACTAR::unotv"
 

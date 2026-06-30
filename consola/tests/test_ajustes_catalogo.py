@@ -279,8 +279,13 @@ def test_pipeline_topes_en_grupo_propio(store):
         assert a.tipo == "float", f"{clave} debe ser float"
         assert a.grupo == "pipeline_topes", f"{clave} debe estar en grupo pipeline_topes"
         assert a.minimo == 0, f"{clave} debe tener minimo 0 (0 = sin límite)"
+    # El RITMO global (dial gradual del gasto) también vive en Economía, pero su rango es [10, 100]
+    # (no 0 = apagado: el apagado total es otra palanca), así que va aparte de los topes de 0.
+    a = ajustes_catalogo.por_clave(config.ENV_RITMO)
+    assert a is not None and a.tipo == "int" and a.grupo == "pipeline_topes"
+    assert a.minimo == 10 and a.maximo == 100 and a.peligroso is False
     en_grupo = {a.clave for a in ajustes_catalogo.catalogo() if a.grupo == "pipeline_topes"}
-    assert en_grupo == _PIPELINE_ECONOMIA_INT | _PIPELINE_ECONOMIA_FLOAT
+    assert en_grupo == _PIPELINE_ECONOMIA_INT | _PIPELINE_ECONOMIA_FLOAT | {config.ENV_RITMO}
 
 
 def test_generacion_pausada_es_kill_switch_de_maquina(store):

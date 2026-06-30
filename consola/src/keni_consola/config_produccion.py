@@ -5,8 +5,10 @@ from ._config_comun import (
     _VERDADEROS,
     AUTOGEN_ARTE_MAX_DEF,
     AUTOGEN_COPY_MAX_DEF,
+    RITMO_DEF,
     ENV_AUTOGEN_ARTE_MAX,
     ENV_AUTOGEN_COPY_MAX,
+    ENV_RITMO,
     ENV_CONSOLA_URL_PUBLICA,
     ENV_GENERACIONES_TTL_HORAS,
     ENV_MEDIA_GC,
@@ -88,12 +90,37 @@ def media_gc_antiguedad_horas() -> int:
     )
 
 
+def ritmo(marca: str) -> int:
+    """Ritmo de producción VIGENTE (porcentaje) que escala los caps por barrido (`KENI_RITMO`).
+
+    Control de gradación del gasto SIN apagar etapas: 100 = sin freno; bajarlo recorta
+    proporcionalmente cuánto trabajo nuevo entra por barrido. El override por marca del store
+    (`KENI_RITMO::marca`) MANDA sobre el env/default global (`KENI_RITMO`); `marca=""` lee el
+    global. CLAMP a [10, 100]: el ritmo nunca congela del todo (mínimo 10); el apagado es otra
+    palanca (toggles de etapa, parada de emergencia).
+    """
+    from . import ajustes  # perezoso: evita el ciclo config <- ajustes
+
+    valor = _entero(ENV_RITMO, RITMO_DEF)  # env/default global
+    if marca:
+        crudo = ajustes.obtener(clave_por_marca(ENV_RITMO, marca))
+        if crudo is not None and crudo.strip():
+            try:
+                valor = int(crudo.strip())  # override por marca MANDA
+            except ValueError:
+                pass
+    return max(10, min(100, valor))
+
+
 def autogen_arte_max() -> int:
     """Maximo de temas a auto-ilustrar por barrido (`KENI_AUTOGEN_ARTE_MAX`, def 3, min 1).
 
-    Cada item llama al proveedor de imagen (coste): el cap evita rafagas por barrido.
+    Cada item llama al proveedor de imagen (coste): el cap evita rafagas por barrido. El RITMO
+    GLOBAL (`ritmo("")`) lo escala hacia abajo para frenar el gasto sin apagar la etapa (ritmo
+    100 = cap de fábrica).
     """
-    return _entero(ENV_AUTOGEN_ARTE_MAX, AUTOGEN_ARTE_MAX_DEF, minimo=1)
+    base = _entero(ENV_AUTOGEN_ARTE_MAX, AUTOGEN_ARTE_MAX_DEF, minimo=1)
+    return max(1, round(base * ritmo("") / 100))
 
 
 def autogen_copy_max(marca: str) -> int:
@@ -102,18 +129,21 @@ def autogen_copy_max(marca: str) -> int:
     Tope del carril 2 de Redactar (news-pool): acota cuantos temas sin copy de UNA marca se
     encolan en cada barrido, para que activar el toggle de una marca con backlog no dispare una
     rafaga de `claude -p`. El override por marca del store (`KENI_AUTOGEN_COPY_MAX::marca`) MANDA
-    sobre el default; sin override, cae al env/default global. Min 1.
+    sobre el default; sin override, cae al env/default global. Min 1. El RITMO de la marca
+    (`ritmo(marca)`) escala el cap hacia abajo para frenar el gasto sin apagar la etapa (ritmo
+    100 = cap de fábrica).
     """
     from . import ajustes  # perezoso: evita el ciclo config <- ajustes
 
+    base = _entero(ENV_AUTOGEN_COPY_MAX, AUTOGEN_COPY_MAX_DEF, minimo=1)
     if marca:
         crudo = ajustes.obtener(clave_por_marca(ENV_AUTOGEN_COPY_MAX, marca))
         if crudo is not None and crudo.strip():
             try:
-                return max(1, int(crudo.strip()))
+                base = max(1, int(crudo.strip()))
             except ValueError:
                 pass
-    return _entero(ENV_AUTOGEN_COPY_MAX, AUTOGEN_COPY_MAX_DEF, minimo=1)
+    return max(1, round(base * ritmo(marca) / 100))
 
 
 def generaciones_ttl_seg() -> int:

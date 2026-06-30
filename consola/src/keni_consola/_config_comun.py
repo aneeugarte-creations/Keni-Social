@@ -307,6 +307,11 @@ ENV_PIPELINE_MAX = "KENI_PIPELINE_MAX"
 # temas autogen sin copy se encolan como máximo para cada marca en cada barrido. Override por
 # marca (`KENI_AUTOGEN_COPY_MAX::marca`) > default global; cada job es un `claude -p` (coste).
 ENV_AUTOGEN_COPY_MAX = "KENI_AUTOGEN_COPY_MAX"
+# RITMO de producción: factor (porcentaje) que ESCALA hacia abajo los caps por barrido de la
+# auto-producción para frenar el gasto SIN apagar etapas. 100 = sin freno (caps de fábrica); 50 =
+# la mitad; 25 = un cuarto. Global (`KENI_RITMO`) y por marca (`KENI_RITMO::marca`, manda sobre el
+# global). Clamp a [10, 100]: el apagado total es otra palanca (toggles/parada), no el ritmo.
+ENV_RITMO = "KENI_RITMO"
 # FLUJO CONTINUO: el pipeline no barre por tandas (sin intervalo configurable: tick corto
 # constante en `pipeline_contenido._barrido`) ni tiene topes por etapa (Verificar/Redactar/Ilustrar/Revisar):
 # el volumen lo regula Admitir (gate serial en proceso por marca) + el backpressure de la cola.
@@ -726,6 +731,10 @@ AUTOGEN_ARTE_MAX_DEF = 3
 # (def 12), porque cada tema acaba en un `claude -p`.
 AUTOGEN_COPY_MAX_DEF = 12
 
+# Ritmo de producción (porcentaje): 100 = sin freno (los caps de barrido valen lo de fábrica).
+# Bajarlo escala los caps proporcionalmente para recortar el gasto. Clamp a [10, 100].
+RITMO_DEF = 100
+
 # Pipeline de contenido (FLUJO CONTINUO): Admitir admite hasta este nº de historias por
 # marca en cada pasada, acotada además por el gate serial en proceso. Cada admisión acaba en
 # `claude -p` (coste); el cap del worker (`KENI_MAX_JOBS`) sigue aplicando más adelante en el flujo.
@@ -882,6 +891,7 @@ __all__ = [
     'ALGORITMOS_INTERVALO_HORAS_DEF',
     'AUTOGEN_ARTE_MAX_DEF',
     'AUTOGEN_COPY_MAX_DEF',
+    'RITMO_DEF',
     'CLAUDE_TIMEOUT_DEF',
     'CLAUDE_IDLE_TIMEOUT_DEF',
     'VERIFICACION_EN_CURSO_TTL_MIN_DEF',
@@ -917,6 +927,7 @@ __all__ = [
     'ENV_PIPELINE_ADMITIR',
     'ENV_AUTOGEN_ARTE_MAX',
     'ENV_AUTOGEN_COPY_MAX',
+    'ENV_RITMO',
     'ENV_AUTO_PREAPROBACION',
     'ENV_PROMPTS_DIR',
     'ENV_PROMPTS_DIR_LEGACY',

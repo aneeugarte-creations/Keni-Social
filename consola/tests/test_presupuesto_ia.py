@@ -226,6 +226,20 @@ def test_estado_presupuesto_tokens_es_suma_de_topes_motor(entorno, monkeypatch):
     assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_NORMAL
 
 
+def test_estado_incluye_ritmo(entorno, monkeypatch):
+    """`estado()` expone el RITMO vigente (%) para que el panel de gasto lo lea de lo que ya recibe:
+    el de la marca con `marca`, el global en ""; default 100 = sin freno."""
+    monkeypatch.delenv("KENI_RITMO", raising=False)
+    est = presupuesto_ia.estado()
+    assert est["ritmo"] == 100 and est["ritmo_global"] == 100
+    monkeypatch.setenv("KENI_RITMO", "40")
+    ajustes.guardar("KENI_RITMO::unotv", "25")  # override por marca vive en el store
+    est_unotv = presupuesto_ia.estado("unotv")
+    assert est_unotv["ritmo"] == 25  # el propio de la marca
+    assert est_unotv["ritmo_global"] == 40  # el global, aparte
+    assert presupuesto_ia.estado()["ritmo"] == 40  # vista global
+
+
 def test_nivel_escalones_por_usd(entorno, monkeypatch):
     """El presupuesto de COSTE (USD) corta igual que el de tokens: solo_manual al alcanzarlo,
     agotado al superar el margen. Es un proxy del gasto independiente del conteo de tokens."""
