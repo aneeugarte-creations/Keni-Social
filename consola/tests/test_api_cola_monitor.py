@@ -221,8 +221,11 @@ def test_cola_desglose_contrato(entorno):
     }
     assert bloque["por_proceso"][generaciones.PROCESO_PRODUCCION]["pendientes"] >= 0
     assert set(bloque["total"]) == {"pendientes", "reclamados"}
-    # Huerfano contado aparte, nunca en una marca.
-    assert data["huerfanos"]["pendientes"] == 1
+    # Huerfano contado aparte, nunca en una marca. `reclamar` clava un job al azar entre los
+    # de igual prioridad (empate de `creado` por segundo -> desempate por id uuid4), asi que el
+    # huerfano puede salir pendiente o, si fue el reclamado, reclamado: lo invariante es que el
+    # unico huerfano del entorno aparece en su bloque (y nunca en una marca).
+    assert data["huerfanos"]["pendientes"] + data["huerfanos"]["reclamados"] == 1
     assert "gen-fantasma" not in por_marca
     # El unico reclamado del entorno cuadra entre marcas + huerfanos.
     total_reclamados = (
