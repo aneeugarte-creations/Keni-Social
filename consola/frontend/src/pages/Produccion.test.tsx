@@ -59,10 +59,34 @@ const SUELTA = {
   resultado_url: "/operacion/investigacion/fuentes",
 };
 
+// Un tema FUTURO: pipeline del tablero aún sin trabajar (`futuro: true`), va al final del feed
+// atenuado y rotulado «En cola».
+const FUTURO = {
+  clase: "run",
+  id: "f1",
+  titulo: "Tema en cola del tablero",
+  marca: "unotv",
+  marca_nombre: "UnoTV",
+  origen: "pipeline",
+  creado: "2026-06-09T10:00:00",
+  actualizado: "2026-06-09T10:00:00",
+  estado_global: "pendiente",
+  etapa_actual: "fusionar",
+  futuro: true,
+  etapas: [
+    { clave: "fusionar", nombre: "Fusionar", estado: "pendiente", detalle: "", ts: "", es_ia: true },
+  ],
+  verificacion: null,
+  cluster: null,
+  piezas: [],
+};
+
 const LISTA = {
   pipelines: [RUN, SUELTA],
   paginacion: { total: 2, limite: 20, desplazamiento: 0 },
   totales: { items: 3, tokens: 17345, coste_usd: 0.088, duration_ms: 16200 },
+  futuros_total: 0,
+  futuros_mostrados: 0,
 };
 
 const AGREGADOS = {
@@ -71,37 +95,11 @@ const AGREGADOS = {
   por_dia: [{ dia: "2026-06-10", items: 4, coste_usd: 1.0 }],
 };
 
-// Embalse del tablero (foto completa por marca×etapa) que el feed muestra como contexto del flujo.
-const BACKLOG = {
-  marcas: [
-    {
-      marca: "unotv",
-      nombre: "UnoTV",
-      etapas: {
-        pool_sin_admitir: 0,
-        pipeline_en_proceso: 0,
-        esperando_copy: 4,
-        generando_copy: 0,
-        generando_arte: 0,
-        lista_para_revisar: 0,
-      },
-      total: 4,
-    },
-  ],
-};
-
-function stubFetch(
-  lista: unknown = LISTA,
-  agregados: unknown = AGREGADOS,
-  backlog: unknown = BACKLOG,
-) {
+function stubFetch(lista: unknown = LISTA, agregados: unknown = AGREGADOS) {
   const fn = vi.fn(async (url: string | URL) => {
     const s = String(url);
     if (s.includes("/api/actividad/agregados")) {
       return new Response(JSON.stringify(agregados), { status: 200 });
-    }
-    if (s.includes("/api/produccion/backlog")) {
-      return new Response(JSON.stringify(backlog), { status: 200 });
     }
     if (s.includes("/api/pipelines")) {
       return new Response(JSON.stringify(lista), { status: 200 });
@@ -141,12 +139,27 @@ describe("Producción (feed unificado: runs del pipeline + actividad suelta)", (
     expect(screen.queryByRole("link", { name: /Econom[ií]a de tokens/i })).toBeNull();
   });
 
-  it("monta el embudo del backlog (embalse del tablero) como contexto del flujo", async () => {
+  it("ya NO monta el embudo del backlog (embalse del tablero): es un conteo por etapa en Contexto", async () => {
     stubFetch();
     renderConProviders(<Produccion />);
-    expect(
-      await screen.findByText("Embalse del tablero (antes de la cola)"),
-    ).toBeInTheDocument();
+    await screen.findByText("Cómo gana la FIFA");
+    expect(screen.queryByText("Embalse del tablero (antes de la cola)")).toBeNull();
+  });
+
+  it("pinta un tema FUTURO atenuado con su badge «En cola» y «+N más en cola» al final", async () => {
+    stubFetch({
+      pipelines: [RUN, FUTURO],
+      paginacion: { total: 2, limite: 20, desplazamiento: 0 },
+      futuros_total: 35,
+      futuros_mostrados: 30,
+    });
+    renderConProviders(<Produccion />);
+    // El tema futuro se rotula «En cola» y su tarjeta queda atenuada (opacity-60).
+    expect(await screen.findByText("En cola")).toBeInTheDocument();
+    const tarjeta = screen.getByText("Tema en cola del tablero").closest(".opacity-60");
+    expect(tarjeta).not.toBeNull();
+    // Resumen de los futuros que no caben en el cap (35 - 30 = 5).
+    expect(screen.getByText("+5 más en cola")).toBeInTheDocument();
   });
 
   it("junto a los filtros solo va el CONTEO del feed", async () => {

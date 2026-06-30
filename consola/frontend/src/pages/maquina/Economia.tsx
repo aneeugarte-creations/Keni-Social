@@ -46,7 +46,7 @@ import { costeUsd, numeroCompacto, numeroCompleto } from "@/lib/formato";
 import { INTERVALO_SERIE_MS, INTERVALO_VIVO_MS } from "@/lib/refresco";
 import { cn } from "@/lib/utils";
 import { PanelAjustes } from "@/pages/configuracion/SeccionFuncionalidad";
-import { PanelPresupuesto, TablaBacklog } from "@/pages/maquina/cola-comun";
+import { PanelPresupuesto } from "@/pages/maquina/cola-comun";
 import { PROC_META } from "@/pages/monitor/comun";
 import type {
   EconomiaCelda,
@@ -377,12 +377,18 @@ export default function Economia() {
     queryFn: ({ signal }) => api.economia({ dias, marca: marcaActiva ?? undefined }, signal),
     refetchInterval: INTERVALO_SERIE_MS,
   });
-  // Embalse del tablero: el trabajo pendiente que aún costará tokens (foto completa sin filtro).
+  // Embalse del tablero: de aquí sale el COSTE pendiente (lo que costará vaciar lo que espera).
   const backlog = useQuery({
     queryKey: ["produccion", "backlog"],
     queryFn: ({ signal }) => api.produccionBacklog(signal),
     refetchInterval: INTERVALO_VIVO_MS,
   });
+  // Coste estimado del trabajo pendiente del ámbito: la marca activa (su estimado) o el total.
+  const estimadoPendiente = backlog.data
+    ? marcaActiva
+      ? backlog.data.marcas.find((m) => m.marca === marcaActiva)?.estimado
+      : backlog.data.estimado_total
+    : undefined;
 
   const quitarFoco = () => {
     const params = new URLSearchParams(searchParams);
@@ -457,18 +463,11 @@ export default function Economia() {
               presupuesto={cola.data.presupuesto}
               esAdmin={esAdmin}
               nombreMarca={nombreActiva ?? undefined}
+              estimadoPendiente={estimadoPendiente}
             />
           )
         )}
       </div>
-
-      {/* Trabajo pendiente: el embalse del tablero que aún costará tokens (lo enmarca el título).
-          Junto al presupuesto/parada, da la dimensión del gasto que falta por generar. */}
-      {backlog.data && (
-        <div className="mb-6">
-          <TablaBacklog backlog={backlog.data} titulo="Trabajo pendiente (backlog que costará)" />
-        </div>
-      )}
 
       {/* Esfuerzo de razonamiento: la palanca calidad/coste de TODA la generación. Vive con la
           economía (más esfuerzo = mejor calidad, más lento y más caro), no en el drawer. */}

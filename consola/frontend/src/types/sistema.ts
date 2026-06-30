@@ -454,6 +454,12 @@ export interface BacklogEtapas {
   lista_para_revisar: number;
 }
 
+/** Coste estimado de vaciar el backlog (lo que costará generar lo que aún espera). */
+export interface BacklogEstimado {
+  tokens: number;
+  coste_usd: number;
+}
+
 /** Backlog de UNA marca: las 6 etapas de la cadena + su total (suma de las 6). */
 export interface BacklogMarca {
   marca: string;
@@ -461,12 +467,16 @@ export interface BacklogMarca {
   nombre: string;
   etapas: BacklogEtapas;
   total: number;
+  /** Tokens y coste estimados de generar el trabajo pendiente de la marca. */
+  estimado: BacklogEstimado;
 }
 
 /** Foto completa del backlog por marca × etapa (`GET /api/produccion/backlog`, sin filtro).
  *  `marcas` ordenado por id; el embalse que se acumula ANTES de la cola de jobs. */
 export interface Backlog {
   marcas: BacklogMarca[];
+  /** Tokens y coste estimados de vaciar TODO el backlog (suma de las marcas). */
+  estimado_total: BacklogEstimado;
 }
 
 // --- Pipelines (vista estilo GitLab del pipeline de contenido CI/CD) ---
@@ -570,6 +580,8 @@ export interface Pipeline {
   estado_global: "ok" | "en_curso" | "pendiente" | "revisar" | "fallo";
   /** Clave de la etapa donde la run está «parada» (1ª no-ok/saltada); "" si todo está hecho. */
   etapa_actual: string;
+  /** Tema del tablero aún SIN trabajar (pipeline que no ha corrido): va al final del feed, atenuado. */
+  futuro?: boolean;
   etapas: PipelineEtapa[];
   /** Verificación de la fuente (⚠️/❗ + hallazgos). `null` en items sueltos. */
   verificacion?: PipelineVerificacionFuente | null;
@@ -623,6 +635,10 @@ export interface RespuestaPipelines {
   /** SUMATORIO de métricas de TODOS los items que casan el filtro (no solo la página):
    *  tokens/coste/duración; `items` = generaciones sumadas. Opcional (backs previos). */
   totales?: PipelineMetricas;
+  /** Temas FUTUROS (pipelines sin trabajar) que casan el filtro. Opcional (backs previos). */
+  futuros_total?: number;
+  /** Cuántos de esos futuros vienen en `pipelines` (cap 30); `total - mostrados` = «+N más». */
+  futuros_mostrados?: number;
 }
 
 /** El STREAM (proceso de pensamiento de `claude -p`) de la generación de una etapa.

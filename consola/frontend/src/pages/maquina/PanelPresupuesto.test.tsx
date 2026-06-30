@@ -181,6 +181,35 @@ describe("PanelPresupuesto · gate diario por % · modo Todas", () => {
   });
 });
 
+// Trabajo pendiente: el coste estimado de vaciar el backlog (lo que costará generar lo que espera).
+describe("PanelPresupuesto · trabajo pendiente", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it("muestra los tokens y el coste pendientes cuando se pasa `estimadoPendiente`", () => {
+    renderConProviders(
+      <PanelPresupuesto
+        presupuesto={presupuesto({ marca: "" })}
+        esAdmin
+        estimadoPendiente={{ tokens: 1_200_000, coste_usd: 4.2 }}
+      />,
+    );
+    expect(
+      screen.getByText(/Trabajo pendiente: ~1\.2\s*M tokens · USD\s*4\.20\s*estimado/i),
+    ).toBeInTheDocument();
+  });
+
+  it("sin trabajo pendiente (todo a 0) no pinta la línea", () => {
+    renderConProviders(
+      <PanelPresupuesto
+        presupuesto={presupuesto({ marca: "" })}
+        esAdmin
+        estimadoPendiente={{ tokens: 0, coste_usd: 0 }}
+      />,
+    );
+    expect(screen.queryByText(/Trabajo pendiente/i)).not.toBeInTheDocument();
+  });
+});
+
 // Dial de ritmo: la palanca protagonista del panel. El global siempre; el de la marca cuando hay
 // marca activa. Al pulsar un nivel escribe la clave de ajuste correcta con `guardarAjuste`.
 describe("PanelPresupuesto · dial de ritmo", () => {

@@ -267,6 +267,9 @@ export function etapasDeItem(run: Pipeline): PipelineEtapa[] {
  *  tarjeta es clicable (abre su detalle) salvo que no haya detalle que abrir (`onAbrir` null). */
 function FilaPipeline({ run, onAbrir }: { run: Pipeline; onAbrir: ((run: Pipeline) => void) | null }) {
   const esActividad = run.clase === "actividad";
+  // Tema FUTURO: pipeline aún sin trabajar. Se atenúa y se rotula «En cola» para leerlo como
+  // algo que todavía no ha corrido, al final del feed.
+  const esFuturo = run.futuro === true;
   return (
     <Card
       role={onAbrir ? "button" : undefined}
@@ -281,6 +284,7 @@ function FilaPipeline({ run, onAbrir }: { run: Pipeline; onAbrir: ((run: Pipelin
       className={cn(
         "transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         onAbrir && "cursor-pointer hover:border-keni-300",
+        esFuturo && "opacity-60",
       )}
     >
       <CardContent className="flex items-center gap-3 p-4">
@@ -291,6 +295,16 @@ function FilaPipeline({ run, onAbrir }: { run: Pipeline; onAbrir: ((run: Pipelin
               <Badge variant="secondary" className="shrink-0 gap-1 text-[10px]" title="Trabajo manual">
                 <Sparkles className="h-2.5 w-2.5" aria-hidden="true" />
                 {etiquetaTipoGeneracion(run.tipo || "")}
+              </Badge>
+            )}
+            {esFuturo && (
+              <Badge
+                variant="secondary"
+                className="shrink-0 gap-1 text-[10px] text-muted-foreground"
+                title="Tema del tablero aún sin trabajar: el pipeline no ha corrido"
+              >
+                <Clock className="h-2.5 w-2.5" aria-hidden="true" />
+                En cola
               </Badge>
             )}
             <ChipEstado estado={run.estado_global} />

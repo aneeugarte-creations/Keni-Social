@@ -19,7 +19,6 @@ import { api, ApiError } from "@/lib/api";
 import { numeroCompleto } from "@/lib/formato";
 import { etiquetaTipoGeneracion } from "@/lib/generaciones";
 import { INTERVALO_SERIE_MS } from "@/lib/refresco";
-import { TablaBacklog } from "@/pages/maquina/cola-comun";
 import type { Pipeline, RespuestaPipelines } from "@/types";
 
 import { ESTADOS_FILTRO, ETAPAS_FILTRO, FilaPipeline } from "./Pipelines";
@@ -71,18 +70,12 @@ export default function Produccion() {
     placeholderData: (prev) => prev, // no parpadea al «Cargar más» ni al cambiar de filtro
   });
 
-  // Embalse del tablero por marca×etapa: el contexto del flujo que esta página traza (foto
-  // completa sin filtro, la misma del Monitor/Cómputo).
-  const backlog = useQuery({
-    queryKey: ["produccion", "backlog"],
-    queryFn: ({ signal }) => api.produccionBacklog(signal),
-    refetchInterval: INTERVALO_SERIE_MS,
-  });
-
   const datos = listaQuery.data as RespuestaPipelines | undefined;
   const items = datos?.pipelines ?? [];
   const total = datos?.paginacion?.total ?? items.length;
   const hayFiltro = !!(etapa || estado || tipo);
+  // Temas FUTUROS (pipelines sin trabajar) que no caben en el cap de 30: «+N más en cola» al final.
+  const futurosOcultos = Math.max(0, (datos?.futuros_total ?? 0) - (datos?.futuros_mostrados ?? 0));
 
   // Catálogo de tipos para el filtro: se deriva del PROPIO feed (los trabajos sueltos traen
   // `tipo`), una sola fuente y una petición menos.
@@ -119,9 +112,6 @@ export default function Produccion() {
     <div className="space-y-6">
       {/* El título lo pinta la tira de pestañas del hub (Actividad). La lista se auto-refresca
           (INTERVALO_SERIE_MS), así que no hay acción manual de recarga. */}
-      {/* Embalse del tablero: el contexto del flujo que esta traza recorre — qué se acumula ANTES
-          de la cola de jobs. Sin filtro de marca (foto completa, como el endpoint). */}
-      {backlog.data && <TablaBacklog backlog={backlog.data} />}
       {/* Filtros del feed: etapa (runs), estado (todo), tipo (trabajos sueltos). */}
       <div className="flex flex-wrap items-center gap-2">
         <Select value={etapa || "todas"} onValueChange={(v) => setEtapa(v === "todas" ? "" : v)}>
@@ -227,6 +217,12 @@ export default function Produccion() {
                   : `Cargar más (${items.length} de ${total})`}
               </Button>
             </div>
+          )}
+          {/* Cola de futuros: los temas sin trabajar que no caben en el cap se resumen al final. */}
+          {futurosOcultos > 0 && (
+            <p className="pt-1 text-center text-xs text-muted-foreground">
+              +{numeroCompleto(futurosOcultos)} más en cola
+            </p>
           )}
         </>
       )}

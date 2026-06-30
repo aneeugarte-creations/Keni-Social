@@ -38,11 +38,10 @@ import {
   slugFase,
   tieneContenido,
 } from "@/pages/maquina/fases";
-import { TablaBacklog } from "@/pages/maquina/cola-comun";
 import { SeccionCadenaAprobacion } from "@/pages/maquina/SeccionCadenaAprobacion";
 import { ServiciosMaquina } from "@/pages/maquina/ServiciosMaquina";
 import { FilaFasePipeline, type FasePipeline } from "@/pages/monitor/PanelPipeline";
-import type { AjusteAdmin, ColaJob } from "@/types";
+import type { AjusteAdmin, BacklogEtapas, ColaJob } from "@/types";
 
 type TipoEtapa = "CRITICA" | "OPCIONAL";
 
@@ -71,6 +70,35 @@ function contarPorCola(jobs: ColaJob[]): Record<string, number> {
     if (e) c[e] = (c[e] ?? 0) + 1;
   }
   return c;
+}
+
+/** Etapa de la matriz (por `nombre`) → la etapa del EMBALSE del tablero que se acumula esperándola.
+ *  Pone el conteo del backlog pegado a su toggle, para ver cuántas piezas gobierna cada switch.
+ *  `acento` realza Redactar: ahí espera la avalancha de temas sin copy (`esperando_copy`). */
+const ETAPA_A_BACKLOG: Record<string, { clave: keyof BacklogEtapas; acento?: boolean }> = {
+  Admitir: { clave: "pool_sin_admitir" },
+  Verificar: { clave: "pipeline_en_proceso" },
+  Redactar: { clave: "esperando_copy", acento: true },
+  Ilustrar: { clave: "generando_arte" },
+};
+
+/** Contador del backlog pegado al toggle de una etapa: cuántas piezas esperan en ella. Nada si 0.
+ *  Realza en ámbar la etapa con la avalancha (Redactar / `esperando_copy`). */
+function EsperaEtapa({ n, acento }: { n: number; acento?: boolean }) {
+  if (n <= 0) return null;
+  return (
+    <span
+      className={cn(
+        "rounded px-1.5 py-0.5 text-xs tabular-nums",
+        acento
+          ? "bg-amber-50 font-semibold text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+          : "bg-muted text-muted-foreground",
+      )}
+      title={`${n} piezas esperan en esta etapa`}
+    >
+      {n} en espera
+    </span>
+  );
 }
 
 interface Fase {
@@ -228,12 +256,31 @@ export function PipelineUnificado({
   }, [preview.data]);
 
   // Embalse del tablero por marca×etapa: QUÉ hay esperando en cada etapa que gobiernan estos
-  // toggles (la foto completa sin filtro, la misma del Monitor).
+  // toggles. Su conteo se integra pegado al toggle de cada etapa (no en una tabla aparte).
   const backlog = useQuery({
     queryKey: ["produccion", "backlog"],
     queryFn: ({ signal }) => api.produccionBacklog(signal),
     refetchInterval: INTERVALO_VIVO_MS,
   });
+  const backlogPorMarca = React.useMemo(() => {
+    const m = new Map<string, BacklogEtapas>();
+    for (const b of backlog.data?.marcas ?? []) m.set(b.marca, b.etapas);
+    return m;
+  }, [backlog.data]);
+  // Suma del backlog de TODAS las marcas (la matriz «Todas» muestra el agregado por etapa).
+  const backlogTotal = React.useMemo(() => {
+    const t: BacklogEtapas = {
+      pool_sin_admitir: 0,
+      pipeline_en_proceso: 0,
+      esperando_copy: 0,
+      generando_copy: 0,
+      generando_arte: 0,
+      lista_para_revisar: 0,
+    };
+    for (const b of backlog.data?.marcas ?? [])
+      for (const k of Object.keys(t) as (keyof BacklogEtapas)[]) t[k] += b.etapas[k];
+    return t;
+  }, [backlog.data]);
 
   // Encender Redactar de una marca con piezas en espera pide confirmación (un ON descarga la cola).
   const guardarRedactar = async (
@@ -311,6 +358,17 @@ export function PipelineUnificado({
         · {esperando[etapa.queue] ?? 0} en cola
       </span>
     ) : null;
+    // Embalse pegado al toggle: cuántas piezas esperan en esta etapa. Con marca activa, las suyas;
+    // en la matriz «Todas», la suma de todas las marcas.
+    const mapeo = ETAPA_A_BACKLOG[etapa.nombre];
+    const espera = mapeo
+      ? {
+          n: marcaActiva
+            ? backlogPorMarca.get(marcaActiva)?.[mapeo.clave] ?? 0
+            : backlogTotal[mapeo.clave],
+          acento: mapeo.acento,
+        }
+      : null;
     let control: React.ReactNode = null;
     if (esAdmin && etapa.clave) {
       const claveBase = etapa.clave;
@@ -396,10 +454,11 @@ export function PipelineUnificado({
           <Settings2 className="h-4 w-4" aria-hidden="true" />
         </button>
       ) : null;
-    if (!conteos && !control && !tuning) return null;
+    if (!conteos && !control && !tuning && !espera?.n) return null;
     return (
       <div className="flex shrink-0 items-center gap-3">
         {conteos}
+        {espera && <EsperaEtapa n={espera.n} acento={espera.acento} />}
         {tuning}
         {control}
       </div>
@@ -432,11 +491,6 @@ export function PipelineUnificado({
           </div>
         </section>
       )}
-
-      {/* Embalse del tablero: qué hay esperando en cada etapa que gobiernan estos toggles. Sobre
-          la matriz, para leer el embudo antes de operar los switches. Sin filtro de marca (foto
-          completa, como el endpoint). */}
-      {backlog.data && <TablaBacklog backlog={backlog.data} />}
 
       {/* Direction hint */}
       <p className="text-xs font-medium text-muted-foreground">FUENTE → FEED</p>

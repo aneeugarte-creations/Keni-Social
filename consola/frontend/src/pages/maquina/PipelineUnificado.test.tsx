@@ -3,7 +3,7 @@
  * y la cascada de críticas (una CRÍTICA apagada oscurece todo lo que sigue).
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -169,7 +169,7 @@ describe("PipelineUnificado", () => {
     expect(screen.getByText("Publicar")).toBeInTheDocument();
   });
 
-  it("monta el embudo del backlog (embalse del tablero) sobre el pipeline", async () => {
+  it("integra el conteo del backlog pegado a cada etapa, sin el embudo suelto", async () => {
     mockBacklog.mockResolvedValue({
       marcas: [
         {
@@ -184,16 +184,18 @@ describe("PipelineUnificado", () => {
             lista_para_revisar: 2,
           },
           total: 11,
+          estimado: { tokens: 0, coste_usd: 0 },
         },
       ],
+      estimado_total: { tokens: 0, coste_usd: 0 },
     });
     renderPipeline({ esAdmin: false });
+    // El embudo (la tabla suelta) ya NO se monta aquí.
     expect(
-      await screen.findByText("Embalse del tablero (antes de la cola)"),
-    ).toBeInTheDocument();
-    const fila = (await screen.findByText("UnoTV")).closest("tr");
-    expect(within(fila as HTMLElement).getByText("9")).toBeInTheDocument();
-    expect(within(fila as HTMLElement).getByText("11")).toBeInTheDocument();
+      screen.queryByText("Embalse del tablero (antes de la cola)"),
+    ).not.toBeInTheDocument();
+    // En su lugar, el conteo por etapa va pegado al toggle: Redactar resalta `esperando_copy` (9).
+    expect(await screen.findByText("9 en espera")).toBeInTheDocument();
   });
 
   it("Avance y Programar NO se pintan como etapas (corren siempre; no son operables)", () => {

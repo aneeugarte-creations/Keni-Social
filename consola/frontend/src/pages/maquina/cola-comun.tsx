@@ -48,6 +48,7 @@ import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
 import { PROC_META } from "@/pages/monitor/comun";
 import type {
   Backlog,
+  BacklogEstimado,
   BacklogEtapas,
   ColaDesglose,
   ColaJob,
@@ -895,11 +896,15 @@ export function PanelPresupuesto({
   presupuesto,
   esAdmin,
   nombreMarca,
+  estimadoPendiente,
 }: {
   presupuesto: PresupuestoIA;
   esAdmin: boolean;
   /** Nombre legible de la marca activa (solo para la cabecera); ausente = vista global. */
   nombreMarca?: string;
+  /** Coste estimado de vaciar el backlog del ámbito (la marca activa o el total): cuánto costará
+   *  generar lo que aún espera. Se muestra junto al gasto. Ausente = no se pinta esa línea. */
+  estimadoPendiente?: BacklogEstimado;
 }) {
   const guardar = useGuardarAjuste();
   const marca = presupuesto.marca || "";
@@ -1017,6 +1022,14 @@ export function PanelPresupuesto({
               {conCapUsd && pctProyectado != null && ` · ${pctProyectado.toFixed(0)}% del tope`}
             </span>
           </div>
+        )}
+        {/* Trabajo pendiente: lo que costará GENERAR el backlog que aún espera (no lo gastado hoy).
+            Sigue el ámbito de marca (su estimado o el total). */}
+        {estimadoPendiente && (estimadoPendiente.tokens > 0 || estimadoPendiente.coste_usd > 0) && (
+          <p className="text-xs text-muted-foreground tabular-nums">
+            Trabajo pendiente: ~{numeroCompacto(estimadoPendiente.tokens)} tokens ·{" "}
+            {costeUsd(estimadoPendiente.coste_usd)} estimado
+          </p>
         )}
         {/* Dos motores lado a lado (apilan en móvil): tokens IN/OUT con su tope por dirección,
             editable por admin. El tope es del ÁMBITO: global en "todas", propio de la marca cuando

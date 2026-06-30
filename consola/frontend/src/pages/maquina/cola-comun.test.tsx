@@ -28,6 +28,7 @@ const BACKLOG: Backlog = {
         lista_para_revisar: 5,
       },
       total: 615,
+      estimado: { tokens: 1_200_000, coste_usd: 4.2 },
     },
     {
       marca: "unotv",
@@ -41,8 +42,10 @@ const BACKLOG: Backlog = {
         lista_para_revisar: 0,
       },
       total: 0,
+      estimado: { tokens: 0, coste_usd: 0 },
     },
   ],
+  estimado_total: { tokens: 1_200_000, coste_usd: 4.2 },
 };
 
 describe("TablaBacklog", () => {
