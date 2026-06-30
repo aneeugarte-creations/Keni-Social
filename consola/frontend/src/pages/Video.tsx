@@ -439,6 +439,11 @@ export default function Video() {
   // primer cambio, se muestra un aviso claro y se desactiva la edición hasta elegir marca.
   const sinMarca = !marca;
 
+  // Reloj del player COMPARTIDO entre el lienzo (centro) y el timeline (dock inferior a todo el
+  // ancho): el preview alimenta `tiempoSeg`; el timeline busca vía `playerRef.buscarA`.
+  const playerRef = React.useRef<PreviewPlayerHandle>(null);
+  const [tiempoSeg, setTiempoSeg] = React.useState(0);
+
   return (
     // FULL-BLEED (mismo patrón que Imagen.tsx): anula el padding del `<main>` del shell para
     // ocupar exactamente el alto bajo la cabecera (h-12 = 3rem). `overflow-hidden` aquí: la
@@ -607,7 +612,8 @@ export default function Video() {
           ) : (
             // Resto de secciones: panel contextual (controles inline) + LIENZO ÚNICO centrado
             // (formato in-place arriba) + timeline multipista debajo.
-            <div className="flex h-full min-h-0">
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="flex min-h-0 flex-1">
               <aside className="w-[300px] shrink-0 overflow-y-auto border-r border-border p-4">
                 {seccion === "base" && (
                   <PistaBase
@@ -678,31 +684,48 @@ export default function Video() {
                     </span>
                   )}
                 </div>
-                <div className="flex min-h-0 flex-1 flex-col bg-muted/30 p-4">
-                  <PreviewConTimeline
+                {/* LIENZO central: el preview ocupa todo el espacio (fit por defecto). */}
+                <div className="flex min-h-0 flex-1 bg-muted/30 p-3">
+                  <PreviewComposicion
                     doc={doc}
                     baseUrl={baseUrl}
                     pipUrl={pipUrl}
                     segmentos={segmentos}
-                    edicionDeshabilitada={sinMarca}
-                    onTrim={(idx, inMs, outMs) =>
-                      mutar((d) => setRecorteBase(d, inMs, outMs, undefined, idx))
-                    }
-                    onDividir={(idx, msLocal) => mutar((d) => dividirClipBase(d, idx, msLocal))}
-                    onQuitarSegmento={(idx) => mutar((d) => quitarSegmentoBase(d, idx))}
-                    onMoverSegmento={(idx, dest) => mutar((d) => moverSegmentoBase(d, idx, dest))}
-                    onAudioBase={(c) => mutar((d) => setAudioBase(d, c))}
-                    onAnadirMusica={pedirMusica}
-                    onVolumenMusica={(c) => mutar((d) => setVolumenMusica(d, c))}
-                    onQuitarMusica={quitarMusicaLocal}
+                    playerRef={playerRef}
+                    onTiempo={setTiempoSeg}
                     pipEditable={seccion === "pip" && !sinMarca}
                     onCajaPip={onCajaPip}
                     reframeEditable={seccion === "base" && !sinMarca}
                     onFoco={(foco) => mutar((d) => setReencuadreBase(d, { foco }))}
+                    conEncuadre
                   />
                 </div>
               </div>
             </div>
+
+            {/* TIMELINE a TODO EL ANCHO, abajo (dock estilo editor de vídeo). */}
+            {baseUrl && (
+              <div className="min-w-0 shrink-0 border-t border-border bg-background px-3 py-2">
+                <TimelineMultipista
+                  doc={doc}
+                  tiempoSeg={tiempoSeg}
+                  onSeek={(s) => playerRef.current?.buscarA(s)}
+                  onTrimSegmento={(idx, inMs, outMs) =>
+                    mutar((d) => setRecorteBase(d, inMs, outMs, undefined, idx))
+                  }
+                  onDividirSegmento={(idx, msLocal) => mutar((d) => dividirClipBase(d, idx, msLocal))}
+                  onQuitarSegmento={(idx) => mutar((d) => quitarSegmentoBase(d, idx))}
+                  onMoverSegmento={(idx, dest) => mutar((d) => moverSegmentoBase(d, idx, dest))}
+                  onAudioBase={(c) => mutar((d) => setAudioBase(d, c))}
+                  onAnadirMusica={pedirMusica}
+                  onVolumenMusica={(c) => mutar((d) => setVolumenMusica(d, c))}
+                  onQuitarMusica={quitarMusicaLocal}
+                  segmentos={segmentos}
+                  disabled={sinMarca}
+                />
+              </div>
+            )}
+          </div>
           )}
         </div>
       </div>
@@ -716,89 +739,6 @@ export default function Video() {
         className="hidden"
         aria-label="Subir música"
       />
-    </div>
-  );
-}
-
-/**
- * Vista previa + LÍNEA DE TIEMPO con el reloj del player COMPARTIDO. Vive como componente
- * propio para que el tick de reproducción (60 fps vía `onTiempo`) re-renderice SOLO esta
- * columna y no toda la página (el editor de capas Konva de Overlay es caro). El playhead es
- * bidireccional: el player alimenta `tiempoSeg` y el timeline busca vía `playerRef.buscarA`.
- */
-function PreviewConTimeline({
-  doc,
-  baseUrl,
-  pipUrl,
-  segmentos,
-  edicionDeshabilitada,
-  onTrim,
-  onDividir,
-  onQuitarSegmento,
-  onMoverSegmento,
-  onAudioBase,
-  onAnadirMusica,
-  onVolumenMusica,
-  onQuitarMusica,
-  pipEditable,
-  onCajaPip,
-  reframeEditable,
-  onFoco,
-}: {
-  doc: ComposicionVideo;
-  baseUrl: string;
-  pipUrl: string;
-  segmentos: SegmentoSub[];
-  edicionDeshabilitada: boolean;
-  onTrim: (idx: number, inMs: number, outMs: number) => void;
-  onDividir: (idx: number, msLocal: number) => void;
-  onQuitarSegmento: (idx: number) => void;
-  onMoverSegmento: (idx: number, destino: number) => void;
-  onAudioBase: (cambios: { volumen?: number; silenciar?: boolean }) => void;
-  onAnadirMusica: () => void;
-  onVolumenMusica: (cambios: { volumen?: number; silenciar?: boolean }) => void;
-  onQuitarMusica: () => void;
-  pipEditable: boolean;
-  onCajaPip: (caja: { x?: number; y?: number; w?: number; h?: number }) => void;
-  reframeEditable: boolean;
-  onFoco: (foco: [number, number]) => void;
-}) {
-  const playerRef = React.useRef<PreviewPlayerHandle>(null);
-  const [tiempoSeg, setTiempoSeg] = React.useState(0);
-  return (
-    <div className="flex min-h-0 w-full flex-1 flex-col gap-3">
-      <PreviewComposicion
-        doc={doc}
-        baseUrl={baseUrl}
-        pipUrl={pipUrl}
-        segmentos={segmentos}
-        playerRef={playerRef}
-        onTiempo={setTiempoSeg}
-        pipEditable={pipEditable}
-        onCajaPip={onCajaPip}
-        reframeEditable={reframeEditable}
-        onFoco={onFoco}
-        conEncuadre
-      />
-      {baseUrl ? (
-        <div className="mx-auto w-full max-w-3xl shrink-0">
-          <TimelineMultipista
-            doc={doc}
-            tiempoSeg={tiempoSeg}
-            onSeek={(s) => playerRef.current?.buscarA(s)}
-            onTrimSegmento={onTrim}
-            onDividirSegmento={onDividir}
-            onQuitarSegmento={onQuitarSegmento}
-            onMoverSegmento={onMoverSegmento}
-            onAudioBase={onAudioBase}
-            onAnadirMusica={onAnadirMusica}
-            onVolumenMusica={onVolumenMusica}
-            onQuitarMusica={onQuitarMusica}
-            segmentos={segmentos}
-            disabled={edicionDeshabilitada}
-          />
-        </div>
-      ) : null}
     </div>
   );
 }
