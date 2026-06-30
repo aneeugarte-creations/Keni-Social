@@ -22,8 +22,10 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { nuevaCapaImagen, nuevaCapaTexto } from "@/editor/documento";
 import {
   composicionVacia,
+  setCapasOverlay,
   setClipBase,
   setClipPip,
   setRecorteBase,
@@ -401,5 +403,24 @@ describe("PreviewComposicion (PiP editable)", () => {
     // Una tecla ajena no commitea nada.
     fireEvent.keyDown(caja, { key: "Enter" });
     expect(onCajaPip).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("PreviewComposicion · capas de overlay (render fiel en DOM)", () => {
+  it("pinta el texto del overlay con su color y SIN caja amarilla de marcador", () => {
+    const capa = nuevaCapaTexto({ texto: "TITULAR", color: "#ffffff", x: 100, y: 200, w: 800, h: 200 });
+    const doc = setCapasOverlay(docConBase(), [capa]);
+    const { container } = render(<PreviewComposicion doc={doc} baseUrl="videos/abc.mp4" />);
+    // El texto real aparece (no el placeholder «Texto»).
+    expect(screen.getByText("TITULAR")).toBeInTheDocument();
+    // Ya no hay cajas de marcador ámbar punteadas.
+    expect(container.querySelector(".border-amber-300\\/70")).toBeNull();
+  });
+
+  it("pinta una imagen de overlay como <img> real (no una caja)", () => {
+    const capa = nuevaCapaImagen("media/logo.png", { x: 0, y: 0, w: 200, h: 200 });
+    const doc = setCapasOverlay(docConBase(), [capa]);
+    const { container } = render(<PreviewComposicion doc={doc} baseUrl="videos/abc.mp4" />);
+    expect(container.querySelector('img[src*="logo.png"]')).not.toBeNull();
   });
 });

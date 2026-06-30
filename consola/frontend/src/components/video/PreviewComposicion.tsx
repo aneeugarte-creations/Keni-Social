@@ -37,6 +37,7 @@
 import { Pause, Play } from "lucide-react";
 import * as React from "react";
 
+import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaTexto } from "@/editor/documento";
 import { urlMedia } from "@/lib/api";
 import {
   formatearDuracionMs,
@@ -571,34 +572,12 @@ export function PreviewComposicion({
           </div>
         )}
 
-        {/* Capas overlay (aproximación: cajas con etiqueta) */}
+        {/* Capas overlay: aproximación FIEL en DOM (texto/imagen/logo/marco), no cajas amarillas.
+            El render fiel pixel-a-pixel es el del servidor; esto encuadra y revisa en movimiento. */}
         {overlay?.capas
           .filter((c) => c.visible !== false)
           .map((c) => (
-            <div
-              key={c.id}
-              className="absolute border border-dashed border-amber-300/70"
-              style={{
-                left: c.x * escala,
-                top: c.y * escala,
-                width: c.w * escala,
-                height: c.h * escala,
-                opacity: c.opacidad ?? 1,
-                transform: c.rotacion ? `rotate(${c.rotacion}deg)` : undefined,
-                background:
-                  c.tipo === "texto" ? "transparent" : "color-mix(in srgb, #fbbf24 12%, transparent)",
-              }}
-              title={c.nombre ?? c.tipo}
-            >
-              {c.tipo === "texto" && "texto" in c && (
-                <span
-                  className="block truncate px-0.5 text-amber-100"
-                  style={{ fontSize: Math.max(8, ((c as { tamano?: number }).tamano ?? 32) * escala) }}
-                >
-                  {(c as { texto?: string }).texto || "Texto"}
-                </span>
-              )}
-            </div>
+            <CapaOverlayDOM key={c.id} capa={c} escala={escala} />
           ))}
 
         {/* Ventana PiP. Con `pipEditable` es un objeto manipulable estilo Canva: arrastrar
@@ -797,4 +776,140 @@ export function PreviewComposicion({
       </p>
     </div>
   );
+}
+
+/**
+ * Render APROXIMADO en DOM de una capa de overlay sobre el vídeo (texto/imagen/logo/marco/grupo).
+ * No es pixel-a-pixel (eso es el render del servidor): degrada degradados/formas complejas a
+ * sólido, pero muestra el texto y las imágenes FIELES (color/fuente/tamaño/imagen real) en vez de
+ * cajas de marcador. El hueco de foto vacío no se pinta: lo cubre el vídeo.
+ */
+function CapaOverlayDOM({ capa, escala }: { capa: Capa; escala: number }) {
+  const base: React.CSSProperties = {
+    position: "absolute",
+    left: capa.x * escala,
+    top: capa.y * escala,
+    width: capa.w * escala,
+    height: capa.h * escala,
+    opacity: capa.opacidad ?? 1,
+    transform: capa.rotacion ? `rotate(${capa.rotacion}deg)` : undefined,
+    overflow: "hidden",
+  };
+
+  if (capa.tipo === "texto") {
+    const t = capa as CapaTexto;
+    const justify =
+      t.valign === "arriba" ? "flex-start" : t.valign === "abajo" ? "flex-end" : "center";
+    const items =
+      t.alineacion === "izquierda" ? "flex-start" : t.alineacion === "derecha" ? "flex-end" : "center";
+    const textAlign =
+      t.alineacion === "justificado"
+        ? "justify"
+        : t.alineacion === "izquierda"
+          ? "left"
+          : t.alineacion === "derecha"
+            ? "right"
+            : "center";
+    const decor = [t.subrayado && "underline", t.tachado && "line-through"].filter(Boolean).join(" ");
+    return (
+      <div
+        style={{ ...base, display: "flex", flexDirection: "column", justifyContent: justify, alignItems: items }}
+        title={capa.nombre ?? "texto"}
+      >
+        <div
+          style={{
+            width: "100%",
+            color: t.color,
+            fontFamily: `"${t.familia}", sans-serif`,
+            fontSize: Math.max(6, t.tamano * escala),
+            fontWeight: t.peso,
+            fontStyle: t.cursiva ? "italic" : undefined,
+            lineHeight: t.interlineado || 1.1,
+            letterSpacing: (t.interletra || 0) * escala,
+            textTransform: t.mayusculas ? "uppercase" : undefined,
+            textAlign,
+            textDecoration: decor || undefined,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            WebkitTextStroke: t.contorno
+              ? `${Math.max(0.4, t.contorno.grosor * escala)}px ${t.contorno.color}`
+              : undefined,
+          }}
+        >
+          {t.texto || ""}
+        </div>
+      </div>
+    );
+  }
+
+  if (capa.tipo === "imagen") {
+    const im = capa as CapaImagen;
+    if (!im.objeto) return null; // hueco de foto vacío: lo cubre el vídeo
+    return (
+      <img
+        src={urlMedia(im.objeto)}
+        alt=""
+        style={{
+          ...base,
+          objectFit: im.ajuste === "contain" ? "contain" : "cover",
+          objectPosition: `${(im.foco?.[0] ?? 0.5) * 100}% ${(im.foco?.[1] ?? 0.5) * 100}%`,
+        }}
+      />
+    );
+  }
+
+  if (capa.tipo === "logo") {
+    const lg = capa as CapaLogo;
+    if (lg.tipo_logo === "imagen" && lg.media_id) {
+      return <img src={urlMedia(lg.media_id)} alt="" style={{ ...base, objectFit: "contain" }} />;
+    }
+    const wm = lg.wordmark;
+    return (
+      <div
+        style={{
+          ...base,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: wm.fondo,
+          color: wm.color,
+          fontFamily: `"${wm.familia}", sans-serif`,
+          fontWeight: wm.peso,
+          fontSize: Math.max(6, capa.h * escala * 0.5),
+        }}
+      >
+        {wm.texto}
+      </div>
+    );
+  }
+
+  if (capa.tipo === "marco") {
+    const mc = capa as CapaMarco;
+    return (
+      <div
+        style={{
+          ...base,
+          background: mc.relleno ?? undefined,
+          border: mc.borde ? `${Math.max(0.4, mc.borde.grosor * escala)}px solid ${mc.borde.color}` : undefined,
+          borderRadius: (mc.radio || 0) * escala,
+        }}
+      />
+    );
+  }
+
+  if (capa.tipo === "grupo") {
+    // Grupo: hijos en coordenadas absolutas del documento; se pintan igual que las capas raíz.
+    const hijos = (capa as unknown as { capas?: Capa[] }).capas ?? [];
+    return (
+      <>
+        {hijos
+          .filter((c) => c.visible !== false)
+          .map((c) => (
+            <CapaOverlayDOM key={c.id} capa={c} escala={escala} />
+          ))}
+      </>
+    );
+  }
+
+  return null;
 }
