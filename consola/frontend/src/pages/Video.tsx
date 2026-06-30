@@ -40,6 +40,7 @@ import { PanelAudio } from "@/components/video/PanelAudio";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError, urlMedia } from "@/lib/api";
 import {
+  agregarMarcador,
   cambiarAspecto,
   composicionVacia,
   dividirClipBase,
@@ -48,6 +49,7 @@ import {
   pistaBase,
   pistaPip,
   pistaSubtitulos,
+  quitarMarcador,
   quitarMusica,
   quitarPip,
   quitarSegmentoBase,
@@ -56,8 +58,10 @@ import {
   setCapasOverlay,
   setClipBase,
   setClipPip,
+  setFadeMusica,
   setMusica,
   setRecorteBase,
+  setRecortePip,
   setReencuadreBase,
   setVolumenMusica,
   tituloBorradorPorDefecto,
@@ -720,6 +724,11 @@ export default function Video() {
                   onAnadirMusica={pedirMusica}
                   onVolumenMusica={(c) => mutar((d) => setVolumenMusica(d, c))}
                   onQuitarMusica={quitarMusicaLocal}
+                  onTrimPip={(inMs, outMs) => mutar((d) => setRecortePip(d, inMs, outMs))}
+                  onFadeMusica={(c) => mutar((d) => setFadeMusica(d, c))}
+                  onAgregarMarcador={(ms, et) => mutar((d) => agregarMarcador(d, ms, et))}
+                  onQuitarMarcador={(id) => mutar((d) => quitarMarcador(d, id))}
+                  baseUrl={baseUrl}
                   segmentos={segmentos}
                   disabled={sinMarca}
                 />

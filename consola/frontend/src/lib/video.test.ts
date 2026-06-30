@@ -17,8 +17,13 @@ import {
   duracionBaseMs,
   formatearDuracionMs,
   formatearTiempo,
+  agregarMarcador,
   fuenteASalidaMs,
+  marcadores,
+  quitarMarcador,
   salidaAFuenteMs,
+  setFadeMusica,
+  setRecortePip,
   MIN_RECORTE_MS,
   moverSegmentoBase,
   normalizarSegmentos,
@@ -376,5 +381,38 @@ describe("conversión tiempo salida ↔ fuente (player)", () => {
     expect(salidaAFuenteMs(doc, 12000)).toEqual({ idx: 1, fuenteMs: 12000 });
     // vuelta: segmento 1, fuente 12 s → salida 12 s
     expect(fuenteASalidaMs(doc, 1, 12000)).toBe(12000);
+  });
+});
+
+describe("batch2: PiP trim, fades de música y marcadores", () => {
+  const base = () => setClipBase(composicionVacia("9:16"), "v/a.mp4", 30000);
+
+  it("setRecortePip recorta el clip PiP", () => {
+    let doc = setClipPip(base(), "v/p.mp4", 10000);
+    doc = setRecortePip(doc, 2000, 8000, 10000);
+    expect(pistaPip(doc)!.clips[0]).toMatchObject({ recorte_in_ms: 2000, recorte_out_ms: 8000 });
+    // sin clip PiP, devuelve el mismo doc
+    const sinPip = base();
+    expect(setRecortePip(sinPip, 0, 5000)).toBe(sinPip);
+  });
+
+  it("setFadeMusica fija fade in/out del clip de música", () => {
+    let doc = setMusica(base(), "v/m.mp3", 12000);
+    doc = setFadeMusica(doc, { fade_in_ms: 1000, fade_out_ms: 2000 });
+    expect(pistaAudio(doc)!.clips[0]).toMatchObject({ fade_in_ms: 1000, fade_out_ms: 2000 });
+    // sin música no hace nada
+    const sinMus = base();
+    expect(setFadeMusica(sinMus, { fade_in_ms: 1000 })).toBe(sinMus);
+  });
+
+  it("agregarMarcador/quitarMarcador gestionan marcadores ordenados", () => {
+    let doc = agregarMarcador(base(), 5000, "intro");
+    doc = agregarMarcador(doc, 1000);
+    expect(marcadores(doc).map((m) => m.ms)).toEqual([1000, 5000]); // ordenados
+    expect(marcadores(doc)[1].etiqueta).toBe("intro");
+    const id = marcadores(doc)[0].id;
+    doc = quitarMarcador(doc, id);
+    expect(marcadores(doc)).toHaveLength(1);
+    expect(quitarMarcador(doc, "noexiste")).toBe(doc);
   });
 });

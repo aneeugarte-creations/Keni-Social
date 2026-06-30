@@ -84,6 +84,10 @@ Notas del contrato:
   pista `pip` usa un único clip. `duracion_ms` = suma de los segmentos tras su recorte.
 - **Audio**: `volumen` (0..1) y `silenciar` por clip controlan su sonido. El audio del clip `base`
   se mezcla con los clips de la pista `audio` (música) vía `amix`; `offset_ms` posiciona la música.
+  Los clips de música admiten `fade_in_ms`/`fade_out_ms` (fundidos, el render los aplica con `afade`).
+- **PiP**: su clip admite `recorte_in_ms`/`recorte_out_ms` (trim propio, igual que el base).
+- **Marcadores**: `marcadores: [{id, ms, etiqueta?}]` a nivel de composición (en tiempo de SALIDA),
+  para sincronizar cortes/revisiones; no afectan al render.
 - `media_id` es una **clave de media** (`videos/<sha>.mp4`), no una URL.
 - El validador de la BASE comprueba **solo la forma del sobre** (formato w/h enteros > 0;
   `pistas` lista; cada pista con `id` único + `tipo` ∈ `{video, overlay, subtitulos, audio}`);

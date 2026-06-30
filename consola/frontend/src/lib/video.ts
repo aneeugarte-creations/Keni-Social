@@ -113,6 +113,10 @@ export interface ClipAudio {
   volumen?: number;
   /** Silencia este clip de audio. */
   silenciar?: boolean;
+  /** Fundido de ENTRADA (ms): el volumen sube de 0 a `volumen` en este tiempo. Ausente = 0. */
+  fade_in_ms?: number;
+  /** Fundido de SALIDA (ms): el volumen baja a 0 en los últimos `fade_out_ms`. Ausente = 0. */
+  fade_out_ms?: number;
 }
 
 /** Pista de AUDIO independiente: música u otras fuentes que el render mezcla (`amix`). */
@@ -154,12 +158,21 @@ export interface FormatoComposicion {
   preset: string;
 }
 
+/** Marcador en la línea de tiempo (en tiempo de SALIDA), para sincronizar cortes/revisiones. */
+export interface Marcador {
+  id: string;
+  ms: number;
+  etiqueta?: string;
+}
+
 export interface ComposicionVideo {
   version: number;
   marca: string;
   formato: FormatoComposicion;
   duracion_ms: number;
   pistas: PistaComposicion[];
+  /** Marcadores en la línea de tiempo (opcional; documentos v1/v2 pueden no traerlos). */
+  marcadores?: Marcador[];
 }
 
 export const ESTILO_SUBTITULOS_DEFECTO: EstiloSubtitulos = {
@@ -518,6 +531,36 @@ export function quitarPip(doc: ComposicionVideo): ComposicionVideo {
   };
 }
 
+/**
+ * Fija el recorte temporal del clip PiP (`recorte_in_ms`/`recorte_out_ms`), igual que el base
+ * pero para la ventana PiP. Clampa a `[0, maxMs]` con mínimo `MIN_RECORTE_MS`. Sin clip PiP o sin
+ * cambio real devuelve el MISMO objeto (autoguardado por referencia).
+ */
+export function setRecortePip(
+  doc: ComposicionVideo,
+  inMs: number,
+  outMs: number,
+  maxMs?: number,
+): ComposicionVideo {
+  const clip = pistaPip(doc)?.clips[0];
+  if (!clip) return doc;
+  const tope =
+    maxMs && maxMs > 0 ? maxMs : Math.max(clip.recorte_out_ms || 0, clip.fin_ms || 0);
+  if (tope <= 0) return doc;
+  const minDur = Math.min(MIN_RECORTE_MS, tope);
+  const salida = Math.round(Math.min(Math.max(outMs, minDur), tope));
+  const entrada = Math.round(Math.min(Math.max(0, inMs), salida - minDur));
+  if (entrada === clip.recorte_in_ms && salida === clip.recorte_out_ms) return doc;
+  return {
+    ...doc,
+    pistas: doc.pistas.map((p) =>
+      p.tipo === "video" && p.id === "pip"
+        ? { ...p, clips: p.clips.map((c, i) => (i === 0 ? { ...c, recorte_in_ms: entrada, recorte_out_ms: salida } : c)) }
+        : p,
+    ),
+  };
+}
+
 /** Reemplaza las capas de la pista overlay (lo emite el editor de capas). */
 export function setCapasOverlay(doc: ComposicionVideo, capas: Capa[]): ComposicionVideo {
   return {
@@ -619,6 +662,55 @@ export function quitarMusica(doc: ComposicionVideo): ComposicionVideo {
     ...doc,
     pistas: doc.pistas.map((p) => (p.tipo === "audio" ? { ...p, clips: [] } : p)),
   };
+}
+
+/** Fija los fundidos de entrada/salida (ms) del primer clip de música. Sin música, no hace nada. */
+export function setFadeMusica(
+  doc: ComposicionVideo,
+  cambios: { fade_in_ms?: number; fade_out_ms?: number },
+): ComposicionVideo {
+  const pista = pistaAudio(doc);
+  if (!pista || pista.clips.length === 0) return doc;
+  const inn = cambios.fade_in_ms != null ? Math.max(0, Math.round(cambios.fade_in_ms)) : undefined;
+  const out = cambios.fade_out_ms != null ? Math.max(0, Math.round(cambios.fade_out_ms)) : undefined;
+  return {
+    ...doc,
+    pistas: doc.pistas.map((p) =>
+      p.tipo === "audio"
+        ? {
+            ...p,
+            clips: p.clips.map((c, i) =>
+              i === 0
+                ? { ...c, ...(inn != null ? { fade_in_ms: inn } : {}), ...(out != null ? { fade_out_ms: out } : {}) }
+                : c,
+            ),
+          }
+        : p,
+    ),
+  };
+}
+
+// --------------------------------------------------------------------------- #
+// Marcadores de la línea de tiempo (tiempo de SALIDA)                          #
+// --------------------------------------------------------------------------- #
+
+/** Marcadores de la composición (vacío si no trae). */
+export function marcadores(doc: ComposicionVideo): Marcador[] {
+  return doc.marcadores ?? [];
+}
+
+/** Añade un marcador en `ms` (tiempo de salida), ordenado por tiempo. */
+export function agregarMarcador(doc: ComposicionVideo, ms: number, etiqueta?: string): ComposicionVideo {
+  const m: Marcador = { id: nuevoId("m"), ms: Math.max(0, Math.round(ms)), ...(etiqueta ? { etiqueta } : {}) };
+  const lista = [...marcadores(doc), m].sort((a, b) => a.ms - b.ms);
+  return { ...doc, marcadores: lista };
+}
+
+/** Quita el marcador `id`. */
+export function quitarMarcador(doc: ComposicionVideo, id: string): ComposicionVideo {
+  const lista = marcadores(doc);
+  if (!lista.some((m) => m.id === id)) return doc;
+  return { ...doc, marcadores: lista.filter((m) => m.id !== id) };
 }
 
 /** Liga la pista de subtítulos a un `subtitulo_id` y/o cambia su estilo. */

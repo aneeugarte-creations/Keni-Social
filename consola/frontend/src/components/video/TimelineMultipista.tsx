@@ -82,6 +82,16 @@ export interface TimelineMultipistaProps {
   onQuitarMusica?: () => void;
   /** Segmentos de subtítulos (barra fina clicable, en tiempo de salida). */
   segmentos?: SegmentoSub[];
+  /** URL servible del clip base: para extraer THUMBNAILS de frames en el carril de vídeo. */
+  baseUrl?: string;
+  /** Trim del clip PiP (carril PiP editable): `recorte_in_ms`/`recorte_out_ms` en su fuente. */
+  onTrimPip?: (inMs: number, outMs: number) => void;
+  /** Fundidos de la música (carril de música): fade in/out en ms. */
+  onFadeMusica?: (cambios: { fade_in_ms?: number; fade_out_ms?: number }) => void;
+  /** Añadir un marcador en `ms` (tiempo de salida). */
+  onAgregarMarcador?: (ms: number, etiqueta?: string) => void;
+  /** Quitar un marcador por id. */
+  onQuitarMarcador?: (id: string) => void;
   /** Desactiva la edición (el seek sigue activo). */
   disabled?: boolean;
 }
