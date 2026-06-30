@@ -1,18 +1,63 @@
 /**
  * Selector de FORMATO/aspecto del Estudio de Video (9:16 / 1:1 / 16:9).
  *
- * Fija el lienzo de la composición. Selector compacto de solo los números (segmentado),
- * sin rectángulos de muestra: la relación de aspecto se entiende del propio texto.
+ * Fija el lienzo de la composición. Cada opción muestra un icono SVG con la FORMA
+ * proporcional del aspecto (rectángulo vertical, cuadrado, rectángulo horizontal)
+ * para reconocimiento visual inmediato, seguido del texto de la relación.
  */
 import { ASPECTOS_VIDEO, type AspectoVideo } from "@/lib/video";
+
+// Dimensiones del viewBox de cada aspecto. Todos comparten la misma base (16 unidades
+// como máximo) para que el grosor de trazo sea coherente entre los tres iconos.
+const DIMS: Record<AspectoVideo, { vw: number; vh: number }> = {
+  "9:16": { vw: 9, vh: 16 },
+  "1:1":  { vw: 16, vh: 16 },
+  "16:9": { vw: 16, vh: 9 },
+};
+
+const PX_BASE = 18; // dimensión máxima en píxeles para los iconos
+
+function IconoAspecto({ aspecto, activo }: { aspecto: AspectoVideo; activo: boolean }) {
+  const { vw, vh } = DIMS[aspecto];
+  const escala = PX_BASE / Math.max(vw, vh);
+  const pw = Math.round(vw * escala);
+  const ph = Math.round(vh * escala);
+  return (
+    <svg
+      width={pw}
+      height={ph}
+      viewBox={`0 0 ${vw} ${vh}`}
+      aria-hidden="true"
+      className={activo ? "text-primary-foreground" : "text-muted-foreground"}
+    >
+      <rect
+        x="0.5"
+        y="0.5"
+        width={vw - 1}
+        height={vh - 1}
+        rx="0.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1"
+      />
+    </svg>
+  );
+}
 
 export interface SelectorFormatoProps {
   aspecto: AspectoVideo;
   onCambio: (aspecto: AspectoVideo) => void;
   disabled?: boolean;
+  /** Muestra el párrafo de ayuda sobre márgenes punteados. Por defecto `true`. */
+  mostrarAyuda?: boolean;
 }
 
-export function SelectorFormato({ aspecto, onCambio, disabled }: SelectorFormatoProps) {
+export function SelectorFormato({
+  aspecto,
+  onCambio,
+  disabled,
+  mostrarAyuda = true,
+}: SelectorFormatoProps) {
   return (
     <div className="space-y-2">
       <div
@@ -30,20 +75,23 @@ export function SelectorFormato({ aspecto, onCambio, disabled }: SelectorFormato
               aria-checked={activo}
               disabled={disabled}
               onClick={() => onCambio(a)}
-              className={`rounded px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 ${
+              className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 ${
                 activo
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
               }`}
             >
+              <IconoAspecto aspecto={a} activo={activo} />
               {a}
             </button>
           );
         })}
       </div>
-      <p className="text-[11px] text-muted-foreground/70">
-        Mantén contenido en los márgenes punteados
-      </p>
+      {mostrarAyuda && (
+        <p className="text-[11px] text-muted-foreground/70">
+          Mantén contenido en los márgenes punteados
+        </p>
+      )}
     </div>
   );
 }

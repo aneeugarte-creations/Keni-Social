@@ -11,7 +11,7 @@
  * estado de "video adjunto" sale de la pieza ligada (`falta_video`). No publica nada.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Captions, ExternalLink, FilmIcon, PencilLine, Trash2, VideoOff } from "lucide-react";
+import { Captions, Copy, ExternalLink, FilmIcon, PencilLine, Trash2, VideoOff } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -68,6 +68,20 @@ export function GestorComposiciones({ marca, onAbrir }: GestorComposicionesProps
   const eliminar = useMutation({
     mutationFn: (id: string) => api.video.eliminarComposicion(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["video-composiciones", marca] }),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  const duplicar = useMutation({
+    mutationFn: (c: ComposicionResumen) =>
+      api.video.crearComposicion({
+        marca,
+        documento: c.documento,
+        titulo: `${c.titulo?.trim() || c.id} (copia)`,
+        estado: "borrador",
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["video-composiciones", marca] });
+      toast.success("Composición duplicada");
+    },
     onError: (e) => toast.error(mensajeError(e)),
   });
 
@@ -165,6 +179,7 @@ export function GestorComposiciones({ marca, onAbrir }: GestorComposicionesProps
               faltaVideo={c.publicacion_id ? estadoPieza.get(c.publicacion_id)?.faltaVideo : undefined}
               onAbrir={() => onAbrir(c.id)}
               onRenombrar={(titulo) => renombrar.mutate({ id: c.id, titulo })}
+              onDuplicar={() => duplicar.mutate(c)}
               onEliminar={() => eliminar.mutate(c.id)}
               eliminando={eliminar.isPending && eliminar.variables === c.id}
             />
@@ -181,6 +196,7 @@ function TarjetaComposicion({
   faltaVideo,
   onAbrir,
   onRenombrar,
+  onDuplicar,
   onEliminar,
   eliminando,
 }: {
@@ -189,6 +205,7 @@ function TarjetaComposicion({
   faltaVideo: boolean | undefined;
   onAbrir: () => void;
   onRenombrar: (titulo: string) => void;
+  onDuplicar: () => void;
   onEliminar: () => void;
   eliminando: boolean;
 }) {
@@ -245,6 +262,7 @@ function TarjetaComposicion({
   const acciones: EntradaMenuContextual[] = [
     { etiqueta: "Abrir", icono: FilmIcon, onClick: onAbrir },
     { etiqueta: "Renombrar", icono: PencilLine, onClick: iniciarEdicion },
+    { etiqueta: "Duplicar", icono: Copy, onClick: onDuplicar },
     ...(comp.publicacion_id
       ? [
           {

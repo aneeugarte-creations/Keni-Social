@@ -5,7 +5,7 @@
  *  - Refleja si la pieza ligada ya tiene su video o le falta (de `piezas`).
  *  - Clic en la tarjeta = abrir en el editor (onAbrir con el id).
  *  - Clic en el TÍTULO = renombrar inline.
- *  - Eliminar / Renombrar viven en el menú contextual (kebab), no en botones periféricos.
+ *  - Duplicar / Eliminar / Renombrar viven en el menú contextual (kebab), no en botones periféricos.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -219,6 +219,28 @@ describe("GestorComposiciones", () => {
     fireEvent.click(await screen.findByRole("menuitem", { name: /^eliminar$/i }));
     await waitFor(() => expect(confirmar).toHaveBeenCalled());
     expect(eliminar).not.toHaveBeenCalled();
+  });
+
+  it("DUPLICA una composición desde el menú llamando a crearComposicion con título '(copia)'", async () => {
+    vi.spyOn(apiMod.api.video, "listarComposiciones").mockResolvedValue({
+      composiciones: [comp({ id: "comp-dup", titulo: "Mi reel" })],
+    });
+    const crear = vi
+      .spyOn(apiMod.api.video, "crearComposicion")
+      .mockResolvedValue({ id: "comp-dup-copia" });
+    renderGestor();
+    await screen.findByText("Mi reel");
+    abrirMenu();
+    fireEvent.click(await screen.findByRole("menuitem", { name: /duplicar/i }));
+    await waitFor(() =>
+      expect(crear).toHaveBeenCalledWith(
+        expect.objectContaining({
+          documento: comp().documento,
+          titulo: "Mi reel (copia)",
+          estado: "borrador",
+        }),
+      ),
+    );
   });
 
   it("FILTRA por estado (Borradores / Listos)", async () => {
