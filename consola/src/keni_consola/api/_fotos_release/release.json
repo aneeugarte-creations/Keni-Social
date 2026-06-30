@@ -1,9 +1,9 @@
 {
-  "version": "0.7.0",
-  "notes": "El procesado sigue visible aunque cambies de pantalla (banner «Procesando… · Volver»). Nuevo: reprocesar/re-etiquetar una galería, renombrar partidos, zoom en el visor, y «omitir versión» en las actualizaciones.",
+  "version": "0.8.0",
+  "notes": "Modo en vivo más rápido: cada vez que entran fotos, solo se procesan las nuevas (antes se reanalizaban todas en cada pasada).",
   "pub_date": "2026-06-30T00:00:00Z",
   "darwin-aarch64": {
-    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcFFpeTR1QmVmNitUTE1mZWM5U3phU2pHNnBBc2FkZnRyRzhBQ2xiSUYwU2JkOUlyeTNCUEFDc2h3czRUcDRidUp5WllDRnEwOTc2SkllS2pvbTNOa1FJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyODQxMzU5CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6Ck9nTFZrS280MFhaZG90Vjd0RHBxSTkvUStEZGlZQWx4U1FkV21CVlhsYUpScnFBNmpSR2NsUnRIdW9pV1dIVXhlRFRnaUp0MnZvcVc3enVDRzZwL0RBPT0K",
+    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcFFTNE1YY2JvZXRNTWlRMHRPSEZZVm9HZ1NLalUzem1zOVhuekN3RXFjZ3FSYmMybWJTRzlDZk5EOVVQZXQxTm1SajRaZm4zcW52M0JhblZJdERla2d3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyODQ1NDg3CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6Ck5WMnVEWFlmWXFmOWlLemVDeDNrN3NoNjB5RzNveDRpNUV6bFVTRGg0M1BSUzI5bnF6MWpuQXpFZEU4SFV5c0V5WnIzNnk0TllBZTd3MDNpem1kRUNnPT0K",
     "url": "https://social.kenitech.io/api/fotos/updater"
   }
 }
