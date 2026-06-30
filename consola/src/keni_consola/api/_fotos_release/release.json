@@ -1,9 +1,9 @@
 {
-  "version": "0.6.0",
-  "notes": "Búsqueda más rápida, miniaturas más fiables y mejor manejo de varias cámaras con la hora desajustada",
+  "version": "0.7.0",
+  "notes": "El procesado sigue visible aunque cambies de pantalla (banner «Procesando… · Volver»). Nuevo: reprocesar/re-etiquetar una galería, renombrar partidos, zoom en el visor, y «omitir versión» en las actualizaciones.",
   "pub_date": "2026-06-30T00:00:00Z",
   "darwin-aarch64": {
-    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcFQ2VmF0RFJlOVp4Q2xORUlCbDBNQjNsWXc5SFJST1VYanVlMWZsS0tDYzZqZmM4ekU5SVY4Yk1KZGhycjNuTTlQUnFUcmQ3aXprSzF4cldHTnF6UGcwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyODQxMTM4CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6CkQyT2lZWFk5SElvemFweU5GV0loVW5rVGU1dGVXTGJXOFhvNnVvS0FZQ0c1M1haZVdVb01aVTBMbFg1ZEJTV2NPYlJkUC9mOVp1LzYrRHdmVDgyUURBPT0K",
+    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcFFpeTR1QmVmNitUTE1mZWM5U3phU2pHNnBBc2FkZnRyRzhBQ2xiSUYwU2JkOUlyeTNCUEFDc2h3czRUcDRidUp5WllDRnEwOTc2SkllS2pvbTNOa1FJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyODQxMzU5CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6Ck9nTFZrS280MFhaZG90Vjd0RHBxSTkvUStEZGlZQWx4U1FkV21CVlhsYUpScnFBNmpSR2NsUnRIdW9pV1dIVXhlRFRnaUp0MnZvcVc3enVDRzZwL0RBPT0K",
     "url": "https://social.kenitech.io/api/fotos/updater"
   }
 }
