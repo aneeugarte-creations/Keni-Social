@@ -22,7 +22,6 @@ from .scoring import PesosScore, puntuar_detalle
 # pero encolar Verificar+Redactar (`claude -p`, coste real de tokens) exige un umbral MÁS ALTO y
 # EXPLICABLE. Defaults conservadores; editables en caliente desde la consola.
 UMBRAL_MIN_SCORE_DEF = 0.35
-UMBRAL_MIN_MARCA_DEF = 0.2
 
 
 def evaluar_umbral(
@@ -31,7 +30,6 @@ def evaluar_umbral(
     palabras_marca: frozenset[str] = frozenset(),
     pesos: PesosScore | None = None,
     min_score: float = UMBRAL_MIN_SCORE_DEF,
-    min_marca: float = UMBRAL_MIN_MARCA_DEF,
     min_maduracion_min: int = 0,
     ahora: datetime | None = None,
     breaking_peso: float = BREAKING_PESO_DEF,
@@ -51,10 +49,6 @@ def evaluar_umbral(
          `primer_visto` parseable no se retiene (no se castiga un dato ausente).
       3. SCORE: el score RECALCULADO AHORA (no el persistido, que envejece entre re-scores)
          debe alcanzar `min_score`.
-      4. ENCAJE DE MARCA: la relevancia por vocabulario debe alcanzar `min_marca`. Exentas:
-         las historias CURADAS por el equipo (señal artificial de cajón: el humano ya decidió)
-         y las BREAKING CORROBORADAS (evento mayor confirmado por varias fuentes a la vez,
-         cuyo vocabulario puede ser nuevo).
     Devuelve siempre un motivo legible (también al superar): es la explicación que se muestra.
     """
     from ..ingesta import SENAL_CURADO
@@ -94,13 +88,6 @@ def evaluar_umbral(
     )
     if score < min_score:
         return False, f"score {score:.2f} < {min_score:.2f} (umbral de producción)"
-    s_marca = float(desglose["marca"])
-    if s_marca < min_marca:
-        if not curada and not breaking_corroborada:
-            return False, (
-                f"encaje con la marca {s_marca:.2f} < {min_marca:.2f} "
-                "(no casa el vocabulario de la marca)"
-            )
     palabras = ", ".join(desglose["palabras"][:4])
     detalle = f" — casa: {palabras}" if palabras else ""
     return True, f"score {score:.2f} ≥ {min_score:.2f}{detalle}"

@@ -167,28 +167,6 @@ def ingesta_max_items() -> int:
     return _entero(ENV_INGESTA_MAX_ITEMS, INGESTA_MAX_ITEMS_DEF, minimo=1)
 
 
-# FILTRO DE ENTRADA por vocabulario de marca (la puerta del pool). Def OFF: el pool ARCHIVA
-# TODO lo que entra por un feed (el embudo es sin pérdidas al frente; la selección vive en la
-# promoción y en la aprobación humana, no en la puerta). Encenderlo (`KENI_INGESTA_FILTRO=1`)
-# hace que un feed de marca solo archive items que casan >= 1 término de la agenda de esa marca
-# (exentos: feeds PROPIOS, compartidos sin marca, y marcas sin vocabulario). El matching del
-# vocabulario es por token exacto y sin stemming: una variante léxica, un sinónimo o una entidad
-# nueva no casan, y filtrar en la puerta pierde esa cobertura de forma IRREVERSIBLE (no llega ni
-# al pool). Para un medio eso es peor que archivar de más: el umbral de promoción ya contiene el
-# coste. Lo descartado (con el filtro encendido) se CUENTA por sondeo (`ultimo_filtrados`, /salud).
-ENV_INGESTA_FILTRO = "KENI_INGESTA_FILTRO"
-
-
-def ingesta_filtro_activo() -> bool:
-    """True si el filtro de ENTRADA por vocabulario está activo (`KENI_INGESTA_FILTRO`, def OFF).
-
-    Def OFF: se archiva TODO lo que entra por los feeds (sin pérdida de cobertura en la puerta);
-    la precisión vive aguas abajo (umbral de promoción + aprobación humana). `1`/`si`/`on` lo
-    enciende (un feed de marca solo archiva lo que casa su vocabulario).
-    """
-    return _crudo(ENV_INGESTA_FILTRO).lower() in _VERDADEROS
-
-
 # Cadencia por categoría: env var + defecto de cada una (segundos), para el accesor genérico.
 _INGESTA_INTERVALOS: dict[str, tuple[str, int]] = {
     "breaking": (ENV_INGESTA_INTERVALO_BREAKING, INGESTA_INTERVALO_BREAKING_DEF),
@@ -385,7 +363,6 @@ def promover_diversidad_umbral() -> float:
 # historia a tema (que acaba en Verificar+Redactar con `claude -p`: coste real de tokens) exige un umbral
 # más alto y explicable. Defaults en `dominio.agrupar` (capa pura); editables en caliente.
 ENV_PROMOVER_MIN_SCORE = "KENI_PROMOVER_MIN_SCORE"
-ENV_PROMOVER_MIN_MARCA = "KENI_PROMOVER_MIN_MARCA"
 
 
 def promover_min_score() -> float:
@@ -396,28 +373,16 @@ def promover_min_score() -> float:
     return _peso01(ENV_PROMOVER_MIN_SCORE, UMBRAL_MIN_SCORE_DEF)
 
 
-def promover_min_marca() -> float:
-    """Encaje de marca mínimo [0,1] (relevancia por vocabulario) para la producción automática
-    (`KENI_PROMOVER_MIN_MARCA`, def 0.2 ≈ 1 término del vocabulario). `0` desactiva el umbral de
-    marca. Exentas: historias curadas por el equipo y breaking corroboradas (ver
-    `agrupar.evaluar_umbral`). Valor inválido → def."""
-    from .dominio.agrupar import UMBRAL_MIN_MARCA_DEF
-
-    return _peso01(ENV_PROMOVER_MIN_MARCA, UMBRAL_MIN_MARCA_DEF)
-
-
 # --------------------------------------------------------------------------- #
-# Cupos de producción automática (volumen ≈ cadencia real de cada marca)       #
+# Volumen de producción automática (el PLAN EDITORIAL por marca es el gate)     #
 # --------------------------------------------------------------------------- #
 
-# Admitir sin cupo produce al ritmo de Recolectar (cientos de noticias/día → cientos de
+# Admitir sin plan produciría al ritmo de Recolectar (cientos de noticias/día → cientos de
 # temas/día), muy por encima de lo que una marca publica de verdad. El PLAN EDITORIAL DIARIO
-# (`plan_dia`) reparte el objetivo del día en cupos POR CATEGORÍA («lo mejor de cada tipo»,
-# con slots explícitos para breaking); para marcas sin plan, `cupo_dia` pone un techo simple.
+# por marca (`plan_dia`) reparte el objetivo del día en cupos POR CATEGORÍA («lo mejor de cada
+# tipo», con slots explícitos para breaking) Y ES EL GATE: sin plan, la marca no auto-produce.
 ENV_PROMOVER_MADURACION_MIN = "KENI_PROMOVER_MADURACION_MIN"
 PROMOVER_MADURACION_MIN_DEF = 45
-ENV_CUPO_DIA = "KENI_CUPO_DIA"
-CUPO_DIA_DEF = 16
 ENV_PLAN_DIA = "KENI_PLAN_DIA"
 ENV_PLAN_REDES = "KENI_PLAN_REDES"
 
@@ -429,25 +394,6 @@ def promover_maduracion_min() -> int:
     Dedicar este tiempo a "elegir" deja que la corroboración se acumule y que Admitir
     compare historias maduras, no primeras llegadas."""
     return _entero(ENV_PROMOVER_MADURACION_MIN, PROMOVER_MADURACION_MIN_DEF, minimo=0)
-
-
-def _entero_marca(env_flag: str, marca: str, defecto: int, *, minimo: int) -> int:
-    """Entero con override POR MARCA: lee `ENV::marca` y cae a `ENV` (mismo sufijo `::` que
-    los toggles de etapa). El override hereda el valor global si falta o no parsea."""
-    base = _entero(env_flag, defecto, minimo=minimo)
-    if not marca:
-        return base
-    return _entero(f"{env_flag}::{marca}", base, minimo=minimo)
-
-
-def cupo_dia(marca: str = "") -> int:
-    """Máx. temas AUTO-PRODUCIDOS por marca en 24 h móviles (`KENI_CUPO_DIA`, def 16, min 0).
-
-    `0` = sin cupo diario. Override por marca: `KENI_CUPO_DIA::<marca>`. Ventana MÓVIL de
-    24 h (no día calendario): sin efecto frontera a medianoche (UTC ≠ CDMX) y sin ráfaga al
-    cambiar de día. Calibrado con la cadencia real de publicación de la marca (Metricool):
-    cada tema abre ~3 piezas (IG/X/FB), así que cupo_dia≈24 ≈ 70-75 posts/día."""
-    return _entero_marca(ENV_CUPO_DIA, marca, CUPO_DIA_DEF, minimo=0)
 
 
 def parsear_plan(crudo: str) -> dict[str, int]:
@@ -472,20 +418,18 @@ def parsear_plan(crudo: str) -> dict[str, int]:
 
 
 def plan_dia(marca: str = "") -> dict[str, int]:
-    """PLAN EDITORIAL DIARIO de una marca: cupos por CATEGORÍA (`KENI_PLAN_DIA[::marca]`).
+    """PLAN EDITORIAL DIARIO de una marca: cupos por CATEGORÍA (`KENI_PLAN_DIA::marca`).
 
     Formato "categoria:n,…" (p. ej. "mx:4,internacional:4,breaking:2,entretenimiento:2,
-    evergreen:1" = el objetivo diario de UnoTV). Con plan, Admitir llena cada cupo
-    con LAS MEJORES historias de esa categoría (las breaking corroboradas consumen el cupo
-    'breaking' sea cual sea su categoría de feed) y Recolectar salta los feeds de categorías
-    fuera del plan. Categorías sin pool (p. ej. 'evergreen') reservan el hueco para el flujo
-    manual ('evergreen' lo llena su automatismo diario). {} = sin plan (cae al cupo diario
-    global, `cupo_dia`). El override por marca SUSTITUYE al global (no se mezclan)."""
-    if marca:
-        propio = _crudo(f"{ENV_PLAN_DIA}::{marca}")
-        if propio:
-            return parsear_plan(propio)
-    return parsear_plan(_crudo(ENV_PLAN_DIA))
+    evergreen:1" = el objetivo diario de UnoTV). El plan es EL GATE de auto-producción: con
+    plan, Admitir llena cada cupo con LAS MEJORES historias de esa categoría (las breaking
+    corroboradas consumen el cupo 'breaking' sea cual sea su categoría de feed). Categorías sin
+    pool (p. ej. 'evergreen') reservan el hueco para el flujo manual. {} = SIN PLAN = no se
+    auto-produce nada para esa marca. El plan se edita POR MARCA en Programación → «Plan y
+    horarios» (`KENI_PLAN_DIA::marca`); no hay plan global por defecto."""
+    if not marca:
+        return {}
+    return parsear_plan(_crudo(f"{ENV_PLAN_DIA}::{marca}"))
 
 
 def parsear_redes(crudo: str) -> list[str]:
@@ -636,8 +580,8 @@ def fusionar_semantica_activo() -> bool:
     titulares distintos —la formación de clusters solo dedup-ea EXACTO (url canónica o hash de
     título)—, así que va encendida por defecto (en la era de la IA el léxico a medias sobra: o
     apagado o encendido). `KENI_PIPELINE_FUSIONAR=0`/`no`/`off` la apaga. Conservador: ante duda no
-    fusiona. Mismo idiom default-ON que `recolectar`/`verificar` no usan (esos son def OFF); aquí
-    seguimos el patrón de `ingesta_filtro_activo` (vacío → True).
+    fusiona. Idiom default-ON (vacío → True), a diferencia de `recolectar`/`verificar` que son
+    def OFF.
     """
     crudo = _crudo(ENV_PIPELINE_FUSIONAR).lower()
     if not crudo:

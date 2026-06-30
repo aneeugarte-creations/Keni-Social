@@ -43,7 +43,6 @@ __all__ = [
     "clusters_pendientes_verificar",
     "categoria_efectiva",
     "linea_de_cluster",
-    "cupo_produccion_restante",
     "cupos_categoria_restantes",
     "promover_clusters_marca",
     "temas_en_proceso",
@@ -315,9 +314,8 @@ def clusters_para_promover(
 
     UMBRAL de producción automática (`noticias_umbral.evaluar`): promover acaba en verificación+copy
     (`claude -p`: coste real de tokens), así que antes de competir por plaza cada candidata debe
-    superar el umbral — verificación no dudosa, score recalculado ≥ `KENI_PROMOVER_MIN_SCORE` y
-    encaje con el vocabulario de la marca ≥ `KENI_PROMOVER_MIN_MARCA` (exentas las curadas por
-    el equipo y las breaking corroboradas). La FUENTE PROPIA se OMITE aquí: la admite el canal
+    superar el umbral — verificación no dudosa y score recalculado ≥ `KENI_PROMOVER_MIN_SCORE`.
+    La FUENTE PROPIA se OMITE aquí: la admite el canal
     Portal aparte (directo, sin umbral ni verificación). Las que no lo superan se quedan `nuevo` en el pool
     (visibles en el panel con su motivo; el humano puede usarlas a mano y la caducidad las
     expira sola). Se loguea cuántas quedaron bajo el umbral: la verificación es auditable.
@@ -920,37 +918,6 @@ def temas_en_proceso(marca: str) -> int:
     item que entra se completa antes de meter nuevos). Best-effort: 0 ante cualquier fallo.
     """
     return len(_temas_en_proceso_de(marca))
-
-
-def cupo_produccion_restante(
-    marca: str, *, ahora: datetime | None = None
-) -> int | None:
-    """Plazas de ADMISIÓN que le quedan a `marca` por su cupo diario simple; None = sin cupo.
-
-    Solo aplica a marcas SIN plan editorial (`config.plan_dia`): un techo de temas
-    auto-producidos en la JORNADA MX (parrilla del día, desde la medianoche de México, NO
-    una ventana móvil de 24 h) — `KENI_CUPO_DIA`, cuenta temas `origen=pipeline` por
-    `creado`. Con plan, el volumen lo gobiernan los cupos POR CATEGORÍA
-    (`cupos_categoria_restantes`). `None` = cupo desactivado (0): la admisión queda solo con
-    el gate serial en curso. FAIL-CLOSED ante un contador ilegible: promover gasta tokens,
-    así que sin lectura fiable se devuelve 0 (el siguiente tick reintenta).
-    """
-    from ..tiempo import inicio_dia_cdmx_iso_utc
-
-    momento = ahora or datetime.now(timezone.utc)
-    if momento.tzinfo is not None:
-        momento = momento.astimezone(timezone.utc).replace(tzinfo=None)
-    cupo_d = config.cupo_dia(marca)
-    if cupo_d <= 0:
-        return None
-    try:
-        usados = repos.contar_publicacion_origen_desde(
-            marca, ORIGEN_PIPELINE, inicio_dia_cdmx_iso_utc(momento)
-        )
-    except Exception:  # noqa: BLE001 -- fail-closed: sin contador fiable no se admite
-        _log.warning("pipeline: no se pudo contar el cupo diario (%s)", marca, exc_info=True)
-        return 0
-    return max(0, cupo_d - usados)
 
 
 def cupos_categoria_restantes(

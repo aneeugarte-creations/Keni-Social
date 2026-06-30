@@ -198,43 +198,6 @@ def test_clave_misma_para_url_equivalente_con_tracking():
 
 
 # --------------------------------------------------------------------------- #
-# Filtro de relevancia en la ENTRADA (`filtrar_por_vocabulario`)                #
-# --------------------------------------------------------------------------- #
-
-
-def _item_pool(titulo, resumen=""):
-    return {"titulo": titulo, "resumen": resumen, "clave": titulo.lower()}
-
-
-def test_filtrar_por_vocabulario_separa_aptos_y_descartados():
-    pal = frozenset({"sismo", "cdmx"})
-    items = [
-        _item_pool("Sismo de 6.1 esta mañana"),
-        _item_pool("Celebrity gossip news"),
-        _item_pool("Tránsito complicado", resumen="cierres en la CDMX"),  # casa por resumen
-    ]
-    aptos, descartados = ingesta.filtrar_por_vocabulario(items, pal)
-    assert [it["titulo"] for it in aptos] == ["Sismo de 6.1 esta mañana", "Tránsito complicado"]
-    assert [it["titulo"] for it in descartados] == ["Celebrity gossip news"]
-
-
-def test_filtrar_por_vocabulario_vacio_no_filtra_nada():
-    # Sin agenda definida no hay criterio: se archiva todo (honesto).
-    items = [_item_pool("Cualquier cosa"), _item_pool("Otra cosa")]
-    aptos, descartados = ingesta.filtrar_por_vocabulario(items, frozenset())
-    assert aptos == items
-    assert descartados == []
-
-
-def test_filtrar_por_vocabulario_normaliza_acentos_y_puntuacion():
-    pal = frozenset({"mexico"})
-    aptos, descartados = ingesta.filtrar_por_vocabulario(
-        [_item_pool("México: arranca la jornada electoral")], pal
-    )
-    assert len(aptos) == 1 and descartados == []
-
-
-# --------------------------------------------------------------------------- #
 # extraer_etiquetas + descargar_html (etiquetas del sitio, Fase 2)            #
 # --------------------------------------------------------------------------- #
 

@@ -754,6 +754,7 @@ def test_verificar_cluster_ok_se_admite_heredando_veredicto(entorno, monkeypatch
     monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_VERIFICACION_OK))  # noqa: F841
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", "mx:50")  # plan = gate de auto-producción
     _inicializar_cluster("c-ok", titulo="Historia verificada", score=0.8)
 
     res = pc._ejecutar_investigacion()
@@ -1056,6 +1057,7 @@ def test_dos_loops_investigacion_y_produccion_separan_fases(entorno, monkeypatch
     monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
     _mock_lanzar_copy(monkeypatch)
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", "mx:50")  # plan = gate de auto-producción
     # Cluster ya verificado: ADMITIR lo promueve sin pasar por la fase de verificación.
     _inicializar_cluster("c1", titulo="Historia caliente", score=0.8, verificacion_fuente=pc.VERIFICACION_VERIFICADO)
 
@@ -1491,6 +1493,7 @@ def test_caducado_libera_hueco_para_lo_fresco_del_ranking(entorno, monkeypatch):
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_EN_PROCESO_MAX", "1")
     monkeypatch.delenv("KENI_PIPELINE_REDACTAR", raising=False)
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", "mx:50")  # plan = gate de auto-producción
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     _tema_pipeline(titulo="Backlog vencido", verificacion_fuente="", copy_pendiente=pend)
     # Cluster ya verificado: ADMITIR lo promueve en cuanto se libere cupo (el foco del test es la caducidad).
@@ -1528,6 +1531,7 @@ def test_admitir_serial_promueve_solo_hasta_el_cupo(entorno, monkeypatch):
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "3")  # pipeline_max alto: el límite real es el cupo
     monkeypatch.setenv("KENI_PIPELINE_EN_PROCESO_MAX", "3")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", "mx:50")  # plan = gate; el cupo serial (1) manda
     # 2 en proceso -> cupo 1: solo entra 1 historia aunque haya 3 clusters y pipeline_max=3.
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     _tema_pipeline(titulo="En proceso 1", verificacion_fuente="", copy_pendiente=pend)
@@ -1549,17 +1553,14 @@ def test_admitir_serial_promueve_solo_hasta_el_cupo(entorno, monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-def test_cupo_dia_corta_la_admision(entorno, monkeypatch):
-    """Sin plan, con el cupo DIARIO (24 h móviles) agotado, ADMITIR no admite más."""
+def test_sin_plan_por_marca_no_se_auto_produce(entorno, monkeypatch):
+    """El PLAN por marca es el gate: sin `KENI_PLAN_DIA::marca`, esa marca NO auto-produce nada."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
-    monkeypatch.setenv("KENI_CUPO_DIA", "1")
-    pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
-    t = _tema_pipeline(
-        titulo="Producido hoy", verificacion_fuente=pc.VERIFICACION_VERIFICADO, copy_pendiente=pend
+    # unotv SIN plan: aunque haya una historia caliente ya verificada, no se admite nada.
+    _inicializar_cluster(
+        "hot", titulo="Historia caliente", score=0.9, verificacion_fuente=pc.VERIFICACION_VERIFICADO
     )
-    repos.crear_pieza_fila(publicacion_id=t["id"], red="x", copy="Copy listo")
-    _inicializar_cluster("hot", titulo="Historia caliente", score=0.9)
 
     res = pc._ejecutar_barrido()
 
@@ -1579,7 +1580,7 @@ def test_plan_llena_cupos_por_categoria_con_lo_mejor(entorno, monkeypatch):
     bootstrap_categorias.inicializar_categorias()
     nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
     internacional = repos.obtener_etiqueta_por_nombre("Internacional", "categoria", "unotv")
-    monkeypatch.setenv("KENI_PLAN_DIA", f"{nacional['id']}:1,{internacional['id']}:1")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", f"{nacional['id']}:1,{internacional['id']}:1")
     ver = pc.VERIFICACION_VERIFICADO  # admisión solo promueve verificadas (no hay atajo `saltada`)
     _inicializar_cluster("mx1", titulo="Nacional floja", score=0.5, categoria="mx", verificacion_fuente=ver)
     _inicializar_cluster("mx2", titulo="Nacional top", score=0.9, categoria="mx", verificacion_fuente=ver)
@@ -1607,7 +1608,7 @@ def test_plan_breaking_consume_slot_breaking(entorno, monkeypatch):
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "10")
-    monkeypatch.setenv("KENI_PLAN_DIA", "breaking:1")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", "breaking:1")
     ver = pc.VERIFICACION_VERIFICADO  # admisión solo promueve verificadas (no hay atajo `saltada`)
     _inicializar_cluster(
         "br1", titulo="Ultima hora corroborada", score=0.8, categoria="mx", breaking=1, verificacion_fuente=ver
@@ -1623,7 +1624,7 @@ def test_plan_descuenta_lo_ya_generado_hoy(entorno, monkeypatch):
     """El cupo de una categoría descuenta lo GENERADO en 24 h (contenido.categoria persistida)."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
-    monkeypatch.setenv("KENI_PLAN_DIA", "mx:1")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", "mx:1")
     # Generado previo de la línea mx (la categoría vive EN el contenido, no en el cluster),
     # CON post real (es_publicacion=1): un tema sin post no consumiría cupo (no cuenta).
     ya = repos.crear_publicacion(
@@ -1653,7 +1654,7 @@ def test_promocion_persiste_categoria_en_el_contenido(entorno, monkeypatch):
     nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
     # El plan declara la línea 'breaking' para que la última hora consuma SU cupo y salga a la
     # vez que la nacional (sin él competiría por el cupo de su línea y la desplazaría).
-    monkeypatch.setenv("KENI_PLAN_DIA", f"{nacional['id']}:1,breaking:1")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", f"{nacional['id']}:1,breaking:1")
     _inicializar_cluster("cat1", titulo="Nacional persistida", score=0.9, categoria="mx",
                      verificacion_fuente=pc.VERIFICACION_VERIFICADO)
     _inicializar_cluster("cat2", titulo="Urgente persistida", score=0.9, categoria="mx", breaking=1,
@@ -1668,24 +1669,22 @@ def test_promocion_persiste_categoria_en_el_contenido(entorno, monkeypatch):
     assert por_titulo["Urgente persistida"]["categoria"] == "breaking"
 
 
-def test_plan_por_marca_gana_al_global(entorno, monkeypatch):
-    """`KENI_PLAN_DIA::marca` (store) SUSTITUYE al plan global para esa marca."""
+def test_plan_es_por_marca_sin_override_no_hay_plan(entorno, monkeypatch):
+    """El plan vive POR MARCA (`KENI_PLAN_DIA::marca`); no hay plan global por defecto: una marca
+    sin su propio plan no tiene plan ({}); con override usa el suyo."""
     overrides = {"KENI_PLAN_DIA::unotv": "internacional:2"}
     monkeypatch.setattr("keni_consola.ajustes.obtener", lambda clave: overrides.get(clave))
-    monkeypatch.setenv("KENI_PLAN_DIA", "mx:4")
     assert config.plan_dia("unotv") == {"internacional": 2}
-    assert config.plan_dia("claro-sports") == {"mx": 4}
+    assert config.plan_dia("claro-sports") == {}  # sin override por marca = sin plan
     assert config.parsear_plan("mx:4, breaking:2, malformado, x:abc, vacio:0") == {
         "mx": 4, "breaking": 2,
     }
 
 
-def test_cupo_produccion_restante_none_sin_cupos(entorno, monkeypatch):
-    """Cupo diario a 0 -> None (la admisión queda solo con el gate serial)."""
-    monkeypatch.setenv("KENI_CUPO_DIA", "0")
+def test_sin_plan_cupos_categoria_restantes_es_none(entorno, monkeypatch):
+    """Sin plan por marca, `cupos_categoria_restantes` es None: esa marca no auto-produce."""
     from keni_consola.pipeline_contenido import _admitir
 
-    assert _admitir.cupo_produccion_restante("unotv") is None
     assert _admitir.cupos_categoria_restantes("unotv") is None  # sin plan
 
 
@@ -1693,7 +1692,7 @@ def test_plan_breaking_excede_su_cupo_con_tope_extra(entorno, monkeypatch):
     """La última hora EXCEDE el plan: techo efectivo = cupo + KENI_BREAKING_EXTRA_DIA."""
     from keni_consola.pipeline_contenido import _admitir
 
-    monkeypatch.setenv("KENI_PLAN_DIA", "breaking:1")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", "breaking:1")
     monkeypatch.setenv("KENI_BREAKING_EXTRA_DIA", "1")
     # El cupo del plan (1) YA está consumido por una breaking generada hoy: tema CON post
     # real (pieza es_publicacion=1); un tema sin post no consumiría cupo (no cuenta).
@@ -1719,7 +1718,7 @@ def test_cupos_solo_cuentan_la_jornada_mx_no_dias_previos(entorno, monkeypatch):
     """
     from keni_consola.pipeline_contenido import _admitir
 
-    monkeypatch.setenv("KENI_PLAN_DIA", "mx:1")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", "mx:1")
     # Ambos con post real (es_publicacion=1): lo ÚNICO que excluye al viejo es la fecha.
     # De otra jornada: NO consume el cupo de hoy -> queda el hueco íntegro.
     ayer = repos.crear_publicacion(
@@ -1747,7 +1746,7 @@ def test_plan_sin_linea_breaking_compite_por_su_feed(entorno, monkeypatch):
 
     bootstrap_categorias.inicializar_categorias()
     nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
-    monkeypatch.setenv("KENI_PLAN_DIA", f"{nacional['id']}:1")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", f"{nacional['id']}:1")
     _inicializar_cluster("brx", titulo="Ultima hora sin linea propia", score=0.9,
                      categoria="mx", breaking=1, verificacion_fuente=pc.VERIFICACION_VERIFICADO)
 
@@ -1767,8 +1766,7 @@ def test_clusters_para_promover_clasifica_por_contenido_si_el_feed_no_mapea(ento
     bootstrap_categorias.inicializar_categorias()
     intl = repos.obtener_etiqueta_por_nombre("Internacional", "categoria", "unotv")
     repos.actualizar_etiqueta(intl["id"], {"keywords": "groenlandia, vikingos, fosil"})
-    # Solo se prueba el enrutado por categoría: se neutralizan los umbrales de score y marca.
-    monkeypatch.setenv("KENI_PROMOVER_MIN_MARCA", "0")
+    # Solo se prueba el enrutado por categoría: se neutraliza el umbral de score.
     monkeypatch.setenv("KENI_PROMOVER_MIN_SCORE", "0")
     _inicializar_cluster(
         "sci", marca="unotv", categoria="gaming", score=0.9,

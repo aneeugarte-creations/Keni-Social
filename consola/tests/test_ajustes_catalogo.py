@@ -78,13 +78,11 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_PRESUPUESTO_TOKENS_PRODUCCION_IN_DIA,
         config.ENV_PRESUPUESTO_TOKENS_PRODUCCION_OUT_DIA,
         config.ENV_PRESUPUESTO_MARGEN_MANUAL,
-        # Umbral de auto-producción del ranking de noticias + cupos de volumen. La maduración,
-        # los caps de admisión, los umbrales de alertas/GC y las caducidades del pool se
-        # DEGRADARON a solo-env (auditoría 2026-06): tunables de ingeniería, fuera de la UI.
-        config.ENV_PROMOVER_MIN_SCORE, config.ENV_PROMOVER_MIN_MARCA,
-        config.ENV_CUPO_DIA, config.ENV_PLAN_DIA,
-        # Filtro de ENTRADA por agenda de marca (la puerta del pool).
-        config.ENV_INGESTA_FILTRO,
+        # Umbral de auto-producción del ranking de noticias (score). El encaje de marca, el cupo
+        # sin plan y el plan global se RETIRARON (el plan por marca, en Programación, es el gate);
+        # la maduración, los caps de admisión, los umbrales de alertas/GC y las caducidades del
+        # pool se DEGRADARON a solo-env: tunables de ingeniería, fuera de la UI.
+        config.ENV_PROMOVER_MIN_SCORE,
         # Esfuerzo de razonamiento de la generación (palanca calidad/coste, se edita en Economía).
         config.ENV_ESFUERZO,
     }
@@ -201,7 +199,7 @@ def test_grupos_estables(store):
         "automatizacion_marca_investigacion", "automatizacion_marca_produccion",
         "pipeline_topes",
         "pieza", "publicacion_marca", "presupuesto_marca", "automatismos_generales",
-        "noticias_entrada", "noticias_rendimiento",
+        "noticias_rendimiento",
         "noticias_produccion", "noticias_produccion_marca",
         "tuning",
     }
@@ -209,25 +207,19 @@ def test_grupos_estables(store):
 
 def test_noticias_reparto_en_secciones(store):
     """Los ajustes del motor de noticias se reparten EXACTAMENTE en los grupos de la sección
-    «Investigación» del drawer del Monitor. Tras la auditoría 2026-06 solo quedan los
-    controles de OPERACIÓN: el filtro editorial de entrada, el master de rendimiento y el
-    umbral/cupos de producción automática. La maduración, el TTL del perfil editorial, los
-    pesos del score, los umbrales de clustering/última hora y el batch/concurrencia de ingesta
-    se degradaron a solo-env (siguen vivos en `config`, fuera de la UI)."""
+    «Investigación» del drawer del Monitor. Solo quedan los controles de OPERACIÓN: el master de
+    rendimiento y el umbral de score de producción automática. El filtro de entrada, el encaje de
+    marca, el cupo y el plan global se RETIRARON; la maduración, el TTL del perfil editorial, los
+    pesos del score, los umbrales de clustering y el batch/concurrencia de ingesta se degradaron a
+    solo-env (siguen vivos en `config`, fuera de la UI)."""
     reparto = {
-        "noticias_entrada": {
-            config.ENV_INGESTA_FILTRO,
-        },
         "noticias_rendimiento": {
             config.ENV_RENDIMIENTO_RANKING,
         },
-        # Umbral de auto-producción (dominio.agrupar.evaluar_umbral): umbrales que deciden
+        # Umbral de auto-producción (dominio.agrupar.evaluar_umbral): el score mínimo que decide
         # qué historias del pool disparan verificación+copy automáticos (coste real de tokens).
         "noticias_produccion": {
             config.ENV_PROMOVER_MIN_SCORE,
-            config.ENV_PROMOVER_MIN_MARCA,
-            config.ENV_CUPO_DIA,
-            config.ENV_PLAN_DIA,
         },
     }
     for gid, esperadas in reparto.items():
@@ -404,23 +396,23 @@ def test_por_clave_desconocida(store):
 
 
 def test_valor_defecto_sin_store_ni_env(store, monkeypatch):
-    monkeypatch.delenv(config.ENV_CUPO_DIA, raising=False)
-    a = _ajuste(config.ENV_CUPO_DIA)
+    monkeypatch.delenv(config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA, raising=False)
+    a = _ajuste(config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA)
     valor, fuente = ajustes_catalogo.valor_y_fuente(a)
-    assert (valor, fuente) == (config.CUPO_DIA_DEF, "defecto")
+    assert (valor, fuente) == (config.PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA_DEF, "defecto")
 
 
 def test_valor_desde_env(store, monkeypatch):
-    monkeypatch.setenv(config.ENV_CUPO_DIA, "8")
-    a = _ajuste(config.ENV_CUPO_DIA)
+    monkeypatch.setenv(config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA, "8")
+    a = _ajuste(config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA)
     valor, fuente = ajustes_catalogo.valor_y_fuente(a)
     assert (valor, fuente) == (8, "env")
 
 
 def test_valor_desde_store_gana_a_env(store, monkeypatch):
-    monkeypatch.setenv(config.ENV_CUPO_DIA, "8")
-    ajustes.guardar(config.ENV_CUPO_DIA, "2")
-    a = _ajuste(config.ENV_CUPO_DIA)
+    monkeypatch.setenv(config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA, "8")
+    ajustes.guardar(config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA, "2")
+    a = _ajuste(config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA)
     valor, fuente = ajustes_catalogo.valor_y_fuente(a)
     assert (valor, fuente) == (2, "store")
 
@@ -445,7 +437,7 @@ def test_float_efectivo_tipado(store):
 
 
 def test_a_dict_int_tiene_min(store):
-    d = ajustes_catalogo.a_dict(_ajuste(config.ENV_CUPO_DIA))
+    d = ajustes_catalogo.a_dict(_ajuste(config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA))
     assert d["tipo"] == "int" and d["min"] == 0 and "opciones" not in d
     assert set(d) >= {"clave", "tipo", "etiqueta", "ayuda", "grupo", "peligroso",
                       "valor", "fuente", "defecto"}
@@ -476,27 +468,27 @@ def test_validar_bool_invalido(store):
 
 
 def test_validar_int_ok(store):
-    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_CUPO_DIA), 5)
+    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA), 5)
     assert err is None and val == "5"
 
 
 def test_validar_int_acepta_str(store):
-    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_CUPO_DIA), " 7 ")
+    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA), " 7 ")
     assert err is None and val == "7"
 
 
 def test_validar_int_bajo_minimo(store):
-    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_CUPO_DIA), -1)
+    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA), -1)
     assert val is None and "≥ 0" in err
 
 
 def test_validar_int_rechaza_bool(store):
-    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_CUPO_DIA), True)
+    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA), True)
     assert val is None and err is not None
 
 
 def test_validar_int_no_numerico(store):
-    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_CUPO_DIA), "x")
+    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA), "x")
     assert val is None and err is not None
 
 

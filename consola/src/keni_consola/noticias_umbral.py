@@ -10,10 +10,8 @@ producción automática?» para que la promoción (pipeline), el panel (API `pro
 cualquier otro consumidor respondan EXACTAMENTE igual:
 
   - la regla PURA vive en `dominio.agrupar.evaluar_umbral` (verificación no dudosa +
-    score recalculado ≥ mínimo + encaje de marca por vocabulario, con exenciones para lo
-    curado por el equipo y las breaking corroboradas);
-  - los umbrales vivos vienen de `config` (`KENI_PROMOVER_MIN_SCORE` /
-    `KENI_PROMOVER_MIN_MARCA`, editables en caliente desde la consola);
+    score recalculado ≥ mínimo);
+  - el umbral vivo viene de `config` (`KENI_PROMOVER_MIN_SCORE`, editable en caliente);
   - el vocabulario de marca es el MISMO que usa el ranking (perfil editorial Haiku si la
     etapa Priorizar está activa para la marca; si no, la base de `relevancia_marca`).
 
@@ -71,7 +69,6 @@ def evaluar(
         palabras_marca=palabras_marca,
         pesos=config.score_pesos(marca),
         min_score=config.promover_min_score(),
-        min_marca=config.promover_min_marca(),
         min_maduracion_min=config.promover_maduracion_min(),
         ahora=ahora,
         breaking_peso=config.cluster_breaking_peso(),

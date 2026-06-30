@@ -165,9 +165,6 @@ def ejecutar_barrido() -> dict[str, Any]:
             )
 
         max_errores = config.ingesta_max_errores()
-        filtro_activo = config.ingesta_filtro_activo()
-        perfil_activo = config.priorizar_perfil_activo()
-        vocab_cache: dict[str, frozenset[str]] = {}  # 1 lectura de vocabulario por marca/barrido
         items_nuevos = 0
         items_filtrados = 0
         errores = 0
@@ -176,27 +173,9 @@ def ejecutar_barrido() -> dict[str, Any]:
             hubo_error = bool(salud.get("error"))
             if hubo_error:
                 errores += 1
-            # FILTRO DE ENTRADA (la puerta del pool): un feed asignado a una marca solo archiva
-            # items que casan la agenda de esa marca (>= 1 término del vocabulario, el MISMO que
-            # usa la priorización). Exentos: feeds PROPIOS (su contenido ES la marca), feeds sin
-            # marca (compartidos/agencias) y marcas sin vocabulario (sin criterio no se filtra).
-            # Lo descartado NO se archiva: se CUENTA por sondeo (observable en /salud).
+            # SIN PÉRDIDAS EN LA PUERTA: se archiva TODO lo que entra por un feed (la selección
+            # vive aguas abajo: umbral de promoción + aprobación humana). `filtrados` queda en 0.
             filtrados = 0
-            marca_feed = str(feed.get("marca") or "")
-            if items and filtro_activo and marca_feed and not feed.get("propia"):
-                if marca_feed not in vocab_cache:
-                    vocab_cache[marca_feed] = _pkg._palabras_relevancia(marca_feed, perfil_activo)
-                try:
-                    items, descartados = ingesta.filtrar_por_vocabulario(
-                        items, vocab_cache[marca_feed]
-                    )
-                    filtrados = len(descartados)
-                    items_filtrados += filtrados
-                except Exception:  # noqa: BLE001 -- ante un fallo del filtro, se archiva todo (fail-open:
-                    # perder cobertura es peor que archivar basura; el umbral posterior contiene el coste)
-                    _log.exception(
-                        "recolectar_daemon: fallo el filtro de entrada del feed %s.", feed.get("id")
-                    )
             insertadas = 0
             if items:
                 try:

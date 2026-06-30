@@ -271,7 +271,7 @@ def mfa_obligatorio_admin() -> bool:
     """
     # OJO: `_FALSOS` incluye "" (cadena vacia = ausente), comodo para los flags Default OFF que
     # leen `in _VERDADEROS`. Para este flag Default ON hay que GUARDAR el caso ausente ANTES de
-    # `not in _FALSOS` (mismo idiom que `ingesta_filtro_activo`/`auto_programar`); si no, un var
+    # `not in _FALSOS` (mismo idiom que `auto_programar`); si no, un var
     # ausente caeria a "" -> in _FALSOS -> OFF, contradiciendo el default ON documentado.
     crudo = _crudo(ENV_MFA_ADMIN).lower()
     if not crudo:

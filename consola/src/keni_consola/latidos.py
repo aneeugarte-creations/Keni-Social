@@ -365,13 +365,13 @@ def descripcion_de(daemon: str) -> str:
 AJUSTES: dict[str, list[str]] = {
     "investigacion": [
         "KENI_PIPELINE_VERIFICAR", "KENI_PIPELINE_RECOLECTAR",
-        "KENI_PROMOVER_MIN_SCORE", "KENI_PROMOVER_MIN_MARCA",
+        "KENI_PROMOVER_MIN_SCORE",
     ],
     "produccion": [
         "KENI_PIPELINE_REDACTAR", "KENI_PIPELINE_ILUSTRAR", "KENI_PIPELINE_STOCK",
         "KENI_GENERACION_PAUSADA", "KENI_ESFUERZO",
     ],
-    "ingesta": ["KENI_PIPELINE_RECOLECTAR", "KENI_INGESTA_FILTRO"],
+    "ingesta": ["KENI_PIPELINE_RECOLECTAR"],
     "trends": ["KENI_TRENDS"],
     "algoritmos": ["KENI_ALGORITMOS_AUTO"],
     "noticias_gc": ["KENI_NOTICIAS_GC"],

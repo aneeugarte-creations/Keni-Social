@@ -69,7 +69,7 @@ def test_mesa_segmenta_por_lineas_del_plan(cliente, monkeypatch):
     bootstrap_categorias.inicializar_categorias()
     nac = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")["id"]
     intl = repos.obtener_etiqueta_por_nombre("Internacional", "categoria", "unotv")["id"]
-    monkeypatch.setenv("KENI_PLAN_DIA", f"{nac}:2,{intl}:1,breaking:1")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", f"{nac}:2,{intl}:1,breaking:1")
     _inicializar("mx-top", score=0.9, categoria="mx", titulo="Nacional top")
     _inicializar("mx-baja", score=0.3, categoria="mx", titulo="Nacional floja")
     # Breaking: compite por la línea 'breaking' aunque su feed sea futbol.
@@ -112,7 +112,7 @@ def test_mesa_clasifica_por_contenido_si_el_feed_no_mapea(cliente, monkeypatch):
     # Como las líneas de Fundación, esta línea recibe keywords: una candidata cuyo feed NO
     # mapea ('gaming' no es línea de UnoTV) se clasifica por su texto.
     repos.actualizar_etiqueta(intl, {"keywords": "groenlandia, vikingos, fosil"})
-    monkeypatch.setenv("KENI_PLAN_DIA", f"{intl}:2")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", f"{intl}:2")
     _inicializar("sci", score=0.9, marca="unotv", categoria="gaming",
                  titulo="Hallazgo en Groenlandia revela el rastro de vikingos")
     # Sin coincidencia de keywords: el feed tampoco mapea -> fuera del plan.
@@ -131,7 +131,7 @@ def test_mesa_extranjera_sin_traducir_se_ve_como_traduciendo(cliente, monkeypatc
     un placeholder "Traduciendo…" (nunca su titular en idioma original) y `traduciendo=True`. La
     traducida se muestra en español (titulo_es) y la nativa en español, normales."""
     nac = _linea_nacional()
-    monkeypatch.setenv("KENI_PLAN_DIA", f"{nac}:5")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", f"{nac}:5")
     _inicializar("es-nativa", score=0.9, categoria="mx", titulo="Noticia nacional", idioma="es")
     _inicializar("en-cruda", score=0.8, categoria="mx", titulo="Foreign breaking",
                  idioma="en", traducido=0)
@@ -153,7 +153,7 @@ def test_mesa_extranjera_sin_traducir_se_ve_como_traduciendo(cliente, monkeypatc
 
 def test_mesa_respeta_top_n_por_linea(cliente, monkeypatch):
     nac = _linea_nacional()
-    monkeypatch.setenv("KENI_PLAN_DIA", f"{nac}:2")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", f"{nac}:2")
     for i in range(4):
         _inicializar(f"m{i}", score=0.9 - i * 0.1, categoria="mx", titulo=f"Nacional {i}")
     datos = cliente.get(
@@ -171,7 +171,7 @@ def test_mesa_conteo_honesto_escala_al_pool_real(cliente, monkeypatch):
     from keni_consola.api.noticias import historias as _h
 
     nac = _linea_nacional()
-    monkeypatch.setenv("KENI_PLAN_DIA", f"{nac}:2")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", f"{nac}:2")
     # 6 candidatas en la línea Nacional, pero la muestra se topa a 3: el reparto/render ve 3.
     monkeypatch.setattr(_h, "_MESA_MUESTRA", 3)
     for i in range(6):
@@ -202,7 +202,7 @@ def test_mesa_sin_plan_degrada_a_fuera_de_plan(cliente, monkeypatch):
 
 def test_mesa_descuenta_lo_generado_en_el_progreso(cliente, monkeypatch):
     nac = _linea_nacional()
-    monkeypatch.setenv("KENI_PLAN_DIA", f"{nac}:2")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", f"{nac}:2")
     # Un tema CON post real cuenta...
     _contenido_con_post(categoria=nac, titulo="Ya generada")
     # ...pero un tema SIN ningún post (promovido y con el copy sin generar, o fallido) NO:
@@ -223,7 +223,7 @@ def test_mesa_solo_cuenta_la_jornada_mx_no_lo_de_dias_previos(cliente, monkeypat
     siguiente el plan vuelve a 0 aunque la pieza vieja siga viva en el tablero.
     """
     nac = _linea_nacional()
-    monkeypatch.setenv("KENI_PLAN_DIA", f"{nac}:2")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", f"{nac}:2")
     # Ambos con post real, así que lo ÚNICO que excluye al viejo es la fecha (no la falta
     # de pieza): de otro día (muy anterior a cualquier medianoche MX de hoy) NO cuenta.
     _contenido_con_post(categoria=nac, titulo="De ayer", creado="2020-01-01T00:00:00")
@@ -313,7 +313,7 @@ def test_mesa_linea_pagina_todo_el_pool_de_la_linea(cliente, monkeypatch):
     devuelve el TOTAL real de la línea y la PÁGINA pedida, rankeada por score.
     """
     nac = _linea_nacional()
-    monkeypatch.setenv("KENI_PLAN_DIA", f"{nac}:2")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", f"{nac}:2")
     # 7 candidatas en la línea Nacional + ruido de otra línea/estado que NO debe contar.
     for i in range(7):
         _inicializar(f"n{i}", score=0.9 - i * 0.05, categoria="mx", titulo=f"Nacional {i}")
@@ -343,7 +343,7 @@ def test_mesa_linea_pagina_todo_el_pool_de_la_linea(cliente, monkeypatch):
 def test_mesa_linea_breaking_y_fuera_de_plan(cliente, monkeypatch):
     # 'breaking' y '__fuera__' son claves de reparto válidas para paginar (incluye el alias 'fuera').
     nac = _linea_nacional()
-    monkeypatch.setenv("KENI_PLAN_DIA", f"{nac}:2,breaking:1")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", f"{nac}:2,breaking:1")
     _inicializar("br", score=0.8, categoria="futbol", breaking=1, titulo="Última hora")
     _inicializar("g1", score=0.7, categoria="gaming", titulo="Gaming sin línea")
 

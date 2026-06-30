@@ -125,11 +125,8 @@ def _lock_concedido(_nombre):
 def _parchear_comun(monkeypatch, *, feeds, fetcher):
     """Parchea db.lock_barrido, repos.feeds_vencidos y la descarga de http_feed.
 
-    Apaga además el FILTRO DE ENTRADA por vocabulario (def ON): estos tests cubren la
-    mecánica del barrido (persistencia, planificación, backoff) con titulares neutros
-    («Nota uno») que no casan ninguna agenda; el filtro tiene sus propios tests abajo.
+    La puerta del pool NO filtra: se archiva todo lo que entra por un feed.
     """
-    monkeypatch.setenv(config.ENV_INGESTA_FILTRO, "0")
     monkeypatch.setattr(recolectar_daemon.db, "lock_barrido", _lock_concedido)
     # Sin BD: el intervalo de un feed con LÍNEA consulta su etiqueta; lo dejamos sin resolver para
     # que caiga a la cadencia por categoría (legado), sin tocar Postgres.
@@ -304,96 +301,6 @@ def test_barrido_aplaza_feeds_fuera_del_plan(monkeypatch):
     assert "dep1" in registrados and registrados["dep1"].get("proximo_sondeo")
     assert "conteo" not in registrados["dep1"]
 
-
-# --------------------------------------------------------------------------- #
-# FILTRO DE ENTRADA por vocabulario de marca (la puerta del pool)               #
-# --------------------------------------------------------------------------- #
-
-_FEED_MIXTO = """<?xml version="1.0"?>
-<rss version="2.0"><channel>
-  <item><title>Sismo sacude la CDMX esta mañana</title><link>https://example.com/sismo</link></item>
-  <item><title>Celebrity gossip from Hollywood</title><link>https://example.com/gossip</link></item>
-</channel></rss>"""
-
-
-def _parchear_filtro(monkeypatch, *, feeds, fetcher):
-    """Como `_parchear_comun` pero con el filtro de entrada ACTIVO (su comportamiento real)."""
-    _parchear_comun(monkeypatch, feeds=feeds, fetcher=fetcher)
-    monkeypatch.setenv(config.ENV_INGESTA_FILTRO, "1")
-    # Sin estos pasos (sin BD aquí), el barrido se queda en la mecánica de ingesta.
-    monkeypatch.setattr(recolectar_daemon, "paso_agrupar", lambda: {"items": 0, "clusters_nuevos": 0})
-    monkeypatch.setattr(recolectar_daemon, "paso_traducir", lambda: {"encolados": 0, "marcas": 0, "candidatos": 0})
-
-
-def test_filtro_entrada_descarta_lo_que_no_casa_la_agenda(monkeypatch):
-    """Feed de marca: solo se archiva lo que casa el vocabulario; lo filtrado se cuenta."""
-    feed = {"id": "f1", "nombre": "F1", "url": "https://93.184.216.34/x", "categoria": "mx",
-            "marca": "unotv", "errores_seguidos": 0}
-    persistidos, registrados = [], []
-    _parchear_filtro(monkeypatch, feeds=[feed], fetcher=lambda _u: _FEED_MIXTO)
-    monkeypatch.setattr(recolectar_daemon.repos, "crear_noticias_items",
-                        lambda items: persistidos.extend(items) or len(items))
-    monkeypatch.setattr(recolectar_daemon.repos, "registrar_sondeo_feed",
-                        lambda fid, **kw: registrados.append((fid, kw)))
-
-    resumen = recolectar_daemon.ejecutar_barrido()
-
-    assert [it["titulo"] for it in persistidos] == ["Sismo sacude la CDMX esta mañana"]
-    assert resumen["items_nuevos"] == 1
-    assert resumen["items_filtrados"] == 1
-    _fid, kw = registrados[0]
-    assert kw["filtrados"] == 1  # observable por feed en /salud (`ultimo_filtrados`)
-
-
-def test_filtro_entrada_exime_feeds_propios_y_sin_marca(monkeypatch):
-    """Un feed PROPIO (su contenido ES la marca) y uno COMPARTIDO (sin marca) no se filtran."""
-    propio = {"id": "p", "nombre": "Propio", "url": "https://93.184.216.34/p", "categoria": "mx",
-              "marca": "unotv", "propia": True, "errores_seguidos": 0}
-    compartido = {"id": "s", "nombre": "Shared", "url": "https://93.184.216.34/s",
-                  "categoria": "mx", "marca": "", "errores_seguidos": 0}
-    persistidos = []
-    _parchear_filtro(monkeypatch, feeds=[propio, compartido], fetcher=lambda _u: _FEED_MIXTO)
-    monkeypatch.setattr(recolectar_daemon.repos, "crear_noticias_items",
-                        lambda items: persistidos.extend(items) or len(items))
-    monkeypatch.setattr(recolectar_daemon.repos, "registrar_sondeo_feed", lambda fid, **kw: None)
-
-    resumen = recolectar_daemon.ejecutar_barrido()
-
-    assert resumen["items_nuevos"] == 4  # 2 del propio + 2 del compartido, sin filtrar
-    assert resumen["items_filtrados"] == 0
-
-
-def test_filtro_entrada_apagado_archiva_todo(monkeypatch):
-    feed = {"id": "f1", "nombre": "F1", "url": "https://93.184.216.34/x", "categoria": "mx",
-            "marca": "unotv", "errores_seguidos": 0}
-    persistidos = []
-    _parchear_filtro(monkeypatch, feeds=[feed], fetcher=lambda _u: _FEED_MIXTO)
-    monkeypatch.setenv(config.ENV_INGESTA_FILTRO, "0")  # apagado: comportamiento anterior
-    monkeypatch.setattr(recolectar_daemon.repos, "crear_noticias_items",
-                        lambda items: persistidos.extend(items) or len(items))
-    monkeypatch.setattr(recolectar_daemon.repos, "registrar_sondeo_feed", lambda fid, **kw: None)
-
-    resumen = recolectar_daemon.ejecutar_barrido()
-    assert resumen["items_nuevos"] == 2
-    assert resumen["items_filtrados"] == 0
-
-
-def test_filtro_entrada_fail_open_si_el_filtro_revienta(monkeypatch):
-    """Si el filtro falla, se archiva TODO (perder cobertura es peor que archivar ruido)."""
-    feed = {"id": "f1", "nombre": "F1", "url": "https://93.184.216.34/x", "categoria": "mx",
-            "marca": "unotv", "errores_seguidos": 0}
-    persistidos = []
-    _parchear_filtro(monkeypatch, feeds=[feed], fetcher=lambda _u: _FEED_MIXTO)
-    def _revienta(items, palabras):  # noqa: ANN001
-        raise RuntimeError("boom")
-    monkeypatch.setattr(recolectar_daemon.ingesta, "filtrar_por_vocabulario", _revienta)
-    monkeypatch.setattr(recolectar_daemon.repos, "crear_noticias_items",
-                        lambda items: persistidos.extend(items) or len(items))
-    monkeypatch.setattr(recolectar_daemon.repos, "registrar_sondeo_feed", lambda fid, **kw: None)
-
-    resumen = recolectar_daemon.ejecutar_barrido()
-    assert resumen["items_nuevos"] == 2  # fail-open: nada se perdió
-    assert resumen["items_filtrados"] == 0
 
 
 # --------------------------------------------------------------------------- #

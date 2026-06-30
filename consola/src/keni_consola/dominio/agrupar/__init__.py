@@ -47,7 +47,6 @@ from .corroboracion import (
     recalcular,
 )
 from .promocion import (
-    UMBRAL_MIN_MARCA_DEF,
     UMBRAL_MIN_SCORE_DEF,
     evaluar_umbral,
 )
@@ -65,7 +64,6 @@ from .scoring import (
 __all__ = [
     "BREAKING_PESO_DEF",
     "BREAKING_VENTANA_H_DEF",
-    "UMBRAL_MIN_MARCA_DEF",
     "UMBRAL_MIN_SCORE_DEF",
     "UMBRAL_MARCA_VOCABULARIO",
     "Asignador",

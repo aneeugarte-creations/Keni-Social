@@ -63,12 +63,8 @@ function todosActivos(): AjusteAdmin[] {
     ajuste("KENI_AUTO_PREAPROBACION", false),
     ajuste("KENI_PUBLICAR_REAL", false),
     // Knobs operacionales por etapa (se editan en el ⚙ de su fila).
-    ajuste("KENI_INGESTA_FILTRO", true),
     ajuste("KENI_RENDIMIENTO_RANKING", false),
     knob("KENI_PROMOVER_MIN_SCORE", "float", 0.45, "Relevancia mínima"),
-    knob("KENI_PROMOVER_MIN_MARCA", "float", 0.2, "Encaje de marca"),
-    knob("KENI_CUPO_DIA", "int", 8, "Cupo diario sin plan"),
-    knob("KENI_PLAN_DIA", "texto", "", "Plan por defecto"),
   ];
 }
 
@@ -228,10 +224,9 @@ describe("PipelineUnificado", () => {
     const gear = await screen.findByRole("button", { name: "Ajustes de Admitir" });
     // ...y Verificar (sin knobs) no lo tiene.
     expect(screen.queryByRole("button", { name: "Ajustes de Verificar" })).not.toBeInTheDocument();
-    // El ⚙ abre el diálogo con los knobs de ESA etapa (no su toggle on/off).
+    // El ⚙ abre el diálogo con el knob de ESA etapa (no su toggle on/off).
     fireEvent.click(gear);
     expect(await screen.findByText("Admitir · ajustes")).toBeInTheDocument();
-    expect(screen.getByText("Cupo diario sin plan")).toBeInTheDocument();
     expect(screen.getByText("Relevancia mínima")).toBeInTheDocument();
   });
 

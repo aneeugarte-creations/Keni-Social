@@ -82,7 +82,6 @@ const PIPELINE: Fase[] = [
         clave: "KENI_PIPELINE_RECOLECTAR",
         queue: "recolectar",
         navegable: true,
-        ajustes: ["KENI_INGESTA_FILTRO"],
       },
       {
         nombre: "Google Trends",
@@ -151,12 +150,7 @@ const PIPELINE: Fase[] = [
         proceso: "investigacion",
         clave: "KENI_PIPELINE_ADMITIR",
         navegable: true,
-        ajustes: [
-          "KENI_PROMOVER_MIN_SCORE",
-          "KENI_PROMOVER_MIN_MARCA",
-          "KENI_CUPO_DIA",
-          "KENI_PLAN_DIA",
-        ],
+        ajustes: ["KENI_PROMOVER_MIN_SCORE"],
       },
     ],
   },

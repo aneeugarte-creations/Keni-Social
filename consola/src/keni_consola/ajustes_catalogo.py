@@ -21,10 +21,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from . import ajustes, config, marcas, preferencias
-from .dominio.agrupar import (
-    UMBRAL_MIN_MARCA_DEF as _UMBRAL_MIN_MARCA_DEF,
-    UMBRAL_MIN_SCORE_DEF as _UMBRAL_MIN_SCORE_DEF,
-)
+from .dominio.agrupar import UMBRAL_MIN_SCORE_DEF as _UMBRAL_MIN_SCORE_DEF
 
 # Conjuntos de verdad/falsedad para flags (mismos que `config`, fuente del parseo de bool).
 _VERDADEROS = frozenset({"1", "true", "yes", "si", "sí", "on"})
@@ -48,7 +45,6 @@ GRUPOS: tuple[tuple[str, str], ...] = (
     ("publicacion_marca", "Excepciones por marca"),
     ("presupuesto_marca", "Presupuesto por marca"),
     ("automatismos_generales", "Automatismos"),
-    ("noticias_entrada", "Qué entra al pool"),
     ("noticias_rendimiento", "Rendimiento en redes"),
     ("noticias_produccion", "Producción automática"),
     ("noticias_produccion_marca", "Plan diario por marca"),
@@ -605,8 +601,8 @@ def _construir_catalogo() -> list[Ajuste]:
         # Siguen leyéndose de env/defecto.)
         # --- Producción automática (grupo `noticias_produccion`) -------------------------- #
         # UMBRAL de producción automática: el panel lista TODO el pool jerarquizado, pero promover
-        # una historia a tema dispara Verificar+Redactar (claude -p: coste real de tokens). Estos dos umbrales
-        # son ese mínimo (la regla vive en `dominio.agrupar.evaluar_umbral`, explicable).
+        # una historia a tema dispara Verificar+Redactar (claude -p: coste real de tokens). Este
+        # umbral de score es ese mínimo (la regla vive en `dominio.agrupar.evaluar_umbral`).
         Ajuste(
             clave=config.ENV_PROMOVER_MIN_SCORE,
             tipo="float",
@@ -618,41 +614,10 @@ def _construir_catalogo() -> list[Ajuste]:
             minimo=0,
             maximo=1,
         ),
-        Ajuste(
-            clave=config.ENV_PROMOVER_MIN_MARCA,
-            tipo="float",
-            etiqueta="Encaje mínimo con la marca",
-            ayuda="Cuánto debe encajar la historia con los temas de la marca para producirse en "
-            "automático (0.2 ≈ un término de la marca en el título); 0 = sin umbral (de 0 a 1).",
-            grupo="noticias_produccion",
-            defecto=_UMBRAL_MIN_MARCA_DEF,
-            minimo=0,
-            maximo=1,
-        ),
-        # (KENI_PROMOVER_MADURACION_MIN —minutos de maduración en el pool antes de producir— se
-        # DEGRADÓ a solo-env: umbral de cadencia de ingeniería, no un control editorial. El cupo
-        # y el plan diario son los knobs de VOLUMEN del operador. Sigue leyéndose de env/defecto.)
-        # CUPOS de volumen: anclan el volumen auto-producido a la cadencia real de publicación de
-        # cada marca (pocas plazas por franja → admisión selectiva, no goteo continuo).
-        Ajuste(
-            clave=config.ENV_CUPO_DIA,
-            tipo="int",
-            etiqueta="Cupo diario sin plan",
-            ayuda="Techo de temas auto-producidos por marca en las últimas 24 horas cuando la "
-            "marca no tiene plan diario; 0 = sin cupo.",
-            grupo="noticias_produccion",
-            defecto=config.CUPO_DIA_DEF,
-            minimo=0,
-        ),
-        Ajuste(
-            clave=config.ENV_PLAN_DIA,
-            tipo="texto",
-            etiqueta="Plan diario por defecto",
-            ayuda="Cupos por categoría para las marcas sin plan propio, formato «categoria:n» "
-            "separados por comas (p. ej. «mx:4,internacional:4,breaking:2»); vacío = sin plan.",
-            grupo="noticias_produccion",
-            defecto="",
-        ),
+        # (KENI_PROMOVER_MADURACION_MIN —minutos de maduración antes de producir— se DEGRADÓ a
+        # solo-env. El VOLUMEN lo gobierna el PLAN EDITORIAL DIARIO por marca (`KENI_PLAN_DIA::marca`,
+        # gate de auto-producción): se edita en Programación → «Plan y horarios», no aquí. Sin plan
+        # por marca, esa marca no auto-produce.)
         # El master «Priorizar por rendimiento» vive AQUÍ (no en automatismos): no arranca ningún
         # daemon, modula la priorización. Sus tres parámetros (KENI_SCORE_PESO_RENDIMIENTO,
         # KENI_RENDIMIENTO_TOP_N, KENI_RENDIMIENTO_MIN_PIEZAS) se DEGRADARON a solo-env:
@@ -667,25 +632,13 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="noticias_rendimiento",
             defecto=False,
         ),
-        # --- Qué entra al pool (grupo `noticias_entrada`) -------------------------- #
-        # Solo queda el control EDITORIAL (el filtro por agenda de marca). Los tunables de
-        # ingeniería de la ingesta se DEGRADARON a solo-env: KENI_INGESTA_BATCH/_WORKERS/
-        # _MAX_ITEMS/_MAX_ERRORES (batch/concurrencia/topes/backoff), KENI_TRAD_MIN_SCORE/
-        # _LOTE (umbral y lote de traducción), KENI_FEED_SLA_MIN (SLA técnico de fuentes),
-        # KENI_CLUSTER_VENTANA_H y KENI_CLUSTER_BREAKING_PESO/_VENTANA_H (umbrales de
-        # clustering/última hora). Todas siguen leyéndose de env/defecto.
-        Ajuste(
-            clave=config.ENV_INGESTA_FILTRO,
-            tipo="bool",
-            etiqueta="Solo noticias de los temas de la marca",
-            ayuda="Una fuente asignada a una marca solo guarda noticias que mencionan algún tema "
-            "de esa marca; el resto ni entra al pool.",
-            grupo="noticias_entrada",
-            defecto=True,
-        ),
-        # (Los pesos del score del pool —KENI_SCORE_PESO_CORROBORACION/_MARCA/_FRESCURA/
-        # _VELOCIDAD/_VIRALIDAD— y KENI_SCORE_BONUS_BREAKING se DEGRADARON a solo-env junto
-        # con su grupo `noticias_orden`: son el algoritmo de ranking, no operación.)
+        # --- Entrada al pool (sin controles editables) -------------------------- #
+        # La puerta del pool NO filtra: se archiva TODO lo que entra por un feed (el filtro por
+        # vocabulario se retiró — «digerir todo y decidir aguas abajo»). Los tunables de ingeniería
+        # de la ingesta (KENI_INGESTA_BATCH/_WORKERS/_MAX_ITEMS/_MAX_ERRORES, KENI_TRAD_MIN_SCORE/
+        # _LOTE, KENI_FEED_SLA_MIN, KENI_CLUSTER_VENTANA_H, KENI_CLUSTER_BREAKING_PESO/_VENTANA_H) y
+        # los pesos del score del pool (KENI_SCORE_PESO_*, KENI_SCORE_BONUS_BREAKING) se leen de
+        # env/defecto, fuera de la UI.
     ]
 
 

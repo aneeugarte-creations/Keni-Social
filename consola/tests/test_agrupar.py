@@ -807,22 +807,12 @@ def test_umbral_dos_potentes_recien_nacida_sale_sin_madurar():
     assert "score" in motivo
 
 
-def test_umbral_breaking_sin_corroborar_no_queda_exenta():
-    breaking_unica = _cluster_apto(
-        titulo="Evento inesperado sin vocabulario", breaking=1, verificacion="unica_fuente"
-    )
-    ok, _motivo = agrupar.evaluar_umbral(breaking_unica, palabras_marca=_PAL, ahora=_T0)
-    assert not ok
-
-
-def test_umbral_umbral_cero_desactiva_cada_regla():
-    # `velocidad=1.0`: supera el score por mérito propio (sin encaje de marca), de modo que el
-    # único filtro pendiente es el de marca, que `min_marca=0` apaga.
+def test_umbral_sin_encaje_de_marca_pasa_por_score():
+    # No hay gate de encaje de marca: un cluster sin vocabulario de marca supera el umbral por
+    # mérito de SCORE (`velocidad=1.0`); el único umbral es el de score.
     sin_encaje = _cluster_apto(titulo="Celebrity gossip news today", velocidad=1.0)
-    ok, _ = agrupar.evaluar_umbral(
-        sin_encaje, palabras_marca=_PAL, min_marca=0.0, ahora=_T0
-    )
-    assert ok  # min_marca=0 apaga el umbral de marca (el de score se mantiene)
+    ok, _ = agrupar.evaluar_umbral(sin_encaje, palabras_marca=_PAL, ahora=_T0)
+    assert ok
 
 
 # --------------------------------------------------------------------------- #

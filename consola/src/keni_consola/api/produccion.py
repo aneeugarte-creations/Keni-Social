@@ -6,12 +6,12 @@ El objetivo editorial es un puñado de contenidos AL DÍA por marca (p.ej. 13 de
 pero su seguimiento estaba repartido: la cola de generación en Actividad, las runs en
 Pipelines, la cola de aprobación en el feed y lo programado en el calendario. Nadie veía
 de un vistazo "¿cómo van los 13 de hoy?". Este endpoint junta las CUATRO vistas para la
-ventana de producción (las mismas 24 h móviles del cupo de Admitir):
+ventana de producción del día:
 
   GET /api/produccion/dia?marca=unotv ->
     {
       "marca", "ventana": {desde, hasta},
-      "objetivo": {"dia": cupo_dia|None, "plan": plan_dia|None},
+      "objetivo": {"plan": plan_dia|None},
       "admision": {"total", "generando", "en_borrador", "en_revision",
                   "programado", "publicado"},
       "por_categoria_etiqueta": [{"categoria", "total", "en_revision", "programado", "publicado"}],
@@ -24,8 +24,8 @@ ventana de producción (las mismas 24 h móviles del cupo de Admitir):
 
 El ADMISION cuenta TEMAS (contenido padre), no filas por red: el objetivo diario se mide en
 contenidos, y cada tema se clasifica por su pieza MÁS AVANZADA (publicado > programado >
-en_revision > borrador con copy > generando). `objetivo.dia` es el MISMO
-`KENI_CUPO_DIA` que regula Admitir: una sola fuente de verdad para "cuántos al día".
+en_revision > borrador con copy > generando). `objetivo.plan` es el PLAN EDITORIAL por marca
+(`KENI_PLAN_DIA::marca`) que regula Admitir: la fuente de verdad de "cuántos al día y de qué".
 
 Lo consumen la UI (panel de producción) y el MCP operativo (`keni_produccion_dia`), para
 que tanto el equipo como los agentes monitoricen la generación del día sin sumar a mano.
@@ -157,9 +157,9 @@ def _dia(marca: str) -> dict:
         )
     piezas.sort(key=lambda p: p["creado"], reverse=True)
 
-    # Objetivo: el MISMO cupo que regula Admitir (0/{} = sin cupo configurado -> None).
+    # Objetivo: el PLAN EDITORIAL por marca que regula Admitir ({} = sin plan -> None, esa marca
+    # no auto-produce).
     objetivo = {
-        "dia": config.cupo_dia(marca) or None,
         "plan": config.plan_dia(marca) or None,
     }
 

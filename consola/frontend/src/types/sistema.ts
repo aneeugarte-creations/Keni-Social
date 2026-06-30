@@ -361,7 +361,7 @@ export interface ProduccionLinea {
 /** Resumen mínimo de /api/produccion/dia que consume el Monitor (líneas del plan). */
 export interface ProduccionDia {
   marca: string;
-  objetivo: { dia: number | null; plan: Record<string, number> | null };
+  objetivo: { plan: Record<string, number> | null };
   por_categoria: ProduccionLinea[];
 }
 

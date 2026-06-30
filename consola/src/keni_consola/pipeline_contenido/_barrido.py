@@ -236,21 +236,17 @@ def _ejecutar_investigacion() -> dict[str, Any]:
         cupo = config.pipeline_en_proceso_max() - _admitir.temas_en_proceso(marca)
         if cupo <= 0:
             continue
-        # VOLUMEN: con PLAN EDITORIAL DIARIO, llena los cupos POR CATEGORÍA que queden hoy; sin
-        # plan, cae al cupo diario simple. La admisión es SELECCIÓN, no goteo.
+        # VOLUMEN: el PLAN EDITORIAL DIARIO por marca es EL GATE. Sin plan, la marca NO
+        # auto-produce; con plan, se llenan los cupos POR CATEGORÍA que queden hoy. La admisión
+        # es SELECCIÓN, no goteo.
         cupos_cat = _admitir.cupos_categoria_restantes(marca)
-        if cupos_cat is not None:
-            if not cupos_cat:
-                _log.debug("pipeline: plan diario de %s completo; hoy no entra más.", marca)
-                continue
-            cupo = min(cupo, sum(cupos_cat.values()))
-        else:
-            cupo_volumen = _admitir.cupo_produccion_restante(marca)
-            if cupo_volumen is not None:
-                if cupo_volumen <= 0:
-                    _log.debug("pipeline: cupo diario agotado para %s.", marca)
-                    continue
-                cupo = min(cupo, cupo_volumen)
+        if cupos_cat is None:
+            _log.debug("pipeline: %s no tiene plan diario; no se auto-produce.", marca)
+            continue
+        if not cupos_cat:
+            _log.debug("pipeline: plan diario de %s completo; hoy no entra más.", marca)
+            continue
+        cupo = min(cupo, sum(cupos_cat.values()))
         try:
             temas_nuevos.extend(promover_clusters_marca(
                 marca, maximo=min(maximo, cupo), cupos_categoria=cupos_cat,
