@@ -302,3 +302,47 @@ def test_comando_musica_anade_input_al_final_y_mapea_aout():
     assert argv.count("-i") == 2
     maps = [argv[i + 1] for i, x in enumerate(argv) if x == "-map"]
     assert "[aout]" in maps
+
+
+# --------------------------------------------------------------------------- #
+# Audio: fundidos (afade) de la musica                                         #
+# --------------------------------------------------------------------------- #
+
+
+def _doc_con_musica_fades(**fade_extra):
+    """Composicion con musica que lleva `fade_in_ms` y/o `fade_out_ms`."""
+    doc = _doc_base()
+    clip = {"id": "a1", "media_id": "videos/m.mp3", "volumen": 0.6,
+            "recorte_in_ms": 0, "recorte_out_ms": 10000}
+    clip.update(fade_extra)
+    doc["pistas"].append({"id": "audio", "tipo": "audio", "clips": [clip]})
+    return doc
+
+
+def test_filtergraph_musica_con_fade_in_incluye_afade_in():
+    fg, _v, _a = filtros.construir_filtergraph(
+        _doc_con_musica_fades(fade_in_ms=1000), tiene_musica=True
+    )
+    assert "afade=t=in:st=0:d=1.000" in fg
+
+
+def test_filtergraph_musica_con_fade_out_incluye_afade_out():
+    # Duracion = 10000-0 = 10 s; fade_out_ms=2000 => st=8.0
+    fg, _v, _a = filtros.construir_filtergraph(
+        _doc_con_musica_fades(fade_out_ms=2000), tiene_musica=True
+    )
+    assert "afade=t=out:st=8.000:d=2.000" in fg
+
+
+def test_filtergraph_musica_con_ambos_fades_incluye_afade_in_y_out():
+    fg, _v, _a = filtros.construir_filtergraph(
+        _doc_con_musica_fades(fade_in_ms=500, fade_out_ms=1500), tiene_musica=True
+    )
+    assert "afade=t=in:st=0:d=0.500" in fg
+    # Duracion = 10 s; st = 10.0 - 1.5 = 8.5
+    assert "afade=t=out:st=8.500:d=1.500" in fg
+
+
+def test_filtergraph_musica_sin_fades_no_incluye_afade():
+    fg, _v, _a = filtros.construir_filtergraph(_doc_con_musica(), tiene_musica=True)
+    assert "afade" not in fg

@@ -80,6 +80,41 @@ def _clip_musica(pistas: list[dict[str, Any]]) -> dict[str, Any] | None:
     return None
 
 
+def _afade_exprs(clip: dict[str, Any], ini: float | None, fin: float | None) -> list[str]:
+    """Genera los filtros `afade` de entrada y/o salida para un clip de audio.
+
+    Usa `fade_in_ms`/`fade_out_ms` del clip. Para el fade-out necesita la duracion del segmento
+    (recorte_out - recorte_in, o recorte_out solo); si no se puede calcular, lo omite defensivamente.
+    """
+    exprs: list[str] = []
+    fade_in_ms = clip.get("fade_in_ms")
+    fade_out_ms = clip.get("fade_out_ms")
+
+    if fade_in_ms:
+        try:
+            d = float(fade_in_ms) / 1000.0
+            if d > 0:
+                exprs.append(f"afade=t=in:st=0:d={d:.3f}")
+        except (TypeError, ValueError):
+            pass
+
+    if fade_out_ms:
+        try:
+            fout = float(fade_out_ms) / 1000.0
+            dur: float | None = None
+            if fin is not None and ini is not None:
+                dur = fin - ini
+            elif fin is not None:
+                dur = fin
+            if dur is not None and fout > 0:
+                st = max(0.0, dur - fout)
+                exprs.append(f"afade=t=out:st={st:.3f}:d={fout:.3f}")
+        except (TypeError, ValueError):
+            pass
+
+    return exprs
+
+
 def _vol(valor: Any) -> float:
     """Volumen a float en [0, 1]; 1.0 por defecto (ausente o no numerico)."""
     try:
@@ -274,7 +309,9 @@ def _cadena_audio(
     if musica is not None:
         vm = 0.0 if bool(musica.get("silenciar")) else _vol(musica.get("volumen"))
         ini, fin = recorte_de(musica)
-        pasos.append(f"[{idx_musica}:a]{_atrim_expr(ini, fin)}volume={vm:.3f}[amus]")
+        afades = _afade_exprs(musica, ini, fin)
+        afade_str = ("," + ",".join(afades)) if afades else ""
+        pasos.append(f"[{idx_musica}:a]{_atrim_expr(ini, fin)}volume={vm:.3f}{afade_str}[amus]")
         fuentes.append("amus")
 
     if not fuentes:
