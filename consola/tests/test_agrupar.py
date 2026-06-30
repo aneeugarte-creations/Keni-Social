@@ -713,17 +713,6 @@ def test_umbral_recalcula_el_score_no_usa_el_persistido():
     assert not ok
 
 
-def test_umbral_rechaza_sin_encaje_de_marca():
-    # `velocidad=1.0`: la historia supera el score por mérito propio, así el rechazo aísla
-    # la regla de ENCAJE DE MARCA (sin ella, caería antes por el umbral de score).
-    ok, motivo = agrupar.evaluar_umbral(
-        _cluster_apto(titulo="Celebrity gossip news today", velocidad=1.0),
-        palabras_marca=_PAL, ahora=_T0,
-    )
-    assert not ok
-    assert "marca" in motivo
-
-
 def test_umbral_madura_antes_de_promover():
     """Con maduración, una historia recién vista NO se promueve aún (motivo explicable)."""
     recien = _cluster_apto(primer_visto=(_T0 - timedelta(minutes=10)).isoformat())

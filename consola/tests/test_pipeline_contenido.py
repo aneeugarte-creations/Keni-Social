@@ -754,7 +754,10 @@ def test_verificar_cluster_ok_se_admite_heredando_veredicto(entorno, monkeypatch
     monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_VERIFICACION_OK))  # noqa: F841
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    monkeypatch.setenv("KENI_PLAN_DIA::unotv", "mx:50")  # plan = gate de auto-producción
+    from keni_consola import bootstrap_categorias
+    bootstrap_categorias.inicializar_categorias()  # el plan se clava por LÍNEA (id de etiqueta)
+    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", f"{nacional['id']}:50")  # plan (línea de 'mx') = gate
     _inicializar_cluster("c-ok", titulo="Historia verificada", score=0.8)
 
     res = pc._ejecutar_investigacion()
@@ -1057,7 +1060,10 @@ def test_dos_loops_investigacion_y_produccion_separan_fases(entorno, monkeypatch
     monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
     _mock_lanzar_copy(monkeypatch)
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    monkeypatch.setenv("KENI_PLAN_DIA::unotv", "mx:50")  # plan = gate de auto-producción
+    from keni_consola import bootstrap_categorias
+    bootstrap_categorias.inicializar_categorias()  # el plan se clava por LÍNEA (id de etiqueta)
+    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", f"{nacional['id']}:50")  # plan (línea de 'mx') = gate
     # Cluster ya verificado: ADMITIR lo promueve sin pasar por la fase de verificación.
     _inicializar_cluster("c1", titulo="Historia caliente", score=0.8, verificacion_fuente=pc.VERIFICACION_VERIFICADO)
 
@@ -1493,7 +1499,10 @@ def test_caducado_libera_hueco_para_lo_fresco_del_ranking(entorno, monkeypatch):
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_EN_PROCESO_MAX", "1")
     monkeypatch.delenv("KENI_PIPELINE_REDACTAR", raising=False)
-    monkeypatch.setenv("KENI_PLAN_DIA::unotv", "mx:50")  # plan = gate de auto-producción
+    from keni_consola import bootstrap_categorias
+    bootstrap_categorias.inicializar_categorias()  # el plan se clava por LÍNEA (id de etiqueta)
+    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", f"{nacional['id']}:50")  # plan (línea de 'mx') = gate
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     _tema_pipeline(titulo="Backlog vencido", verificacion_fuente="", copy_pendiente=pend)
     # Cluster ya verificado: ADMITIR lo promueve en cuanto se libere cupo (el foco del test es la caducidad).
@@ -1531,7 +1540,10 @@ def test_admitir_serial_promueve_solo_hasta_el_cupo(entorno, monkeypatch):
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "3")  # pipeline_max alto: el límite real es el cupo
     monkeypatch.setenv("KENI_PIPELINE_EN_PROCESO_MAX", "3")
-    monkeypatch.setenv("KENI_PLAN_DIA::unotv", "mx:50")  # plan = gate; el cupo serial (1) manda
+    from keni_consola import bootstrap_categorias
+    bootstrap_categorias.inicializar_categorias()  # el plan se clava por LÍNEA (id de etiqueta)
+    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", f"{nacional['id']}:50")  # plan (línea de 'mx') = gate; el cupo serial (1) manda
     # 2 en proceso -> cupo 1: solo entra 1 historia aunque haya 3 clusters y pipeline_max=3.
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     _tema_pipeline(titulo="En proceso 1", verificacion_fuente="", copy_pendiente=pend)
