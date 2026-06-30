@@ -279,6 +279,12 @@ from .db_jobs import (  # noqa: F401
     terminar_job,
     tokens_promedio_por_etapa,
 )
+from .db_intentos import (  # noqa: F401
+    anotar_intento_etapa,
+    intento_ts,
+    intentos_etapa,
+    reset_intentos_etapa,
+)
 from .db_latidos import (  # noqa: F401
     consumir_solicitud_barrido,
     latido_barrido,
@@ -562,6 +568,10 @@ __all__ = [
     "tokens_promedio_por_etapa",
     "reencolar_job",
     "reiniciar_intentos_job",
+    "intentos_etapa",
+    "anotar_intento_etapa",
+    "intento_ts",
+    "reset_intentos_etapa",
     "actualizar_fuente_algoritmo",
     "borrar_fuente_algoritmo",
     "contar_fuentes_algoritmo",

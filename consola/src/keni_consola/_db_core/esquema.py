@@ -832,6 +832,22 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # re-reclamo de suelto). Al superar `KENI_JOBS_MAX_INTENTOS`, el re-reclamo DESCARTA
     # el job en vez de re-ejecutarlo para siempre. Migracion idempotente.
     "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS intentos INTEGER NOT NULL DEFAULT 0",
+    # CONTADOR de intentos por ETAPA del pipeline de contenido (anti reintento desbocado).
+    # Vive FUERA de la cola de `jobs` y del JSON `copy_pendiente` del tema para SOBREVIVIR a la
+    # purga de la cola y a un "exito vacio" que limpiaria el pendiente. `sujeto` es el
+    # `publicacion_id` (tema) o el `cluster_id` (verificacion pre-tablero, antes de que exista
+    # tema); `etapa` es el nombre estable de la fase (`verificar`/`redactar`/...). `n` cuenta
+    # los intentos consumidos y `actualizado` (el instante del ultimo) alimenta el backoff
+    # creciente. La fila se BORRA al exito de la etapa (no se conserva historial aqui).
+    """
+    CREATE TABLE IF NOT EXISTS intentos_etapa (
+        sujeto      TEXT NOT NULL,
+        etapa       TEXT NOT NULL,
+        n           INTEGER NOT NULL DEFAULT 0,
+        actualizado timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (sujeto, etapa)
+    )
+    """,
     # LEDGER de gasto de IA (economia de tokens, ver `presupuesto_ia.py`): una fila por
     # GENERACION CERRADA (terminal completado/error) con sus tokens/coste. La escribe el
     # hook de cierre del almacen de generaciones (UPSERT por gen_id: idempotente ante

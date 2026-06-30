@@ -79,6 +79,9 @@ _TABLAS = (
     "webhooks",
     "eventos_internos",
     "jobs",
+    # Contador de intentos por etapa del pipeline (anti reintento desbocado): sin truncar, las
+    # filas de un test contaminarian el tope/backoff del siguiente.
+    "intentos_etapa",
     # Indice del listado de generaciones (cache derivado del almacen YAML; rendimiento).
     "generaciones_indice",
     "metricas_cache",
