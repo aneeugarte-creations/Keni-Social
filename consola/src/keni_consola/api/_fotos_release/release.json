@@ -1,9 +1,9 @@
 {
-  "version": "0.5.0",
-  "notes": "Fases más fiables: la separación pre/in/post-partido ya no se descoloca por un disparo suelto de teleobjetivo en el calentamiento o el post-partido. La ventana de juego se calcula sobre el bloque denso de acción, no sobre sus extremos.",
+  "version": "0.6.0",
+  "notes": "Búsqueda más rápida, miniaturas más fiables y mejor manejo de varias cámaras con la hora desajustada",
   "pub_date": "2026-06-30T00:00:00Z",
   "darwin-aarch64": {
-    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcGQyVEsyWDdORzA1aXNFSjg1cXBUa3BrN08yZU9yWkxiSGFkRTE4dno2N2FMS3NYQ1lRL0d4WG9sWHpUOUF4OGR2NGU1c0N4WUZTYXgxWG9iZW5VZ3djPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyODM5MzcxCWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6CllrQnhIR1E2MmRiUXJlamN5TGFKMjFLYzYvR1N6QUt4b0RCSzJnRlg5d3dwblpERjFvTU5NSGpCMldTWE1PUmhsNE13NDgrcTdld0tkdzZ2NzZEZ0RRPT0K",
+    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcFQ2VmF0RFJlOVp4Q2xORUlCbDBNQjNsWXc5SFJST1VYanVlMWZsS0tDYzZqZmM4ekU5SVY4Yk1KZGhycjNuTTlQUnFUcmQ3aXprSzF4cldHTnF6UGcwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyODQxMTM4CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6CkQyT2lZWFk5SElvemFweU5GV0loVW5rVGU1dGVXTGJXOFhvNnVvS0FZQ0c1M1haZVdVb01aVTBMbFg1ZEJTV2NPYlJkUC9mOVp1LzYrRHdmVDgyUURBPT0K",
     "url": "https://social.kenitech.io/api/fotos/updater"
   }
 }
