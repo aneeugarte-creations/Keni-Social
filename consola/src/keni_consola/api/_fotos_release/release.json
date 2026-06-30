@@ -1,9 +1,9 @@
 {
-  "version": "0.1.13",
-  "notes": "Procesa fotos RAW (extrae el preview embebido), endereza las verticales, etiquetado más robusto (no se atasca y reintenta), barra de progreso (15/175) y botón para cancelar el procesado.",
+  "version": "0.1.14",
+  "notes": "Arreglada la pantalla en blanco al abrir una galería; ahora un fallo de datos muestra un aviso en vez de cerrarse.",
   "pub_date": "2026-06-29T00:00:00Z",
   "darwin-aarch64": {
-    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcFJMc2pzZVgvOGxXUE9LTnV6bWsvb0Nwd2s2ODZhelpVYzBvY1diOUZ2eHhkYnNaNzFWcjQwSENSUlYxRk90Sk5tNHN6eHR5TzNCbW4xdGRvcnFKNHdrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzgyMDQ2CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6ClRrbzZESm40MWNxS2N0NjJaS2RjZTJPNCt2Qjk4YnJhOVhOT1hMMTBXeDFZQmpHQy92eGprbVRNQWYyNzdNeUxUbTdTaG1BMVJtQmUwOVg0N1FqY0RnPT0K",
+    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcFhkSEIwSWZkZmlUT0thVXhRV3NMTWFtUFZFUEFGN2t2RnJrRGFCOHNpYzFNenF6c1ZqeWMwR2Q1aU1oVnFxWVoyRFF2NUJkQ0ZtT0c5R3dDbFpWRWdBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzgyMzMyCWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6CnZVazFEZEZvL29uRmk0RHM2anNXUVphS2pXdkczWk44TS9aYXMyTWRyQUhnMnRuRWZDZndQc0xUZ29vSDFMNStzN1E3Um1QQkppOFE0d2ZtdkdCaEFBPT0K",
     "url": "https://social.kenitech.io/api/fotos/updater"
   }
 }
