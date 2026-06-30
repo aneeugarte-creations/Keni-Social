@@ -11,7 +11,10 @@
 
 import type { Capa } from "@/editor/documento";
 
-export const VERSION_COMPOSICION = 1;
+// v2 añade: pista `audio` (música mezclada con `amix`), `volumen`/`silenciar` por clip de vídeo
+// y SEGMENTOS múltiples en la pista base (split/corte). Los documentos v1 son retro-compatibles
+// (la pista audio falta → null; un solo clip base → un solo segmento).
+export const VERSION_COMPOSICION = 2;
 
 // --------------------------------------------------------------------------- #
 // Presets de formato (espejo de keni_shared/video.py::PRESETS_FORMATO)         #
@@ -79,12 +82,44 @@ export interface ClipVideo {
   ajuste: AjusteVideo;
   /** Punto focal 0..1 que dirige el `crop` del reencuadre cover. */
   foco: [number, number];
+  /** Volumen del audio de ESTE clip (0..1). Ausente = 1 (volumen original). */
+  volumen?: number;
+  /** Silencia el audio de este clip (el render no lo mezcla). Ausente = false. */
+  silenciar?: boolean;
 }
 
 export interface PistaVideo {
   id: string; // "base" | "pip"
   tipo: "video";
+  /**
+   * Clips de la pista. La pista BASE admite VARIOS clips ("segmentos") que el render concatena
+   * en orden (corte/split); la pista PiP usa un único clip. Cada clip lleva su propio recorte.
+   */
   clips: ClipVideo[];
+}
+
+/** Un clip de la pista de AUDIO (música u otra fuente de sonido mezclada con el clip base). */
+export interface ClipAudio {
+  id: string;
+  /** Clave de media de audio/vídeo del que se toma el sonido. */
+  media_id: string;
+  inicio_ms: number;
+  fin_ms: number;
+  recorte_in_ms: number;
+  recorte_out_ms: number;
+  /** Desplazamiento (ms) respecto al inicio de la composición donde entra este audio. */
+  offset_ms: number;
+  /** Volumen 0..1 (ausente = 1). */
+  volumen?: number;
+  /** Silencia este clip de audio. */
+  silenciar?: boolean;
+}
+
+/** Pista de AUDIO independiente: música u otras fuentes que el render mezcla (`amix`). */
+export interface PistaAudio {
+  id: string; // "audio"
+  tipo: "audio";
+  clips: ClipAudio[];
 }
 
 export interface PistaOverlay {
@@ -110,7 +145,7 @@ export interface PistaSubtitulos {
   estilo: EstiloSubtitulos;
 }
 
-export type PistaComposicion = PistaVideo | PistaOverlay | PistaSubtitulos;
+export type PistaComposicion = PistaVideo | PistaOverlay | PistaSubtitulos | PistaAudio;
 
 export interface FormatoComposicion {
   w: number;
@@ -156,6 +191,16 @@ export function pistaSubtitulos(doc: ComposicionVideo): PistaSubtitulos | null {
   return (doc.pistas.find((p) => p.tipo === "subtitulos") as PistaSubtitulos) ?? null;
 }
 
+/** Pista de audio (música). `null` en documentos v1 que no la traen (retro-compat). */
+export function pistaAudio(doc: ComposicionVideo): PistaAudio | null {
+  return (doc.pistas.find((p) => p.tipo === "audio") as PistaAudio) ?? null;
+}
+
+/** Segmentos de la pista base, en orden de concatenación (vacío si no hay clip base). */
+export function segmentosBase(doc: ComposicionVideo): ClipVideo[] {
+  return pistaBase(doc)?.clips ?? [];
+}
+
 // --------------------------------------------------------------------------- #
 // Constructores / mutadores (inmutables: devuelven una composición nueva)       #
 // --------------------------------------------------------------------------- #
@@ -183,6 +228,7 @@ export function composicionVacia(aspecto: AspectoVideo, marca = ""): Composicion
       { id: "pip", tipo: "video", clips: [] },
       { id: "overlay", tipo: "overlay", capas: [] },
       { id: "subs", tipo: "subtitulos", subtitulo_id: "", estilo: { ...ESTILO_SUBTITULOS_DEFECTO } },
+      { id: "audio", tipo: "audio", clips: [] },
     ],
   };
 }
@@ -238,52 +284,102 @@ export function setClipBase(
   };
 }
 
-/** Duración mínima (ms) que debe conservar el clip base tras un trim. */
+/** Duración mínima (ms) que debe conservar un segmento del clip base tras un trim/corte. */
 export const MIN_RECORTE_MS = 1000;
 
+/** Duración de salida (ms) de un segmento: lo que aporta al vídeo final tras su recorte. */
+function durSegmento(c: ClipVideo): number {
+  const inn = c.recorte_in_ms ?? 0;
+  const out = c.recorte_out_ms || c.fin_ms || 0;
+  return Math.max(0, out - inn);
+}
+
+/** Duración total de la pista base (suma de los segmentos tras su recorte). */
+export function duracionBaseMs(doc: ComposicionVideo): number {
+  return segmentosBase(doc).reduce((s, c) => s + durSegmento(c), 0);
+}
+
+/** Reescribe los clips de la pista base y recalcula `duracion_ms` (= suma de segmentos). */
+function conSegmentosBase(doc: ComposicionVideo, clips: ClipVideo[]): ComposicionVideo {
+  const duracion = clips.reduce((s, c) => s + durSegmento(c), 0);
+  return {
+    ...doc,
+    duracion_ms: duracion,
+    pistas: doc.pistas.map((p) => (p.tipo === "video" && p.id === "base" ? { ...p, clips } : p)),
+  };
+}
+
 /**
- * Fija el recorte temporal del clip BASE (`recorte_in_ms`/`recorte_out_ms`), que el render
- * server-side aplica con `-ss`/`-to` antes del input de FFmpeg
- * (`motores/estudio_video/filtros.py::construir_comando`). Clampa a `[0, maxMs]` (la duración
- * real del clip, si se conoce) y garantiza un mínimo de `MIN_RECORTE_MS` (clips más cortos:
- * todo el clip). Recalcula `fin_ms` del clip y `duracion_ms` del documento (= duración
- * recortada; el worker la usa para el % de progreso del render). Sin clip base o sin cambio
- * real devuelve el MISMO objeto (los autoguardados comparan por referencia).
+ * Fija el recorte temporal de un SEGMENTO del clip BASE (`recorte_in_ms`/`recorte_out_ms`), que
+ * el render aplica con `trim`/`-ss`-`-to` (`motores/estudio_video/filtros.py`). Clampa a
+ * `[0, maxMs]` (duración real del segmento si se conoce) con un mínimo de `MIN_RECORTE_MS`.
+ * Recalcula `fin_ms` del segmento y `duracion_ms` del documento (= suma de segmentos). Sin clip
+ * base o sin cambio real devuelve el MISMO objeto (los autoguardados comparan por referencia).
+ * `idx` selecciona el segmento (0 por defecto: compat con la pista de un solo clip).
  */
 export function setRecorteBase(
   doc: ComposicionVideo,
   inMs: number,
   outMs: number,
   maxMs?: number,
+  idx = 0,
 ): ComposicionVideo {
-  const clip = pistaBase(doc)?.clips[0];
+  const clips = segmentosBase(doc);
+  const clip = clips[idx];
   if (!clip) return doc;
   const tope =
     maxMs && maxMs > 0
       ? maxMs
-      : Math.max(clip.recorte_out_ms || 0, clip.fin_ms || 0, doc.duracion_ms || 0);
+      : Math.max(clip.recorte_out_ms || 0, clip.fin_ms || 0, durSegmento(clip) || 0);
   if (tope <= 0) return doc;
   const minDur = Math.min(MIN_RECORTE_MS, tope);
   const salida = Math.round(Math.min(Math.max(outMs, minDur), tope));
   const entrada = Math.round(Math.min(Math.max(0, inMs), salida - minDur));
   if (entrada === clip.recorte_in_ms && salida === clip.recorte_out_ms) return doc;
-  const dur = salida - entrada;
-  return {
-    ...doc,
-    duracion_ms: dur,
-    pistas: doc.pistas.map((p) =>
-      p.tipo === "video" && p.id === "base"
-        ? {
-            ...p,
-            clips: p.clips.map((c, i) =>
-              i === 0
-                ? { ...c, recorte_in_ms: entrada, recorte_out_ms: salida, fin_ms: c.inicio_ms + dur }
-                : c,
-            ),
-          }
-        : p,
-    ),
-  };
+  const nuevos = clips.map((c, i) =>
+    i === idx
+      ? { ...c, recorte_in_ms: entrada, recorte_out_ms: salida, inicio_ms: 0, fin_ms: salida - entrada }
+      : c,
+  );
+  return conSegmentosBase(doc, nuevos);
+}
+
+/**
+ * DIVIDE (corta) el segmento `idx` de la pista base en su tiempo de salida local `msLocal`
+ * (0..duración del segmento), produciendo dos segmentos consecutivos de la misma fuente. El
+ * punto de corte en la fuente es `recorte_in + msLocal`. Si alguna mitad quedaría por debajo de
+ * `MIN_RECORTE_MS`, no corta (devuelve el MISMO objeto). La duración total no cambia.
+ */
+export function dividirClipBase(doc: ComposicionVideo, idx: number, msLocal: number): ComposicionVideo {
+  const clips = segmentosBase(doc);
+  const c = clips[idx];
+  if (!c) return doc;
+  const inn = c.recorte_in_ms ?? 0;
+  const out = c.recorte_out_ms || c.fin_ms || 0;
+  const corte = Math.round(inn + msLocal);
+  if (corte - inn < MIN_RECORTE_MS || out - corte < MIN_RECORTE_MS) return doc;
+  const izq: ClipVideo = { ...c, id: nuevoId("c"), recorte_in_ms: inn, recorte_out_ms: corte, inicio_ms: 0, fin_ms: corte - inn };
+  const der: ClipVideo = { ...c, id: nuevoId("c"), recorte_in_ms: corte, recorte_out_ms: out, inicio_ms: 0, fin_ms: out - corte };
+  const nuevos = [...clips.slice(0, idx), izq, der, ...clips.slice(idx + 1)];
+  return conSegmentosBase(doc, nuevos);
+}
+
+/** Elimina el segmento `idx` de la pista base (conserva al menos uno). */
+export function quitarSegmentoBase(doc: ComposicionVideo, idx: number): ComposicionVideo {
+  const clips = segmentosBase(doc);
+  if (clips.length <= 1 || idx < 0 || idx >= clips.length) return doc;
+  return conSegmentosBase(doc, clips.filter((_, i) => i !== idx));
+}
+
+/** Reordena el segmento `idx` a la posición `destino` (clamp); útil para arrastrar segmentos. */
+export function moverSegmentoBase(doc: ComposicionVideo, idx: number, destino: number): ComposicionVideo {
+  const clips = segmentosBase(doc);
+  const dest = Math.min(Math.max(0, destino), clips.length - 1);
+  if (idx < 0 || idx >= clips.length || idx === dest) return doc;
+  const copia = [...clips];
+  const [m] = copia.splice(idx, 1);
+  copia.splice(dest, 0, m);
+  return conSegmentosBase(doc, copia);
 }
 
 /** Actualiza el reencuadre (ajuste/foco) del clip base. */
@@ -372,6 +468,101 @@ export function setCapasOverlay(doc: ComposicionVideo, capas: Capa[]): Composici
   return {
     ...doc,
     pistas: doc.pistas.map((p) => (p.tipo === "overlay" ? { ...p, capas } : p)),
+  };
+}
+
+// --------------------------------------------------------------------------- #
+// Audio: silenciar/volumen del audio del clip base + pista de música           #
+// --------------------------------------------------------------------------- #
+
+/** Volumen por defecto (0..1) de un clip cuando no declara `volumen`. */
+export const VOLUMEN_DEFECTO = 1;
+
+/** Aplica `cambios` (volumen/silenciar) a TODOS los segmentos de la pista base (su audio). */
+export function setAudioBase(
+  doc: ComposicionVideo,
+  cambios: { volumen?: number; silenciar?: boolean },
+): ComposicionVideo {
+  const clips = segmentosBase(doc);
+  if (clips.length === 0) return doc;
+  const vol = cambios.volumen != null ? Math.min(1, Math.max(0, cambios.volumen)) : undefined;
+  return {
+    ...doc,
+    pistas: doc.pistas.map((p) =>
+      p.tipo === "video" && p.id === "base"
+        ? {
+            ...p,
+            clips: p.clips.map((c) => ({
+              ...c,
+              ...(vol != null ? { volumen: vol } : {}),
+              ...(cambios.silenciar != null ? { silenciar: cambios.silenciar } : {}),
+            })),
+          }
+        : p,
+    ),
+  };
+}
+
+/** Devuelve `pistas` garantizando que existe la pista `audio` (la añade en docs v1). */
+function conPistaAudio(doc: ComposicionVideo): PistaComposicion[] {
+  if (doc.pistas.some((p) => p.tipo === "audio")) return doc.pistas;
+  return [...doc.pistas, { id: "audio", tipo: "audio", clips: [] } as PistaAudio];
+}
+
+/** Fija (o reemplaza) la música de la composición: un único clip de audio en la pista `audio`. */
+export function setMusica(doc: ComposicionVideo, mediaId: string, duracionMs: number): ComposicionVideo {
+  const clip: ClipAudio = {
+    id: nuevoId("a"),
+    media_id: mediaId,
+    inicio_ms: 0,
+    fin_ms: duracionMs,
+    recorte_in_ms: 0,
+    recorte_out_ms: duracionMs,
+    offset_ms: 0,
+    volumen: VOLUMEN_DEFECTO,
+    silenciar: false,
+  };
+  return {
+    ...doc,
+    pistas: conPistaAudio(doc).map((p) => (p.tipo === "audio" ? { ...p, clips: [clip] } : p)),
+  };
+}
+
+/** Cambia volumen/silenciar del primer clip de música. Sin música no hace nada. */
+export function setVolumenMusica(
+  doc: ComposicionVideo,
+  cambios: { volumen?: number; silenciar?: boolean },
+): ComposicionVideo {
+  const pista = pistaAudio(doc);
+  if (!pista || pista.clips.length === 0) return doc;
+  const vol = cambios.volumen != null ? Math.min(1, Math.max(0, cambios.volumen)) : undefined;
+  return {
+    ...doc,
+    pistas: doc.pistas.map((p) =>
+      p.tipo === "audio"
+        ? {
+            ...p,
+            clips: p.clips.map((c, i) =>
+              i === 0
+                ? {
+                    ...c,
+                    ...(vol != null ? { volumen: vol } : {}),
+                    ...(cambios.silenciar != null ? { silenciar: cambios.silenciar } : {}),
+                  }
+                : c,
+            ),
+          }
+        : p,
+    ),
+  };
+}
+
+/** Quita la música (deja la pista de audio vacía). */
+export function quitarMusica(doc: ComposicionVideo): ComposicionVideo {
+  if (!pistaAudio(doc)) return doc;
+  return {
+    ...doc,
+    pistas: doc.pistas.map((p) => (p.tipo === "audio" ? { ...p, clips: [] } : p)),
   };
 }
 

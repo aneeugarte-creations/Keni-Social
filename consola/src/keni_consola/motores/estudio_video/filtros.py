@@ -30,6 +30,8 @@ _LBL_BASE = "vbase"
 _LBL_PIP = "vpip"
 _LBL_OVL = "vovl"
 _LBL_SUB = "vsub"
+# Etiqueta de la cadena de audio mezclada (base + musica).
+_LBL_AUDIO = "aout"
 
 
 def _foco_seguro(foco: Any) -> tuple[float, float]:
@@ -44,14 +46,66 @@ def _foco_seguro(foco: Any) -> tuple[float, float]:
     return 0.5, 0.5
 
 
-def _clip_base(pistas: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Primer clip de la pista de video BASE (id 'base' si existe; si no, la primera pista video)."""
+def _pista_base(pistas: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Pista de video BASE (id 'base' si existe; si no, la primera pista de video)."""
     videos = [p for p in pistas if p.get("tipo") == "video"]
     if not videos:
         return None
-    base = next((p for p in videos if p.get("id") == "base"), videos[0])
-    clips = base.get("clips") or []
+    return next((p for p in videos if p.get("id") == "base"), videos[0])
+
+
+def _clips_base(pistas: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """SEGMENTOS de la pista base, en orden (varios = corte/split que se concatena)."""
+    base = _pista_base(pistas)
+    if base is None:
+        return []
+    return list(base.get("clips") or [])
+
+
+def _clip_base(pistas: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Primer clip/segmento de la pista base (para leer ajuste/foco, comunes a la pista)."""
+    clips = _clips_base(pistas)
     return clips[0] if clips else None
+
+
+def _clip_musica(pistas: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Primer clip de la pista de AUDIO (musica) si la hay con media."""
+    audio = next((p for p in pistas if p.get("tipo") == "audio"), None)
+    if audio is None:
+        return None
+    clips = audio.get("clips") or []
+    clip = clips[0] if clips else None
+    if clip and str(clip.get("media_id") or "").strip():
+        return clip
+    return None
+
+
+def _vol(valor: Any) -> float:
+    """Volumen a float en [0, 1]; 1.0 por defecto (ausente o no numerico)."""
+    try:
+        return min(1.0, max(0.0, float(valor)))
+    except (TypeError, ValueError):
+        return 1.0
+
+
+def _trim_expr(ini: float | None, fin: float | None) -> str:
+    """Expresion `trim=start=..:end=..,` (con coma final) o "" si no hay recorte."""
+    partes = []
+    if ini is not None:
+        partes.append(f"start={ini:.3f}")
+    if fin is not None:
+        partes.append(f"end={fin:.3f}")
+    return f"trim={':'.join(partes)}," if partes else ""
+
+
+def _atrim_expr(ini: float | None, fin: float | None) -> str:
+    """Expresion `atrim=start=..:end=..,` (con coma final) o "" si no hay recorte."""
+    partes = []
+    if ini is not None:
+        partes.append(f"start={ini:.3f}")
+    if fin is not None:
+        partes.append(f"end={fin:.3f}")
+    return f"atrim={':'.join(partes)}," if partes else ""
 
 
 def _pista_pip(pistas: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -162,34 +216,120 @@ def filtro_subtitulos(ruta_ass: str, *, entrada: str, salida: str) -> str:
     return f"[{entrada}]ass={_escapar_ruta_ass(ruta_ass)}[{salida}]"
 
 
+def _cadena_audio(
+    segmentos: list[dict[str, Any]],
+    base_clip: dict[str, Any],
+    musica: dict[str, Any] | None,
+    idx_musica: int,
+) -> tuple[list[str], str | None]:
+    """Construye la sub-cadena de AUDIO del filter_complex y su etiqueta de salida.
+
+    Devuelve `(pasos, etiqueta)` donde `etiqueta` es:
+      - `None`  -> no hace falta grafo de audio: el comando mapea `0:a?` (audio del base tal cual).
+      - `""`    -> silencio EXPLICITO (base silenciado y sin musica): no se mapea audio.
+      - `"<lbl>"`-> etiqueta del audio resultante a mapear con `-map [<lbl>]`.
+
+    Mezcla el audio del clip base (respetando split con `atrim`+`concat`, volumen/silenciar) con la
+    musica (input `idx_musica`, su propio volumen) usando `amix` (sin normalizar, para no bajar el
+    nivel). El audio solo se procesa cuando hay split, volumen!=1, silenciado o musica.
+    """
+    base_silenciado = bool(base_clip.get("silenciar"))
+    vol_base = base_clip.get("volumen")
+    hay_split = len(segmentos) > 1
+    necesita = (
+        hay_split
+        or base_silenciado
+        or (vol_base is not None and _vol(vol_base) != 1.0)
+        or musica is not None
+    )
+    if not necesita:
+        return [], None
+
+    pasos: list[str] = []
+    fuentes: list[str] = []
+
+    # Audio del clip base (omitido si esta silenciado).
+    if not base_silenciado and segmentos:
+        if hay_split:
+            for i, seg in enumerate(segmentos):
+                ini, fin = recorte_de(seg)
+                pasos.append(f"[0:a]{_atrim_expr(ini, fin)}asetpts=PTS-STARTPTS[aseg{i}]")
+            cadena = "".join(f"[aseg{i}]" for i in range(len(segmentos)))
+            pasos.append(f"{cadena}concat=n={len(segmentos)}:v=0:a=1[acat]")
+            fuente = "acat"
+        else:
+            fuente = "0:a"
+        v = _vol(vol_base)
+        if v != 1.0:
+            pasos.append(f"[{fuente}]volume={v:.3f}[abase]")
+            fuentes.append("abase")
+        elif fuente == "acat":
+            fuentes.append("acat")
+        else:
+            # Volumen original y sin split, pero hay musica: nombra el audio base para mezclar.
+            pasos.append("[0:a]anull[abase]")
+            fuentes.append("abase")
+
+    # Musica.
+    if musica is not None:
+        vm = 0.0 if bool(musica.get("silenciar")) else _vol(musica.get("volumen"))
+        ini, fin = recorte_de(musica)
+        pasos.append(f"[{idx_musica}:a]{_atrim_expr(ini, fin)}volume={vm:.3f}[amus]")
+        fuentes.append("amus")
+
+    if not fuentes:
+        return pasos, ""  # silencio explicito: base silenciado y sin musica
+    if len(fuentes) == 1:
+        return pasos, fuentes[0]
+    mezcla = "".join(f"[{x}]" for x in fuentes)
+    pasos.append(
+        f"{mezcla}amix=inputs={len(fuentes)}:duration=first:dropout_transition=0:normalize=0[{_LBL_AUDIO}]"
+    )
+    return pasos, _LBL_AUDIO
+
+
 def construir_filtergraph(
     documento: dict[str, Any],
     *,
     overlay_png: str | None = None,
     ass_path: str | None = None,
     tiene_pip: bool = False,
-) -> tuple[str, str]:
+    tiene_musica: bool = False,
+) -> tuple[str, str, str | None]:
     """Construye el filtergraph completo a partir del `documento` validado + recursos disponibles.
 
-    Devuelve `(filtergraph, etiqueta_final)`: el string `-filter_complex` y la etiqueta de la
-    cadena de video a mapear como salida. El ORDEN de entradas de ffmpeg que asume es:
-      [0:v] = clip base ; [1:v] = clip pip (si `tiene_pip`) ; siguiente = overlay PNG (si lo hay).
-    El ejecutor debe alinear los `-i` con este orden.
+    Devuelve `(filtergraph, etiqueta_video, etiqueta_audio)`: el string `-filter_complex`, la
+    etiqueta de la cadena de video a mapear, y la etiqueta de audio (`None` = mapear `0:a?`,
+    `""` = sin audio, `"<lbl>"` = mapear `[<lbl>]`). El ORDEN de entradas de ffmpeg que asume es:
+      [0] = clip base ; [1] = clip pip (si `tiene_pip`) ; siguiente = overlay PNG (si lo hay) ;
+      ultimo = musica (si `tiene_musica`).
 
-    Pasos (en orden de prioridad del contrato): reencuadre -> PiP -> overlay -> subtitulos.
+    Video (en orden de prioridad del contrato): segmentos (split) -> reencuadre -> PiP -> overlay
+    -> subtitulos. Audio: base (volumen/silenciar/split) + musica (`amix`).
     """
     formato = documento.get("formato") or {}
     w = int(formato.get("w") or 0)
     h = int(formato.get("h") or 0)
     pistas = documento.get("pistas") or []
 
-    base_clip = _clip_base(pistas) or {}
+    segmentos = _clips_base(pistas)
+    base_clip = segmentos[0] if segmentos else {}
     ajuste = str(base_clip.get("ajuste") or "cover")
     foco = base_clip.get("foco")
 
     pasos: list[str] = []
-    # 1) Reencuadre del clip base ([0:v] -> [vbase]).
-    pasos.append(filtro_reencuadre(w, h, ajuste, foco, entrada="0:v", salida=_LBL_BASE))
+    # 1) Cadena base: concat de segmentos (split) -> reencuadre. Con un solo segmento, el recorte
+    #    va a nivel input (`-ss`/`-to`) y aqui la entrada es `[0:v]` directo (rapido, compat).
+    if len(segmentos) > 1:
+        for i, seg in enumerate(segmentos):
+            ini, fin = recorte_de(seg)
+            pasos.append(f"[0:v]{_trim_expr(ini, fin)}setpts=PTS-STARTPTS[vseg{i}]")
+        cadena = "".join(f"[vseg{i}]" for i in range(len(segmentos)))
+        pasos.append(f"{cadena}concat=n={len(segmentos)}:v=1:a=0[vcat]")
+        entrada_base = "vcat"
+    else:
+        entrada_base = "0:v"
+    pasos.append(filtro_reencuadre(w, h, ajuste, foco, entrada=entrada_base, salida=_LBL_BASE))
     actual = _LBL_BASE
 
     # 2) PiP (segundo video, [1:v]).
@@ -209,7 +349,13 @@ def construir_filtergraph(
         pasos.append(filtro_subtitulos(ass_path, entrada=actual, salida=_LBL_SUB))
         actual = _LBL_SUB
 
-    return ";".join(pasos), actual
+    # 5) Audio: el indice de la musica es el siguiente tras los inputs de video.
+    idx_musica = 1 + (1 if tiene_pip else 0) + (1 if overlay_png else 0)
+    musica = _clip_musica(pistas) if tiene_musica else None
+    pasos_audio, etiqueta_audio = _cadena_audio(segmentos, base_clip, musica, idx_musica)
+    pasos.extend(pasos_audio)
+
+    return ";".join(pasos), actual, etiqueta_audio
 
 
 def construir_comando(
@@ -220,36 +366,47 @@ def construir_comando(
     pip_path: str | None = None,
     overlay_png: str | None = None,
     ass_path: str | None = None,
+    musica_path: str | None = None,
     salida_path: str,
     progress_pipe: bool = True,
 ) -> list[str]:
     """Arma la lista de argv de ffmpeg (SIN shell) para renderizar la composicion.
 
-    - Aplica el recorte temporal del clip base (`-ss`/`-to`) ANTES de su `-i` (recorte rapido).
+    - Recorte del clip base: con UN solo segmento va `-ss`/`-to` ANTES de su `-i` (rapido); con
+      VARIOS segmentos (split) el recorte vive en el filtergraph (`trim`+`concat`), sin `-ss/-to`.
     - Encadena el filtergraph de `construir_filtergraph` con `-filter_complex`.
-    - Mapea la etiqueta de video final + el audio del clip base (si existe) y codifica H.264/AAC
+    - Mapea la etiqueta de video final y la de audio: `0:a?` si no hay grafo de audio, `[aout]`/
+      etiqueta si hay mezcla/volumen/split, o NADA si el audio esta silenciado. Codifica H.264/AAC
       en yuv420p (compatible con redes), a los fps del formato.
     - Con `progress_pipe`, emite `-progress pipe:1` para parsear el avance del render.
     """
     pistas = documento.get("pistas") or []
     formato = documento.get("formato") or {}
     fps = int(formato.get("fps") or 30)
-    base_clip = _clip_base(pistas) or {}
+    segmentos = _clips_base(pistas)
+    base_clip = segmentos[0] if segmentos else {}
+    hay_split = len(segmentos) > 1
     pip_clip = _pista_pip(pistas) if pip_path else None
 
     tiene_pip = bool(pip_path)
-    filtergraph, etiqueta = construir_filtergraph(
-        documento, overlay_png=overlay_png, ass_path=ass_path, tiene_pip=tiene_pip
+    filtergraph, etiqueta, etiqueta_audio = construir_filtergraph(
+        documento,
+        overlay_png=overlay_png,
+        ass_path=ass_path,
+        tiene_pip=tiene_pip,
+        tiene_musica=bool(musica_path),
     )
 
     argv: list[str] = [ffmpeg_bin, "-y", "-hide_banner", "-nostdin"]
 
-    # Entrada 0: clip base (con recorte temporal antes del -i).
-    ini, fin = recorte_de(base_clip)
-    if ini is not None:
-        argv += ["-ss", f"{ini:.3f}"]
-    if fin is not None:
-        argv += ["-to", f"{fin:.3f}"]
+    # Entrada 0: clip base. Con un solo segmento, recorte rapido `-ss`/`-to` antes del -i; con
+    # split el recorte ya esta en el filtergraph (no se duplica aqui).
+    if not hay_split:
+        ini, fin = recorte_de(base_clip)
+        if ini is not None:
+            argv += ["-ss", f"{ini:.3f}"]
+        if fin is not None:
+            argv += ["-to", f"{fin:.3f}"]
     argv += ["-i", base_path]
 
     # Entrada 1: clip PiP (con su propio recorte).
@@ -265,13 +422,20 @@ def construir_comando(
     if overlay_png:
         argv += ["-i", overlay_png]
 
+    # Ultimo input: musica (audio). Va al final para no desplazar los indices de video.
+    if musica_path:
+        argv += ["-i", musica_path]
+
     if filtergraph:
         argv += ["-filter_complex", filtergraph, "-map", f"[{etiqueta}]"]
     else:  # pragma: no cover - defensivo: sin filtros mapeamos el video crudo.
         argv += ["-map", "0:v"]
 
-    # Audio del clip base, si lo trae (opcional: `?` no falla si no hay pista de audio).
-    argv += ["-map", "0:a?"]
+    # Audio: `0:a?` (sin grafo), `[etiqueta]` (mezcla/volumen/split) o NADA (silenciado).
+    if etiqueta_audio is None:
+        argv += ["-map", "0:a?"]
+    elif etiqueta_audio:
+        argv += ["-map", f"[{etiqueta_audio}]"]
 
     argv += [
         "-r", str(fps),

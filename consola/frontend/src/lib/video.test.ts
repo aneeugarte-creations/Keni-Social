@@ -1,6 +1,6 @@
 /**
  * Tests de los helpers PUROS del motor de video (`lib/video.ts`):
- *  - `composicionVacia` produce un sobre válido del contrato (4 pistas, formato del preset).
+ *  - `composicionVacia` produce un sobre válido del contrato (5 pistas, formato del preset).
  *  - `setClipBase` fija el clip a pantalla completa y la duración.
  *  - `cambiarAspecto` reescala las cajas de los clips de video.
  *  - `setCajaPip` hace clamp dentro del lienzo.
@@ -13,35 +13,45 @@ import { describe, expect, it } from "vitest";
 import {
   cambiarAspecto,
   composicionVacia,
+  dividirClipBase,
+  duracionBaseMs,
   formatearDuracionMs,
   formatearTiempo,
   MIN_RECORTE_MS,
+  moverSegmentoBase,
   normalizarSegmentos,
+  pistaAudio,
   pistaBase,
   pistaPip,
   presetParaAspecto,
+  quitarMusica,
   quitarPip,
+  quitarSegmentoBase,
   segmentoEn,
+  segmentosBase,
+  setAudioBase,
   setCajaPip,
   setClipBase,
   setClipPip,
+  setMusica,
   setRecorteBase,
   setReencuadreBase,
   setSubtitulos,
+  setVolumenMusica,
   tituloBorradorPorDefecto,
 } from "./video";
 
 describe("composicionVacia", () => {
-  it("produce el sobre del contrato (4 pistas, formato del preset 9:16)", () => {
+  it("produce el sobre del contrato (5 pistas, formato del preset 9:16)", () => {
     const doc = composicionVacia("9:16", "claro-sports");
-    expect(doc.version).toBe(1);
+    expect(doc.version).toBe(2);
     expect(doc.marca).toBe("claro-sports");
     expect(doc.formato).toEqual({ w: 1080, h: 1920, fps: 30, preset: "9:16" });
     expect(doc.duracion_ms).toBe(0);
     const ids = doc.pistas.map((p) => p.id).sort();
-    expect(ids).toEqual(["base", "overlay", "pip", "subs"]);
+    expect(ids).toEqual(["audio", "base", "overlay", "pip", "subs"]);
     const tipos = new Set(doc.pistas.map((p) => p.tipo));
-    expect(tipos).toEqual(new Set(["video", "overlay", "subtitulos"]));
+    expect(tipos).toEqual(new Set(["video", "overlay", "subtitulos", "audio"]));
   });
 
   it("usa el preset correcto por aspecto", () => {
@@ -255,5 +265,92 @@ describe("setRecorteBase", () => {
     expect(setRecorteBase(vacia, 0, 5000)).toBe(vacia);
     const doc = doc30();
     expect(setRecorteBase(doc, 0, 30000, 30000)).toBe(doc);
+  });
+});
+
+describe("split de segmentos del clip base", () => {
+  const doc30 = () => setClipBase(composicionVacia("9:16"), "videos/abc.mp4", 30000);
+
+  it("dividirClipBase parte un segmento en dos manteniendo la duración total", () => {
+    const doc = dividirClipBase(doc30(), 0, 10000);
+    const segs = segmentosBase(doc);
+    expect(segs).toHaveLength(2);
+    expect(segs[0]).toMatchObject({ recorte_in_ms: 0, recorte_out_ms: 10000, fin_ms: 10000 });
+    expect(segs[1]).toMatchObject({ recorte_in_ms: 10000, recorte_out_ms: 30000, fin_ms: 20000 });
+    expect(segs[0].id).not.toBe(segs[1].id);
+    expect(duracionBaseMs(doc)).toBe(30000);
+    expect(doc.duracion_ms).toBe(30000);
+  });
+
+  it("no divide si alguna mitad quedaría por debajo del mínimo (devuelve el MISMO doc)", () => {
+    const doc = doc30();
+    expect(dividirClipBase(doc, 0, 500)).toBe(doc); // izquierda < 1 s
+    expect(dividirClipBase(doc, 0, 29800)).toBe(doc); // derecha < 1 s
+  });
+
+  it("quitarSegmentoBase elimina un segmento pero conserva al menos uno", () => {
+    let doc = dividirClipBase(doc30(), 0, 10000);
+    doc = quitarSegmentoBase(doc, 0);
+    const segs = segmentosBase(doc);
+    expect(segs).toHaveLength(1);
+    expect(segs[0]).toMatchObject({ recorte_in_ms: 10000, recorte_out_ms: 30000 });
+    expect(doc.duracion_ms).toBe(20000);
+    // con un solo segmento, no se puede quitar más
+    expect(quitarSegmentoBase(doc, 0)).toBe(doc);
+  });
+
+  it("moverSegmentoBase reordena los segmentos", () => {
+    let doc = dividirClipBase(doc30(), 0, 10000); // [0..10][10..30]
+    doc = moverSegmentoBase(doc, 1, 0); // [10..30][0..10]
+    const segs = segmentosBase(doc);
+    expect(segs[0].recorte_in_ms).toBe(10000);
+    expect(segs[1].recorte_in_ms).toBe(0);
+  });
+
+  it("setRecorteBase con idx recorta el segmento indicado", () => {
+    let doc = dividirClipBase(doc30(), 0, 10000); // [0..10][10..30]
+    doc = setRecorteBase(doc, 12000, 20000, 30000, 1); // recorta el 2º segmento
+    const segs = segmentosBase(doc);
+    expect(segs[1]).toMatchObject({ recorte_in_ms: 12000, recorte_out_ms: 20000 });
+    // total = 10000 (seg0) + 8000 (seg1) = 18000
+    expect(doc.duracion_ms).toBe(18000);
+  });
+});
+
+describe("audio (silenciar/volumen base + música)", () => {
+  const doc30 = () => setClipBase(composicionVacia("9:16"), "videos/abc.mp4", 30000);
+
+  it("setAudioBase silencia y ajusta el volumen de todos los segmentos base", () => {
+    let doc = dividirClipBase(doc30(), 0, 10000);
+    doc = setAudioBase(doc, { silenciar: true, volumen: 0.5 });
+    for (const c of segmentosBase(doc)) {
+      expect(c.silenciar).toBe(true);
+      expect(c.volumen).toBe(0.5);
+    }
+  });
+
+  it("setAudioBase clampa el volumen a [0,1]", () => {
+    const doc = setAudioBase(doc30(), { volumen: 9 });
+    expect(segmentosBase(doc)[0].volumen).toBe(1);
+  });
+
+  it("setMusica añade un clip a la pista audio y quitarMusica la vacía", () => {
+    let doc = setMusica(doc30(), "videos/musica.mp3", 12000);
+    const pista = pistaAudio(doc)!;
+    expect(pista.clips).toHaveLength(1);
+    expect(pista.clips[0]).toMatchObject({ media_id: "videos/musica.mp3", volumen: 1, offset_ms: 0 });
+    doc = setVolumenMusica(doc, { volumen: 0.3, silenciar: true });
+    expect(pistaAudio(doc)!.clips[0]).toMatchObject({ volumen: 0.3, silenciar: true });
+    doc = quitarMusica(doc);
+    expect(pistaAudio(doc)!.clips).toHaveLength(0);
+  });
+
+  it("setMusica crea la pista audio en documentos v1 que no la traen", () => {
+    const v1 = composicionVacia("9:16");
+    // simula un documento viejo sin pista audio
+    const sinAudio = { ...v1, pistas: v1.pistas.filter((p) => p.tipo !== "audio") };
+    expect(pistaAudio(sinAudio)).toBeNull();
+    const doc = setMusica(sinAudio, "videos/m.mp3", 5000);
+    expect(pistaAudio(doc)!.clips).toHaveLength(1);
   });
 });

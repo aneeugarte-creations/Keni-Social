@@ -88,7 +88,9 @@ def preset_para_red(red_id: str) -> dict[str, int]:
 # --------------------------------------------------------------------------- #
 
 # Tipos de pista validos del esquema de composicion (ver G-video-engine.md).
-TIPOS_PISTA = frozenset({"video", "overlay", "subtitulos"})
+#   - audio: pista de sonido independiente (audio del clip base auto-separado o musica anadida),
+#     con volumen/silenciar por clip. El render la mezcla con `amix` (filtros.py).
+TIPOS_PISTA = frozenset({"video", "overlay", "subtitulos", "audio"})
 
 
 def _entero_no_negativo(valor: Any, campo: str) -> int:

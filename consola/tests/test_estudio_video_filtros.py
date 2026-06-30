@@ -56,7 +56,7 @@ def test_reencuadre_foco_desplaza_el_crop():
 
 
 def test_filtergraph_solo_base_es_un_unico_reencuadre():
-    fg, etiqueta = filtros.construir_filtergraph(_doc_base())
+    fg, etiqueta, _ = filtros.construir_filtergraph(_doc_base())
     assert etiqueta == "vbase"
     assert fg.count("scale=") == 1
     assert "overlay" not in fg
@@ -102,7 +102,7 @@ def test_comando_inserta_ss_to_antes_del_input_base():
 def test_filtergraph_con_overlay_anade_overlay_sobre_base():
     doc = _doc_base()
     doc["pistas"].append({"id": "overlay", "tipo": "overlay", "capas": [{"tipo": "texto"}]})
-    fg, etiqueta = filtros.construir_filtergraph(doc, overlay_png="/tmp/ovl.png")
+    fg, etiqueta, _ = filtros.construir_filtergraph(doc, overlay_png="/tmp/ovl.png")
     assert etiqueta == "vovl"
     # El overlay entra como segunda entrada de ffmpeg ([1:v]) y se compone en 0,0.
     assert "[1:v]scale=1080:1920[ovlsc]" in fg
@@ -136,7 +136,7 @@ def _doc_con_pip():
 
 def test_filtergraph_pip_escala_y_compone_en_posicion():
     doc = _doc_con_pip()
-    fg, etiqueta = filtros.construir_filtergraph(doc, tiene_pip=True)
+    fg, etiqueta, _ = filtros.construir_filtergraph(doc, tiene_pip=True)
     assert etiqueta == "vpip"
     assert "[1:v]scale=480:270[pipsc]" in fg
     assert "[vbase][pipsc]overlay=40:60[vpip]" in fg
@@ -163,7 +163,7 @@ def test_comando_pip_alinea_orden_de_inputs_base_pip_overlay():
 def test_filtergraph_con_ass_quema_subtitulos_al_final():
     doc = _doc_base()
     doc["pistas"].append({"id": "subs", "tipo": "subtitulos", "subtitulo_id": "s1"})
-    fg, etiqueta = filtros.construir_filtergraph(doc, ass_path="/tmp/subs.ass")
+    fg, etiqueta, _ = filtros.construir_filtergraph(doc, ass_path="/tmp/subs.ass")
     assert etiqueta == "vsub"
     assert "ass=" in fg
     assert fg.endswith("[vsub]")
@@ -178,7 +178,7 @@ def test_filtro_subtitulos_escapa_la_ruta():
 def test_sin_ass_no_hay_filtro_de_subtitulos():
     doc = _doc_base()
     doc["pistas"].append({"id": "subs", "tipo": "subtitulos", "subtitulo_id": "s1"})
-    fg, etiqueta = filtros.construir_filtergraph(doc, ass_path=None)
+    fg, etiqueta, _ = filtros.construir_filtergraph(doc, ass_path=None)
     assert etiqueta == "vbase"
     assert "ass=" not in fg
 
@@ -204,5 +204,101 @@ def test_comando_mapea_audio_opcional_del_base():
     argv = filtros.construir_comando(
         "ffmpeg", _doc_base(), base_path="/tmp/base.mp4", salida_path="/tmp/out.mp4"
     )
-    # El audio del clip base se mapea con `?` (no falla si no hay pista de audio).
+    # Sin ajustes de audio (sin split/volumen/silenciar/musica) se mapea el audio del base con `?`.
     assert "0:a?" in argv
+
+
+# --------------------------------------------------------------------------- #
+# Split / concat de segmentos del clip base                                    #
+# --------------------------------------------------------------------------- #
+
+
+def _doc_split():
+    """Composicion con DOS segmentos del clip base (corte/split)."""
+    base = {"id": "c1", "media_id": "videos/abc.mp4", "ajuste": "cover", "foco": [0.5, 0.5]}
+    seg1 = {**base, "recorte_in_ms": 0, "recorte_out_ms": 10000}
+    seg2 = {**base, "id": "c2", "recorte_in_ms": 20000, "recorte_out_ms": 30000}
+    doc = _doc_base()
+    doc["pistas"][0]["clips"] = [seg1, seg2]
+    return doc
+
+
+def test_filtergraph_split_concatena_segmentos_antes_del_reencuadre():
+    fg, etiqueta, _ = filtros.construir_filtergraph(_doc_split())
+    assert etiqueta == "vbase"
+    assert "[0:v]trim=start=0.000:end=10.000,setpts=PTS-STARTPTS[vseg0]" in fg
+    assert "[0:v]trim=start=20.000:end=30.000,setpts=PTS-STARTPTS[vseg1]" in fg
+    assert "[vseg0][vseg1]concat=n=2:v=1:a=0[vcat]" in fg
+    # El reencuadre toma la concatenacion, no [0:v] directo.
+    assert "[vcat]scale=" in fg
+
+
+def test_comando_split_no_pone_ss_to_a_nivel_input():
+    argv = filtros.construir_comando(
+        "ffmpeg", _doc_split(), base_path="/tmp/base.mp4", salida_path="/tmp/out.mp4"
+    )
+    i_in = argv.index("-i")
+    # El recorte vive en el filtergraph (trim), no como -ss/-to del input base.
+    assert "-ss" not in argv[:i_in]
+    # El audio del split se reconstruye con atrim+concat y se mapea por etiqueta (no 0:a?).
+    fg = argv[argv.index("-filter_complex") + 1]
+    assert "concat=n=2:v=0:a=1[acat]" in fg
+    assert "0:a?" not in argv
+
+
+# --------------------------------------------------------------------------- #
+# Audio: volumen / silenciar / musica                                          #
+# --------------------------------------------------------------------------- #
+
+
+def test_filtergraph_volumen_base_aplica_filtro_volume():
+    fg, _v, etiqueta_audio = filtros.construir_filtergraph(_doc_base(volumen=0.5))
+    assert "[0:a]volume=0.500[abase]" in fg
+    assert etiqueta_audio == "abase"
+
+
+def test_comando_audio_silenciado_no_mapea_audio():
+    argv = filtros.construir_comando(
+        "ffmpeg", _doc_base(silenciar=True), base_path="/tmp/base.mp4", salida_path="/tmp/out.mp4"
+    )
+    # Silenciado y sin musica: no se mapea ninguna pista de audio (ni 0:a? ni etiqueta).
+    assert "0:a?" not in argv
+    maps = [argv[i + 1] for i, x in enumerate(argv) if x == "-map"]
+    assert maps == ["[vbase]"]
+
+
+def _doc_con_musica(**base_extra):
+    doc = _doc_base(**base_extra)
+    doc["pistas"].append(
+        {
+            "id": "audio",
+            "tipo": "audio",
+            "clips": [
+                {"id": "a1", "media_id": "videos/m.mp3", "volumen": 0.6,
+                 "recorte_in_ms": 0, "recorte_out_ms": 8000}
+            ],
+        }
+    )
+    return doc
+
+
+def test_filtergraph_musica_se_mezcla_con_amix():
+    fg, _v, etiqueta_audio = filtros.construir_filtergraph(_doc_con_musica(), tiene_musica=True)
+    assert etiqueta_audio == "aout"
+    # Audio base (anull) + musica (volume) mezclados con amix.
+    assert "[0:a]anull[abase]" in fg
+    assert "volume=0.600[amus]" in fg
+    assert "amix=inputs=2" in fg
+    assert fg.endswith("[aout]") or "[aout]" in fg
+
+
+def test_comando_musica_anade_input_al_final_y_mapea_aout():
+    argv = filtros.construir_comando(
+        "ffmpeg", _doc_con_musica(), base_path="/tmp/base.mp4",
+        musica_path="/tmp/m.mp3", salida_path="/tmp/out.mp4",
+    )
+    assert "/tmp/m.mp3" in argv
+    # Dos inputs: el base [0] y la musica [1] al final.
+    assert argv.count("-i") == 2
+    maps = [argv[i + 1] for i, x in enumerate(argv) if x == "-map"]
+    assert "[aout]" in maps

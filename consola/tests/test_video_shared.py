@@ -57,6 +57,17 @@ def test_validar_composicion_valida_normaliza():
     assert [p["id"] for p in norm["pistas"]] == ["base", "overlay", "subs"]
 
 
+def test_validar_composicion_acepta_pista_audio():
+    """La pista `audio` (audio separado / musica) es un tipo valido del esquema."""
+    doc = _composicion_valida()
+    doc["pistas"].append(
+        {"id": "audio", "tipo": "audio", "clips": [{"id": "a1", "media_id": "videos/x.mp4", "volumen": 0.8}]}
+    )
+    norm = video.validar_composicion(doc)
+    assert [p["id"] for p in norm["pistas"]] == ["base", "overlay", "subs", "audio"]
+    assert norm["pistas"][3]["tipo"] == "audio"
+
+
 def test_validar_composicion_rellena_preset_y_fps_por_dimension():
     doc = _composicion_valida()
     del doc["formato"]["preset"]

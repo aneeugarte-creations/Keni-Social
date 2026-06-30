@@ -112,6 +112,13 @@ def _render(gen_id: str, spec: dict) -> None:
             _fase(gen_id, "componiendo overlay", "Horneando la pista de overlay a PNG.")
             overlay_png = _hornear_overlay(pista_ovl, formato, documento.get("marca", ""), carpeta)
 
+        # 4b) Musica -> input de audio (si la pista `audio` trae un clip con media).
+        musica_path: str | None = None
+        clip_musica = filtros._clip_musica(pistas)
+        if clip_musica and (clip_musica.get("media_id") or "").strip():
+            _fase(gen_id, "descargando", "Descargando la musica.")
+            musica_path = _materializar_clip(clip_musica["media_id"], carpeta, "musica")
+
         # 5) Subtitulos -> ASS a disco (si hay).
         ass_path: str | None = None
         pista_subs = filtros.pista_subtitulos(pistas)
@@ -133,6 +140,7 @@ def _render(gen_id: str, spec: dict) -> None:
             pip_path=pip_path,
             overlay_png=overlay_png,
             ass_path=ass_path,
+            musica_path=musica_path,
             salida_path=salida_path,
         )
         _fase(gen_id, "codificando", "Codificando el video con ffmpeg.")

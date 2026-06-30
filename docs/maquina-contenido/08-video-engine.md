@@ -49,20 +49,27 @@ valida con `keni_shared.video.validar_composicion(doc)`.
 
 ```jsonc
 {
-  "version": 1,
+  "version": 2,
   "marca": "claro-sports",
   "formato": {"w": 1080, "h": 1920, "fps": 30, "preset": "9:16"},
   "duracion_ms": 30000,
   "pistas": [
     {"id": "base", "tipo": "video", "clips": [
+      // VARIOS clips = SEGMENTOS concatenados en orden (corte/split). Un solo clip = sin corte.
       {"id": "c1", "media_id": "videos/<sha>.mp4", "inicio_ms": 0, "fin_ms": 30000,
        "recorte_in_ms": 0, "recorte_out_ms": 30000,
-       "x": 0, "y": 0, "w": 1080, "h": 1920, "ajuste": "cover", "foco": [0.5, 0.5]}]},
-    {"id": "pip", "tipo": "video", "clips": [ /* clip con x/y/w/h de posición PiP */ ]},
+       "x": 0, "y": 0, "w": 1080, "h": 1920, "ajuste": "cover", "foco": [0.5, 0.5],
+       "volumen": 1, "silenciar": false}]},
+    {"id": "pip", "tipo": "video", "clips": [ /* clip único con x/y/w/h de posición PiP */ ]},
     {"id": "overlay", "tipo": "overlay", "capas": [ /* capas estilo Documento del Estudio */ ]},
     {"id": "subs", "tipo": "subtitulos", "subtitulo_id": "<id>",
      "estilo": {"fuente": "Barlow", "tam": 64, "color": "#FFFFFF", "borde": "#000000",
-                "posicion": "inferior", "karaoke": true}}
+                "posicion": "inferior", "karaoke": true}},
+    {"id": "audio", "tipo": "audio", "clips": [
+      // Música (u otra fuente) mezclada con `amix` sobre el audio del clip base.
+      {"id": "a1", "media_id": "videos/<sha>.mp3", "inicio_ms": 0, "fin_ms": 12000,
+       "recorte_in_ms": 0, "recorte_out_ms": 12000, "offset_ms": 0,
+       "volumen": 0.6, "silenciar": false}]}
   ]
 }
 ```
@@ -72,11 +79,16 @@ Notas del contrato:
   (`motores/estudio_imagen/documento.py`): así el render del overlay es
   `renderizar_documento_bytes({..., "capas": <capas>})` → PNG transparente → `overlay` en ffmpeg.
 - `ajuste` ∈ `cover|contain` y `foco: [fx, fy]` (0..1) dirigen el `crop` del reencuadre.
+- **Segmentos (split)**: la pista `base` admite **varios clips** que el render **concatena** en
+  orden (FFmpeg `trim`+`concat`). Cada clip lleva su propio `recorte_in_ms`/`recorte_out_ms`. La
+  pista `pip` usa un único clip. `duracion_ms` = suma de los segmentos tras su recorte.
+- **Audio**: `volumen` (0..1) y `silenciar` por clip controlan su sonido. El audio del clip `base`
+  se mezcla con los clips de la pista `audio` (música) vía `amix`; `offset_ms` posiciona la música.
 - `media_id` es una **clave de media** (`videos/<sha>.mp4`), no una URL.
 - El validador de la BASE comprueba **solo la forma del sobre** (formato w/h enteros > 0;
-  `pistas` lista; cada pista con `id` único + `tipo` ∈ `{video, overlay, subtitulos}`); normaliza
-  `version`/`marca`/`duracion_ms`/`formato.fps`/`formato.preset`. **No** valida las capas
-  (eso es del Estudio de imagen) ni los media reales (eso es del render).
+  `pistas` lista; cada pista con `id` único + `tipo` ∈ `{video, overlay, subtitulos, audio}`);
+  normaliza `version`/`marca`/`duracion_ms`/`formato.fps`/`formato.preset`. **No** valida las capas
+  (eso es del Estudio de imagen), los clips/segmentos, ni los media reales (eso es del render).
 
 ---
 
