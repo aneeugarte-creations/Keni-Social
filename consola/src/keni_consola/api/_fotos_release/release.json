@@ -1,9 +1,9 @@
 {
-  "version": "0.1.12",
-  "notes": "Quitamos el título de página duplicado en Galería y Nuevo partido.",
+  "version": "0.1.13",
+  "notes": "Procesa fotos RAW (extrae el preview embebido), endereza las verticales, etiquetado más robusto (no se atasca y reintenta), barra de progreso (15/175) y botón para cancelar el procesado.",
   "pub_date": "2026-06-29T00:00:00Z",
   "darwin-aarch64": {
-    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcFFQYkRweVJwRDFzOGlaMkpXbGROU29jNUs3RFQ2THlvZ3ZoQ2ZaaFlYUmJGdm1tL1pjdVNhMlBHSExUMExOandPMkF0bDJ3YUZ4bFBhQWxEbmRablE4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzc5ODI4CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6CncvTGdJaFJlNmVucGFHVDkydENaUUNFaXRXQllOcXNTM3lkMTI1RUh4L0pVUVNHMlZVQ3lGODVKdHorOW5nRkpEUm5kQWRDVERNcE1JamRxYkZPeUJ3PT0K",
+    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcFJMc2pzZVgvOGxXUE9LTnV6bWsvb0Nwd2s2ODZhelpVYzBvY1diOUZ2eHhkYnNaNzFWcjQwSENSUlYxRk90Sk5tNHN6eHR5TzNCbW4xdGRvcnFKNHdrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzgyMDQ2CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6ClRrbzZESm40MWNxS2N0NjJaS2RjZTJPNCt2Qjk4YnJhOVhOT1hMMTBXeDFZQmpHQy92eGprbVRNQWYyNzdNeUxUbTdTaG1BMVJtQmUwOVg0N1FqY0RnPT0K",
     "url": "https://social.kenitech.io/api/fotos/updater"
   }
 }
