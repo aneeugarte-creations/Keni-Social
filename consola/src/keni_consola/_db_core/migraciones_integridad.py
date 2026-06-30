@@ -552,6 +552,14 @@ def _drop_fosiles_renombrado(con: Any) -> None:
         con.execute(f"DROP INDEX IF EXISTS {nombre}")  # noqa: S608
 
 
+def _drop_columna_marca_clasificada_por_ia(con: Any) -> None:
+    """Elimina la columna `noticias_clusters.marca_clasificada_por_ia` (one-shot).
+
+    Era el sello del clasificador de marca por IA, ya retirado: la columna quedó inerte (nada la
+    escribe). Se descarta para no arrastrar esquema muerto. Idempotente (`DROP COLUMN IF EXISTS`)."""
+    con.execute("ALTER TABLE noticias_clusters DROP COLUMN IF EXISTS marca_clasificada_por_ia")
+
+
 # --------------------------------------------------------------------------- #
 # Bloque 8: NORMALIZACIÓN de referencias huérfanas en noticias_*               #
 # --------------------------------------------------------------------------- #

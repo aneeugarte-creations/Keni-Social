@@ -347,10 +347,6 @@ def reparar_traduccion_encolada_atascada(umbral_iso: str) -> int:
     return db.reparar_traduccion_encolada_atascada(umbral_iso)
 
 
-def marcar_cluster_marca_ia(cluster_id: str) -> None:
-    return db.marcar_cluster_marca_ia(cluster_id)
-
-
 def marcar_cluster_verificacion(cluster_id: str, verificacion: str, hallazgos: str = "") -> None:
     return db.marcar_cluster_verificacion(cluster_id, verificacion, hallazgos)
 

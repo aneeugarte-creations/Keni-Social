@@ -89,6 +89,7 @@ from .migraciones_integridad import (
     _FKS,
     _aplicar_reloptions_autovacuum,
     _comentar_pieza_id_snapshots,
+    _drop_columna_marca_clasificada_por_ia,
     _drop_fosiles_renombrado,
     _drop_indice_snapshots_pieza_redundante,
     _drop_tabla_sugerencias_editoriales,
@@ -593,6 +594,10 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # presets, para que dejen de pasar por langdetect. One-shot e idempotente (solo filas con
     # `idioma=''`). Ver `_backfill_idioma_fuente`.
     Migracion("0066-backfill-idioma-fuente", _backfill_idioma_fuente),
+    # Retirada del clasificador de marca por IA: la columna `marca_clasificada_por_ia` quedó
+    # inerte (nada la escribe). Se descarta para no arrastrar esquema muerto. Ver
+    # `_drop_columna_marca_clasificada_por_ia`.
+    Migracion("0067-drop-col-marca-clasificada-ia", _drop_columna_marca_clasificada_por_ia),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

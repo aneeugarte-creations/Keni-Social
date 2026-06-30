@@ -1504,7 +1504,6 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         primera_fuente TEXT NOT NULL DEFAULT '',
         primera_fuente_nombre TEXT NOT NULL DEFAULT '',
         fuentes_detalle TEXT NOT NULL DEFAULT '',
-        marca_clasificada_por_ia INTEGER NOT NULL DEFAULT 0,
         verificacion_fuente  TEXT NOT NULL DEFAULT '',
         verificar_hallazgos  TEXT NOT NULL DEFAULT '',
         tema_macro    TEXT NOT NULL DEFAULT '',

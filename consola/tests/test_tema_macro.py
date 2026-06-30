@@ -13,8 +13,7 @@ def test_serializer_expone_tema_macro_y_default_vacio():
 
     base = {c: "" for c in _columnas_base()}
     base.update({"n_items": 0, "n_fuentes": 0, "senal": 0, "score": 0.0, "breaking": 0,
-                 "traducido": 0, "peso_fuentes": 0.0, "velocidad": 0.0,
-                 "marca_clasificada_por_ia": 0, "idiomas": "[]"})
+                 "traducido": 0, "peso_fuentes": 0.0, "velocidad": 0.0, "idiomas": "[]"})
 
     con_tema = {**base, "tema_macro": "Cumbre del G7"}
     assert _fila_a_noticia_cluster(con_tema)["tema_macro"] == "Cumbre del G7"

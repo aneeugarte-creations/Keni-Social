@@ -53,7 +53,6 @@ _COLS_NOTICIA_CLUSTER: tuple[str, ...] = (
     "primera_fuente",
     "primera_fuente_nombre",
     "fuentes_detalle",
-    "marca_clasificada_por_ia",
     "verificacion_fuente",
     "verificar_hallazgos",
     "tema_macro",
@@ -114,8 +113,6 @@ def _fila_a_noticia_cluster(fila: Any) -> dict[str, Any]:
         "primera_fuente": fila["primera_fuente"] or "",
         "primera_fuente_nombre": fila["primera_fuente_nombre"] or "",
         "fuentes_detalle": _detalle_fuentes_a_lista(fila["fuentes_detalle"]),
-        # Encaje de marca por IA (ADR 0011): la marca la asignó el clasificador Haiku.
-        "marca_clasificada_por_ia": bool(fila["marca_clasificada_por_ia"]),
         # Verificación (verificación de la fuente) sobre la HISTORIA (ADR 0011): verificacion +
         # hallazgos; la admisión solo materializa contenido de las verificadas.
         "verificacion_fuente": fila["verificacion_fuente"] or "",
@@ -190,10 +187,6 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
         "primera_fuente": cluster.get("primera_fuente") or "",
         "primera_fuente_nombre": cluster.get("primera_fuente_nombre") or "",
         "fuentes_detalle": _detalle_fuentes_a_json(cluster.get("fuentes_detalle")),
-        # Encaje de marca por IA (ADR 0011): valor del ALTA; en conflicto NO se pisa (está en
-        # `_NO_PISAR`), lo sella aparte `marcar_cluster_marca_ia` — como `traducido`. Así un
-        # recalc (merge/fusión/rescore) sin el flag no borra el encaje IA ya hecho.
-        "marca_clasificada_por_ia": 1 if cluster.get("marca_clasificada_por_ia") else 0,
         # Verificación (verificación de la fuente) sobre la historia (ADR 0011): valor del ALTA; en
         # conflicto NO se pisa (está en `_NO_PISAR`), lo sella aparte `marcar_cluster_verificacion`. Así un
         # recalc (merge/fusión/rescore) sin el verificacion no borra una verificación ya hecha.
@@ -217,7 +210,7 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
     _NO_PISAR = (
         "id", "creado", "titulo_es", "resumen_es", "titulo_original", "idioma", "traducido",
         "traduccion_encolada",
-        "estado", "publicacion_id", "marca_clasificada_por_ia", "verificacion_fuente", "verificar_hallazgos",
+        "estado", "publicacion_id", "verificacion_fuente", "verificar_hallazgos",
         "tema_macro", "subtema",
     )
     actualizables = [c for c in _COLS_NOTICIA_CLUSTER if c not in _NO_PISAR]
@@ -598,25 +591,6 @@ def marcar_cluster_traducido(
     return obtener_noticia_cluster(cluster_id)
 
 
-def marcar_cluster_marca_ia(cluster_id: str) -> None:
-    """Sella `marca_clasificada_por_ia=1` (ADR 0011): la marca la asignó el clasificador IA.
-
-    Aparte del upsert (la columna está en `_NO_PISAR`) para que un recalc posterior sin el flag
-    no lo borre — mismo patrón que `marcar_cluster_traducido`. Best-effort: si el cluster no
-    existe, no hace nada.
-    """
-    con = _conectar()
-    try:
-        con.execute(
-            "UPDATE noticias_clusters SET marca_clasificada_por_ia = 1, actualizado = ? "
-            "WHERE id = ?",
-            (ahora_iso(), cluster_id),
-        )
-        con.commit()
-    finally:
-        con.close()
-
-
 def marcar_cluster_verificacion(cluster_id: str, verificacion: str, hallazgos: str = "") -> None:
     """Sella la VERIFICACIÓN (verificación de la fuente) de la HISTORIA (ADR 0011).
 
@@ -624,7 +598,7 @@ def marcar_cluster_verificacion(cluster_id: str, verificacion: str, hallazgos: s
     producción: la admisión solo promueve las verificadas (`no_verificado`/`saltada`) y hereda
     el verificacion al `contenido`. Aparte del upsert (ambas columnas están en `_NO_PISAR`) para
     que un recalc del daemon sin el verificacion no lo borre — mismo patrón que
-    `marcar_cluster_marca_ia`/`marcar_cluster_traducido`. Best-effort: si el cluster no existe,
+    `marcar_cluster_traducido`. Best-effort: si el cluster no existe,
     no hace nada.
     """
     con = _conectar()
@@ -645,7 +619,7 @@ def marcar_clusters_tema_macro(ids: list[str], tema: str) -> int:
     Agrupa varias HISTORIAS distintas bajo un mismo gran evento (p. ej. "Cumbre del G7") SIN
     fusionarlas: cada cluster conserva su identidad y solo comparte `tema_macro`. Aparte del
     upsert (la columna está en `_NO_PISAR`) para que un recalc posterior del daemon no la
-    borre — mismo patrón que `marcar_cluster_marca_ia`/`marcar_cluster_traducido`. `ids` vacío
+    borre — mismo patrón que `marcar_cluster_traducido`. `ids` vacío
     -> 0 sin tocar BD. `tema` vacío desvincula los clusters del macro-evento.
     """
     pedidos = [i for i in dict.fromkeys(ids) if i]

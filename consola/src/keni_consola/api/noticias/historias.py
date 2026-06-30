@@ -278,11 +278,9 @@ def _historia_a_dict(
         "promovible_motivo": (umbral[1] if umbral else ""),
         "breaking": int(cluster.get("breaking") or 0),
         "verificacion": cluster.get("verificacion") or "unica_fuente",
-        # Etapas de INVESTIGACIÓN visibles por historia (ADR 0011): el verificacion de
-        # VERIFICACIÓN (verificación de la fuente, del contenido asociado; lo inyecta el llamante en
-        # lote) y si la MARCA la asignó el clasificador IA.
+        # Etapa de INVESTIGACIÓN visible por historia (ADR 0011): el veredicto de VERIFICACIÓN
+        # (verificación de la fuente, del contenido asociado; lo inyecta el llamante en lote).
         "verificacion_fuente": cluster.get("verificacion_fuente") or "",
-        "marca_clasificada_por_ia": bool(cluster.get("marca_clasificada_por_ia")),
         "traducido": traducido,
         # Extranjera aún sin traducir: la UI muestra la fila con un indicador "Traduciendo…" en
         # vez del titular en idioma original (que va en `titulo_original`).

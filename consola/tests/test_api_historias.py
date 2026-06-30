@@ -853,36 +853,33 @@ def test_historias_umbral_no_promovible_explica_por_que(cliente, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# Etapas de Investigación visibles por historia (ADR 0011): verificación + marca por IA  #
+# Etapa de Investigación visible por historia (ADR 0011): verificación de la fuente  #
 # --------------------------------------------------------------------------- #
 
 
-def test_historia_expone_verificacion_fuente_y_marca_por_ia(cliente):
-    """La historia trae el verificacion verificación de su contenido (verificación) y si la marca fue IA."""
+def test_historia_expone_verificacion_fuente(cliente):
+    """La historia trae el veredicto de verificación de su contenido (verificación de la fuente)."""
     cont = repos.crear_publicacion(
         clase="contenido", titulo="Tema verificado", marca="unotv", categoria="mx",
         verificacion_fuente="verificado",
     )
     _inicializar_cluster("h-verificación", marca="unotv")
     repos.actualizar_noticia_cluster("h-verificación", estado="usado", publicacion_id=cont["id"])
-    repos.marcar_cluster_marca_ia("h-verificación")
 
     h = next(
         x for x in cliente.get("/api/noticias/historias", params={"marca": "unotv"}).json()["historias"]
         if x["id"] == "h-verificación"
     )
-    assert h["verificacion_fuente"] == "verificado"  # verificacion verificación del contenido asociado (batch)
-    assert h["marca_clasificada_por_ia"] is True
+    assert h["verificacion_fuente"] == "verificado"  # verificación del contenido asociado (batch)
 
 
-def test_historia_sin_contenido_ni_ia_trae_campos_vacios(cliente):
+def test_historia_sin_contenido_trae_campos_vacios(cliente):
     _inicializar_cluster("h-plain", marca="unotv")
     h = next(
         x for x in cliente.get("/api/noticias/historias", params={"marca": "unotv"}).json()["historias"]
         if x["id"] == "h-plain"
     )
     assert h["verificacion_fuente"] == ""
-    assert h["marca_clasificada_por_ia"] is False
 
 
 def test_historia_expone_verificacion_nativo_del_cluster_sin_contenido(cliente):
