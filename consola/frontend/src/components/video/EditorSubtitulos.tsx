@@ -38,6 +38,8 @@ export interface EditorSubtitulosProps {
   onSubtituloLigado: (id: string) => void;
   /** Notifica los segmentos corregidos al padre (para el preview). */
   onSegmentos?: (segmentos: SegmentoSub[]) => void;
+  /** Busca en el player el segundo indicado (para que el timestamp del segmento sea clicable). */
+  onSeek?: (seg: number) => void;
 }
 
 const ETIQUETA_ESTADO: Record<EstadoSubtitulos, string> = {
@@ -58,6 +60,7 @@ function EditorSubtitulosComposicion({
   baseMediaId,
   onSubtituloLigado,
   onSegmentos,
+  onSeek,
 }: EditorSubtitulosProps) {
   const qc = useQueryClient();
   const { generacion, ejecutando, iniciar } = useGeneracion();
@@ -220,9 +223,22 @@ function EditorSubtitulosComposicion({
           <ul className="max-h-72 space-y-2 overflow-auto pr-1">
             {segmentos.map((s) => (
               <li key={s.id} className="flex gap-2">
-                <span className="w-20 shrink-0 pt-1.5 text-[11px] tabular-nums text-muted-foreground">
-                  {formatearTiempo(s.inicio)}
-                </span>
+                {/* El timestamp es clicable cuando el padre proporciona onSeek (busca en el player). */}
+                {onSeek ? (
+                  <button
+                    type="button"
+                    onClick={() => onSeek(s.inicio)}
+                    title={`Ir a ${formatearTiempo(s.inicio)}`}
+                    aria-label={`Ir al segundo ${formatearTiempo(s.inicio)}`}
+                    className="w-20 shrink-0 cursor-pointer pt-1.5 text-left text-[11px] tabular-nums text-primary underline-offset-2 hover:underline"
+                  >
+                    {formatearTiempo(s.inicio)}
+                  </button>
+                ) : (
+                  <span className="w-20 shrink-0 pt-1.5 text-[11px] tabular-nums text-muted-foreground">
+                    {formatearTiempo(s.inicio)}
+                  </span>
+                )}
                 <textarea
                   value={s.texto}
                   onChange={(e) => editarTexto(s.id, e.target.value)}

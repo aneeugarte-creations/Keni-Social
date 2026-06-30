@@ -16,7 +16,7 @@
  * base, y luego se autoguarda. El estado "listo" es organización, NO publicación.
  */
 import { useMutation } from "@tanstack/react-query";
-import { Captions, Check, CheckCircle2, Film, FolderOpen, Layers, Music, PictureInPicture2, Save, Undo2, Video as VideoIcon } from "lucide-react";
+import { Captions, Check, CheckCircle2, Film, FolderOpen, Layers, Music, PictureInPicture2, Redo2, Save, Undo2, Upload, Video as VideoIcon } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -37,6 +37,7 @@ import { PreviewComposicion, type PreviewPlayerHandle } from "@/components/video
 import { SelectorFormato } from "@/components/video/SelectorFormato";
 import { TimelineMultipista } from "@/components/video/TimelineMultipista";
 import { PanelAudio } from "@/components/video/PanelAudio";
+import { useHistorialDoc } from "@/components/video/useHistorialDoc";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError, urlMedia } from "@/lib/api";
 import {
@@ -96,6 +97,9 @@ export default function Video() {
   const [seccion, setSeccion] = React.useState<Seccion>("gestor");
   const [aspecto, setAspecto] = React.useState<AspectoVideo>("9:16");
   const [doc, setDoc] = React.useState<ComposicionVideo>(() => composicionVacia("9:16", marca));
+
+  // Historial de deshacer/rehacer del documento (se registra ANTES de cada mutación real).
+  const historial = useHistorialDoc(doc);
 
   // Media servible para el preview (la composición guarda claves; aquí guardamos las urls).
   const [baseKey, setBaseKey] = React.useState("");
@@ -260,12 +264,14 @@ export default function Video() {
    * Aplica una mutación pura al documento y la PERSISTE. Si aún no hay composición en backend, la
    * CREA al primer cambio real (persistencia temprana: el borrador no se pierde aunque no haya
    * clip base). Si ya existe, autoguarda. Sin cambio real (misma referencia) no hace nada.
+   * Registra el estado anterior en el historial de deshacer antes de aplicar el cambio.
    */
   const mutar = React.useCallback(
     (fn: (d: ComposicionVideo) => ComposicionVideo) => {
       setDoc((prev) => {
         const siguiente = fn(prev);
         if (siguiente === prev) return prev; // sin cambio real: no reguardar (evita bucles).
+        historial.registrar(prev); // guarda el estado anterior para poder deshacer.
         if (composicionId) {
           void guardar.mutateAsync({ doc: siguiente }).catch(() => {});
         } else if (!crear.isPending) {
@@ -281,8 +287,65 @@ export default function Video() {
         return siguiente;
       });
     },
-    [composicionId, guardar, crear, marca],
+    [composicionId, guardar, crear, marca, historial],
   );
+
+  /**
+   * Aplica un doc del historial (deshacer/rehacer): actualiza el estado y autoguarda.
+   * No llama a `mutar` para evitar registrar en el historial de nuevo.
+   */
+  const aplicarHistorial = React.useCallback(
+    (docRestaurado: ComposicionVideo) => {
+      setDoc(docRestaurado);
+      // Sincroniza el aspecto con el doc restaurado (el selector de formato lo lee del estado).
+      const aspectoRestaurado = (docRestaurado.formato?.preset as AspectoVideo) ?? "9:16";
+      setAspecto(aspectoRestaurado);
+      // Re-hidrata las urls de media si el clip base cambió.
+      const baseId = pistaBase(docRestaurado)?.clips[0]?.media_id ?? "";
+      setBaseKey(baseId);
+      setBaseUrl(baseId ? urlMedia(baseId) : "");
+      const pipId = pistaPip(docRestaurado)?.clips[0]?.media_id ?? "";
+      setPipKey(pipId);
+      setPipUrl(pipId ? urlMedia(pipId) : "");
+      const musId = pistaAudio(docRestaurado)?.clips[0]?.media_id ?? "";
+      setMusicaUrl(musId ? urlMedia(musId) : "");
+      if (composicionId) {
+        void guardar.mutateAsync({ doc: docRestaurado }).catch(() => {});
+      }
+    },
+    [composicionId, guardar],
+  );
+
+  // Atajos de teclado Cmd/Ctrl+Z (deshacer) y Cmd/Ctrl+Shift+Z (rehacer).
+  // Se ignoran si el foco está en un campo de texto/área o en el editor Konva de overlay.
+  React.useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const meta = e.metaKey || e.ctrlKey;
+      if (!meta || e.key !== "z") return;
+      // No interceptar cuando el foco está en inputs, textareas o contenido editable (p. ej.
+      // Konva usa un canvas; el selector de sección Overlay se usa para detectarlo).
+      const el = document.activeElement;
+      if (
+        el instanceof HTMLInputElement ||
+        el instanceof HTMLTextAreaElement ||
+        (el instanceof HTMLElement && el.isContentEditable)
+      )
+        return;
+      // La sección Overlay tiene su propio historial Konva; no interferir.
+      if (seccion === "overlay") return;
+
+      e.preventDefault();
+      if (e.shiftKey) {
+        const siguiente = historial.rehacer();
+        if (siguiente) aplicarHistorial(siguiente);
+      } else {
+        const anterior = historial.deshacer();
+        if (anterior) aplicarHistorial(anterior);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [seccion, historial, aplicarHistorial]);
 
   /** Crea explícitamente el borrador (botón "Guardar borrador") si aún no existe. */
   const guardarBorrador = React.useCallback(() => {
@@ -404,6 +467,20 @@ export default function Video() {
     mutar((d) => quitarMusica(d));
   }, [mutar]);
 
+  // Input oculto para el CTA de "Sube un clip base" del área central (el aside tiene el suyo en
+  // EditorVideo; éste es el del CTA prominente del lienzo vacío).
+  const inputBaseCtaRef = React.useRef<HTMLInputElement>(null);
+  const subirBase = useMutation({
+    mutationFn: (archivo: File) => api.subirVideo(archivo),
+    onSuccess: (r) => onCambioBase(r.id, r.url),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  function onArchivoBaseCta(e: React.ChangeEvent<HTMLInputElement>) {
+    const archivo = e.target.files?.[0];
+    if (archivo) subirBase.mutate(archivo);
+    if (inputBaseCtaRef.current) inputBaseCtaRef.current.value = "";
+  }
+
   // Subir un archivo de música y ligarlo (lo dispara «+ Música» del timeline o del panel Audio).
   const inputMusicaRef = React.useRef<HTMLInputElement>(null);
   const subirMusica = useMutation({
@@ -512,6 +589,34 @@ export default function Video() {
           {/* El indicador de guardado vive en la cabecera unificada (arriba), no aquí:
               un solo sitio para ese dato, igual que en Imagen. */}
 
+          {/* Deshacer / Rehacer: historial de cambios del documento. */}
+          <button
+            type="button"
+            onClick={() => {
+              const anterior = historial.deshacer();
+              if (anterior) aplicarHistorial(anterior);
+            }}
+            disabled={!historial.puedeDeshacer}
+            title="Deshacer (Cmd+Z)"
+            aria-label="Deshacer"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs font-medium text-foreground hover:bg-accent/60 disabled:opacity-40"
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const siguiente = historial.rehacer();
+              if (siguiente) aplicarHistorial(siguiente);
+            }}
+            disabled={!historial.puedeRehacer}
+            title="Rehacer (Cmd+Shift+Z)"
+            aria-label="Rehacer"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs font-medium text-foreground hover:bg-accent/60 disabled:opacity-40"
+          >
+            <Redo2 className="h-3.5 w-3.5" />
+          </button>
+
           {/* Acciones: guardar borrador (si aún no existe) o marcar listo/volver a borrador. */}
           {!composicionId ? (
             <button
@@ -596,23 +701,54 @@ export default function Video() {
               </div>
             </div>
           ) : seccion === "overlay" ? (
-            // Overlay: editor de capas a pantalla completa, con el clip base DETRÁS del lienzo
-            // (las capas se editan directamente sobre el vídeo, no en un área aparte).
-            <React.Suspense
-              fallback={
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  Cargando editor de capas…
+            // Overlay: editor de capas arriba + timeline multipista abajo. El timeline permite
+            // hacer seek y ver el overlay en un segundo concreto (el clip base sirve de referencia).
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <React.Suspense
+                  fallback={
+                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                      Cargando editor de capas…
+                    </div>
+                  }
+                >
+                  <PanelOverlay
+                    doc={doc}
+                    marca={marca}
+                    capas={pistaOverlayCapas(doc)}
+                    videoBaseUrl={baseUrl}
+                    onCapas={(capas) => mutar((d) => setCapasOverlay(d, capas))}
+                  />
+                </React.Suspense>
+              </div>
+              {/* Timeline visible en Overlay: permite seek para ver el overlay en un frame concreto. */}
+              {baseUrl && (
+                <div className="min-w-0 shrink-0 border-t border-border bg-background px-3 py-2">
+                  <TimelineMultipista
+                    doc={doc}
+                    tiempoSeg={tiempoSeg}
+                    onSeek={(s) => playerRef.current?.buscarA(s)}
+                    onTrimSegmento={(idx, inMs, outMs) =>
+                      mutar((d) => setRecorteBase(d, inMs, outMs, undefined, idx))
+                    }
+                    onDividirSegmento={(idx, msLocal) => mutar((d) => dividirClipBase(d, idx, msLocal))}
+                    onQuitarSegmento={(idx) => mutar((d) => quitarSegmentoBase(d, idx))}
+                    onMoverSegmento={(idx, dest) => mutar((d) => moverSegmentoBase(d, idx, dest))}
+                    onAudioBase={(c) => mutar((d) => setAudioBase(d, c))}
+                    onAnadirMusica={pedirMusica}
+                    onVolumenMusica={(c) => mutar((d) => setVolumenMusica(d, c))}
+                    onQuitarMusica={quitarMusicaLocal}
+                    onTrimPip={(inMs, outMs) => mutar((d) => setRecortePip(d, inMs, outMs))}
+                    onFadeMusica={(c) => mutar((d) => setFadeMusica(d, c))}
+                    onAgregarMarcador={(ms, et) => mutar((d) => agregarMarcador(d, ms, et))}
+                    onQuitarMarcador={(id) => mutar((d) => quitarMarcador(d, id))}
+                    baseUrl={baseUrl}
+                    segmentos={segmentos}
+                    disabled={sinMarca}
+                  />
                 </div>
-              }
-            >
-              <PanelOverlay
-                doc={doc}
-                marca={marca}
-                capas={pistaOverlayCapas(doc)}
-                videoBaseUrl={baseUrl}
-                onCapas={(capas) => mutar((d) => setCapasOverlay(d, capas))}
-              />
-            </React.Suspense>
+              )}
+            </div>
           ) : (
             // Resto de secciones: panel contextual (controles inline) + LIENZO ÚNICO centrado
             // (formato in-place arriba) + timeline multipista debajo.
@@ -660,6 +796,7 @@ export default function Video() {
                     baseMediaId={baseKey}
                     onSubtituloLigado={onSubtituloLigado}
                     onSegmentos={setSegmentos}
+                    onSeek={(s) => playerRef.current?.buscarA(s)}
                   />
                 )}
                 {seccion === "render" && (
@@ -688,21 +825,41 @@ export default function Video() {
                     </span>
                   )}
                 </div>
-                {/* LIENZO central: el preview ocupa todo el espacio (fit por defecto). */}
+                {/* LIENZO central: CTA prominente si no hay clip base; de lo contrario el preview. */}
                 <div className="flex min-h-0 flex-1 bg-muted/30 p-3">
-                  <PreviewComposicion
-                    doc={doc}
-                    baseUrl={baseUrl}
-                    pipUrl={pipUrl}
-                    segmentos={segmentos}
-                    playerRef={playerRef}
-                    onTiempo={setTiempoSeg}
-                    pipEditable={seccion === "pip" && !sinMarca}
-                    onCajaPip={onCajaPip}
-                    reframeEditable={seccion === "base" && !sinMarca}
-                    onFoco={(foco) => mutar((d) => setReencuadreBase(d, { foco }))}
-                    conEncuadre
-                  />
+                  {!tieneBase ? (
+                    // Sin clip base, el área central muestra un CTA claro en vez de un lienzo vacío.
+                    <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+                      <Upload className="h-10 w-10 text-muted-foreground/50" />
+                      <p className="text-sm font-medium text-foreground">Sube un clip base para empezar</p>
+                      <p className="text-xs text-muted-foreground">
+                        El clip base es el video principal sobre el que se aplican el overlay, PiP y subtítulos.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => inputBaseCtaRef.current?.click()}
+                        disabled={sinMarca || subirBase.isPending}
+                        className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                      >
+                        <Upload className="h-4 w-4" />
+                        {subirBase.isPending ? "Subiendo…" : "Subir clip base"}
+                      </button>
+                    </div>
+                  ) : (
+                    <PreviewComposicion
+                      doc={doc}
+                      baseUrl={baseUrl}
+                      pipUrl={pipUrl}
+                      segmentos={segmentos}
+                      playerRef={playerRef}
+                      onTiempo={setTiempoSeg}
+                      pipEditable={seccion === "pip" && !sinMarca}
+                      onCajaPip={onCajaPip}
+                      reframeEditable={seccion === "base" && !sinMarca}
+                      onFoco={(foco) => mutar((d) => setReencuadreBase(d, { foco }))}
+                      conEncuadre
+                    />
+                  )}
                 </div>
               </div>
             </div>
@@ -738,6 +895,16 @@ export default function Video() {
           )}
         </div>
       </div>
+
+      {/* Input oculto para el CTA de clip base del área central (disparado por el botón "Subir clip base"). */}
+      <input
+        ref={inputBaseCtaRef}
+        type="file"
+        accept="video/*"
+        onChange={onArchivoBaseCta}
+        className="hidden"
+        aria-label="Subir clip base"
+      />
 
       {/* Input oculto para subir música (lo dispara «+ Música» del timeline / panel de audio). */}
       <input

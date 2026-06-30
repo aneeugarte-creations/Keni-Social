@@ -166,9 +166,22 @@ describe("Video", () => {
     expect(screen.getByRole("button", { name: /guardar borrador/i })).not.toBeDisabled();
   });
 
-  it("avisa que el preview es aproximado (render fiel = servidor)", async () => {
+  it("sin clip base: muestra CTA 'Sube un clip base' en el área central", async () => {
     renderVideo();
     await irABase();
+    // Sin clip base el área central muestra el CTA prominente en vez de un lienzo vacío.
+    expect(screen.getByText(/sube un clip base para empezar/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /subir clip base/i })).toBeInTheDocument();
+  });
+
+  it("con clip base muestra el aviso 'Preview aproximado' (render fiel = servidor)", async () => {
+    vi.spyOn(apiMod.api.video, "composicion").mockResolvedValue({
+      composicion: { id: "comp-7", documento: docConBase(), titulo: "T", estado: "borrador" },
+    });
+    renderVideo("/contenido/video?composicion=comp-7");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^render$/i })).not.toBeDisabled(),
+    );
     expect(screen.getByText(/preview aproximado/i)).toBeInTheDocument();
   });
 
@@ -387,5 +400,37 @@ describe("Video", () => {
     const boton = await screen.findByRole("button", { name: /marcar listo/i });
     fireEvent.click(boton);
     await waitFor(() => expect(actualizar).toHaveBeenCalledWith("comp-7", { estado: "listo" }));
+  });
+
+  it("deshacer revierte un cambio del documento (formato) al estado anterior", async () => {
+    vi.spyOn(apiMod.api.video, "crearComposicion").mockResolvedValue({ id: "comp-undo" });
+    vi.spyOn(apiMod.api.video, "guardarComposicion").mockResolvedValue({} as never);
+    renderVideo();
+    irABase();
+    // Cambia el formato a 1:1 (edición real → registra en el historial).
+    fireEvent.click(screen.getByRole("radio", { name: /1:1/i }));
+    await waitFor(() => expect(screen.getByRole("radio", { name: /1:1/i })).toHaveAttribute("aria-checked", "true"));
+    // El botón Deshacer ahora está habilitado.
+    const btnDeshacer = screen.getByRole("button", { name: /deshacer/i });
+    expect(btnDeshacer).not.toBeDisabled();
+    // Deshace → vuelve a 9:16.
+    fireEvent.click(btnDeshacer);
+    await waitFor(() => expect(screen.getByRole("radio", { name: /9:16/i })).toHaveAttribute("aria-checked", "true"));
+  });
+
+  it("en la sección Overlay el timeline multipista sigue visible", async () => {
+    vi.spyOn(apiMod.api.video, "composicion").mockResolvedValue({
+      composicion: { id: "comp-7", documento: docConBase(), titulo: "T", estado: "borrador" },
+    });
+    renderVideo("/contenido/video?composicion=comp-7");
+    // Espera a que se habiliten las secciones que requieren clip base.
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /overlay/i })).not.toBeDisabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /overlay/i }));
+    // En la sección Overlay el timeline debe estar presente (dock inferior).
+    await waitFor(() =>
+      expect(screen.getByLabelText("Pistas de la composición")).toBeInTheDocument(),
+    );
   });
 });

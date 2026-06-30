@@ -138,4 +138,24 @@ describe("EditorSubtitulos (respaldo de correcciones sin guardar)", () => {
     // Y deja rastro con CONTEXTO (la clave del respaldo) + el error original.
     expect(warn).toHaveBeenCalledWith(expect.stringContaining(CLAVE), expect.anything());
   });
+
+  it("clic en el timestamp de un segmento llama onSeek con el segundo de inicio", async () => {
+    const onSeek = vi.fn();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <EditorSubtitulos
+          composicionId="comp-7"
+          baseMediaId="videos/abc.mp4"
+          onSubtituloLigado={vi.fn()}
+          onSeek={onSeek}
+        />
+      </QueryClientProvider>,
+    );
+    // Espera a que carguen los segmentos.
+    const btnTimestamp = await screen.findByRole("button", { name: /ir al segundo/i });
+    fireEvent.click(btnTimestamp);
+    // El fixture tiene inicio=0 (segundos, según normalizarSegmentos convierte ms→s si necesario).
+    expect(onSeek).toHaveBeenCalledTimes(1);
+  });
 });
