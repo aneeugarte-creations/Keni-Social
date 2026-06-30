@@ -184,4 +184,7 @@ def lanzar(
         tipo="prompt", titulo=titulo, marca=marca, prompt=prompt_final,
         procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
         procesar_spec=procesar_spec, dir_temporal=dir_temporal, autor=autor,
+        # Etapa EXPLÍCITA: el tipo='prompt' no la deriva; sellarla agrupa el gasto de los
+        # lanzamientos de la biblioteca bajo su fila «Prompts» en la pestaña Herramientas.
+        etapa="Prompts",
     )

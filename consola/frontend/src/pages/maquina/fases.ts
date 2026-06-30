@@ -54,21 +54,30 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
     paralelo: "ingesta",
   },
   {
-    // Cotejo previo a la fusión: corre por grupo propuesto ANTES de fundir. Seguidora de Fusionar
-    // (sin flag propio, `claves: []`): su recorrido lo gobierna Fusionar.
-    nombre: "Cotejar",
-    es_ia: true,
-    claves: [],
-    ayuda: "Verifica cada grupo propuesto antes de fundir",
-    doc: "prompt/fusionar-verificar",
-  },
-  {
     nombre: "Fusionar",
     es_ia: true,
     claves: ["KENI_PIPELINE_FUSIONAR"],
-    ayuda: "Funde las notas del mismo hecho y agrupa las de un mismo gran evento",
+    ayuda: "Propone qué notas son del mismo hecho y qué familias forman un mismo gran evento",
     doc: "prompt/fusionar",
     etapa: "fusionar",
+  },
+  {
+    // Cotejar y Subtema son las dos SUB-LLAMADAS del job de Fusionar: corren DESPUÉS de la pasada
+    // principal (por eso van aquí, no antes), una por grupo / por familia. Seguidoras de Fusionar
+    // (sin flag propio, `claves: []`): su recorrido lo gobierna Fusionar. Cada una deja su propia
+    // línea en la economía «por etapa» (`gasto_ia.etapa` = «Cotejar» / «Subtema»).
+    nombre: "Cotejar",
+    es_ia: true,
+    claves: [],
+    ayuda: "Verifica cada grupo propuesto antes de fundir las notas del mismo hecho",
+    doc: "prompt/fusionar-verificar",
+  },
+  {
+    nombre: "Subtema",
+    es_ia: true,
+    claves: [],
+    ayuda: "Parte un macro-evento en subtemas coherentes (un carrusel por faceta)",
+    doc: "prompt/fusionar-subtema",
   },
   {
     nombre: "Traducir",

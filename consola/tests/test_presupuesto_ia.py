@@ -389,6 +389,28 @@ def test_fase_inline_del_pool_registra_gasto_con_etapa(entorno, monkeypatch):
     assert fus["tokens"] == 130 and fus["coste_usd"] == pytest.approx(0.02)
 
 
+def test_subllamadas_del_pool_dejan_etapa_propia_cotejar_subtema(entorno, monkeypatch):
+    """Cada sub-llamada del job de Fusionar (Cotejar/Subtema) sella su gasto bajo su ETAPA propia, así
+    la economía las muestra como filas SEPARADAS de «Fusionar» (antes su coste quedaba invisible)."""
+    from keni_consola.dominio import actividad_pool
+    from keni_consola.dominio import traducir as _trad
+
+    # Métricas distintas por sub-llamada (el ejecutor síncrono no corre: las simulamos).
+    metricas = iter([
+        {"tokens_in": 40, "tokens_out": 10, "total_cost_usd": 0.01},
+        {"tokens_in": 20, "tokens_out": 5, "total_cost_usd": 0.005},
+    ])
+    monkeypatch.setattr(_trad, "tomar_metricas_acumuladas", lambda: next(metricas))
+    actividad_pool.registrar_actividad_pool("unotv", "Cotejar grupos — UnoTV", etapa="Cotejar")
+    actividad_pool.registrar_actividad_pool("unotv", "Subtema — UnoTV", etapa="Subtema")
+    presupuesto_ia.invalidar_cache()
+    inv = repos.gasto_ia_economia_por_proceso(2)["investigacion"]
+    etapas = {e["etapa"]: e for e in inv["por_etapa"]}
+    assert "Cotejar" in etapas and "Subtema" in etapas, "Cotejar y Subtema deben ser etapas propias"
+    assert etapas["Cotejar"]["tokens"] == 50 and etapas["Cotejar"]["coste_usd"] == pytest.approx(0.01)
+    assert etapas["Subtema"]["tokens"] == 25 and etapas["Subtema"]["coste_usd"] == pytest.approx(0.005)
+
+
 def test_encolar_parada_marca_corta_su_trabajo_no_otras(entorno):
     """La parada de una marca rechaza el encolado de SU trabajo (fondo y manual); otras pasan."""
     ajustes.guardar("KENI_GENERACION_PAUSADA::unotv", "1")

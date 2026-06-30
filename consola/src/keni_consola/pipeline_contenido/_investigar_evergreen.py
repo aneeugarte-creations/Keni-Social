@@ -116,6 +116,9 @@ def lanzar_investigar_idea(
         endurecer=_endurecer_investigar(),
         # Frontera ADR 0011: investigar es INVESTIGACION (motor de evergreen), no producción.
         proceso=generaciones.PROCESO_INVESTIGACION,
+        # Etapa EXPLÍCITA: su tipo='pipeline' caería en «Verificar» (la verificación de la fuente),
+        # colapsando dos vías de investigación distintas en una línea. Sellarla las separa.
+        etapa="Investigar evergreen",
         al_fallar={"revertir_idea_evergreen": idea_id},
     )
 

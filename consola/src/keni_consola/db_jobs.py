@@ -713,9 +713,11 @@ PESTANAS_ECONOMIA = (
 )
 # `tipo` -> Desarrollo (pipeline de auto-desarrollo: fases del carril + discovery).
 _TIPOS_DESARROLLO = frozenset({"dev-fase", "dev-discovery"})
-# `tipo` -> Herramientas (agentes sueltos de la pestaña: Recibir/Importar/Ideación/Audio).
+# `tipo` -> Herramientas (agentes sueltos de la pestaña: Recibir/Importar/Ideación/Audio). `prompt`
+# (audio sobre transcripción + lanzamientos de la biblioteca de Prompts) es una herramienta, no
+# producción: sin esto su gasto caía en la pestaña Producción con la etiqueta cruda «prompt».
 _TIPOS_HERRAMIENTAS = frozenset(
-    {"insumos", "import-calendario", "parrilla-import", "evergreen-ideas", "transcribir"}
+    {"insumos", "import-calendario", "parrilla-import", "evergreen-ideas", "transcribir", "prompt"}
 )
 
 
@@ -738,14 +740,16 @@ def pestana_economia(proceso: str, tipo: str) -> str:
 
 # `tipo` del ledger -> ETAPA (fase del pipeline de Contexto). Varios tipos colapsan en una fase
 # (copy/autogen/evergreen = Redactar) para que el desglose "por etapa" hable el idioma del
-# pipeline (Redactar/Verificar/Ilustrar…) en vez del tipo crudo del job (pipeline/copy…). Las
-# sub-fases que NO dejan fila propia en el ledger (Admitir sin IA; Fusionar/Traducir/Clasificar
-# inline) no aparecen aquí: solo se listan las etapas que de verdad consumen tokens.
+# pipeline (Redactar/Verificar/Ilustrar…) en vez del tipo crudo del job (pipeline/copy…). Este mapa
+# solo cubre las etapas DERIVADAS del tipo: las fases que sellan su `gasto_ia.etapa` EXPLÍCITA
+# (Fusionar/Cotejar/Subtema/Traducir/Priorizar, todas tipo='pipeline') no pasan por aquí —su etapa
+# manda en `etapa_economia`— así que cada una deja su propia fila aunque compartan tipo.
 _ETAPA_POR_TIPO = {
     # Investigación
     "rss": "Recolectar", "noticias-ia": "Recolectar", "noticias": "Recolectar",
     "verificacion": "Verificar", "revision": "Revisión editorial",
     # Producción
+    "decisor": "Decisor",
     "copy": "Redactar", "autogen": "Redactar", "evergreen": "Redactar",
     "sugerir-hashtags": "Keywords",
     "imagen": "Ilustrar",
@@ -756,6 +760,8 @@ _ETAPA_POR_TIPO = {
     "import-calendario": "Importar", "parrilla-import": "Importar",
     "evergreen-ideas": "Ideación",
     "transcribir": "Audio",
+    # `prompt` sin etapa explícita (raro: audio y biblioteca la sellan): nombre limpio de respaldo.
+    "prompt": "Prompts",
     # Desarrollo
     "dev-fase": "Desarrollo", "dev-discovery": "Exploración",
 }

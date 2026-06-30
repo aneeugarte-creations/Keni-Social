@@ -142,6 +142,9 @@ def lanzar_tratamiento(
             procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
             procesar_spec=procesar_spec,
             autor=autor or {},
+            # Etapa EXPLÍCITA: el tipo='prompt' no la deriva a «Audio»; sellarla agrupa el gasto del
+            # tratamiento de audio bajo su fila en la pestaña Herramientas.
+            etapa="Audio",
         )
     except Exception as e:  # noqa: BLE001 -- cola llena/presupuesto: marca el artefacto en error
         repos.actualizar_audio_artefacto(

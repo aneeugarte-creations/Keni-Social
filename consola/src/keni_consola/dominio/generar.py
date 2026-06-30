@@ -537,6 +537,7 @@ def lanzar(
     manual: bool = False,
     publicacion_id: str = "",
     proceso: str = generaciones.PROCESO_PRODUCCION,
+    etapa: str = "",
     al_fallar: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Crea el registro de generación, ENCOLA el trabajo y devuelve el registro (para sondeo).
@@ -575,6 +576,10 @@ def lanzar(
         # Proceso de la maquina (ADR 0011): por defecto PRODUCCION (la maquina de contenido:
         # copy/arte/manual). La verificación verificación de la fuente lo pasa "investigacion" (motor de noticias).
         "proceso": proceso or generaciones.PROCESO_PRODUCCION,
+        # ETAPA explícita del ledger (opcional): la sella el caller cuyo `tipo` colapsaría en una
+        # etapa equivocada del mapa `tipo->etapa` (p. ej. evergreen, tipo='pipeline', caería en
+        # «Verificar»). Vacía = la economía deriva la etapa del tipo. El hook de cierre la propaga.
+        **({"etapa": etapa} if etapa else {}),
         **_autor_campos(autor),
     })
     if not nueva:

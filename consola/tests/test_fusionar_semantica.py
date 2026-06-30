@@ -360,6 +360,31 @@ def test_construir_procesar_fusionar_limpia_el_marcador(entorno, monkeypatch):
     assert repos.obtener_noticia_cluster("c2") is None
 
 
+def test_fusionar_marca_invoca_callbacks_por_subllamada(entorno):
+    """`fusionar_marca` invoca `al_ejecutar` por cada grupo COTEJADO y `al_ejecutar_subtema` por cada
+    familia faceteada: así el job sella el gasto de esas sub-llamadas bajo «Cotejar» / «Subtema»."""
+    _inicializar("c1", n_fuentes=2, score=0.6, fuente_id="medioA", url="https://a.com/1")
+    _inicializar("c2", n_fuentes=1, score=0.2, fuente_id="medioB", url="https://b.com/1")
+    _inicializar("c3", fuente_id="medioC", url="https://c.com/1")
+    _inicializar("c4", fuente_id="medioD", url="https://d.com/1")
+    cotejos: list[str] = []
+    subtemas: list[str] = []
+
+    # Un solo ejecutor sirve a ambas sub-llamadas: la verificación lee «grupos» (confirma c1+c2) y el
+    # reparto de subtemas lee «subtemas» (una faceta con c3+c4) de la MISMA respuesta.
+    def ej(_prompt, _carpeta):
+        return json.dumps({"grupos": [["c1", "c2"]], "subtemas": [{"subtema": "General", "ids": ["c3", "c4"]}]})
+
+    salida = json.dumps({"grupos": [["c1", "c2"]], "familias": [{"tema": "Elecciones 2026", "ids": ["c3", "c4"]}]})
+    fusionar_semantica.fusionar_marca(
+        "unotv", _recientes(), salida_principal=salida, ejecutor=ej,
+        al_ejecutar=lambda _p, s: cotejos.append(s),
+        al_ejecutar_subtema=lambda _p, s: subtemas.append(s),
+    )
+    assert len(cotejos) == 1   # un grupo cotejado
+    assert len(subtemas) == 1  # una familia faceteada
+
+
 # --------------------------------------------------------------------------- #
 # Payload (id + titulo + tema_macro, sin resumen) + ejecutor no-agéntico         #
 # --------------------------------------------------------------------------- #

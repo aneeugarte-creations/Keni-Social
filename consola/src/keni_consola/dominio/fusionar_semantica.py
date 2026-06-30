@@ -420,12 +420,16 @@ def _falta_subtema(ids: list[str], por_id: dict[str, dict[str, Any]]) -> bool:
 def _partir_en_subtemas(
     tema: str, ids: list[str], por_id: dict[str, dict[str, Any]],
     *, ejecutor: Ejecutor | None,
+    al_ejecutar: Callable[[str, str], None] | None = None,
 ) -> int:
     """Parte una familia de macro-evento en SUBTEMAS (Haiku) y los persiste. Devuelve nº etiquetados.
 
     Cada subtema (faceta: «Partidos», «Espectáculo»…) agrupa los clusters de un tipo, para que el
     carrusel sea coherente y la cadencia sea por subtema. Best-effort: cualquier fallo (Haiku o
     persistencia) se loguea y devuelve lo que llevara, sin abortar el paso.
+
+    `al_ejecutar(prompt, salida)` recibe el prompt+salida REALES de la llamada de subtema
+    (observabilidad: el job de fusión lo usa para sellar su gasto bajo la etapa «Subtema»).
     """
     from .. import repos
 
@@ -433,7 +437,7 @@ def _partir_en_subtemas(
     if len(familia) < 2:
         return 0
     try:
-        grupos = proponer_subtemas(familia, ejecutor=ejecutor)
+        grupos = proponer_subtemas(familia, ejecutor=ejecutor, al_ejecutar=al_ejecutar)
     except Exception:  # noqa: BLE001 -- un fallo de Haiku no aborta el etiquetado del evento
         _log.exception("fusionar_semantica: fallo proponiendo subtemas de «%s».", tema[:60])
         return 0
@@ -631,6 +635,7 @@ def fusionar_marca(
     salida_principal: str,
     ejecutor: Ejecutor | None = None,
     al_ejecutar: Callable[[str, str], None] | None = None,
+    al_ejecutar_subtema: Callable[[str, str], None] | None = None,
     ahora: datetime | None = None,
 ) -> dict[str, Any]:
     """Orquesta la fusión semántica de UNA marca a partir de la salida de la pasada principal.
@@ -646,6 +651,11 @@ def fusionar_marca(
          parte en SUBTEMAS (Haiku) si falta facetar alguna.
     Best-effort: un fallo por grupo/familia se loguea y no aborta. Devuelve `{grupos, fusionadas,
     familias, anclas}`.
+
+    `al_ejecutar` recibe el prompt+salida de cada llamada de Cotejar (verificación de grupo) y
+    `al_ejecutar_subtema` los de cada llamada de Subtema: el job de fusión los usa para sellar el
+    gasto de esas sub-llamadas bajo su propia etapa («Cotejar»/«Subtema»), que de otro modo quedaría
+    huérfano (el job solo registra el coste de la pasada principal, etapa «Fusionar»).
     """
     from .. import config, marcas, repos
     from . import agrupar
@@ -733,7 +743,7 @@ def fusionar_marca(
         if n:
             resultado["familias"] += 1
         if _falta_subtema(ids, por_id):
-            _partir_en_subtemas(tema, ids, por_id, ejecutor=ejecutor)
+            _partir_en_subtemas(tema, ids, por_id, ejecutor=ejecutor, al_ejecutar=al_ejecutar_subtema)
 
     if resultado["grupos"] or resultado["fusionadas"]:
         _log.info(
@@ -765,12 +775,36 @@ def construir_procesar_fusionar(marca: str, recientes: list[dict[str, Any]]):  #
     `construir_prompt_fusion`; aquí tomamos esa `salida` como la pasada PRINCIPAL y orquestamos la
     fusión de la marca (`fusionar_marca`: ancla de agenda + grupos verificados + familias + subtemas),
     persistiendo en repos. La verificación y los subtemas corren con `_ejecutar_haiku` (el worker
-    tiene claude). Al terminar limpia el marcador de fusión en curso de la marca. Devuelve
-    `{grupos, fusionadas, familias, anclas}`.
+    tiene claude); sus callbacks sellan el gasto de cada sub-llamada bajo su etapa («Cotejar» /
+    «Subtema») para que ese coste no quede invisible frente a la pasada principal («Fusionar»). Al
+    terminar limpia el marcador de fusión en curso de la marca. Devuelve `{grupos, fusionadas,
+    familias, anclas}`.
     """
+    from .. import marcas
+    from . import actividad_pool, traducir
+
+    etiqueta_marca = marcas.etiqueta_de(marca) if marca else "sin marca"
+
+    def _al_cotejar(prompt: str, salida: str) -> None:
+        actividad_pool.registrar_actividad_pool(
+            marca, f"Cotejar grupos — {etiqueta_marca}", etapa="Cotejar", prompt=prompt, salida=salida,
+        )
+
+    def _al_subtema(prompt: str, salida: str) -> None:
+        actividad_pool.registrar_actividad_pool(
+            marca, f"Subtema — {etiqueta_marca}", etapa="Subtema", prompt=prompt, salida=salida,
+        )
+
     def procesar(salida: str, _metricas: object) -> dict[str, object]:
+        # Descarta el residuo del acumulador del hilo ANTES de las sub-llamadas: la pasada principal
+        # (que el worker ya contabilizó como «Fusionar») pudo acumular aquí; no debe contarse otra vez
+        # en la primera sub-llamada.
+        traducir.tomar_metricas_acumuladas()
         try:
-            return fusionar_marca(marca, recientes, salida_principal=salida or "")
+            return fusionar_marca(
+                marca, recientes, salida_principal=salida or "",
+                al_ejecutar=_al_cotejar, al_ejecutar_subtema=_al_subtema,
+            )
         finally:
             limpiar_fusion_encolada(marca)
 
