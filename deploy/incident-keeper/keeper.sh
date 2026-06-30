@@ -122,6 +122,9 @@ diagnóstico claro y el plan para un humano."
     # otro commit (no arreglar lo ya arreglado).
     deadline=$(( $(date +%s) + TIMEOUT ))
     ( while kill -0 "$cl_pid" 2>/dev/null; do
+        : > "$LATIDO" 2>/dev/null || true   # late mientras la sesión corre: claude -p bloquea el bucle
+        # principal hasta $TIMEOUT, así que sin esto el latido caduca a los 60s y autoheal reinicia el
+        # contenedor a media sesión (la marca «interrumpido»). El cuelgue real lo corta el deadline.
         sleep "$CI_ABORT_INTERVALO"
         if [ "$(date +%s)" -ge "$deadline" ]; then
           log "sesión supera ${TIMEOUT}s sin terminar -> la corto (posible cuelgue)"
