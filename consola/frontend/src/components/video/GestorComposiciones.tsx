@@ -1,23 +1,25 @@
 /**
  * GESTOR de composiciones de video (= gestor de transcripciones).
  *
- * Lista las composiciones de la MARCA ACTIVA con: formato, última edición, enlace a la pieza
- * ligada (si tiene `publicacion_id`), el ESTADO de subtítulos (pendiente/transcrito/editado/listo)
- * y si la pieza ya tiene su video adjunto o le falta. Reabrir una composición la carga en el
- * editor navegando a `?composicion=<id>`.
+ * Rejilla de TARJETAS a ancho completo de las composiciones de la MARCA ACTIVA. Cada tarjeta
+ * muestra formato, última edición, el ESTADO de subtítulos (pendiente/transcrito/editado/listo)
+ * y si la pieza ligada (`publicacion_id`) ya tiene su video adjunto o le falta. El modelo de
+ * interacción es item-first: clic en la tarjeta = abrir en el editor (`?composicion=<id>`); clic
+ * en el título = renombrar inline; las acciones secundarias viven en el menú contextual + kebab.
  *
  * Honestidad: el estado de subtítulos sale de `GET /api/video/subtitulos` por composición; el
  * estado de "video adjunto" sale de la pieza ligada (`falta_video`). No publica nada.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Captions, Check, ExternalLink, FilmIcon, PencilLine, Trash2, VideoOff, X } from "lucide-react";
+import { Captions, ExternalLink, FilmIcon, PencilLine, Trash2, VideoOff } from "lucide-react";
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { confirmar } from "@/components/comunes/confirmar";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFechaHora } from "@/lib/fecha";
 import {
@@ -77,7 +79,7 @@ export function GestorComposiciones({ marca, onAbrir }: GestorComposicionesProps
     enabled: !!marca,
   });
 
-  // Map publicacion_id -> { faltaVideo, tieneVideo } a partir de las piezas de esa pieza/contenido.
+  // Map publicacion_id -> { faltaVideo } a partir de las piezas de esa pieza/contenido.
   const estadoPieza = React.useMemo(() => {
     const m = new Map<string, { faltaVideo: boolean }>();
     for (const p of pubsQ.data ?? []) {
@@ -152,9 +154,12 @@ export function GestorComposiciones({ marca, onAbrir }: GestorComposicionesProps
           No hay composiciones.
         </p>
       ) : (
-        <ul className="space-y-2" aria-label="Mis composiciones de video">
+        <ul
+          className="grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3"
+          aria-label="Mis composiciones de video"
+        >
           {visibles.map((c) => (
-            <FilaComposicion
+            <TarjetaComposicion
               key={c.id}
               comp={c}
               faltaVideo={c.publicacion_id ? estadoPieza.get(c.publicacion_id)?.faltaVideo : undefined}
@@ -170,8 +175,8 @@ export function GestorComposiciones({ marca, onAbrir }: GestorComposicionesProps
   );
 }
 
-/** Una fila del gestor: una composición con su título, estado, formato, subtítulos y enlaces. */
-function FilaComposicion({
+/** Una tarjeta del gestor: una composición con su título, estado, formato, subtítulos y enlaces. */
+function TarjetaComposicion({
   comp,
   faltaVideo,
   onAbrir,
@@ -187,6 +192,8 @@ function FilaComposicion({
   onEliminar: () => void;
   eliminando: boolean;
 }) {
+  const navigate = useNavigate();
+
   // Estado de subtítulos: una query barata por composición (null si aún no se transcribió).
   const subQ = useQuery({
     queryKey: ["video-subtitulos-de", comp.id],
@@ -202,15 +209,24 @@ function FilaComposicion({
   const estadoComp: EstadoComposicion = comp.estado ?? "borrador";
   const tituloMostrado = comp.titulo?.trim() || comp.id;
 
-  // Renombrado inline: al confirmar, sólo dispara si cambió y no quedó vacío.
+  // Renombrado inline: el título es un botón; al hacer clic entra en edición. Enter/blur
+  // confirman, Escape cancela. `commitHecho` evita el doble commit Enter→blur.
   const [editando, setEditando] = React.useState(false);
   const [borrador, setBorrador] = React.useState(comp.titulo ?? "");
+  const commitHecho = React.useRef(false);
+
+  function iniciarEdicion() {
+    setBorrador(comp.titulo ?? "");
+    commitHecho.current = false;
+    setEditando(true);
+  }
 
   function confirmarRenombre() {
-    const t = borrador.trim();
+    if (commitHecho.current) return;
+    commitHecho.current = true;
     setEditando(false);
+    const t = borrador.trim();
     if (t && t !== (comp.titulo ?? "")) onRenombrar(t);
-    else setBorrador(comp.titulo ?? "");
   }
 
   async function pedirEliminar() {
@@ -226,11 +242,41 @@ function FilaComposicion({
     }
   }
 
+  const acciones: EntradaMenuContextual[] = [
+    { etiqueta: "Abrir", icono: FilmIcon, onClick: onAbrir },
+    { etiqueta: "Renombrar", icono: PencilLine, onClick: iniciarEdicion },
+    ...(comp.publicacion_id
+      ? [
+          {
+            etiqueta: "Ir a la pieza",
+            icono: ExternalLink,
+            onClick: () => navigate("/operacion/feed/lista"),
+          } as EntradaMenuContextual,
+        ]
+      : []),
+    { separador: true },
+    {
+      etiqueta: "Eliminar",
+      icono: Trash2,
+      destructivo: true,
+      deshabilitado: eliminando,
+      onClick: () => void pedirEliminar(),
+    },
+  ];
+
   return (
-    <li className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-card p-3">
+    <FilaConAcciones
+      como="li"
+      realce
+      kebab="hover"
+      onPrimaria={onAbrir}
+      acciones={acciones}
+      etiquetaAcciones={`Acciones de ${tituloMostrado}`}
+      className="flex gap-3 rounded-md border border-border bg-card p-3"
+    >
       <FilmIcon className="h-5 w-5 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 pr-7">
           {editando ? (
             <input
               autoFocus
@@ -239,9 +285,12 @@ function FilaComposicion({
               onChange={(e) => setBorrador(e.target.value)}
               onBlur={confirmarRenombre}
               onKeyDown={(e) => {
-                if (e.key === "Enter") confirmarRenombre();
-                if (e.key === "Escape") {
-                  setBorrador(comp.titulo ?? "");
+                if (e.key === "Enter") {
+                  e.stopPropagation();
+                  confirmarRenombre();
+                } else if (e.key === "Escape") {
+                  e.stopPropagation();
+                  commitHecho.current = true;
                   setEditando(false);
                 }
               }}
@@ -249,9 +298,17 @@ function FilaComposicion({
               className="min-w-0 flex-1 rounded border border-border bg-background px-1.5 py-0.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
             />
           ) : (
-            <span className="truncate text-sm font-medium text-foreground" title={comp.id}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                iniciarEdicion();
+              }}
+              title="Clic para renombrar"
+              className="min-w-0 truncate text-left text-sm font-medium text-foreground hover:text-keni-600"
+            >
               {tituloMostrado}
-            </span>
+            </button>
           )}
           <Badge variant={estadoComp === "listo" ? "ok" : "aviso"}>
             {ETIQUETA_ESTADO_COMPOSICION[estadoComp] ?? estadoComp}
@@ -286,60 +343,6 @@ function FilaComposicion({
           )}
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {comp.publicacion_id && (
-          <Button asChild size="sm" variant="ghost">
-            <Link to="/operacion/feed/lista" title="Ir a la lista de contenido">
-              <ExternalLink className="mr-1 h-4 w-4" />
-              Pieza
-            </Link>
-          </Button>
-        )}
-        {editando ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={confirmarRenombre}
-            aria-label="Confirmar nombre"
-            title="Confirmar nombre"
-          >
-            <Check className="h-4 w-4" />
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              setBorrador(comp.titulo ?? "");
-              setEditando(true);
-            }}
-            aria-label="Renombrar"
-            title="Renombrar"
-          >
-            <PencilLine className="h-4 w-4" />
-          </Button>
-        )}
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={pedirEliminar}
-          disabled={eliminando}
-          aria-label="Eliminar"
-          title="Eliminar"
-          className="text-destructive hover:text-destructive"
-        >
-          {eliminando ? <X className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
-        </Button>
-        <Button type="button" size="sm" variant="outline" onClick={onAbrir}>
-          <PencilLine className="mr-1 h-4 w-4" />
-          Abrir
-        </Button>
-      </div>
-    </li>
+    </FilaConAcciones>
   );
 }
-
-/** Fecha ISO → `dd/mm/aa hh:mm` (es-MX); vacío si no hay dato. */

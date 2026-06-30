@@ -1,9 +1,11 @@
 /**
  * Tests del GESTOR de composiciones de video (= gestor de transcripciones).
- *  - Lista las composiciones de la marca activa con su formato.
- *  - Muestra el ESTADO de subtítulos por fila (de `subtitulosDe`).
+ *  - Lista las composiciones de la marca activa como TARJETAS con su formato.
+ *  - Muestra el ESTADO de subtítulos por tarjeta (de `subtitulosDe`).
  *  - Refleja si la pieza ligada ya tiene su video o le falta (de `piezas`).
- *  - "Abrir" invoca onAbrir con el id de la composición (reabrir en el editor).
+ *  - Clic en la tarjeta = abrir en el editor (onAbrir con el id).
+ *  - Clic en el TÍTULO = renombrar inline.
+ *  - Eliminar / Renombrar viven en el menú contextual (kebab), no en botones periféricos.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -16,7 +18,7 @@ import type { ComposicionResumen, Subtitulo } from "@/lib/video";
 
 import { GestorComposiciones } from "./GestorComposiciones";
 
-// La app NO usa el confirm del navegador: el botón borrar pasa por `confirmar()`
+// La app NO usa el confirm del navegador: el borrado pasa por `confirmar()`
 // (Promise<boolean>). Lo mockeamos para controlar la respuesta del usuario.
 vi.mock("@/components/comunes/confirmar", () => ({
   confirmar: vi.fn(),
@@ -53,6 +55,11 @@ function renderGestor(onAbrir = vi.fn()) {
     </QueryClientProvider>,
   );
   return onAbrir;
+}
+
+/** Abre el menú contextual de una tarjeta (kebab "Más acciones"). */
+function abrirMenu() {
+  fireEvent.click(screen.getByRole("button", { name: /más acciones/i }));
 }
 
 beforeEach(() => {
@@ -119,14 +126,24 @@ describe("GestorComposiciones", () => {
     expect(await screen.findByText(/video adjunto a la pieza/i)).toBeInTheDocument();
   });
 
-  it("'Abrir' invoca onAbrir con el id de la composición (reabrir en el editor)", async () => {
+  it("clic en la TARJETA invoca onAbrir con el id (reabrir en el editor)", async () => {
     vi.spyOn(apiMod.api.video, "listarComposiciones").mockResolvedValue({
       composiciones: [comp({ id: "comp-abrir" })],
     });
     const onAbrir = renderGestor();
-    const boton = await screen.findByRole("button", { name: /abrir/i });
-    fireEvent.click(boton);
+    // El cuerpo de la tarjeta (no un botón) dispara la acción primaria.
+    fireEvent.click(await screen.findByText("9:16"));
     expect(onAbrir).toHaveBeenCalledWith("comp-abrir");
+  });
+
+  it("clic en el TÍTULO entra en modo edición y NO abre la composición", async () => {
+    vi.spyOn(apiMod.api.video, "listarComposiciones").mockResolvedValue({
+      composiciones: [comp({ id: "comp-edit", titulo: "Mi reel" })],
+    });
+    const onAbrir = renderGestor();
+    fireEvent.click(await screen.findByRole("button", { name: "Mi reel" }));
+    expect(screen.getByRole("textbox", { name: /nuevo título/i })).toBeInTheDocument();
+    expect(onAbrir).not.toHaveBeenCalled();
   });
 
   it("muestra vacío cuando no hay composiciones para la marca", async () => {
@@ -157,7 +174,7 @@ describe("GestorComposiciones", () => {
     expect(screen.getByText(/^Borrador$/)).toBeInTheDocument();
   });
 
-  it("RENOMBRA un borrador (PUT solo título) y refresca", async () => {
+  it("RENOMBRA un borrador desde el menú (PUT solo título) y refresca", async () => {
     vi.spyOn(apiMod.api.video, "listarComposiciones").mockResolvedValue({
       composiciones: [comp({ id: "comp-r", titulo: "Viejo" })],
     });
@@ -166,14 +183,15 @@ describe("GestorComposiciones", () => {
       .mockResolvedValue({ composicion: { id: "comp-r", titulo: "Nuevo", estado: "borrador" } });
     renderGestor();
     await screen.findByText("Viejo");
-    fireEvent.click(screen.getByRole("button", { name: /renombrar/i }));
+    abrirMenu();
+    fireEvent.click(await screen.findByRole("menuitem", { name: /renombrar/i }));
     const input = screen.getByRole("textbox", { name: /nuevo título/i });
     fireEvent.change(input, { target: { value: "Nuevo" } });
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => expect(renombrar).toHaveBeenCalledWith("comp-r", "Nuevo"));
   });
 
-  it("ELIMINA un borrador tras confirmar", async () => {
+  it("ELIMINA un borrador desde el menú tras confirmar", async () => {
     vi.spyOn(apiMod.api.video, "listarComposiciones").mockResolvedValue({
       composiciones: [comp({ id: "comp-del", titulo: "Borrar esto" })],
     });
@@ -183,7 +201,8 @@ describe("GestorComposiciones", () => {
     vi.mocked(confirmar).mockResolvedValue(true);
     renderGestor();
     await screen.findByText("Borrar esto");
-    fireEvent.click(screen.getByRole("button", { name: /^eliminar$/i }));
+    abrirMenu();
+    fireEvent.click(await screen.findByRole("menuitem", { name: /^eliminar$/i }));
     expect(confirmar).toHaveBeenCalled();
     await waitFor(() => expect(eliminar).toHaveBeenCalledWith("comp-del"));
   });
@@ -196,7 +215,8 @@ describe("GestorComposiciones", () => {
     vi.mocked(confirmar).mockResolvedValue(false);
     renderGestor();
     await screen.findByText("Conservar");
-    fireEvent.click(screen.getByRole("button", { name: /^eliminar$/i }));
+    abrirMenu();
+    fireEvent.click(await screen.findByRole("menuitem", { name: /^eliminar$/i }));
     await waitFor(() => expect(confirmar).toHaveBeenCalled());
     expect(eliminar).not.toHaveBeenCalled();
   });
