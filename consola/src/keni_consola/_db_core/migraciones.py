@@ -45,6 +45,7 @@ from .migraciones_columnas import (
     _migrar_columnas_campanias,
     _migrar_columnas_catalogo_media,
     _migrar_cuenta_uso_por_cuenta,
+    _migrar_sonnet_inicio_dia,
     _migrar_columnas_origen_fuente,
     _migrar_backfill_origen_catalogo,
     _migrar_reorg_originales_a_portal,
@@ -598,6 +599,11 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # inerte (nada la escribe). Se descarta para no arrastrar esquema muerto. Ver
     # `_drop_columna_marca_clasificada_por_ia`.
     Migracion("0067-drop-col-marca-clasificada-ia", _drop_columna_marca_clasificada_por_ia),
+    # BASE DIARIA DE SONNET: columna `sonnet_pct_inicio_dia` en `cuenta_uso`, para derivar el
+    # consumo de Sonnet de HOY (igual que el semanal) y que el gate diario corte por el limite que
+    # PRIMERO se agota. One-shot e idempotente (`ADD COLUMN IF NOT EXISTS`); el DDL la trae para BDs
+    # virgenes. Sin backfill (muestreo prospectivo). Ver `_migrar_sonnet_inicio_dia` y `db_cuenta_uso`.
+    Migracion("0068-sonnet-inicio-dia", _migrar_sonnet_inicio_dia),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

@@ -1,6 +1,6 @@
 """Gate DIARIO de consumo POR CUENTA de Claude: corta la generacion de las marcas de UNA cuenta
-cuando el % de SU limite SEMANAL consumido HOY (jornada CDMX) alcanza el umbral del dia, con
-reanudacion humana-en-el-bucle e INDEPENDIENTE por cuenta.
+cuando el limite del dia que PRIMERO se agota (semanal all-models o Sonnet) alcanza su umbral del
+dia (jornada CDMX), con reanudacion humana-en-el-bucle e INDEPENDIENTE por cuenta.
 
 POR QUE EXISTE: la generacion corre `claude -p` (ADR 0001) con suscripciones de equipo que tienen
 limite SEMANAL. Hay DOS cuentas (A/B; el reparto de marcas vive en `ruteo_cuentas`), cada una con
@@ -11,11 +11,16 @@ cupo, PAUSA la generacion de SUS marcas (automatica Y manual) y pide criterio hu
 otra cuenta sigue su ritmo aparte. Aceptar +10% sube el umbral del dia de ESA cuenta y reanuda; al
 cruzar el nuevo umbral, vuelve a pausar y pedir aceptar.
 
-FUENTE DEL % (seam unico, `consumo_semanal_hoy_pct(cuenta)`): el % semanal real de cada cuenta lo
-persiste una FUNDACION aparte que muestrea el medidor "Current week (all models)" POR CUENTA y
-guarda snapshots. Este modulo NO muestrea: solo LEE, tras un unico accesor con fallback seguro
-(None => NO cortar). El cableado a los repos por cuenta lo hace el orquestador al integrar (ver el
-TODO del accesor): hasta entonces el accesor devuelve None y el gate queda inerte (no corta).
+DOS LIMITES (el que primero se agota): Claude limita por separado "Current week (all models)" y
+"Current week (Sonnet only)". El equipo usa Sonnet mas que el resto, asi que su ventana puede
+agotarse ANTES que la de all-models. El gate evalua el cupo del dia de AMBOS (`_evaluar`) y corta
+por el mas atado; `estado().limite` dice cual es para que el medidor pinte ese.
+
+FUENTE DEL % (seam, `consumo_semanal_hoy_pct(cuenta)` para el semanal; Sonnet desde la misma fila):
+el % real de cada cuenta lo persiste una FUNDACION aparte que muestrea los medidores POR CUENTA y
+guarda snapshots (incluidas las bases del dia `semana_pct_inicio_dia`/`sonnet_pct_inicio_dia`). Este
+modulo NO muestrea: solo LEE, con fallback seguro (None => NO cortar). Mientras un medidor no tenga
+dato, su limite queda inerte (no corta).
 
 ESTADO DIARIO (mutable, pequeno) POR CUENTA: por dia CDMX y por cuenta se persiste cuantos "+10%" se
 han aceptado, en el store de ajustes compartido (`ajustes.py`, TOML en /data: lo ven
@@ -91,14 +96,7 @@ def consumo_semanal_hoy_pct(cuenta: str) -> float | None:
     Implementacion: `repos.leer_uso_cuenta(cuenta)` (la fila de ESA cuenta del muestreo de fondo
     POR CUENTA). Best-effort: ante un fallo de lectura devuelve None (no corta).
     """
-    fila = _leer_fila(cuenta)
-    if not fila or not fila.get("conectada"):
-        return None
-    actual = fila.get("semana_pct")
-    base = fila.get("semana_pct_inicio_dia")
-    if actual is None or base is None:
-        return None
-    return max(0.0, float(actual) - float(base))
+    return _consumo_de(_leer_fila(cuenta), "semana_pct", "semana_pct_inicio_dia")
 
 
 def _leer_fila(cuenta: str) -> dict | None:
@@ -111,6 +109,19 @@ def _leer_fila(cuenta: str) -> dict | None:
     except Exception:  # noqa: BLE001 -- un blip de BD no debe cortar las marcas de la cuenta
         _log.warning("gate_diario: fallo al leer el uso de %s; no corto", cuenta, exc_info=True)
         return None
+
+
+def _consumo_de(fila: dict | None, k_pct: str, k_base: str) -> float | None:
+    """Consumo de HOY de UN medidor de `fila` (`k_pct` actual − `k_base` base del dia), en pp del
+    semanal. None si la cuenta esta desconectada o falta el dato (fallback seguro: ese limite no
+    corta)."""
+    if not fila or not fila.get("conectada"):
+        return None
+    actual = fila.get(k_pct)
+    base = fila.get(k_base)
+    if actual is None or base is None:
+        return None
+    return max(0.0, float(actual) - float(base))
 
 
 def _dias_hasta_reset(reset_iso: str, hoy: date) -> int:
@@ -144,15 +155,38 @@ def _umbral_base_pct(semana_pct_inicio_dia: float | None, reset_iso: str, hoy: d
     return restante / _dias_hasta_reset(reset_iso, hoy)
 
 
-def _umbral_base_cuenta(cuenta: str) -> float:
-    """Cupo base del dia de `cuenta` leyendo su fila de uso (reset + base del dia). Sin fila ->
-    reparto plano (`BASE_UMBRAL_PCT`)."""
+# Limites del dia que vigila el gate: (nombre, columna del % actual, columna de la base del dia). El
+# corte cae por el que PRIMERO se agota (mayor consumo respecto a su cupo). Sonnet se mide aparte
+# porque el equipo lo usa mas y su ventana semanal puede agotarse antes que la de "all models".
+_LIMITES = (
+    ("semanal", "semana_pct", "semana_pct_inicio_dia"),
+    ("sonnet", "sonnet_pct", "sonnet_pct_inicio_dia"),
+)
+
+
+def _evaluar(cuenta: str) -> tuple[str, float | None, float]:
+    """(limite, consumo_hoy_pct, umbral_pct) del limite del dia que PRIMERO se agota en `cuenta`.
+
+    Evalua el cupo del dia de los dos medidores —semanal (all-models) y Sonnet— y devuelve el mas
+    atado (mayor consumo respecto a su umbral). Un limite con consumo None (sin dato) no cuenta; si
+    ninguno tiene dato, devuelve el semanal con consumo None (gate inerte). El umbral de cada limite
+    es su cupo del dia (lo que le queda / dias hasta el reset) + los +10% aceptados (el contador de
+    aceptar es comun a la cuenta y sube el umbral del limite que toque).
+    """
     fila = _leer_fila(cuenta)
-    if not fila:
-        return BASE_UMBRAL_PCT
-    return _umbral_base_pct(
-        fila.get("semana_pct_inicio_dia"), str(fila.get("reset_semana_iso") or ""), hoy_cdmx()
-    )
+    reset = str((fila or {}).get("reset_semana_iso") or "")
+    hoy = hoy_cdmx()
+    extra = aceptados_hoy(cuenta) * PASO_PCT
+    candidatos: list[tuple[str, float | None, float]] = []
+    for nombre, k_pct, k_base in _LIMITES:
+        # El semanal pasa por el accesor publico (patcheable en tests); el resto, desde la fila.
+        consumo = consumo_semanal_hoy_pct(cuenta) if nombre == "semanal" else _consumo_de(fila, k_pct, k_base)
+        umbral = _umbral_base_pct((fila or {}).get(k_base), reset, hoy) + extra
+        candidatos.append((nombre, consumo, umbral))
+    con_dato = [c for c in candidatos if c[1] is not None]
+    if not con_dato:
+        return candidatos[0]
+    return max(con_dato, key=lambda t: (t[1] / t[2]) if t[2] > 0 else float("inf"))
 
 
 def _estado_persistido(cuenta: str) -> tuple[str, int]:
@@ -176,20 +210,16 @@ def aceptados_hoy(cuenta: str) -> int:
 
 
 def umbral_vigente(cuenta: str) -> float:
-    """Umbral del dia de `cuenta` (pp del semanal): cupo base del dia (lo que queda del cupo semanal
-    repartido entre los dias hasta el reset) + aceptados_hoy(cuenta) * PASO."""
-    return _umbral_base_cuenta(cuenta) + aceptados_hoy(cuenta) * PASO_PCT
+    """Umbral del dia del limite que primero se agota en `cuenta` (pp): su cupo del dia (lo que le
+    queda / dias hasta el reset) + aceptados_hoy(cuenta) * PASO."""
+    return _evaluar(cuenta)[2]
 
 
 def pausado_por_pct(cuenta: str) -> bool:
-    """True si el consumo del dia de `cuenta` alcanza su umbral vigente => PAUSA sus marcas.
-
-    Con la fuente del % en None (sin dato) devuelve False: NO cortar (fallback seguro).
-    """
-    consumo = consumo_semanal_hoy_pct(cuenta)
-    if consumo is None:
-        return False
-    return consumo >= umbral_vigente(cuenta)
+    """True si el limite del dia que primero se agota en `cuenta` alcanza su umbral => PAUSA sus
+    marcas. Con la fuente del % en None (sin dato) devuelve False: NO cortar (fallback seguro)."""
+    _, consumo, umbral = _evaluar(cuenta)
+    return consumo is not None and consumo >= umbral
 
 
 def aceptar_mas(cuenta: str) -> dict:
@@ -214,17 +244,17 @@ def estado(cuenta: str) -> dict:
     """Snapshot del gate diario de UNA cuenta para el UI/los agentes (CONTRATO):
 
       {cuenta: str, consumo_hoy_pct: float|None, umbral_pct: float, aceptados_hoy: int,
-       pausado_por_pct: bool, base_umbral_pct: float, paso_pct: float, dia: str}
+       pausado_por_pct: bool, base_umbral_pct: float, paso_pct: float, limite: str, dia: str}
 
-    `consumo_hoy_pct` es None mientras la fuente del % de esa cuenta no exista (rollout): con None el
-    gate esta inerte y `pausado_por_pct` es False. `base_umbral_pct` es el cupo base del dia (lo que
-    queda del cupo semanal repartido entre los dias hasta el reset) y `umbral_pct` ese cupo + los
-    +10% aceptados. El UI muestra "Aceptar continuar (+10%)" para la cuenta cuando `pausado_por_pct`.
-    `cuenta` rotula a quien pertenece el bloque (y a quien aplica aceptar).
+    Refleja el limite del dia que PRIMERO se agota (`limite`: "semanal" all-models o "sonnet"): el
+    medidor pinta ese, que es el que de verdad ata. `consumo_hoy_pct` es None mientras la fuente del
+    % de esa cuenta no exista (rollout): con None el gate esta inerte y `pausado_por_pct` es False.
+    `base_umbral_pct` es el cupo base del dia de ese limite (lo que le queda repartido entre los dias
+    hasta el reset) y `umbral_pct` ese cupo + los +10% aceptados. El UI muestra "Aceptar continuar
+    (+10%)" para la cuenta cuando `pausado_por_pct`. `cuenta` rotula a quien pertenece el bloque.
     """
-    consumo = consumo_semanal_hoy_pct(cuenta)
-    base = _umbral_base_cuenta(cuenta)
-    umbral = base + aceptados_hoy(cuenta) * PASO_PCT
+    limite, consumo, umbral = _evaluar(cuenta)
+    base = umbral - aceptados_hoy(cuenta) * PASO_PCT
     return {
         "cuenta": cuenta,
         "consumo_hoy_pct": round(consumo, 1) if consumo is not None else None,
@@ -233,6 +263,7 @@ def estado(cuenta: str) -> dict:
         "pausado_por_pct": consumo is not None and consumo >= umbral,
         "base_umbral_pct": round(base, 1),
         "paso_pct": PASO_PCT,
+        "limite": limite,
         "dia": _hoy_cdmx(),
     }
 

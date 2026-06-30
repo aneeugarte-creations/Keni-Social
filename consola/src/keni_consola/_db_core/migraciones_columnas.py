@@ -35,6 +35,19 @@ def _migrar_cuenta_uso_por_cuenta(con: Any) -> None:
     )
 
 
+def _migrar_sonnet_inicio_dia(con: Any) -> None:
+    """Anade `sonnet_pct_inicio_dia` a `cuenta_uso`: la base del dia del medidor de Sonnet.
+
+    Permite derivar el consumo de Sonnet de HOY (`sonnet_pct - sonnet_pct_inicio_dia`) igual que el
+    semanal, para que el gate diario corte por el limite que PRIMERO se agota (all-models o Sonnet).
+    One-shot e idempotente (`ADD COLUMN IF NOT EXISTS`); el DDL la trae para BDs virgenes. Sin
+    backfill: el muestreo la llena prospectivamente (`cuenta_uso_daemon`).
+    """
+    if not _tabla_existe(con, "cuenta_uso"):
+        return
+    con.execute("ALTER TABLE cuenta_uso ADD COLUMN IF NOT EXISTS sonnet_pct_inicio_dia INTEGER")
+
+
 def _migrar_renombre_catalogo_media(con: Any) -> None:
     """Renombra la tabla `biblioteca_media` a `catalogo_media` y sus índices (idempotente).
 

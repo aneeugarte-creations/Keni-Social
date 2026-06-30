@@ -99,6 +99,7 @@ def test_guardar_y_leer_singleton(entorno):
     assert fila is not None
     assert fila["semana_pct"] == 67 and fila["sesion_5h_pct"] == 26 and fila["sonnet_pct"] == 2
     assert fila["semana_pct_inicio_dia"] == 67  # cold start: base = lectura actual
+    assert fila["sonnet_pct_inicio_dia"] == 2  # idem para Sonnet
     # Singleton: una segunda escritura ACTUALIZA la misma fila (no inserta otra).
     repos.guardar_uso_cuenta(
         conectada=True, semana_pct=70, sesion_5h_pct=30, sonnet_pct=4,
@@ -119,6 +120,9 @@ def test_consumo_de_hoy_rueda_la_base_al_cambiar_de_dia(entorno):
     assert fila["dia_utc"] == "2026-06-15"
     assert fila["semana_pct_inicio_dia"] == 67
     assert fila["semana_pct"] - fila["semana_pct_inicio_dia"] == 4
+    # Sonnet rueda su base igual que el semanal: base hereda el cierre de ayer (2); consumo = 3-2 = 1.
+    assert fila["sonnet_pct_inicio_dia"] == 2
+    assert fila["sonnet_pct"] - fila["sonnet_pct_inicio_dia"] == 1
 
 
 def test_guardar_y_leer_por_cuenta(entorno):

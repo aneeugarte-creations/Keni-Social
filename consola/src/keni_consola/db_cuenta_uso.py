@@ -5,12 +5,13 @@ corre `claude -p /usage` por cuenta y deja aquí su última lectura, para que el
 barra lateral y el gate diario lean de la BD sin ejecutar `claude`. `cuenta` es la clave lógica
 (índice único + target del UPSERT); `id` la espeja por compat de PK.
 
-Además del snapshot, se mantiene —POR CUENTA— el `semana_pct` AL INICIO DEL DÍA CDMX para derivar
-el "consumo de HOY" (= `semana_pct` actual − `semana_pct_inicio_dia`): el medidor semanal es
-acumulativo y solo resetea su ventana semanal, así que dentro de un día crece de forma
-monótona. La línea base se RUEDA en la primera escritura de cada día CDMX (se hereda el último
-`semana_pct` del día anterior como valor de medianoche) y se reajusta a la baja si la ventana
-semanal resetea a mitad del día (el porcentaje cae), para que el consumo de hoy nunca sea negativo.
+Además del snapshot, se mantiene —POR CUENTA— el `semana_pct` Y el `sonnet_pct` AL INICIO DEL DÍA
+CDMX (`*_pct_inicio_dia`) para derivar el "consumo de HOY" de cada límite (= `*_pct` actual −
+`*_pct_inicio_dia`): los medidores son acumulativos y solo resetean su ventana semanal, así que
+dentro de un día crecen de forma monótona. Cada línea base se RUEDA en la primera escritura de cada
+día CDMX (se hereda la última lectura del día anterior como valor de medianoche) y se reajusta a la
+baja si la ventana semanal resetea a mitad del día (el porcentaje cae), para que el consumo de hoy
+nunca sea negativo.
 La jornada del equipo es la mexicana: el rollover en la medianoche de México (no la de UTC) evita
 que la base se reancle a media tarde y vacíe el consumo del día en plena operación. La columna
 `dia_utc` guarda ese día-bucket (ya en jornada CDMX).
@@ -33,6 +34,7 @@ _COLS = (
     "reset_semana_iso",
     "reset_semana_txt",
     "semana_pct_inicio_dia",
+    "sonnet_pct_inicio_dia",
     "dia_utc",
     "actualizado_ts",
 )
@@ -80,27 +82,35 @@ def leer_uso_cuentas() -> dict[str, dict[str, Any] | None]:
     return {c: por_cuenta.get(c) for c in jobspec.CUENTAS}
 
 
+def _baseline_col(
+    previa: dict[str, Any] | None, dia: str, pct: int | None, k_pct: str, k_base: str
+) -> int | None:
+    """Línea base del consumo de HOY de UN medidor (`k_pct` actual, `k_base` base del día).
+
+    PURA (sin reloj ni BD): dado el snapshot previo, el día CDMX actual y el `pct` recién leído,
+    decide la base del día del medidor. Reglas:
+      - Día NUEVO (o sin fila previa): la base es el `pct` del cierre del día anterior (la última
+        lectura ≈ el valor de medianoche); si no hay previa, la lectura actual.
+      - Mismo día: conserva la base previa, salvo que la ventana semanal haya reseteado a mitad
+        del día (`pct` actual < base) — entonces la base baja al valor actual.
+    """
+    if previa is None or previa.get("dia_utc") != dia:
+        base = previa.get(k_pct) if previa else None
+        if base is None:
+            base = pct
+        return base
+    base = previa.get(k_base)
+    if pct is not None and base is not None and pct < base:
+        base = pct
+    return base
+
+
 def _baseline_dia(
     previa: dict[str, Any] | None, dia: str, semana_pct: int | None
 ) -> tuple[int | None, str]:
-    """Línea base del consumo de HOY: (`semana_pct_inicio_dia`, `dia_utc`) a persistir.
-
-    PURA (sin reloj ni BD): dado el snapshot previo, el día CDMX actual y el `semana_pct` recién
-    leído, decide la base del día. Reglas:
-      - Día NUEVO (o sin fila previa): la base es el `semana_pct` del cierre del día anterior
-        (la última lectura ≈ el valor de medianoche); si no hay previa, la lectura actual.
-      - Mismo día: conserva la base previa, salvo que la ventana semanal haya reseteado a mitad
-        del día (`semana_pct` actual < base) — entonces la base baja al valor actual.
-    """
-    if previa is None or previa.get("dia_utc") != dia:
-        base = previa.get("semana_pct") if previa else None
-        if base is None:
-            base = semana_pct
-        return base, dia
-    base = previa.get("semana_pct_inicio_dia")
-    if semana_pct is not None and base is not None and semana_pct < base:
-        base = semana_pct
-    return base, dia
+    """Base del día del medidor SEMANAL (all-models): `(semana_pct_inicio_dia, dia_utc)`. Envoltura
+    fina de `_baseline_col` con las claves del semanal (la fuente del corte por defecto)."""
+    return _baseline_col(previa, dia, semana_pct, "semana_pct", "semana_pct_inicio_dia"), dia
 
 
 def guardar_uso_cuenta(
@@ -128,6 +138,7 @@ def guardar_uso_cuenta(
         prev = con.execute(_SELECT, (c,)).fetchone()
         previa = _fila_a_uso(prev) if prev is not None else None
         base, dia = _baseline_dia(previa, dia, semana_pct)
+        base_sonnet = _baseline_col(previa, dia, sonnet_pct, "sonnet_pct", "sonnet_pct_inicio_dia")
         fila = {
             "id": c,
             "cuenta": c,
@@ -138,6 +149,7 @@ def guardar_uso_cuenta(
             "reset_semana_iso": reset_semana_iso or "",
             "reset_semana_txt": reset_semana_txt or "",
             "semana_pct_inicio_dia": base,
+            "sonnet_pct_inicio_dia": base_sonnet,
             "dia_utc": dia,
             "actualizado_ts": actualizado_ts,
         }
