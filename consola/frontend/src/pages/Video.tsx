@@ -16,7 +16,7 @@
  * base, y luego se autoguarda. El estado "listo" es organización, NO publicación.
  */
 import { useMutation } from "@tanstack/react-query";
-import { Captions, Check, CheckCircle2, Film, FolderOpen, Layers, PictureInPicture2, Save, Undo2, Video as VideoIcon } from "lucide-react";
+import { Captions, Check, CheckCircle2, Film, FolderOpen, Layers, Music, PictureInPicture2, Save, Undo2, Video as VideoIcon } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -30,27 +30,36 @@ import { GestorComposiciones } from "@/components/video/GestorComposiciones";
 const PanelOverlay = React.lazy(() =>
   import("@/components/video/PanelOverlay").then((m) => ({ default: m.PanelOverlay })),
 );
-import { LineaTiempo } from "@/components/video/LineaTiempo";
 import { PanelPip } from "@/components/video/PanelPip";
 import { PanelRender } from "@/components/video/PanelRender";
 import { PistaBase } from "@/components/video/PistaBase";
 import { PreviewComposicion, type PreviewPlayerHandle } from "@/components/video/PreviewComposicion";
 import { SelectorFormato } from "@/components/video/SelectorFormato";
+import { TimelineMultipista } from "@/components/video/TimelineMultipista";
+import { PanelAudio } from "@/components/video/PanelAudio";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError, urlMedia } from "@/lib/api";
 import {
   cambiarAspecto,
   composicionVacia,
+  dividirClipBase,
+  moverSegmentoBase,
+  pistaAudio,
   pistaBase,
   pistaPip,
   pistaSubtitulos,
+  quitarMusica,
   quitarPip,
+  quitarSegmentoBase,
+  setAudioBase,
   setCajaPip,
   setCapasOverlay,
   setClipBase,
   setClipPip,
+  setMusica,
   setRecorteBase,
   setReencuadreBase,
+  setVolumenMusica,
   tituloBorradorPorDefecto,
   type AspectoVideo,
   type ComposicionVideo,
@@ -58,13 +67,14 @@ import {
   type SegmentoSub,
 } from "@/lib/video";
 
-type Seccion = "gestor" | "base" | "overlay" | "pip" | "subs" | "render";
+type Seccion = "gestor" | "base" | "overlay" | "pip" | "audio" | "subs" | "render";
 
 const SECCIONES: { clave: Seccion; etiqueta: string; Icono: typeof VideoIcon }[] = [
   { clave: "gestor", etiqueta: "Mis composiciones", Icono: FolderOpen },
   { clave: "base", etiqueta: "Base", Icono: VideoIcon },
   { clave: "overlay", etiqueta: "Overlay", Icono: Layers },
   { clave: "pip", etiqueta: "PiP", Icono: PictureInPicture2 },
+  { clave: "audio", etiqueta: "Audio", Icono: Music },
   { clave: "subs", etiqueta: "Subtítulos", Icono: Captions },
   { clave: "render", etiqueta: "Render", Icono: Film },
 ];
@@ -88,6 +98,7 @@ export default function Video() {
   const [baseUrl, setBaseUrl] = React.useState("");
   const [pipKey, setPipKey] = React.useState("");
   const [pipUrl, setPipUrl] = React.useState("");
+  const [musicaUrl, setMusicaUrl] = React.useState("");
 
   // Identidad backend de la composición.
   const [composicionId, setComposicionId] = React.useState<string | null>(null);
@@ -157,6 +168,8 @@ export default function Video() {
       const pip = pistaPip(cargado)?.clips[0]?.media_id ?? "";
       setPipKey(pip);
       setPipUrl(pip ? urlMedia(pip) : "");
+      const mus = pistaAudio(cargado)?.clips[0]?.media_id ?? "";
+      setMusicaUrl(mus ? urlMedia(mus) : "");
       setSegmentos([]);
       setSeccion("base");
     },
@@ -314,6 +327,7 @@ export default function Video() {
     setBaseUrl("");
     setPipKey("");
     setPipUrl("");
+    setMusicaUrl("");
     setSegmentos([]);
     setTitulo("");
     setEstado("borrador");
@@ -369,6 +383,37 @@ export default function Video() {
       .catch(() => mutar((d) => setClipPip(d, clave, 0)));
   }
 
+  // ── MÚSICA (pista de audio independiente) ───────────────────────────────────────────────────
+  function onCambioMusica(clave: string, url: string) {
+    setMusicaUrl(url);
+    if (!clave) {
+      mutar((d) => quitarMusica(d));
+      return;
+    }
+    leerDuracion(url)
+      .then((ms) => mutar((d) => setMusica(d, clave, ms)))
+      .catch(() => mutar((d) => setMusica(d, clave, 0)));
+  }
+
+  const quitarMusicaLocal = React.useCallback(() => {
+    setMusicaUrl("");
+    mutar((d) => quitarMusica(d));
+  }, [mutar]);
+
+  // Subir un archivo de música y ligarlo (lo dispara «+ Música» del timeline o del panel Audio).
+  const inputMusicaRef = React.useRef<HTMLInputElement>(null);
+  const subirMusica = useMutation({
+    mutationFn: (archivo: File) => api.subirVideo(archivo),
+    onSuccess: (r) => onCambioMusica(r.id, r.url),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  const pedirMusica = React.useCallback(() => inputMusicaRef.current?.click(), []);
+  function onArchivoMusica(e: React.ChangeEvent<HTMLInputElement>) {
+    const archivo = e.target.files?.[0];
+    if (archivo) subirMusica.mutate(archivo);
+    if (inputMusicaRef.current) inputMusicaRef.current.value = "";
+  }
+
   // Escribe el id de subtítulo en la pista subs de la composición (idempotente: si ya coincide,
   // no muta ni reguarda, para no entrar en bucle de autoguardado).
   function onSubtituloLigado(id: string) {
@@ -422,33 +467,6 @@ export default function Video() {
           </span>
         </AccionesPaginaFin>
       )}
-
-      {/* Sub-navegación de secciones */}
-      <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-3 py-1.5" aria-label="Secciones del editor de video">
-        {SECCIONES.map(({ clave, etiqueta, Icono }) => {
-          const activo = seccion === clave;
-          // Overlay/PiP/Subs/Render requieren un clip base; se deshabilitan hasta tenerlo.
-          // "Mis composiciones" (gestor) y "Base" están siempre disponibles.
-          const requiereBase = clave !== "base" && clave !== "gestor";
-          const off = requiereBase && !tieneBase;
-          return (
-            <button
-              key={clave}
-              type="button"
-              disabled={off}
-              // Explica POR QUÉ está deshabilitada (el disabled sin razón desorienta).
-              title={off ? "Requiere un clip base" : undefined}
-              onClick={() => setSeccion(clave)}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-40 ${
-                activo ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60"
-              }`}
-            >
-              <Icono className="h-4 w-4" />
-              {etiqueta}
-            </button>
-          );
-        })}
-      </nav>
 
       {/* Sin marca activa no hay dónde guardar: aviso claro + edición desactivada (mejor que un
           toast seco al primer cambio). El selector de marca vive en la cabecera del shell. */}
@@ -521,15 +539,43 @@ export default function Video() {
         </div>
       )}
 
-      {/* Cuerpo: controles (izq) + preview (der). El GESTOR ocupa todo el ancho (sin preview).
+      {/* Cuerpo: RAIL de herramientas (izq, estilo Canva como el Estudio de imagen) + contenido.
           El padre NO scrollea (overflow-hidden); cada panel scrollea por dentro. */}
-      <div className="min-h-0 flex-1 overflow-hidden">
-        {seccion === "gestor" ? (
-          <div className="h-full overflow-y-auto">
-            {/* Ocupa TODO el ancho (sin `max-w` centrado, para no dejar los lados vacíos), mismo
-                criterio que la galería de Imagen.tsx. */}
-            <div className="space-y-3 p-4 sm:p-6">
-              <div className="flex items-center justify-between gap-2">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {/* Rail vertical de secciones. */}
+        <nav
+          aria-label="Secciones del editor de video"
+          className="flex w-16 shrink-0 flex-col items-stretch gap-0.5 overflow-y-auto border-r border-border bg-muted/30 py-2"
+        >
+          {SECCIONES.map(({ clave, etiqueta, Icono }) => {
+            const activo = seccion === clave;
+            // Las secciones que componen sobre el clip requieren un clip base; "Mis composiciones"
+            // (gestor) y "Base" están siempre disponibles.
+            const requiereBase = clave !== "base" && clave !== "gestor";
+            const off = requiereBase && !tieneBase;
+            return (
+              <button
+                key={clave}
+                type="button"
+                disabled={off}
+                title={off ? "Requiere un clip base" : undefined}
+                onClick={() => setSeccion(clave)}
+                className={`flex flex-col items-center gap-1 px-1 py-2 text-[10px] font-medium leading-tight transition-colors disabled:opacity-40 ${
+                  activo ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60"
+                }`}
+              >
+                <Icono className="h-5 w-5" />
+                <span className="text-center">{etiqueta}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Contenido según la sección. */}
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {seccion === "gestor" ? (
+            <div className="h-full overflow-y-auto">
+              <div className="space-y-3 p-4 sm:p-6">
                 <button
                   type="button"
                   onClick={nuevaComposicion}
@@ -537,28 +583,33 @@ export default function Video() {
                 >
                   Nueva composición
                 </button>
+                <GestorComposiciones marca={marca} onAbrir={abrirComposicion} />
               </div>
-              <p className="text-xs text-muted-foreground">
-                El estado de subtítulos y el video adjunto se muestran por fila.
-              </p>
-              <GestorComposiciones marca={marca} onAbrir={abrirComposicion} />
             </div>
-          </div>
-        ) : (
-        // En lg+ el grid llena el alto disponible y CADA columna scrollea por separado (Canva:
-        // paneles con scroll interno, página quieta). Por debajo de lg las columnas se apilan y
-        // scrollea este contenedor (un solo scroll interno, nunca el de la página).
-        <div className="mx-auto grid h-full w-full max-w-6xl gap-6 overflow-y-auto p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:overflow-hidden">
-          {/* Columna de controles según la sección */}
-          <section className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:overflow-y-auto">
-            {seccion === "base" && (
-              <>
-                <div>
-                  <h2 className="mb-2 text-sm font-semibold text-foreground">Formato</h2>
-                  <SelectorFormato aspecto={aspecto} onCambio={onCambioFormato} disabled={sinMarca} />
+          ) : seccion === "overlay" ? (
+            // Overlay: editor de capas a pantalla completa, con el clip base DETRÁS del lienzo
+            // (las capas se editan directamente sobre el vídeo, no en un área aparte).
+            <React.Suspense
+              fallback={
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  Cargando editor de capas…
                 </div>
-                <div>
-                  <h2 className="mb-2 text-sm font-semibold text-foreground">Pista base</h2>
+              }
+            >
+              <PanelOverlay
+                doc={doc}
+                marca={marca}
+                capas={pistaOverlayCapas(doc)}
+                videoBaseUrl={baseUrl}
+                onCapas={(capas) => mutar((d) => setCapasOverlay(d, capas))}
+              />
+            </React.Suspense>
+          ) : (
+            // Resto de secciones: panel contextual (controles inline) + LIENZO ÚNICO centrado
+            // (formato in-place arriba) + timeline multipista debajo.
+            <div className="flex h-full min-h-0">
+              <aside className="w-[300px] shrink-0 overflow-y-auto border-r border-border p-4">
+                {seccion === "base" && (
                   <PistaBase
                     doc={doc}
                     videoKey={baseKey}
@@ -567,108 +618,104 @@ export default function Video() {
                     onReencuadre={(c) => mutar((d) => setReencuadreBase(d, c))}
                     disabled={sinMarca}
                   />
-                </div>
-              </>
-            )}
+                )}
+                {seccion === "pip" && (
+                  <PanelPip
+                    doc={doc}
+                    videoKey={pipKey}
+                    videoUrl={pipUrl}
+                    onCambioVideo={onCambioPip}
+                    onQuitar={() => {
+                      setPipKey("");
+                      setPipUrl("");
+                      mutar((d) => quitarPip(d));
+                    }}
+                    disabled={sinMarca}
+                  />
+                )}
+                {seccion === "audio" && (
+                  <PanelAudio
+                    doc={doc}
+                    musicaUrl={musicaUrl}
+                    onAudioBase={(c) => mutar((d) => setAudioBase(d, c))}
+                    onCambioMusica={onCambioMusica}
+                    onVolumenMusica={(c) => mutar((d) => setVolumenMusica(d, c))}
+                    onQuitarMusica={quitarMusicaLocal}
+                    disabled={sinMarca}
+                  />
+                )}
+                {seccion === "subs" && (
+                  <EditorSubtitulos
+                    composicionId={composicionId}
+                    baseMediaId={baseKey}
+                    onSubtituloLigado={onSubtituloLigado}
+                    onSegmentos={setSegmentos}
+                  />
+                )}
+                {seccion === "render" && (
+                  <PanelRender
+                    composicionId={composicionId}
+                    onAntesDeRenderizar={async () => {
+                      if (composicionId) await guardar.mutateAsync({ doc });
+                    }}
+                  />
+                )}
+              </aside>
 
-            {seccion === "overlay" && (
-              <>
-                <h2 className="text-sm font-semibold text-foreground">Capas de overlay</h2>
-                <p className="text-xs text-muted-foreground">
-                  Logos, marcos de marca, imagen-in-video y textos.
-                </p>
-                {/* En lg+ el editor LLENA el alto restante de la columna (flex-1); por debajo
-                    conserva un alto fijo (la columna apilada scrollea). */}
-                <div className="min-h-0 lg:flex-1">
-                  <React.Suspense
-                    fallback={
-                      <div className="flex h-[60vh] min-h-[420px] items-center justify-center rounded-md border border-border text-sm text-muted-foreground lg:h-full">
-                        Cargando editor de capas…
-                      </div>
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                {/* Formato IN-PLACE sobre el lienzo (un solo selector). */}
+                <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">Formato</span>
+                  <SelectorFormato aspecto={aspecto} onCambio={onCambioFormato} disabled={sinMarca} />
+                  {seccion === "base" && tieneBase && (
+                    <span className="ml-auto hidden text-[11px] text-muted-foreground sm:inline">
+                      Arrastra sobre el vídeo para mover el foco
+                    </span>
+                  )}
+                  {seccion === "pip" && (
+                    <span className="ml-auto hidden text-[11px] text-muted-foreground sm:inline">
+                      Arrastra y redimensiona el PiP en el lienzo
+                    </span>
+                  )}
+                </div>
+                <div className="flex min-h-0 flex-1 flex-col items-center gap-3 overflow-y-auto bg-muted/30 p-4">
+                  <PreviewConTimeline
+                    doc={doc}
+                    baseUrl={baseUrl}
+                    pipUrl={pipUrl}
+                    segmentos={segmentos}
+                    edicionDeshabilitada={sinMarca}
+                    onTrim={(idx, inMs, outMs) =>
+                      mutar((d) => setRecorteBase(d, inMs, outMs, undefined, idx))
                     }
-                  >
-                    <PanelOverlay
-                      doc={doc}
-                      marca={marca}
-                      capas={pistaOverlayCapas(doc)}
-                      onCapas={(capas) => mutar((d) => setCapasOverlay(d, capas))}
-                    />
-                  </React.Suspense>
+                    onDividir={(idx, msLocal) => mutar((d) => dividirClipBase(d, idx, msLocal))}
+                    onQuitarSegmento={(idx) => mutar((d) => quitarSegmentoBase(d, idx))}
+                    onMoverSegmento={(idx, dest) => mutar((d) => moverSegmentoBase(d, idx, dest))}
+                    onAudioBase={(c) => mutar((d) => setAudioBase(d, c))}
+                    onAnadirMusica={pedirMusica}
+                    onVolumenMusica={(c) => mutar((d) => setVolumenMusica(d, c))}
+                    onQuitarMusica={quitarMusicaLocal}
+                    pipEditable={seccion === "pip" && !sinMarca}
+                    onCajaPip={onCajaPip}
+                    reframeEditable={seccion === "base" && !sinMarca}
+                    onFoco={(foco) => mutar((d) => setReencuadreBase(d, { foco }))}
+                  />
                 </div>
-              </>
-            )}
-
-            {seccion === "pip" && (
-              <>
-                <h2 className="text-sm font-semibold text-foreground">Picture-in-Picture</h2>
-                <PanelPip
-                  doc={doc}
-                  videoKey={pipKey}
-                  videoUrl={pipUrl}
-                  onCambioVideo={onCambioPip}
-                  onCaja={onCajaPip}
-                  onQuitar={() => {
-                    setPipKey("");
-                    setPipUrl("");
-                    mutar((d) => quitarPip(d));
-                  }}
-                />
-              </>
-            )}
-
-            {seccion === "subs" && (
-              <>
-                <h2 className="text-sm font-semibold text-foreground">Subtítulos (es-MX)</h2>
-                <EditorSubtitulos
-                  composicionId={composicionId}
-                  baseMediaId={baseKey}
-                  onSubtituloLigado={onSubtituloLigado}
-                  onSegmentos={setSegmentos}
-                />
-              </>
-            )}
-
-            {seccion === "render" && (
-              <>
-                <h2 className="text-sm font-semibold text-foreground">Renderizar</h2>
-                <p className="text-xs text-muted-foreground">
-                  El preview de la derecha es solo una aproximación.
-                </p>
-                <PanelRender
-                  composicionId={composicionId}
-                  onAntesDeRenderizar={async () => {
-                    if (composicionId) await guardar.mutateAsync({ doc });
-                  }}
-                />
-              </>
-            )}
-          </section>
-
-          {/* Columna de preview (persistente). Scrollea por dentro si no cabe; el preview se
-              clampa al ancho de la columna (no desborda en horizontal). */}
-          <aside className="min-w-0 space-y-2 lg:min-h-0 lg:overflow-y-auto">
-            <h2 className="text-sm font-semibold text-foreground">Vista previa</h2>
-            {/* `atajoEspacio` se apaga en Overlay: el Lienzo (Konva) ya usa la barra espaciadora
-                para el pan del lienzo y los dos atajos chocarían. */}
-            {/* El PiP solo es manipulable sobre el preview EN su sección (no sorprende al
-                editar base/overlay/subtítulos); sin marca la edición está desactivada. */}
-            <PreviewConTimeline
-              doc={doc}
-              baseUrl={baseUrl}
-              pipUrl={pipUrl}
-              segmentos={segmentos}
-              atajoEspacio={seccion !== "overlay"}
-              trimDeshabilitado={sinMarca}
-              onTrim={(inMs, outMs, durMs) =>
-                mutar((d) => setRecorteBase(d, inMs, outMs, durMs > 0 ? durMs : undefined))
-              }
-              pipEditable={seccion === "pip" && !sinMarca}
-              onCajaPip={onCajaPip}
-            />
-          </aside>
+              </div>
+            </div>
+          )}
         </div>
-        )}
       </div>
+
+      {/* Input oculto para subir música (lo dispara «+ Música» del timeline / panel de audio). */}
+      <input
+        ref={inputMusicaRef}
+        type="file"
+        accept="audio/*,video/*"
+        onChange={onArchivoMusica}
+        className="hidden"
+        aria-label="Subir música"
+      />
     </div>
   );
 }
@@ -684,29 +731,40 @@ function PreviewConTimeline({
   baseUrl,
   pipUrl,
   segmentos,
-  atajoEspacio,
-  trimDeshabilitado,
+  edicionDeshabilitada,
   onTrim,
+  onDividir,
+  onQuitarSegmento,
+  onMoverSegmento,
+  onAudioBase,
+  onAnadirMusica,
+  onVolumenMusica,
+  onQuitarMusica,
   pipEditable,
   onCajaPip,
+  reframeEditable,
+  onFoco,
 }: {
   doc: ComposicionVideo;
   baseUrl: string;
   pipUrl: string;
   segmentos: SegmentoSub[];
-  atajoEspacio: boolean;
-  trimDeshabilitado: boolean;
-  /** Commit del trim del clip base; `durMs` = duración real del clip (0 si aún no se conoce). */
-  onTrim: (inMs: number, outMs: number, durMs: number) => void;
-  /** Habilita arrastrar/redimensionar la ventana PiP directamente sobre el preview. */
+  edicionDeshabilitada: boolean;
+  onTrim: (idx: number, inMs: number, outMs: number) => void;
+  onDividir: (idx: number, msLocal: number) => void;
+  onQuitarSegmento: (idx: number) => void;
+  onMoverSegmento: (idx: number, destino: number) => void;
+  onAudioBase: (cambios: { volumen?: number; silenciar?: boolean }) => void;
+  onAnadirMusica: () => void;
+  onVolumenMusica: (cambios: { volumen?: number; silenciar?: boolean }) => void;
+  onQuitarMusica: () => void;
   pipEditable: boolean;
-  /** Commit de la caja PiP (compartido con los inputs numéricos del panel). */
   onCajaPip: (caja: { x?: number; y?: number; w?: number; h?: number }) => void;
+  reframeEditable: boolean;
+  onFoco: (foco: [number, number]) => void;
 }) {
   const playerRef = React.useRef<PreviewPlayerHandle>(null);
   const [tiempoSeg, setTiempoSeg] = React.useState(0);
-  const [durSeg, setDurSeg] = React.useState(0);
-  const durMs = Math.round(durSeg * 1000);
   return (
     <>
       <PreviewComposicion
@@ -714,23 +772,31 @@ function PreviewConTimeline({
         baseUrl={baseUrl}
         pipUrl={pipUrl}
         segmentos={segmentos}
-        atajoEspacio={atajoEspacio}
         playerRef={playerRef}
         onTiempo={setTiempoSeg}
-        onDuracion={setDurSeg}
         pipEditable={pipEditable}
         onCajaPip={onCajaPip}
+        reframeEditable={reframeEditable}
+        onFoco={onFoco}
       />
       {baseUrl ? (
-        <LineaTiempo
-          doc={doc}
-          duracionClipMs={durMs}
-          tiempoSeg={tiempoSeg}
-          onSeek={(s) => playerRef.current?.buscarA(s)}
-          onTrim={(inMs, outMs) => onTrim(inMs, outMs, durMs)}
-          segmentos={segmentos}
-          disabled={trimDeshabilitado}
-        />
+        <div className="w-full max-w-3xl">
+          <TimelineMultipista
+            doc={doc}
+            tiempoSeg={tiempoSeg}
+            onSeek={(s) => playerRef.current?.buscarA(s)}
+            onTrimSegmento={onTrim}
+            onDividirSegmento={onDividir}
+            onQuitarSegmento={onQuitarSegmento}
+            onMoverSegmento={onMoverSegmento}
+            onAudioBase={onAudioBase}
+            onAnadirMusica={onAnadirMusica}
+            onVolumenMusica={onVolumenMusica}
+            onQuitarMusica={onQuitarMusica}
+            segmentos={segmentos}
+            disabled={edicionDeshabilitada}
+          />
+        </div>
       ) : null}
     </>
   );

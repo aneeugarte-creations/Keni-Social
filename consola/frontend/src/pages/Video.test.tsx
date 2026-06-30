@@ -187,18 +187,18 @@ describe("Video", () => {
     );
   });
 
-  it("con clip base muestra la LÍNEA DE TIEMPO (regla + playhead + asas de trim)", async () => {
+  it("con clip base muestra el TIMELINE multipista (regla + playhead + asas de trim del segmento)", async () => {
     vi.spyOn(apiMod.api.video, "composicion").mockResolvedValue({
       composicion: { id: "comp-7", documento: docConBase(), titulo: "Mi clip", estado: "borrador" },
     });
     renderVideo("/contenido/video?composicion=comp-7");
-    // El timeline vive bajo el preview: playhead accesible y asas de trim del clip base.
+    // El timeline multipista vive bajo el lienzo: playhead accesible y asas de trim del segmento.
     await waitFor(() =>
-      expect(screen.getByLabelText("Línea de tiempo de la composición")).toBeInTheDocument(),
+      expect(screen.getByLabelText("Pistas de la composición")).toBeInTheDocument(),
     );
     expect(screen.getByRole("slider", { name: /cursor de reproducción/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /recortar inicio del clip/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /recortar fin del clip/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /recortar inicio del segmento 1/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /recortar fin del segmento 1/i })).toBeInTheDocument();
   });
 
   it("por `?contenido=<id>` REABRE la composición de la pieza si ya existe", async () => {
@@ -309,9 +309,9 @@ describe("Video", () => {
         () => new Promise<never>((res) => { resolverPut = () => res({} as never); }),
       );
     renderVideo("/contenido/video?composicion=comp-7");
-    const asa = await screen.findByRole("button", { name: /recortar fin del clip/i });
+    const asa = await screen.findByRole("button", { name: /recortar fin del segmento 1/i });
     // jsdom no tiene layout: banda de 100px (1px = 1% del eje de 30 s).
-    const banda = screen.getByLabelText("Línea de tiempo de la composición");
+    const banda = screen.getByLabelText("Pistas de la composición");
     vi.spyOn(banda, "getBoundingClientRect").mockReturnValue({
       left: 0, top: 0, width: 100, height: 96, right: 100, bottom: 96, x: 0, y: 0, toJSON: () => ({}),
     } as DOMRect);
@@ -351,7 +351,7 @@ describe("Video", () => {
     expect((put.mock.calls[0][1] as ComposicionVideo).formato.preset).toBe("16:9");
   });
 
-  it("arrastrar el PiP en el preview SINCRONIZA los inputs numéricos y autoguarda (y viceversa)", async () => {
+  it("arrastrar el PiP en el lienzo lo recoloca y autoguarda (posicionamiento INLINE, sin campos numéricos)", async () => {
     // Composición con base + PiP por defecto (x=673, y=1674, w=367, h=206 en el lienzo 9:16).
     const docPip = setClipPip(docConBase(), "videos/pip.mp4", 10000);
     vi.spyOn(apiMod.api.video, "composicion").mockResolvedValue({
@@ -362,22 +362,18 @@ describe("Video", () => {
     const tabPip = await screen.findByRole("button", { name: /^pip$/i });
     await waitFor(() => expect(tabPip).not.toBeDisabled());
     fireEvent.click(tabPip);
-    // La caja del preview SOLO es interactiva en la sección PiP.
+    // La caja del lienzo SOLO es interactiva en la sección PiP. El posicionamiento es 100% inline
+    // (no hay inputs numéricos X/Y/W/H: se eliminaron en el rediseño).
     const caja = await screen.findByRole("group", { name: "Ventana PiP" });
+    expect(screen.queryByLabelText("PiP X")).not.toBeInTheDocument();
     // Arrastre: Δpantalla (−20, −10) a escala 520/1920 = Δlienzo (−73,8, −36,9) → (599, 1637).
     fireEvent.mouseDown(caja, { clientX: 500, clientY: 500 });
     fireEvent.mouseMove(window, { clientX: 480, clientY: 490 });
     fireEvent.mouseUp(window);
-    // El commit fluye al MISMO doc que alimenta el panel: los inputs reflejan la nueva posición…
-    expect(screen.getByLabelText("PiP X")).toHaveValue(599);
-    expect(screen.getByLabelText("PiP Y")).toHaveValue(1637);
-    // …y se autoguarda (PUT con la caja movida).
+    // El arrastre commitea al doc y autoguarda (PUT con la caja movida).
     await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
     const guardado = put.mock.calls[0][1] as ComposicionVideo;
     expect(pistaPip(guardado)!.clips[0]).toMatchObject({ x: 599, y: 1637, w: 367, h: 206 });
-    // Y al revés: editar el input numérico recoloca la caja del preview (sincronía bidireccional).
-    fireEvent.change(screen.getByLabelText("PiP X"), { target: { value: "100" } });
-    expect(caja.style.left).toBe(`${100 * (520 / 1920)}px`);
   });
 
   it("'Marcar listo' hace PUT del estado='listo' sin reenviar documento", async () => {

@@ -40,6 +40,14 @@ export interface EditorVideoProps {
   idPrefijo?: string;
   /** Red de la publicación (para mostrar el límite correspondiente). */
   red?: string;
+  /**
+   * Modo COMPACTO: no renderiza el reproductor `<video controls>` (la superficie de vídeo es el
+   * lienzo central del Estudio). Solo muestra subir/reemplazar/quitar y el estado. Evita el doble
+   * vídeo del editor de composición.
+   */
+  compacto?: boolean;
+  /** Etiqueta de la zona (p. ej. «Vídeo base», «PiP»). Por defecto «Video». */
+  etiqueta?: string;
 }
 
 export function EditorVideo({
@@ -49,6 +57,8 @@ export function EditorVideo({
   disabled,
   idPrefijo = "vid",
   red,
+  compacto = false,
+  etiqueta = "Video",
 }: EditorVideoProps) {
   const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -79,7 +89,7 @@ export function EditorVideo({
     <div className="space-y-2.5">
       <Label className="flex items-center gap-1.5">
         <Video className="h-4 w-4 text-muted-foreground" />
-        Video
+        {etiqueta}
       </Label>
 
       <input
@@ -123,15 +133,33 @@ export function EditorVideo({
               } as EntradaMenuContextual,
             ]}
           >
-            <div className="relative inline-block w-full max-w-sm">
-              <video
-                src={src}
-                controls
-                muted
-                className="w-full rounded-md border border-border transition-colors hover:border-keni-300 focus-within:border-keni-300"
-                aria-label="Previsualización del video"
-              />
-            </div>
+            {compacto ? (
+              // Sin reproductor: la superficie de vídeo es el lienzo central. Fila con estado.
+              <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+                <Video className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                  {subir.isPending ? "Subiendo…" : "Vídeo cargado"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => inputRef.current?.click()}
+                  disabled={ocupado}
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-40"
+                >
+                  <Upload className="h-3.5 w-3.5" /> Reemplazar
+                </button>
+              </div>
+            ) : (
+              <div className="relative inline-block w-full max-w-sm">
+                <video
+                  src={src}
+                  controls
+                  muted
+                  className="w-full rounded-md border border-border transition-colors hover:border-keni-300 focus-within:border-keni-300"
+                  aria-label="Previsualización del video"
+                />
+              </div>
+            )}
           </FilaConAcciones>
 
           {limiteRed && (

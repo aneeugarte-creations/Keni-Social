@@ -142,6 +142,7 @@ export function EditorDocumento({
   accionesInicio,
   accionesFin,
   menuExtra,
+  fondoLienzo,
 }: {
   store: StoreEditor;
   marca: string;
@@ -167,6 +168,9 @@ export function EditorDocumento({
   accionesFin?: ReactNode;
   // Entradas extra para el menú «Más» (terciarias de la página, p. ej. «Guardar como…»).
   menuExtra?: ReactNode;
+  // Fondo OPCIONAL del lienzo (detrás del Stage): el `<video>` base en el Estudio de video, para
+  // editar las capas overlay directamente sobre el vídeo. Se reenvía a `Lienzo`.
+  fondoLienzo?: ReactNode;
 }) {
   const fuentesExtra = useFuentesMarca(marca);
   // Stage de Konva + escala actual (publicados por el Lienzo) para muestrear píxeles (legibilidad).
@@ -667,6 +671,7 @@ export function EditorDocumento({
               onSalirRecorte={() => setRecorteId(null)}
               muestraFoto={muestraFoto}
               muestraCopy={muestraCopy}
+              fondo={fondoLienzo}
               onStage={(stage, escala) => { stageInfo.current = { stage, escala }; }}
               barraSeleccion={
                 <BarraContextual

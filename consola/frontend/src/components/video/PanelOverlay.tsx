@@ -27,8 +27,8 @@ import type { Capa, Documento } from "@/editor/documento";
 import { EditorDocumento } from "@/editor/EditorDocumento";
 import { GaleriaPlantillas } from "@/editor/GaleriaPlantillas";
 import { crearStoreEditor, type StoreEditor } from "@/editor/store";
-import { api, type PlantillaDiseno } from "@/lib/api";
-import type { ComposicionVideo } from "@/lib/video";
+import { api, urlMedia, type PlantillaDiseno } from "@/lib/api";
+import { pistaBase, type ComposicionVideo } from "@/lib/video";
 
 import { overlayAPlantilla, plantillaAOverlay } from "./overlayPlantillas";
 
@@ -41,6 +41,26 @@ export interface PanelOverlayProps {
   capas: Capa[];
   /** Notifica el nuevo conjunto de capas tras cada edición. */
   onCapas: (capas: Capa[]) => void;
+  /** URL del clip base: se pinta DETRÁS del lienzo de capas para editar el overlay sobre el vídeo. */
+  videoBaseUrl?: string;
+}
+
+/** `<video>` base como fondo del lienzo de overlay (object-fit + foco del clip base). */
+function FondoVideo({ doc, url }: { doc: ComposicionVideo; url: string }) {
+  const clip = pistaBase(doc)?.clips[0];
+  return (
+    <video
+      src={urlMedia(url)}
+      muted
+      playsInline
+      preload="metadata"
+      className="h-full w-full"
+      style={{
+        objectFit: clip?.ajuste === "contain" ? "contain" : "cover",
+        objectPosition: clip ? `${clip.foco[0] * 100}% ${clip.foco[1] * 100}%` : "center",
+      }}
+    />
+  );
 }
 
 /** Construye un Documento transparente del tamaño de la composición con las capas dadas. */
@@ -56,7 +76,7 @@ function documentoOverlay(doc: ComposicionVideo, marca: string, capas: Capa[]): 
   };
 }
 
-export function PanelOverlay({ doc, marca, capas, onCapas }: PanelOverlayProps) {
+export function PanelOverlay({ doc, marca, capas, onCapas, videoBaseUrl }: PanelOverlayProps) {
   // Un store POR montaje, inicializado con las capas actuales. Se recrea si cambia el formato del
   // lienzo (las capas se preservan vía el documento).
   const storeRef = React.useRef<StoreEditor | null>(null);
@@ -167,6 +187,7 @@ export function PanelOverlay({ doc, marca, capas, onCapas }: PanelOverlayProps) 
         store={store}
         marca={marca}
         accionesEnCabecera
+        fondoLienzo={videoBaseUrl ? <FondoVideo doc={doc} url={videoBaseUrl} /> : undefined}
         onPlantillas={() => setGaleria(true)}
         menuExtra={
           <button

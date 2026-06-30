@@ -85,6 +85,13 @@ export interface PreviewComposicionProps {
   pipEditable?: boolean;
   /** Commit de la caja PiP (px del lienzo) al soltar un gesto o pulsar una flecha. */
   onCajaPip?: (caja: { x?: number; y?: number; w?: number; h?: number }) => void;
+  /**
+   * Habilita el REENCUADRE inline: arrastrar sobre el vídeo mueve el punto focal del clip base
+   * (solo con `ajuste === "cover"`). Actívalo en la sección Base. Muestra un marcador de foco.
+   */
+  reframeEditable?: boolean;
+  /** Commit del foco del clip base (0..1) al soltar el gesto de reencuadre. */
+  onFoco?: (foco: [number, number]) => void;
 }
 
 /** Umbral de SNAP del arrastre del PiP, en px de PANTALLA (constante a cualquier escala). */
@@ -102,6 +109,8 @@ export function PreviewComposicion({
   playerRef,
   pipEditable = false,
   onCajaPip,
+  reframeEditable = false,
+  onFoco,
 }: PreviewComposicionProps) {
   const { w, h } = doc.formato;
 
@@ -460,6 +469,42 @@ export function PreviewComposicion({
   // Caja a PINTAR: la transitoria del gesto si lo hay; si no, la del documento.
   const cajaPip = gestoPip ?? clipPip;
 
+  // ------------------------------------------------------------------ //
+  // REENCUADRE inline: arrastrar sobre el vídeo mueve el foco del base   //
+  // ------------------------------------------------------------------ //
+  const [focoGesto, setFocoGesto] = React.useState<[number, number] | null>(null);
+  const reframeInteractivo =
+    reframeEditable && !!onFoco && !!clipBase && clipBase.ajuste === "cover";
+  const focoActual: [number, number] = focoGesto ?? (clipBase ? clipBase.foco : [0.5, 0.5]);
+
+  const iniciarReframe = React.useCallback(
+    (e: React.MouseEvent) => {
+      if (!onFoco) return;
+      e.preventDefault();
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const calc = (cx: number, cy: number): [number, number] => {
+        const fx = rect.width > 0 ? Math.min(1, Math.max(0, (cx - rect.left) / rect.width)) : 0.5;
+        const fy = rect.height > 0 ? Math.min(1, Math.max(0, (cy - rect.top) / rect.height)) : 0.5;
+        return [Number(fx.toFixed(4)), Number(fy.toFixed(4))];
+      };
+      let ultimo = calc(e.clientX, e.clientY);
+      setFocoGesto(ultimo);
+      const mover = (ev: MouseEvent) => {
+        ultimo = calc(ev.clientX, ev.clientY);
+        setFocoGesto(ultimo);
+      };
+      const soltar = () => {
+        window.removeEventListener("mousemove", mover);
+        window.removeEventListener("mouseup", soltar);
+        setFocoGesto(null);
+        onFoco(ultimo);
+      };
+      window.addEventListener("mousemove", mover);
+      window.addEventListener("mouseup", soltar);
+    },
+    [onFoco],
+  );
+
   const segActivo = segmentos && segmentos.length > 0 ? segmentoEn(segmentos, tiempo) : null;
   const progresoPct = durTotal > 0 ? Math.min(100, (tiempo / durTotal) * 100) : 0;
   // Reloj del VÍDEO FINAL: con recorte, el contador corre desde `recorte_in` y el total es la
@@ -499,14 +544,30 @@ export function PreviewComposicion({
             className="absolute inset-0 h-full w-full"
             style={{
               objectFit: clipBase?.ajuste === "contain" ? "contain" : "cover",
-              objectPosition: clipBase
-                ? `${clipBase.foco[0] * 100}% ${clipBase.foco[1] * 100}%`
-                : "center",
+              objectPosition: `${focoActual[0] * 100}% ${focoActual[1] * 100}%`,
             }}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-xs text-white/50">
             Sube un video base para previsualizar
+          </div>
+        )}
+
+        {/* Reencuadre inline: capa de arrastre que mueve el foco del clip base + marcador. */}
+        {reframeInteractivo && (
+          <div
+            data-testid="reframe-capa"
+            role="application"
+            aria-label="Arrastra para mover el foco del reencuadre"
+            onMouseDown={iniciarReframe}
+            className="absolute inset-0 z-[1] cursor-move"
+          >
+            <div
+              className="pointer-events-none absolute h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/90 bg-white/10 shadow ring-1 ring-black/30"
+              style={{ left: focoActual[0] * anchoPx, top: focoActual[1] * altoPx }}
+            >
+              <span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white" />
+            </div>
           </div>
         )}
 

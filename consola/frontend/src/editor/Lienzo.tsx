@@ -53,6 +53,7 @@ export function Lienzo({
   muestraCopy = false,
   onStage,
   barraSeleccion,
+  fondo,
 }: {
   maxAncho?: number;
   maxAlto?: number;
@@ -72,6 +73,10 @@ export function Lienzo({
   // reservada de arriba, junto a la píldora de alinear/orden, y solo se ve con selección (y fuera
   // de arrastre/edición/modos de imagen, igual que aquella).
   barraSeleccion?: ReactNode;
+  // Fondo OPCIONAL detrás del Stage: sustituye el tablero de transparencia (p. ej. el `<video>`
+  // base en el Estudio de video, para editar las capas overlay DIRECTAMENTE sobre el vídeo). Se
+  // pinta a tamaño del lienzo escalado; el Stage transparente lo deja ver. No afecta al export.
+  fondo?: ReactNode;
 }) {
   const store = useStoreEditor();
   const documento = useEditor((s) => s.documento);
@@ -357,15 +362,24 @@ export function Lienzo({
          style={{
            width: w * escala,
            height: h * escala,
-           // Tablero de ajedrez (GIMP/Adobe) DETRÁS del Stage: donde el documento es transparente
-           // (alfa < 1) se ve a través del canvas Konva. Solo editor; el PNG exportado es transparente.
-           backgroundImage:
-             "linear-gradient(45deg,#c8c8c8 25%,transparent 25%),linear-gradient(-45deg,#c8c8c8 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#c8c8c8 75%),linear-gradient(-45deg,transparent 75%,#c8c8c8 75%)",
-           backgroundSize: "16px 16px",
-           backgroundPosition: "0 0,0 8px,8px -8px,-8px 0",
-           backgroundColor: "#fff",
+           // Con `fondo` (vídeo) detrás del Stage no se pinta el tablero: el vídeo es el fondo y el
+           // Stage transparente lo deja ver. Sin `fondo`, tablero de ajedrez (GIMP/Adobe) donde el
+           // documento es transparente. Solo editor; el PNG exportado es transparente.
+           ...(fondo
+             ? { backgroundColor: "#000" }
+             : {
+                 backgroundImage:
+                   "linear-gradient(45deg,#c8c8c8 25%,transparent 25%),linear-gradient(-45deg,#c8c8c8 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#c8c8c8 75%),linear-gradient(-45deg,transparent 75%,#c8c8c8 75%)",
+                 backgroundSize: "16px 16px",
+                 backgroundPosition: "0 0,0 8px,8px -8px,-8px 0",
+                 backgroundColor: "#fff",
+               }),
          }}
        >
+        {/* Fondo opcional (vídeo base): detrás del Stage, a tamaño del lienzo escalado. */}
+        {fondo && (
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">{fondo}</div>
+        )}
         <Stage
           ref={stageRef}
           width={w * escala}
