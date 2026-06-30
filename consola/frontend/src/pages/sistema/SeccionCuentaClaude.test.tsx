@@ -7,7 +7,7 @@
  * Mockeamos `api.sistemaCuenta`, el selector (`useMarcaActiva`) y el uso (`useUsoCuenta`).
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UsoCuenta } from "@/hooks/use-uso-cuenta";
@@ -126,8 +126,8 @@ describe("SeccionCuentaClaude", () => {
     renderSeccion();
 
     // Ambas tarjetas presentes, cada una consultada con su selector.
-    expect(await screen.findByText("Cuenta de Claude del servidor (A)")).toBeInTheDocument();
-    expect(screen.getByText("Cuenta de Claude del servidor (B)")).toBeInTheDocument();
+    expect(await screen.findByText("Cuenta A")).toBeInTheDocument();
+    expect(screen.getByText("Cuenta B")).toBeInTheDocument();
 
     // La A está conectada: muestra su email; la B no, con el aviso de "sin cuenta".
     expect(await screen.findByText("cuenta-a@kenitech.io")).toBeInTheDocument();
@@ -135,8 +135,9 @@ describe("SeccionCuentaClaude", () => {
       await screen.findByText(/No hay ninguna cuenta de Claude conectada/),
     ).toBeInTheDocument();
 
-    // La B se etiqueta con las marcas que usa (incluida la Fundación).
-    expect(screen.getByText(/UnoTV, Nación Gamer, UnoTV US .* y la Fundación/)).toBeInTheDocument();
+    // El selector de marcas vive DENTRO de cada tarjeta (una por cuenta), no en un panel aparte.
+    expect(await screen.findAllByText("Marcas de esta cuenta")).toHaveLength(2);
+    expect(screen.queryByText("Marcas por cuenta")).not.toBeInTheDocument();
 
     // Cada tarjeta pidió su cuenta por separado.
     expect(sistemaCuenta).toHaveBeenCalledWith("a");
@@ -147,8 +148,8 @@ describe("SeccionCuentaClaude", () => {
     marcaActivaMock.mockReturnValue({ marcaActiva: "claro-sports" });
     renderSeccion();
 
-    expect(await screen.findByText("Cuenta de Claude del servidor (A)")).toBeInTheDocument();
-    expect(screen.queryByText("Cuenta de Claude del servidor (B)")).not.toBeInTheDocument();
+    expect(await screen.findByText("Cuenta A")).toBeInTheDocument();
+    expect(screen.queryByText("Cuenta B")).not.toBeInTheDocument();
     expect(sistemaCuenta).toHaveBeenCalledWith("a");
     expect(sistemaCuenta).not.toHaveBeenCalledWith("b");
   });
@@ -157,34 +158,32 @@ describe("SeccionCuentaClaude", () => {
     marcaActivaMock.mockReturnValue({ marcaActiva: "unotv" });
     renderSeccion();
 
-    expect(await screen.findByText("Cuenta de Claude del servidor (B)")).toBeInTheDocument();
-    expect(screen.queryByText("Cuenta de Claude del servidor (A)")).not.toBeInTheDocument();
+    expect(await screen.findByText("Cuenta B")).toBeInTheDocument();
+    expect(screen.queryByText("Cuenta A")).not.toBeInTheDocument();
     expect(sistemaCuenta).toHaveBeenCalledWith("b");
     expect(sistemaCuenta).not.toHaveBeenCalledWith("a");
   });
 
-  it("lista las marcas por cuenta, marca el defecto vs override y mueve una marca a la otra cuenta", async () => {
+  it("cada tarjeta lista las marcas como chips; togglear un chip mueve la marca de cuenta", async () => {
     renderSeccion();
+    // El reparto vive en las tarjetas (chips), no en un panel "Marcas por cuenta" aparte.
+    expect(await screen.findAllByText("Marcas de esta cuenta")).toHaveLength(2);
+    expect(screen.queryByText("Marcas por cuenta")).not.toBeInTheDocument();
 
-    // El bloque "Marcas por cuenta" se pinta con las marcas de cada cuenta.
-    expect(await screen.findByText("Marcas por cuenta")).toBeInTheDocument();
-
-    // Una marca por defecto lleva el tag "(defecto)"; la personalizada, el badge.
-    const filaUnotv = (await screen.findByText("UnoTV")).closest("li") as HTMLElement;
-    expect(within(filaUnotv).getByText("(defecto)")).toBeInTheDocument();
-    const filaFundacion = (await screen.findByText("Fundación")).closest("li") as HTMLElement;
-    expect(within(filaFundacion).getByText("personalizado")).toBeInTheDocument();
-
-    // "Mover a {otra cuenta}": la Fundación está en B, su botón la manda a la cuenta A.
-    fireEvent.click(within(filaFundacion).getByRole("button", { name: /Mover a Claro Sports/ }));
+    // La Fundación está en la cuenta B: su chip INACTIVO (tarjeta A) la mueve a la cuenta A.
+    const chipsFundacion = await screen.findAllByRole("button", { name: /Fundación/ });
+    const fundacionEnA = chipsFundacion.find((b) => b.getAttribute("aria-pressed") === "false");
+    fireEvent.click(fundacionEnA as HTMLElement);
     await waitFor(() =>
       expect(asignarCuentaMarca).toHaveBeenCalledWith({ marca: "fundacion", cuenta: "a" }),
     );
 
-    // La personalizada ofrece además volver al defecto (limpia el override con cuenta vacía).
-    fireEvent.click(within(filaFundacion).getByRole("button", { name: /Defecto/ }));
+    // Claro Sports está en A: su chip ACTIVO (tarjeta A) la mueve a la otra cuenta (B).
+    const chipsClaro = screen.getAllByRole("button", { name: /Claro Sports/ });
+    const claroActivo = chipsClaro.find((b) => b.getAttribute("aria-pressed") === "true");
+    fireEvent.click(claroActivo as HTMLElement);
     await waitFor(() =>
-      expect(asignarCuentaMarca).toHaveBeenCalledWith({ marca: "fundacion", cuenta: "" }),
+      expect(asignarCuentaMarca).toHaveBeenCalledWith({ marca: "claro-sports", cuenta: "b" }),
     );
   });
 });

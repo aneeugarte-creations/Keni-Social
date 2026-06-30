@@ -1,13 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowRightLeft,
   BadgeCheck,
   Copy,
   ExternalLink,
   KeyRound,
   LogOut,
   RefreshCw,
-  RotateCcw,
   UserCog,
 } from "lucide-react";
 import * as React from "react";
@@ -46,7 +44,13 @@ import { CLAVE_USO_CUENTA, useUsoCuenta } from "@/hooks/use-uso-cuenta";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFechaHoraCorta, haceSegundos } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
-import type { CuentaAuth, CuentaUso, MedidorUso } from "@/types";
+import type {
+  CuentaAuth,
+  CuentaMarcaAsignacion,
+  CuentaUso,
+  MedidorUso,
+  RespuestaCuentaMarcas,
+} from "@/types";
 
 import { colorUso } from "./lib";
 
@@ -331,14 +335,71 @@ function BotonLogout({ cuenta, onHecho }: { cuenta: Cuenta; onHecho: () => void 
 }
 
 /** Tarjeta de UNA cuenta de Claude del servidor: estado de auth, uso y cambio de cuenta. */
+/** Selector MÚLTIPLE de marcas de UNA cuenta: un chip por marca; activo = la sirve esta cuenta.
+ *  Togglear mueve la marca entre cuentas (una sola cuenta sirve cada marca). Admin-only: solo se
+ *  pinta si el reparto cargó. */
+function SelectorMarcas({
+  cuenta,
+  marcas,
+  onMover,
+  marcaPendiente,
+}: {
+  cuenta: Cuenta;
+  marcas: CuentaMarcaAsignacion[];
+  onMover: (marca: string, cuenta: Cuenta) => void;
+  marcaPendiente: string | undefined;
+}) {
+  const otra: Cuenta = cuenta === "a" ? "b" : "a";
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs font-medium text-muted-foreground">Marcas de esta cuenta</p>
+      <p className="text-xs text-muted-foreground/70">
+        Marca activa = la sirve esta cuenta. Toca una para moverla a la otra cuenta.
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {marcas.map((m) => {
+          const aqui = m.cuenta === cuenta;
+          const ocupada = marcaPendiente === m.id;
+          return (
+            <Button
+              key={m.id}
+              type="button"
+              size="sm"
+              variant={aqui ? "secondary" : "outline"}
+              aria-pressed={aqui}
+              disabled={marcaPendiente != null}
+              onClick={() => onMover(m.id, aqui ? otra : cuenta)}
+              title={
+                aqui
+                  ? `Mover «${m.nombre}» a la cuenta ${otra.toUpperCase()}`
+                  : `Mover «${m.nombre}» a esta cuenta`
+              }
+              className="h-7 rounded-full px-3 text-xs"
+            >
+              {ocupada && <Spinner className="mr-1.5 h-3 w-3" />}
+              {m.nombre}
+            </Button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function TarjetaCuenta({
   cuenta,
   titulo,
   descripcion,
+  reparto,
+  onMover,
+  marcaPendiente,
 }: {
   cuenta: Cuenta;
   titulo: string;
   descripcion?: string;
+  reparto: RespuestaCuentaMarcas | undefined;
+  onMover: (marca: string, cuenta: Cuenta) => void;
+  marcaPendiente: string | undefined;
 }) {
   const query = useQuery({
     queryKey: ["sistema", "cuenta", cuenta],
@@ -439,166 +500,62 @@ function TarjetaCuenta({
             </div>
           </>
         )}
+
+        {/* Reparto de marcas dentro de la propia tarjeta (qué marcas sirve esta cuenta). Solo si el
+            reparto cargó (admin); el routing es independiente de que la cuenta esté conectada. */}
+        {reparto && (
+          <div className="border-t border-border/50 pt-3">
+            <SelectorMarcas
+              cuenta={cuenta}
+              marcas={reparto.marcas}
+              onMover={onMover}
+              marcaPendiente={marcaPendiente}
+            />
+          </div>
+        )}
       </CardContent>
     </Card>
   );
 }
 
-/** Textos de cada tarjeta de cuenta, indexados por su selector. */
-const TARJETAS: Record<Cuenta, { titulo: string; descripcion: string }> = {
-  a: {
-    titulo: "Cuenta de Claude del servidor (A)",
-    descripcion:
-      "Cuenta principal: marca de Claro Sports, y todo lo que no esté repartido a la cuenta B.",
-  },
-  b: {
-    titulo: "Cuenta de Claude del servidor (B)",
-    descripcion:
-      "Segunda cuenta para el reparto por marcas: UnoTV, Nación Gamer, UnoTV US (informativo) y la Fundación.",
-  },
+/** Título de cada tarjeta de cuenta (las marcas que sirve se ven en su selector, no en el texto). */
+const TARJETAS: Record<Cuenta, { titulo: string }> = {
+  a: { titulo: "Cuenta A" },
+  b: { titulo: "Cuenta B" },
 };
 
 /** Clave de caché del reparto marca→cuenta. */
 const CLAVE_CUENTA_MARCAS = ["sistema", "cuenta-marcas"] as const;
 
-/** Reparto de marcas por cuenta (admin): para cada cuenta A/B, sus marcas, con un control para
- *  mover cada marca a la OTRA cuenta y, si tiene override, restablecerla al defecto. Se oculta
- *  sola si el endpoint responde 403 (no admin) o falla. Al asignar, refresca este reparto y el
- *  uso (`/sistema/uso`) para que las tarjetas y etiquetas de cuenta reflejen el cambio. */
-function SeccionMarcasPorCuenta() {
+/** Sección de las cuentas de Claude del servidor: cuenta A y cuenta B. Cada tarjeta lleva su
+ *  estado/uso, login/logout y, dentro, el SELECTOR DE MARCAS de esa cuenta (admin): qué marcas
+ *  sirve, movibles entre cuentas. (Antes había un panel «Marcas por cuenta» aparte; ahora vive en
+ *  la propia tarjeta.)
+ *
+ *  Respeta el SELECTOR DE MARCA global (`useMarcaActiva`): en "Todas" (`marcaActiva === null`)
+ *  muestra AMBAS tarjetas; con una marca concreta, solo la de su cuenta (mapeo reutilizado del
+ *  endpoint de uso). El reparto marca→cuenta (`cuenta-marcas`, admin-only) se carga aquí y se pasa
+ *  a cada tarjeta; si responde 403/falla, las tarjetas no pintan el selector. */
+export function SeccionCuentaClaude() {
+  const { marcaActiva } = useMarcaActiva();
+  const { data } = useUsoCuenta();
   const qc = useQueryClient();
-  const query = useQuery({
+
+  const repartoQuery = useQuery({
     queryKey: CLAVE_CUENTA_MARCAS,
     queryFn: ({ signal }) => api.cuentaMarcas(signal),
     retry: false,
     refetchOnWindowFocus: false,
   });
-
   const asignar = useMutation({
     mutationFn: (datos: { marca: string; cuenta: string }) => api.asignarCuentaMarca(datos),
-    onSuccess: (data) => {
-      qc.setQueryData(CLAVE_CUENTA_MARCAS, data);
+    onSuccess: (mapa) => {
+      qc.setQueryData(CLAVE_CUENTA_MARCAS, mapa);
       void qc.invalidateQueries({ queryKey: CLAVE_USO_CUENTA });
       toast.success("Reparto de marcas actualizado.");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
-
-  // 403 (no admin) o cualquier fallo: no pintamos la sección (es un panel admin opcional).
-  if (query.isError || (!query.data && !query.isPending)) return null;
-  if (query.isPending || !query.data) {
-    return <Skeleton className="h-40 w-full rounded-xl" />;
-  }
-
-  const { cuentas, marcas } = query.data;
-  const etiquetaCuenta = (c: string) =>
-    cuentas.find((x) => x.cuenta === c)?.etiqueta ?? c.toUpperCase();
-  const otraCuenta = (c: string) => cuentas.find((x) => x.cuenta !== c)?.cuenta;
-  const marcaPendiente = asignar.isPending ? asignar.variables?.marca : undefined;
-
-  return (
-    <Card>
-      <CardHeader className="p-4 pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground">
-          <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />
-          Marcas por cuenta
-        </CardTitle>
-        <p className="pt-1 text-xs text-muted-foreground">
-          Qué cuenta de Claude sirve cada marca. Muévela a la otra cuenta para repartir la carga;
-          «defecto» es el reparto base sin personalizar.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4 p-4 pt-0">
-        {cuentas.map((c) => {
-          const suyas = marcas.filter((m) => m.cuenta === c.cuenta);
-          const destino = otraCuenta(c.cuenta);
-          return (
-            <div key={c.cuenta} className="space-y-1.5">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {c.etiqueta}
-              </p>
-              {suyas.length === 0 ? (
-                <p className="text-sm text-muted-foreground/70">Sin marcas en esta cuenta.</p>
-              ) : (
-                <ul className="divide-y divide-border/50">
-                  {suyas.map((m) => {
-                    const ocupada = marcaPendiente === m.id;
-                    return (
-                      <li
-                        key={m.id}
-                        className="flex items-center justify-between gap-3 py-1.5 text-sm"
-                      >
-                        <span className="flex items-center gap-2">
-                          <span className="font-medium">{m.nombre}</span>
-                          {m.por_defecto ? (
-                            <span className="text-xs text-muted-foreground/70">(defecto)</span>
-                          ) : (
-                            <Badge variant="outline" className="text-[10px]">
-                              personalizado
-                            </Badge>
-                          )}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          {!m.por_defecto && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 text-muted-foreground"
-                              disabled={asignar.isPending}
-                              onClick={() => asignar.mutate({ marca: m.id, cuenta: "" })}
-                              title="Volver al reparto por defecto"
-                            >
-                              {ocupada && asignar.variables?.cuenta === "" ? (
-                                <Spinner className="mr-1.5 h-3.5 w-3.5" />
-                              ) : (
-                                <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                              )}
-                              Defecto
-                            </Button>
-                          )}
-                          {destino && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7"
-                              disabled={asignar.isPending}
-                              onClick={() => asignar.mutate({ marca: m.id, cuenta: destino })}
-                              title={`Mover a ${etiquetaCuenta(destino)}`}
-                            >
-                              {ocupada && asignar.variables?.cuenta === destino ? (
-                                <Spinner className="mr-1.5 h-3.5 w-3.5" />
-                              ) : (
-                                <ArrowRightLeft className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                              )}
-                              Mover a {etiquetaCuenta(destino)}
-                            </Button>
-                          )}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          );
-        })}
-      </CardContent>
-    </Card>
-  );
-}
-
-/** Sección de las cuentas de Claude del servidor: la cuenta A (histórica) y la cuenta B
- *  (segunda cuenta para el split por marcas). Cada una con su estado/uso y login/logout.
- *
- *  Respeta el SELECTOR DE MARCA global (`useMarcaActiva`), igual que el indicador del sidebar:
- *  en "Todas" (`marcaActiva === null`, admin) muestra AMBAS tarjetas; con una marca concreta,
- *  solo la tarjeta de la cuenta que sirve esa marca. El mapeo marca→cuenta se REUTILIZA del
- *  endpoint de uso (`useUsoCuenta` → `/api/sistema/uso`): la cuenta cuyo `marcas` incluye la
- *  marca activa. Si el mapeo no es resoluble (uso aún sin cargar, o marca fuera de toda cuenta)
- *  se muestran AMBAS, para no dejar este panel admin vacío. */
-export function SeccionCuentaClaude() {
-  const { marcaActiva } = useMarcaActiva();
-  const { data } = useUsoCuenta();
 
   const cuentas = React.useMemo<Cuenta[]>(() => {
     if (marcaActiva === null) return ["a", "b"];
@@ -607,6 +564,8 @@ export function SeccionCuentaClaude() {
     return ["a", "b"];
   }, [marcaActiva, data]);
 
+  const marcaPendiente = asignar.isPending ? asignar.variables?.marca : undefined;
+
   return (
     <div className="space-y-4">
       {cuentas.map((cuenta) => (
@@ -614,10 +573,11 @@ export function SeccionCuentaClaude() {
           key={cuenta}
           cuenta={cuenta}
           titulo={TARJETAS[cuenta].titulo}
-          descripcion={TARJETAS[cuenta].descripcion}
+          reparto={repartoQuery.data}
+          onMover={(marca, c) => asignar.mutate({ marca, cuenta: c })}
+          marcaPendiente={marcaPendiente}
         />
       ))}
-      <SeccionMarcasPorCuenta />
     </div>
   );
 }
