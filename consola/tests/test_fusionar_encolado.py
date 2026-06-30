@@ -72,6 +72,10 @@ def test_encola_por_marca_con_carril_de_cuenta_e_investigacion(monkeypatch):
     assert spec["procesar"]["marca"] == "unotv"
     assert {r["id"] for r in spec["procesar"]["recientes"]} == {"c1", "c2"}
     assert spec["endurecer"]["modelo"] == config.fusion_modelo()
+    # JSON-in/JSON-out: corre como sus etapas hermanas (sin esquemas de tools, un solo turno) para no
+    # inflar entrada (~17k de tools) ni salida (~4000 de razonamiento agéntico).
+    assert spec["endurecer"]["sin_tools"] is True
+    assert spec["endurecer"]["max_turns"] == 1
     assert jobspec.prioridad(spec) == jobspec.PRIORIDAD_AUTOMATICO
     # El registro de actividad de Fusionar queda creado al encolar (lo completa el worker).
     assert capt["creados"][0]["etapa"] == "Fusionar"

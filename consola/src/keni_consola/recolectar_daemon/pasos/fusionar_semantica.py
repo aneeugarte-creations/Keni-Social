@@ -190,8 +190,12 @@ def _encolar_fusion(marca: str, clusters: list[dict[str, Any]], *, ahora: dateti
             # Carril de la CUENTA de la marca: el worker que monta esa cuenta reclama el job.
             carril=ruteo_cuentas.carril_de_marca(marca),
             # La fusión usa SU PROPIO modelo (`config.fusion_modelo()`, def sonnet): agrupar por evento
-            # es más sutil que traducir, mismo modelo que usaba la fusión inline.
-            endurecer={"modelo": config.fusion_modelo()},
+            # es más sutil que traducir, mismo modelo que usaba la fusión inline. Es JSON-in/JSON-out
+            # (agrupa ids de titulares en una sola respuesta), igual que el camino síncrono
+            # (`_ejecutar_haiku`): `sin_tools` evita exponer esquemas de tools (~17k tokens) y
+            # `max_turns=1` la corre en un turno sin bucle agéntico (~500 tokens de JSON en vez de ~4000
+            # de razonamiento/turnos), como sus etapas hermanas Traducir/Decisor/Sugerir-hashtags.
+            endurecer={"modelo": config.fusion_modelo(), "sin_tools": True, "max_turns": 1},
             # Lo lanza la maquina: AUTOMATICO, cede el paso a los lanzamientos manuales del equipo.
             prioridad=jobspec.PRIORIDAD_AUTOMATICO,
         )

@@ -886,7 +886,8 @@ def test_paso_fusionar_semantica_va_throttled(monkeypatch):
 
 def test_paso_fusionar_semantica_salta_si_el_lote_no_cambio(monkeypatch):
     """Skip-if-unchanged: si el conjunto candidato no cambió desde la última pasada, NO se encola
-    (no hay nada nuevo que fusionar). Un cluster nuevo/actualizado mueve la huella y re-evalúa."""
+    (no hay nada nuevo que fusionar). Una historia NUEVA (o un re-titulado) mueve la huella y
+    re-evalúa; un artículo más a la MISMA historia (solo avanza `ultimo_visto`) NO la mueve."""
     from keni_consola.recolectar_daemon.pasos import fusionar_semantica as paso
 
     monkeypatch.setattr(recolectar_daemon.config, "fusionar_semantica_activo", lambda: True)
@@ -914,8 +915,15 @@ def test_paso_fusionar_semantica_salta_si_el_lote_no_cambio(monkeypatch):
     assert recolectar_daemon.paso_fusionar_semantica() == {"encolados": 0, "marcas": 0, "candidatos": 0}
     assert llamadas["encolar"] == 1  # no se volvió a encolar
 
-    # Cambia el marcador de un cluster (entró un item nuevo) -> la huella cambia -> re-evalúa.
+    # Solo avanza `ultimo_visto` (entró un artículo más a la MISMA historia): la agrupación no
+    # cambia -> la huella NO se mueve -> SIGUE saltando (antes esto disparaba un Sonnet por barrido).
     recientes[0]["ultimo_visto"] = "t2"
+    _comun._ultimo_fusionar = 0.0
+    assert recolectar_daemon.paso_fusionar_semantica() == {"encolados": 0, "marcas": 0, "candidatos": 0}
+    assert llamadas["encolar"] == 1
+
+    # Entra una historia NUEVA (cambia el conjunto {id, titulo}) -> la huella cambia -> re-evalúa.
+    recientes.append({"id": "c3", "titulo": "C", "estado": "nuevo", "marca": "unotv", "ultimo_visto": "t1"})
     _comun._ultimo_fusionar = 0.0
     recolectar_daemon.paso_fusionar_semantica()
     assert llamadas["encolar"] == 2

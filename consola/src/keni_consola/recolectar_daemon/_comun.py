@@ -47,13 +47,16 @@ _ultima_huella_fusionar: str | None = None
 
 
 def _huella_lote(clusters: list[dict[str, Any]]) -> str:
-    """Huella ESTABLE del conjunto candidato: ids ordenados + su marcador de cambio (`ultimo_visto`).
+    """Huella del conjunto candidato por sus ENTRADAS de agrupación: ids + títulos, ordenados.
 
-    Cambia cuando entra un cluster nuevo, sale uno o uno recibe items nuevos (su `ultimo_visto`
-    avanza); idéntica si el lote no se movió. PURA: dos lotes equivalentes dan la misma huella
+    La fusión agrupa por `{id, titulo}` (lo único que ve el LLM); su resultado NO cambia porque una
+    historia reciba un artículo más. Por eso la huella se basa en id+título y NO en `ultimo_visto`:
+    así el skip-if-unchanged salta el re-fusionado mientras el lote no gane/pierda historias ni se
+    re-titule alguna (antes `ultimo_visto` avanzaba con cada artículo nuevo y disparaba un Sonnet por
+    barrido para re-derivar la MISMA agrupación). PURA: dos lotes equivalentes dan la misma huella
     sin importar el orden de entrada.
     """
-    partes = sorted(f"{c.get('id')}\t{c.get('ultimo_visto') or ''}" for c in clusters)
+    partes = sorted(f"{c.get('id')}\t{(c.get('titulo') or '').strip()}" for c in clusters)
     return "\n".join(partes)
 
 # Caducidad del pool (TTL): como mucho una pasada cada tantos segundos (la caducidad se mide
