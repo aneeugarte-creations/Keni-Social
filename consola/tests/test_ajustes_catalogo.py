@@ -169,8 +169,9 @@ def test_toggles_por_marca_por_fase(store):
         config.ENV_PIPELINE_ADMITIR,
     }
     assert produccion == {
-        config.ENV_PIPELINE_REDACTAR, config.ENV_PIPELINE_SUGERIR_HASHTAGS,
-        config.ENV_PIPELINE_ILUSTRAR, config.ENV_PIPELINE_STOCK, config.ENV_CRITICA_IA,
+        config.ENV_PIPELINE_DECISOR, config.ENV_PIPELINE_REDACTAR,
+        config.ENV_PIPELINE_SUGERIR_HASHTAGS, config.ENV_PIPELINE_ILUSTRAR,
+        config.ENV_PIPELINE_STOCK, config.ENV_PIPELINE_REVISAR, config.ENV_CRITICA_IA,
     }
     # El grupo viejo unificado ya no existe.
     assert _bases("automatizacion_marca") == set()

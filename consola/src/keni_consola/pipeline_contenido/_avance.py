@@ -154,8 +154,8 @@ def ejecutar_avance() -> list[dict[str, Any]]:
     Incondicional bajo el único maestro `KENI_MAQUINA` (sin toggle propio ni exclusión por
     marca). Best-effort: un fallo por pieza se loguea y se sigue. Devuelve las piezas enviadas.
 
-    VERIFICACIÓN DE CALIDAD (ADVISORY, gateada por `KENI_PIPELINE_REVISAR`, def OFF): si el toggle está
-    ON, ANTES de mover cada borrador se valida la CALIDAD de su copy (voz de marca + coherencia
+    VERIFICACIÓN DE CALIDAD (ADVISORY, gateada POR MARCA por `KENI_PIPELINE_REVISAR`, def OFF): si la
+    etapa está ON para la marca de la pieza, ANTES de moverla se valida la CALIDAD de su copy (voz de marca + coherencia
     con la nota de origen, `_revisar`). Es safe-by-default: NO bloquea el avance —la pieza pasa a
     revisión igual—, pero si la verificación encuentra algo DEGRADA su revision (`listo`→`revisar`) y
     deja una nota, para que el humano decida con los avisos delante (IA hacia adentro: filtra la
@@ -168,13 +168,13 @@ def ejecutar_avance() -> list[dict[str, Any]]:
     except Exception:  # noqa: BLE001 -- sin tablero, la etapa no actúa
         _log.exception("pipeline: no se pudieron leer los borradores para la etapa de avance.")
         return []
-    verificacion_calidad = config.revisar_activo()
     enviadas: list[dict[str, Any]] = []
     for pub in piezas_para_avance(pubs, ahora=ahora_iso()):
-        # Verificación de calidad ADVISORY (no bloquea: marca/degrada y deja al humano decidir). Si
-        # marcó la pieza, el `pub` en memoria conserva el revision viejo, pero la transición de
-        # `_enviar` no lo toca (sólo el estado), así que la degradación ya persistida se respeta.
-        if verificacion_calidad:
+        # Verificación de calidad ADVISORY (no bloquea: marca/degrada y deja al humano decidir),
+        # gateada POR MARCA («Revisar» de la pieza). Si marcó la pieza, el `pub` en memoria conserva
+        # el revision viejo, pero la transición de `_enviar` no lo toca (sólo el estado), así que la
+        # degradación ya persistida se respeta.
+        if config.etapa_activa(config.ENV_PIPELINE_REVISAR, pub.get("marca") or ""):
             _revisar.verificar_calidad_pieza(pub)
         try:
             if enviar_a_revision(pub):

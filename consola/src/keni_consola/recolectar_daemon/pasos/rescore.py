@@ -53,7 +53,7 @@ def paso_rescore(
 
     breaking_peso = config.cluster_breaking_peso()
     breaking_ventana_h = config.cluster_breaking_ventana_h()
-    perfil_activo = config.priorizar_perfil_activo()
+    perfil_activo = config.alguna_marca_con_etapa(config.ENV_PRIORIZAR_PERFIL_IA)
     rendimiento_activo = config.rendimiento_ranking_activo()
     ahora = datetime.now(UTC)
     palabras_cache: dict[str, frozenset[str]] = {}

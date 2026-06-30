@@ -157,8 +157,8 @@ def topics_sin_arte(
             continue
         if not (item.get("titulo") or "").strip():
             continue
-        # Exclusión por marca: no auto-ilustramos temas de una marca apagada a mano para arte.
-        if config.marca_apagada(config.ENV_PIPELINE_ILUSTRAR, item.get("marca") or ""):
+        # Toggle "Generar arte" POR MARCA: no auto-ilustramos temas de una marca con la etapa apagada.
+        if not config.etapa_activa(config.ENV_PIPELINE_ILUSTRAR, item.get("marca") or ""):
             continue
         item_id = item.get("id")
         if item_id in ya_procesados:

@@ -79,7 +79,7 @@ def paso_fusionar_semantica(
     dir de datos) impide re-encolar una marca cuyo job sigue en vuelo y sobrevive a reinicios; el
     throttle/huella en memoria solo evita TRABAJO redundante (no coordina barrido↔worker).
     """
-    if not config.fusionar_semantica_activo():
+    if not config.alguna_marca_con_etapa(config.ENV_PIPELINE_FUSIONAR):
         return {"encolados": 0, "marcas": 0, "candidatos": 0}
     ahora_mono = time.monotonic()
     if (
@@ -125,8 +125,9 @@ def paso_fusionar_semantica(
     for marca_f, clusters in por_marca.items():
         if len(clusters) < 2:
             continue
-        # Excepción por marca (toggle "Fusionar"): si está apagada para esta marca, no se fusiona.
-        if config.marca_apagada(config.ENV_PIPELINE_FUSIONAR, marca_f):
+        # Toggle "Fusionar" POR MARCA: si la etapa no está encendida para esta marca, no se fusiona.
+        # El feed compartido (marca vacía) sigue el default de fábrica vía `etapa_activa`.
+        if marca_f and not config.etapa_activa(config.ENV_PIPELINE_FUSIONAR, marca_f):
             continue
         candidatos += len(clusters)
         # IDEMPOTENCIA: no re-encolar una marca cuya fusión sigue EN VUELO (marcador persistido).

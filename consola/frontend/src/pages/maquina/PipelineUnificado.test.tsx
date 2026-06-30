@@ -168,7 +168,9 @@ describe("PipelineUnificado", () => {
         },
       ],
     });
-    renderPipeline();
+    // La cascada es POR MARCA: se pinta con una marca concreta (en «Todas las marcas» cada marca
+    // diverge y no hay un único corte).
+    renderPipeline({ marcaActiva: "unotv" });
     const marker = await screen.findByTestId("cut-marker");
     expect(marker).toBeInTheDocument();
     expect(marker).toHaveTextContent("no llega");
@@ -233,5 +235,40 @@ describe("PipelineUnificado", () => {
   it("el ⚙ no se pinta para un editor (no admin)", () => {
     renderPipeline({ esAdmin: false });
     expect(screen.queryByRole("button", { name: /^Ajustes de / })).not.toBeInTheDocument();
+  });
+
+  it("en «Todas las marcas» pinta la MATRIZ: un toggle por marca en cada etapa, con su label", async () => {
+    function porMarca(clave: string, marca: string, nombre: string, valor: boolean): AjusteAdmin {
+      return {
+        clave: `${clave}::${marca}`,
+        tipo: "bool",
+        valor,
+        etiqueta: `${nombre} · Recolectar`,
+        ayuda: "",
+        grupo: "automatizacion_marca_investigacion",
+        peligroso: false,
+        fuente: "store",
+        defecto: false,
+      };
+    }
+    mockAjustes.mockResolvedValue({
+      grupos: [
+        { id: "pipeline", titulo: "Pipeline", ajustes: todosActivos() },
+        {
+          id: "automatizacion_marca_investigacion",
+          titulo: "Excepciones por marca",
+          ajustes: [
+            porMarca("KENI_PIPELINE_RECOLECTAR", "unotv", "UnoTV", true),
+            porMarca("KENI_PIPELINE_RECOLECTAR", "claro-sports", "Claro Sports", false),
+          ],
+        },
+      ],
+    });
+    renderPipeline(); // marcaActiva = null → «Todas las marcas»
+    // Cada marca aporta su switch en la etapa Recolectar, etiquetado con su nombre.
+    expect(await screen.findByRole("switch", { name: "UnoTV · Recolectar" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Claro Sports · Recolectar" })).toBeInTheDocument();
+    expect(screen.getByText("UnoTV")).toBeInTheDocument();
+    expect(screen.getByText("Claro Sports")).toBeInTheDocument();
   });
 });

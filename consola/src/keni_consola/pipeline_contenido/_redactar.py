@@ -192,7 +192,7 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
         marca = item.get("marca") or ""
         if not marca or not marcas.es_marca(marca):
             continue
-        if config.marca_apagada(config.ENV_PIPELINE_REDACTAR, marca):
+        if not config.etapa_activa(config.ENV_PIPELINE_REDACTAR, marca):
             continue
         if not (item.get("titulo") or "").strip():
             continue
@@ -226,7 +226,7 @@ def encadenar_ilustrar_tras_redactar(publicacion_id: str) -> dict[str, Any] | No
     """
     if not publicacion_id:
         return None
-    if not config.gate_maquina(config.ilustrar_activo)():
+    if not config.gate_maquina(lambda: config.alguna_marca_con_etapa(config.ENV_PIPELINE_ILUSTRAR))():
         return None
     from .. import autogen_ilustrar, media
 
@@ -242,7 +242,7 @@ def encadenar_ilustrar_tras_redactar(publicacion_id: str) -> dict[str, Any] | No
             return None
         if not (tema.get("titulo") or "").strip():
             return None
-        if config.marca_apagada(config.ENV_PIPELINE_ILUSTRAR, tema.get("marca") or ""):
+        if not config.etapa_activa(config.ENV_PIPELINE_ILUSTRAR, tema.get("marca") or ""):
             return None
         if (tema.get("id") or "") in autogen_ilustrar.ids_ya_procesados():
             return None

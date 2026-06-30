@@ -659,7 +659,7 @@ def fusionar_marca(
     breaking_peso = config.cluster_breaking_peso()
     breaking_ventana_h = config.cluster_breaking_ventana_h()
     fuentes_baja = config.fuentes_baja_confianza()
-    perfil_activo = config.priorizar_perfil_activo()
+    perfil_activo = config.alguna_marca_con_etapa(config.ENV_PRIORIZAR_PERFIL_IA)
     pesos = config.score_pesos(marca)
     try:
         eventos = _eventos_de_marca(marca, ref)

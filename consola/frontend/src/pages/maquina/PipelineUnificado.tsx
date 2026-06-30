@@ -251,6 +251,14 @@ function claveConMarca(clave: string, marcaActiva: string | null, porClave: Map<
   return clave;
 }
 
+/** Nombre de marca de un ajuste por marca: su etiqueta es «Nombre · Etapa»; tomamos «Nombre».
+ *  Si no encaja, cae al sufijo `::marca` de la clave. */
+function nombreDeMarcaAjuste(a: AjusteAdmin): string {
+  const izq = a.etiqueta.split("·")[0]?.trim();
+  if (izq) return izq;
+  return a.clave.split("::")[1] ?? a.clave;
+}
+
 interface Cascada {
   cortados: Set<string>;
   cutNombre: string | null;
@@ -330,8 +338,13 @@ export function PipelineUnificado({
     [data],
   );
 
+  // La cascada (crítica apaga lo posterior) es POR MARCA: solo se pinta con una marca concreta.
+  // En «Todas las marcas» (la matriz) cada marca diverge, así que no hay un único corte que pintar.
   const cascada = React.useMemo(
-    () => calcularCascada(marcaActiva, porClave),
+    () =>
+      marcaActiva
+        ? calcularCascada(marcaActiva, porClave)
+        : { cortados: new Set<string>(), cutNombre: null, primerCortado: null },
     [marcaActiva, porClave],
   );
 
@@ -360,17 +373,39 @@ export function PipelineUnificado({
     ) : null;
     let control: React.ReactNode = null;
     if (esAdmin && etapa.clave) {
-      const ajuste = porClave.get(claveConMarca(etapa.clave, marcaActiva, porClave));
-      control = ajuste ? (
-        <Switch
-          checked={Boolean(ajuste.valor)}
-          disabled={guardar.isPending}
-          onCheckedChange={(v) => guardar.mutate({ clave: ajuste.clave, valor: v })}
-          aria-label={`${ajuste.etiqueta} (${etapa.nombre})`}
-        />
-      ) : (
-        <span className="text-xs text-muted-foreground">vía env</span>
-      );
+      const claveBase = etapa.clave;
+      // MATRIZ: en «Todas las marcas» cada etapa con toggle por marca muestra UN switch por marca
+      // (con su etiqueta), para ver y gobernar todas a la vez. Con una marca concreta, su columna.
+      const deMarca = porMarca.filter((a) => a.clave.startsWith(`${claveBase}::`));
+      if (marcaActiva === null && deMarca.length > 0) {
+        control = (
+          <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+            {deMarca.map((a) => (
+              <label key={a.clave} className="flex items-center gap-1.5 text-xs">
+                <span className="text-muted-foreground">{nombreDeMarcaAjuste(a)}</span>
+                <Switch
+                  checked={Boolean(a.valor)}
+                  disabled={guardar.isPending}
+                  onCheckedChange={(v) => guardar.mutate({ clave: a.clave, valor: v })}
+                  aria-label={`${a.etiqueta}`}
+                />
+              </label>
+            ))}
+          </div>
+        );
+      } else {
+        const ajuste = porClave.get(claveConMarca(claveBase, marcaActiva, porClave));
+        control = ajuste ? (
+          <Switch
+            checked={Boolean(ajuste.valor)}
+            disabled={guardar.isPending}
+            onCheckedChange={(v) => guardar.mutate({ clave: ajuste.clave, valor: v })}
+            aria-label={`${ajuste.etiqueta} (${etapa.nombre})`}
+          />
+        ) : (
+          <span className="text-xs text-muted-foreground">vía env</span>
+        );
+      }
     }
     const tuning =
       esAdmin && etapa.ajustes && etapa.ajustes.length > 0 ? (

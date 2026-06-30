@@ -204,7 +204,7 @@ def topics_sin_stock(
             continue
         if not (item.get("titulo") or "").strip():
             continue
-        if config.marca_apagada(config.ENV_PIPELINE_STOCK, item.get("marca") or ""):
+        if not config.etapa_activa(config.ENV_PIPELINE_STOCK, item.get("marca") or ""):
             continue
         plataformas = plataformas_por_item.get(item.get("id"), [])
         hay_vacia = any(_tiene_copy(p) and _sin_imagen(p) for p in plataformas)
@@ -429,11 +429,11 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
 def ejecutar_stock() -> list[dict[str, Any]]:
     """Etapa de Stock del pipeline: adjunta fotos de ayuda a temas con copy sin imagen.
 
-    Gateada por el maestro `KENI_MAQUINA` + su toggle `KENI_PIPELINE_STOCK` (def ON), igual que
-    Ilustrar. Sin proveedores gratuitos disponibles degrada a no hacer nada. Devuelve la lista de
+    Gateada por `KENI_MAQUINA` + el toggle `KENI_PIPELINE_STOCK` POR MARCA (def ON, corre si alguna
+    marca lo tiene on), igual que Ilustrar. Sin proveedores gratuitos disponibles degrada a no hacer nada. Devuelve la lista de
     piezas a las que adjuntó una foto (para el log del tick).
     """
-    if not config.gate_maquina(config.stock_busca_activo)():
+    if not config.gate_maquina(lambda: config.alguna_marca_con_etapa(config.ENV_PIPELINE_STOCK))():
         return []
     if not stock_fotos.proveedores_disponibles():
         return []

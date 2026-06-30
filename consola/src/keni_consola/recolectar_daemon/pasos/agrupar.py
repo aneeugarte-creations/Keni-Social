@@ -120,7 +120,9 @@ def paso_agrupar() -> dict[str, Any]:
     breaking_peso = config.cluster_breaking_peso()
     breaking_ventana_h = config.cluster_breaking_ventana_h()
     fuentes_baja = config.fuentes_baja_confianza()
-    perfil_activo = config.priorizar_perfil_activo()  # relevancia desde la línea editorial (Haiku)
+    # Relevancia desde la línea editorial (Haiku) si ALGUNA marca tiene «Priorizar» encendida; el
+    # refinamiento por marca lo hace `_palabras_relevancia`/`etapa_activa` más abajo.
+    perfil_activo = config.alguna_marca_con_etapa(config.ENV_PRIORIZAR_PERFIL_IA)
     perfil_ttl = config.perfil_editorial_ttl_horas()
     perfil_refrescadas: set[str] = set()  # 1 intento de encolado de perfil por marca por barrido
     # Pesos del score y agenda POR MARCA (modelo v2): perfil distinto por marca y señal de evento
@@ -239,15 +241,15 @@ def paso_agrupar() -> dict[str, Any]:
                     marca_c = str(base.get("marca") or "")
                 if marca_c:
                     recalc["marca"] = marca_c
-            # Relevancia desde la LÍNEA EDITORIAL (perfil Haiku) si está activa (maestro + por-marca:
-            # el toggle "Priorizar"); si no, la base inicial. El refresco se ENCOLA como job `claude`
-            # por marca (ruteado al carril de su cuenta); el worker corre el Haiku y escribe el cache.
-            # Los gates se conservan: lo corta la parada de emergencia / presupuesto
-            # (`ia_fondo_bloqueada`) y el toggle por-marca, como al resto del fondo. Las lecturas de
+            # Relevancia desde la LÍNEA EDITORIAL (perfil Haiku) si la etapa "Priorizar" está
+            # encendida PARA ESTA marca (`etapa_activa`); si no, la base inicial. El refresco se
+            # ENCOLA como job `claude` por marca (ruteado al carril de su cuenta); el worker corre el
+            # Haiku y escribe el cache. Los gates se conservan: lo corta la parada de emergencia /
+            # presupuesto (`ia_fondo_bloqueada`), como al resto del fondo. Las lecturas de
             # `palabras(marca)` (abajo) usan el cache vigente (posiblemente algo viejo: aceptable).
             if (
                 perfil_activo and marca_c and marca_c not in perfil_refrescadas
-                and not config.marca_apagada(config.ENV_PRIORIZAR_PERFIL_IA, marca_c)
+                and config.etapa_activa(config.ENV_PRIORIZAR_PERFIL_IA, marca_c)
                 and not _pkg.ia_fondo_bloqueada()
             ):
                 perfil_refrescadas.add(marca_c)

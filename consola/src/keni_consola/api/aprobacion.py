@@ -354,12 +354,12 @@ def _encolar_critica_si_corresponde(pieza_id: str) -> None:
     (`dominio.critica_ia`) usa la idempotencia de `generar.lanzar` para no encolar dos veces si la
     ruta se reintenta. Nunca rompe la respuesta de aprobacion: la decision humana ya quedo escrita.
     """
-    if not config.critica_ia_activa():
+    pub = repos.obtener_pieza(pieza_id) or {}
+    if not config.etapa_activa(config.ENV_CRITICA_IA, str(pub.get("marca") or "")):
         return
     cadena = repos.listar_aprobaciones(pieza_id)
     # La parte humana se cierra al alcanzar el umbral de la marca (acotado a sus niveles humanos),
     # no al llenar TODOS los niveles: una cadena legada mas larga encola igual al critico.
-    pub = repos.obtener_pieza(pieza_id) or {}
     minimo = min(
         _km.likes_aprobacion_de(str(pub.get("marca") or "")),
         colaboracion.niveles_humanos(cadena),

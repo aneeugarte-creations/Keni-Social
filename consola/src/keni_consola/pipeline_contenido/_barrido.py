@@ -389,9 +389,10 @@ def ejecutar_redactar(*, autor: dict[str, str] | None = None) -> list[dict[str, 
     """
     if autor is None:
         autor = _ref._autor_pipeline()
-    # Etapa CD = toggle "Generar copy" (`KENI_PIPELINE_REDACTAR`), 1 toggle = 1 etapa: si el maestro está
-    # OFF no se genera copy (aunque el daemon barra por otra etapa). Por marca se filtra abajo.
-    if not config.pipeline_activo():
+    # Etapa CD = "Generar copy" (`KENI_PIPELINE_REDACTAR`), POR MARCA: si NINGUNA marca lo tiene
+    # encendido, no se genera copy (aunque el daemon barra por otra etapa). Por marca se filtra
+    # abajo con `etapa_activa(REDACTAR, marca)`.
+    if not config.alguna_marca_con_etapa(config.ENV_PIPELINE_REDACTAR):
         return []
     # Import perezoso (evita ciclos en la carga del paquete): el Decisor toca `dominio.generar`.
     from ..dominio import decisor as decisor_dom
@@ -497,7 +498,9 @@ def ejecutar_ilustrar() -> list[dict[str, Any]]:
 
     from .. import autogen_ilustrar
 
-    if not config.gate_maquina(config.ilustrar_activo)():
+    if not config.gate_maquina(
+        lambda: config.alguna_marca_con_etapa(config.ENV_PIPELINE_ILUSTRAR)
+    )():
         return []
     from .. import media
 
@@ -696,7 +699,9 @@ def iniciar_pipeline(
 
     def bucle_portal() -> None:
         daemon_util.bucle_gateado(
-            activo_fn=config.gate_maquina(config.recolectar_activo),
+            activo_fn=config.gate_maquina(
+                lambda: config.alguna_marca_con_etapa(config.ENV_PIPELINE_RECOLECTAR)
+            ),
             intervalo_seg_fn=lambda: intervalo_portal,
             sweep_fn=ejecutar_portal,
             log=_log,

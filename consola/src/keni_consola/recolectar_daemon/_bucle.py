@@ -130,10 +130,15 @@ def ejecutar_barrido() -> dict[str, Any]:
 
         ahora = datetime.now(UTC)
         feeds = repos.feeds_vencidos(iso_utc(ahora), config.ingesta_batch())
-        # Excepción por marca de "Crear noticias" (KENI_PIPELINE_RECOLECTAR::<marca>): salta los feeds de
-        # marcas apagadas a mano. Los COMPARTIDOS (marca vacía) siempre corren —`marca_apagada`
-        # con marca vacía es False. Best-effort: no toca agrupar/traducir (pasos globales).
-        feeds = [f for f in feeds if not config.marca_apagada(config.ENV_PIPELINE_RECOLECTAR, str(f.get("marca") or ""))]
+        # Recolectar es POR MARCA (KENI_PIPELINE_RECOLECTAR::<marca>): salta los feeds de marcas con
+        # Recolectar apagado. Los COMPARTIDOS (marca vacía) siempre corren si el daemon corre.
+        # Best-effort: no toca agrupar/traducir (pasos globales).
+        feeds = [
+            f
+            for f in feeds
+            if not (m := str(f.get("marca") or ""))
+            or config.etapa_activa(config.ENV_PIPELINE_RECOLECTAR, m)
+        ]
         # PLAN EDITORIAL DIARIO: una marca con plan solo digiere los feeds de las categorías
         # de su plan — sondear lo que jamás competirá por una plaza es carga (red + archivo +
         # agrupar) sin salida. Los feeds fuera de plan se APLAZAN (proximo_sondeo += 6 h)
@@ -285,7 +290,7 @@ def ejecutar_barrido() -> dict[str, Any]:
         # carril de la cuenta de la marca). Best-effort: un fallo se loguea y NO invalida el barrido.
         # Sin tope artificial: cada barrido encola un lote del backlog.
         trad_resumen: dict[str, Any] = {"encolados": 0, "marcas": 0, "candidatos": 0}
-        if not ia_bloqueada and config.traducir_activo():
+        if not ia_bloqueada and config.alguna_marca_con_etapa(config.ENV_PIPELINE_TRADUCIR):
             try:
                 trad_resumen = _pkg.paso_traducir()
             except Exception:  # noqa: BLE001 -- el traducir es aditivo; nunca tumba la recolección
@@ -338,7 +343,9 @@ def iniciar_ingesta() -> threading.Thread:
 
     def bucle() -> None:
         daemon_util.bucle_gateado(
-            activo_fn=config.gate_maquina(config.recolectar_activo),
+            activo_fn=config.gate_maquina(
+                lambda: config.alguna_marca_con_etapa(config.ENV_PIPELINE_RECOLECTAR)
+            ),
             intervalo_seg_fn=lambda: _TICK_SEG,
             sweep_fn=ejecutar_barrido,
             tick_seg=_TICK_SEG,
@@ -348,7 +355,11 @@ def iniciar_ingesta() -> threading.Thread:
 
     hilo = threading.Thread(target=bucle, name="ingesta-daemon", daemon=True)
     hilo.start()
-    estado = "ACTIVO" if config.recolectar_activo() else "EN ESPERA (KENI_PIPELINE_RECOLECTAR off)"
+    estado = (
+        "ACTIVO"
+        if config.alguna_marca_con_etapa(config.ENV_PIPELINE_RECOLECTAR)
+        else "EN ESPERA (Recolectar apagado en todas las marcas)"
+    )
     _log.info(
         "Daemon de recolección %s, tick %.0fs (batch=%d, workers=%d, max_items=%d).",
         estado, _TICK_SEG, config.ingesta_batch(), config.ingesta_workers(),

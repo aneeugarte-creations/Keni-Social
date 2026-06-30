@@ -781,13 +781,16 @@ def alguna_etapa_investigacion_activa() -> bool:
     """Gate del loop de INVESTIGACIÓN (ADR 0011): True si hay trabajo de investigación que
     considerar bajo la máquina.
 
-    El loop de investigación (caducidad + Admitir + Verificar) solo tiene sentido si su admisión o su verificación
-    están encendidas: con Recolectar Y Verificar globales OFF no entra nada nuevo ni se verificación, y
-    el loop duerme (la caducidad de lo ya en curso retoma en cuanto se reactive). El override por
-    marca se aplica DENTRO del barrido (`etapa_activa`), no aquí: basta una marca activa para que
-    el loop barra. Las etapas de Fusionar/Priorizar viven en el daemon de Recolectar, no en este loop.
+    El loop de investigación (caducidad + Admitir + Verificar) solo tiene sentido si ALGUNA marca
+    tiene su admisión o su verificación encendidas: con Recolectar Y Verificar apagadas en todas
+    las marcas no entra nada nuevo ni se verifica, y el loop duerme (la caducidad de lo ya en curso
+    retoma en cuanto se reactive). Basta UNA marca activa para que el loop barra; el override por
+    marca se aplica DENTRO del barrido (`etapa_activa`). Las etapas de Fusionar/Priorizar viven en
+    el daemon de Recolectar, no en este loop.
     """
-    return etapa_global_activa(ENV_PIPELINE_RECOLECTAR) or etapa_global_activa(ENV_PIPELINE_VERIFICAR)
+    return alguna_marca_con_etapa(ENV_PIPELINE_RECOLECTAR) or alguna_marca_con_etapa(
+        ENV_PIPELINE_VERIFICAR
+    )
 
 
 def alguna_etapa_produccion_activa() -> bool:
@@ -881,12 +884,13 @@ def sugerir_hashtags_activo() -> bool:
 # Toggle ÚNICO «Generar» (noticia → copy)                                       #
 # --------------------------------------------------------------------------- #
 
-def _accesor_global_de_etapa(env_flag: str):
-    """Accesor del maestro GLOBAL de una etapa del pipeline por su env (`KENI_PIPELINE_<ETAPA>`).
+def _accesor_default_de_etapa(env_flag: str):
+    """Accesor del DEFAULT DE FÁBRICA de una etapa del pipeline por su env (`KENI_PIPELINE_<ETAPA>`).
 
-    Mapa ÚNICO etapa→accesor: lo comparten el resolver de abajo y el catálogo de ajustes
-    (que usa el global como defecto del toggle por marca). `ValueError` si la env no es
-    una etapa del pipeline (error de programación, no de datos).
+    Mapa ÚNICO etapa→accesor: el valor por defecto de cada etapa cuando una marca no tiene su
+    propio override (`::marca`). NO es un maestro editable: solo el suelo de fábrica (Traducir/
+    Admitir/Stock/Fusionar/Keywords ON; el resto OFF). `ValueError` si la env no es una etapa
+    del pipeline (error de programación, no de datos).
     """
     try:
         return {
@@ -901,29 +905,46 @@ def _accesor_global_de_etapa(env_flag: str):
             ENV_PIPELINE_ADMITIR: admitir_activo,
             ENV_PIPELINE_ILUSTRAR: ilustrar_activo,
             ENV_PIPELINE_STOCK: stock_busca_activo,
+            ENV_PIPELINE_REVISAR: revisar_activo,
             ENV_CRITICA_IA: critica_ia_activa,
         }[env_flag]
     except KeyError:
         raise ValueError(f"'{env_flag}' no es una etapa del pipeline de contenido.") from None
 
 
-def etapa_global_activa(env_flag: str) -> bool:
-    """Maestro GLOBAL de la etapa `env_flag` (ON/OFF para todas las marcas). Lectura única."""
-    return _accesor_global_de_etapa(env_flag)()
+def etapa_default(env_flag: str) -> bool:
+    """Default DE FÁBRICA de la etapa `env_flag` (el suelo cuando una marca no tiene override)."""
+    return _accesor_default_de_etapa(env_flag)()
 
 
 def etapa_activa(env_flag: str, marca: str) -> bool:
-    """FUENTE ÚNICA de verdad de «¿la etapa `env_flag` está encendida para `marca`?».
+    """FUENTE ÚNICA de «¿la etapa `env_flag` está encendida para `marca`?». SIEMPRE por marca.
 
-    Una etapa corre para una marca si su maestro global está ON y la marca NO está excluida
-    a mano (override `KENI_PIPELINE_<ETAPA>::marca` falsy en el store). La MISMA lectura la
-    usan el daemon (qué barre), la vista Pipelines (qué se pinta «saltada») y el catálogo de
-    ajustes (qué muestra el toggle): si una de las tres dijera otra cosa, sería un bug aquí,
-    no tres semánticas paralelas.
+    Lee el toggle POR MARCA `KENI_PIPELINE_<ETAPA>::marca` del store (lo que pone la UI); sin
+    override, cae al DEFAULT DE FÁBRICA de la etapa (`etapa_default`). NO hay maestro global
+    editable: cada marca se gobierna por separado. La marca vacía (feed compartido sin marca)
+    sigue el default de fábrica (nunca se apaga por marca). La MISMA lectura la usan el daemon
+    (qué barre), la vista Pipeline (qué pinta «saltada») y el catálogo (qué muestra el toggle).
     """
-    from .config_produccion import marca_apagada  # local: evita ciclo de import en el barrel
+    from . import ajustes  # perezoso: evita el ciclo config <- ajustes
+    from .config_produccion import clave_por_marca
 
-    return etapa_global_activa(env_flag) and not marca_apagada(env_flag, marca)
+    if marca:
+        crudo = ajustes.obtener(clave_por_marca(env_flag, marca))
+        if crudo is not None and crudo.strip():
+            return crudo.strip().lower() in _VERDADEROS
+    return etapa_default(env_flag)
+
+
+def alguna_marca_con_etapa(env_flag: str) -> bool:
+    """¿ALGUNA marca de noticias tiene la etapa `env_flag` encendida? Gate de LOOP: el daemon
+    corre si al menos una marca la usa. Sin marcas, cae al default de fábrica de la etapa."""
+    from . import marcas
+
+    ids = list(marcas.noticias())
+    if not ids:
+        return etapa_default(env_flag)
+    return any(etapa_activa(env_flag, mid) for mid in ids)
 
 
 def critica_ia_activa() -> bool:

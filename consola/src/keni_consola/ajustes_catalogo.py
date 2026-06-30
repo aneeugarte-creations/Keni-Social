@@ -196,13 +196,13 @@ def _maestros_etapa() -> list[Ajuste]:
     ]
 
 
-def _global_de_etapa(env_flag: str) -> bool:
-    """Valor GLOBAL actual de una etapa (defecto de su toggle por-marca).
+def _default_de_etapa(env_flag: str) -> bool:
+    """Default DE FÁBRICA de una etapa (el valor del toggle por-marca cuando no hay override).
 
-    Delegado en el resolver ÚNICO (`config.etapa_global_activa`): la misma lectura que usan
-    el daemon y la vista Pipelines, para que el toggle nunca muestre otra cosa que el estado real.
+    Delegado en el resolver ÚNICO (`config.etapa_default`): el suelo que ve una marca sin su
+    propio override, la misma lectura que usan el daemon y la vista Pipeline.
     """
-    return config.etapa_global_activa(env_flag)
+    return config.etapa_default(env_flag)
 
 
 # Fases EDITABLES por marca de cada proceso (ADR 0011, rev. fase×marca): cada fase tiene su
@@ -218,10 +218,12 @@ _FASES_MARCA_INVESTIGACION: tuple[tuple[str, str], ...] = (
     (config.ENV_PIPELINE_ADMITIR, "Admitir"),
 )
 _FASES_MARCA_PRODUCCION: tuple[tuple[str, str], ...] = (
+    (config.ENV_PIPELINE_DECISOR, "Decisor"),
     (config.ENV_PIPELINE_REDACTAR, "Redactar"),
     (config.ENV_PIPELINE_SUGERIR_HASHTAGS, "Keywords"),
     (config.ENV_PIPELINE_ILUSTRAR, "Ilustrar"),
     (config.ENV_PIPELINE_STOCK, "Stock"),
+    (config.ENV_PIPELINE_REVISAR, "Revisar"),
     (config.ENV_CRITICA_IA, "Crítica"),
 )
 
@@ -242,7 +244,7 @@ def _ajustes_por_marca() -> list[Ajuste]:
                     etiqueta=f"{nombre} · {etapa}",
                     ayuda=f"Apaga la fase «{etapa}» solo para «{nombre}».",
                     grupo="automatizacion_marca_investigacion",
-                    defecto=_global_de_etapa(flag),
+                    defecto=_default_de_etapa(flag),
                 )
             )
         for flag, etapa in _FASES_MARCA_PRODUCCION:
@@ -253,7 +255,7 @@ def _ajustes_por_marca() -> list[Ajuste]:
                     etiqueta=f"{nombre} · {etapa}",
                     ayuda=f"Apaga la fase «{etapa}» solo para «{nombre}».",
                     grupo="automatizacion_marca_produccion",
-                    defecto=_global_de_etapa(flag),
+                    defecto=_default_de_etapa(flag),
                 )
             )
     return salida

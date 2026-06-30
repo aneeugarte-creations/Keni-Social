@@ -36,10 +36,10 @@ def palabras_relevancia(marca: str, perfil_activo: bool | None = None) -> frozen
     admite el valor ya leído (el daemon lo lee una vez por barrido); None = leer de config.
     """
     if perfil_activo is None:
-        perfil_activo = config.priorizar_perfil_activo()
+        perfil_activo = config.alguna_marca_con_etapa(config.ENV_PRIORIZAR_PERFIL_IA)
     if (
         perfil_activo and marca
-        and not config.marca_apagada(config.ENV_PRIORIZAR_PERFIL_IA, marca)
+        and config.etapa_activa(config.ENV_PRIORIZAR_PERFIL_IA, marca)
     ):
         perfil = perfil_editorial.palabras(marca)
         if perfil:

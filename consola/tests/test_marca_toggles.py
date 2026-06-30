@@ -141,9 +141,9 @@ def test_etapa_activa_es_la_fuente_unica(monkeypatch):
     assert config.etapa_activa(config.ENV_PIPELINE_REDACTAR, "claro-sports") is True
 
 
-def test_etapa_global_activa_cubre_las_seis_etapas(monkeypatch):
-    # El AVANCE a revisión ya no es una etapa con toggle (corre incondicionalmente), así que
-    # `etapa_global_activa` cubre solo las SEIS que sí se encienden/apagan.
+def test_etapa_default_es_el_suelo_de_fabrica(monkeypatch):
+    # `etapa_default` es el suelo de fábrica de una etapa (lo que ve una marca sin override por
+    # marca). Lo siembra el env `KENI_PIPELINE_<ETAPA>`; ya no es un maestro editable en la UI.
     _store(monkeypatch, {})
     etapas = (
         config.ENV_PIPELINE_FUSIONAR, config.ENV_PRIORIZAR_PERFIL_IA, config.ENV_PIPELINE_RECOLECTAR,
@@ -151,13 +151,13 @@ def test_etapa_global_activa_cubre_las_seis_etapas(monkeypatch):
     )
     for env in etapas:
         monkeypatch.setenv(env, "1")
-        assert config.etapa_global_activa(env) is True
+        assert config.etapa_default(env) is True
         monkeypatch.setenv(env, "0")
-        assert config.etapa_global_activa(env) is False
+        assert config.etapa_default(env) is False
 
 
-def test_etapa_global_activa_env_desconocida():
+def test_etapa_default_env_desconocida():
     import pytest
 
     with pytest.raises(ValueError):
-        config.etapa_global_activa("KENI_NO_ES_UNA_ETAPA")
+        config.etapa_default("KENI_NO_ES_UNA_ETAPA")
