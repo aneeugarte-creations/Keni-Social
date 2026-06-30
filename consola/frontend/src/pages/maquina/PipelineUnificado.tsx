@@ -8,7 +8,6 @@ import { ChevronDown, Settings2, Users } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -32,7 +31,7 @@ import { ServiciosMaquina } from "@/pages/maquina/ServiciosMaquina";
 import { FilaFasePipeline } from "@/pages/monitor/PanelPipeline";
 import type { AjusteAdmin, ColaJob } from "@/types";
 
-type TipoEtapa = "CRITICA" | "OPCIONAL" | "FIJO";
+type TipoEtapa = "CRITICA" | "OPCIONAL";
 
 interface Etapa {
   nombre: string;
@@ -221,13 +220,6 @@ const PIPELINE: Fase[] = [
     titulo: "Aprobar y publicar",
     etapas: [
       {
-        nombre: "Avance",
-        tipo: "FIJO",
-        es_ia: false,
-        ayuda: "Pasa el borrador completo a la cola de revisión",
-        proceso: "produccion",
-      },
-      {
         nombre: "Crítica",
         tipo: "OPCIONAL",
         es_ia: true,
@@ -243,13 +235,6 @@ const PIPELINE: Fase[] = [
         ayuda: "Auto-aprueba las piezas de bajo riesgo",
         proceso: "produccion",
         clave: "KENI_AUTO_PREAPROBACION",
-      },
-      {
-        nombre: "Programar",
-        tipo: "FIJO",
-        es_ia: false,
-        ayuda: "Programa la pieza aprobada a su próximo hueco",
-        proceso: "produccion",
       },
       {
         nombre: "Publicar",
@@ -380,13 +365,7 @@ export function PipelineUnificado({
       </span>
     ) : null;
     let control: React.ReactNode = null;
-    if (etapa.tipo === "FIJO") {
-      control = (
-        <Badge variant="outline" className="text-[10px] font-normal" data-testid="fijo-badge">
-          fijo
-        </Badge>
-      );
-    } else if (esAdmin && etapa.clave) {
+    if (esAdmin && etapa.clave) {
       const ajuste = porClave.get(claveConMarca(etapa.clave, marcaActiva, porClave));
       control = ajuste ? (
         <Switch

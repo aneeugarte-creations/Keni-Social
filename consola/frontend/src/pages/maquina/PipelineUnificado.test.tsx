@@ -1,5 +1,5 @@
 /**
- * Smoke tests del PipelineUnificado: las 5 fases, los toggles, los pasos fijos
+ * Smoke tests del PipelineUnificado: las 5 fases, los toggles, el ⚙ por etapa
  * y la cascada de críticas (una CRÍTICA apagada oscurece todo lo que sigue).
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -149,21 +149,12 @@ describe("PipelineUnificado", () => {
     expect(screen.getByText("Google Trends")).toBeInTheDocument();
     expect(screen.getByText("Redactar")).toBeInTheDocument();
     expect(screen.getByText("Publicar")).toBeInTheDocument();
-    // FIJO stages
-    expect(screen.getByText("Avance")).toBeInTheDocument();
-    expect(screen.getByText("Programar")).toBeInTheDocument();
   });
 
-  it("los pasos FIJO (Avance, Programar) tienen badge 'fijo' y no tienen switch", async () => {
-    renderPipeline();
-    // Wait for ajustes to load (admin render fires the query)
-    await screen.findByRole("switch", { name: /Recolectar/i });
-    // Both FIJO stages show the badge
-    const fijosBadges = screen.getAllByTestId("fijo-badge");
-    expect(fijosBadges).toHaveLength(2);
-    // No switch within those rows (the badges appear instead)
-    expect(fijosBadges[0]).toHaveTextContent("fijo");
-    expect(fijosBadges[1]).toHaveTextContent("fijo");
+  it("Avance y Programar NO se pintan como etapas (corren siempre; no son operables)", () => {
+    renderPipeline({ esAdmin: false });
+    expect(screen.queryByText("Avance")).not.toBeInTheDocument();
+    expect(screen.queryByText("Programar")).not.toBeInTheDocument();
   });
 
   it("un CRÍTICA apagado genera el marcador de corte en la etapa siguiente", async () => {
