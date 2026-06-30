@@ -28,7 +28,7 @@ import { EditorDocumento } from "@/editor/EditorDocumento";
 import { GaleriaPlantillas } from "@/editor/GaleriaPlantillas";
 import { crearStoreEditor, type StoreEditor } from "@/editor/store";
 import { api, urlMedia, type PlantillaDiseno } from "@/lib/api";
-import { pistaBase, type ComposicionVideo } from "@/lib/video";
+import { pistaBase, presetParaAspecto, type ComposicionVideo } from "@/lib/video";
 
 import { overlayAPlantilla, plantillaAOverlay } from "./overlayPlantillas";
 
@@ -48,6 +48,7 @@ export interface PanelOverlayProps {
 /** `<video>` base como fondo del lienzo de overlay (object-fit + foco del clip base). */
 function FondoVideo({ doc, url }: { doc: ComposicionVideo; url: string }) {
   const clip = pistaBase(doc)?.clips[0];
+  const recorteInMs = clip?.recorte_in_ms ?? 0;
   return (
     <video
       src={urlMedia(url)}
@@ -59,18 +60,21 @@ function FondoVideo({ doc, url }: { doc: ComposicionVideo; url: string }) {
         objectFit: clip?.ajuste === "contain" ? "contain" : "cover",
         objectPosition: clip ? `${clip.foco[0] * 100}% ${clip.foco[1] * 100}%` : "center",
       }}
+      onLoadedMetadata={(e) => {
+        if (recorteInMs > 0) (e.currentTarget as HTMLVideoElement).currentTime = recorteInMs / 1000;
+      }}
     />
   );
 }
 
 /** Construye un Documento transparente del tamaño de la composición con las capas dadas. */
-function documentoOverlay(doc: ComposicionVideo, marca: string, capas: Capa[]): Documento {
-  const safeTop = 0;
+export function documentoOverlay(doc: ComposicionVideo, marca: string, capas: Capa[]): Documento {
+  const preset = presetParaAspecto(doc.formato.preset);
   return {
     version: 1,
     marca,
     fuentes: { sans: "Barlow", condensada: "Barlow Condensed" },
-    formato: { w: doc.formato.w, h: doc.formato.h, safe_top: safeTop, safe_bottom: 0 },
+    formato: { w: doc.formato.w, h: doc.formato.h, safe_top: preset.safe_top, safe_bottom: preset.safe_bottom },
     fondo: { tipo: "color", color: "#00000000" },
     capas,
   };

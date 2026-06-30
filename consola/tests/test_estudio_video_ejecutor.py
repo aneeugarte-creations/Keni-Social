@@ -100,6 +100,38 @@ def test_render_happy_path_completa_con_resultado(entorno, monkeypatch):
     assert capturado["argv"][0] == config.ffmpeg_bin()
 
 
+def test_render_overlay_documento_incluye_fuentes(entorno, monkeypatch):
+    """El documento horneado del overlay lleva `fuentes` para que el texto use la tipografía correcta."""
+    monkeypatch.setattr(estudio_video.media, "leer_objeto", lambda mid: b"clip-bytes")
+
+    capturado: dict = {}
+
+    def _capturar_doc(doc, **k):
+        capturado["doc"] = doc
+        return b"png-falso"
+
+    monkeypatch.setattr(estudio_video.estudio_imagen, "renderizar_documento_bytes", _capturar_doc)
+
+    def _fake_ffmpeg(argv, *, timeout, gen_id, documento):
+        from pathlib import Path
+
+        Path(argv[-1]).write_bytes(b"mp4")
+
+    monkeypatch.setattr(estudio_video, "_correr_ffmpeg", _fake_ffmpeg)
+
+    doc = json.loads(json.dumps(_DOC))
+    doc["pistas"].append({"id": "overlay", "tipo": "overlay", "capas": [{"tipo": "texto"}]})
+    comp = _crear_composicion(doc)
+    gen = _mint_gen()
+    estudio_video.ejecutar_render(gen, {"composicion_id": comp})
+
+    assert generaciones.obtener(gen)["estado"] == generaciones.ESTADO_COMPLETADO
+    assert "fuentes" in capturado["doc"], "El documento del overlay debe incluir 'fuentes'"
+    fuentes = capturado["doc"]["fuentes"]
+    assert fuentes.get("sans") == "Barlow"
+    assert fuentes.get("condensada") == "Barlow Condensed"
+
+
 def test_render_overlay_hornea_png_y_lo_compone(entorno, monkeypatch):
     monkeypatch.setattr(estudio_video.media, "leer_objeto", lambda mid: b"clip-bytes")
     # El horneado del overlay (Estudio de imagen) devuelve un PNG falso.

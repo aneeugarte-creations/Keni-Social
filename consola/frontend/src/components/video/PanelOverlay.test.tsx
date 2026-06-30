@@ -24,17 +24,27 @@ import {
 } from "@/editor/documento";
 import * as apiMod from "@/lib/api";
 import type { PlantillaDiseno } from "@/lib/api";
-import type { ComposicionVideo } from "@/lib/video";
+import { PRESETS_FORMATO_VIDEO, type ClipVideo, type ComposicionVideo } from "@/lib/video";
 
-import { PanelOverlay } from "./PanelOverlay";
+import { documentoOverlay, PanelOverlay } from "./PanelOverlay";
 
 // El editor real arrastra Konva (canvas): aquí solo importa el cableado de plantillas, así que se
-// sustituye por un stub que expone el botón del rail («Plantillas») y las entradas de `menuExtra`.
+// sustituye por un stub que expone el botón del rail («Plantillas»), las entradas de `menuExtra`
+// y el fondo del lienzo (`fondoLienzo`) para que FondoVideo se pueda ejercitar.
 vi.mock("@/editor/EditorDocumento", () => ({
-  EditorDocumento: ({ onPlantillas, menuExtra }: { onPlantillas?: () => void; menuExtra?: ReactNode }) => (
+  EditorDocumento: ({
+    onPlantillas,
+    menuExtra,
+    fondoLienzo,
+  }: {
+    onPlantillas?: () => void;
+    menuExtra?: ReactNode;
+    fondoLienzo?: ReactNode;
+  }) => (
     <div>
       <button onClick={onPlantillas}>Plantillas</button>
       <div>{menuExtra}</div>
+      <div>{fondoLienzo}</div>
     </div>
   ),
 }));
@@ -101,6 +111,38 @@ function renderPanel(capas: Capa[] = [], onCapas = vi.fn()) {
   return onCapas;
 }
 
+/** Composición con un clip base real que tiene `recorte_in_ms` configurable. */
+function docVideoConClip(recorteInMs = 0): ComposicionVideo {
+  const clip: ClipVideo = {
+    id: "c1",
+    media_id: "videos/x.mp4",
+    inicio_ms: 0,
+    fin_ms: 5000,
+    recorte_in_ms: recorteInMs,
+    recorte_out_ms: 5000,
+    x: 0,
+    y: 0,
+    w: 1080,
+    h: 1920,
+    ajuste: "cover",
+    foco: [0.5, 0.5],
+  };
+  return {
+    ...docVideo(),
+    pistas: [
+      { id: "base", tipo: "video", clips: [clip] },
+      { id: "pip", tipo: "video", clips: [] },
+      { id: "overlay", tipo: "overlay", capas: [] },
+      {
+        id: "subs",
+        tipo: "subtitulos",
+        subtitulo_id: "",
+        estilo: { fuente: "Barlow", tam: 64, color: "#FFF", borde: "#000", posicion: "inferior", karaoke: true },
+      },
+    ],
+  };
+}
+
 beforeEach(() => {
   vi.spyOn(apiMod.api, "plantillasDiseno").mockResolvedValue({ plantillas: [plantilla()] });
 });
@@ -163,5 +205,55 @@ describe("PanelOverlay · plantillas compartidas con Imagen", () => {
     renderPanel([]);
     fireEvent.click(screen.getByRole("button", { name: /Guardar como plantilla/ }));
     expect(screen.queryByPlaceholderText("Nombre de la plantilla")).not.toBeInTheDocument();
+  });
+});
+
+describe("documentoOverlay · zonas seguras del preset", () => {
+  it("usa safe_top y safe_bottom del preset en lugar de forzar cero", () => {
+    const doc = docVideo(); // preset "9:16"
+    const preset = PRESETS_FORMATO_VIDEO["9:16"];
+    const resultado = documentoOverlay(doc, "unotv", []);
+    expect(resultado.formato.safe_top).toBe(preset.safe_top);
+    expect(resultado.formato.safe_bottom).toBe(preset.safe_bottom);
+  });
+
+  it("aplica el preset correcto para cada aspecto", () => {
+    for (const aspecto of ["9:16", "1:1", "16:9"] as const) {
+      const doc: ComposicionVideo = { ...docVideo(), formato: { ...docVideo().formato, preset: aspecto } };
+      const preset = PRESETS_FORMATO_VIDEO[aspecto];
+      const resultado = documentoOverlay(doc, "unotv", []);
+      expect(resultado.formato.safe_top).toBe(preset.safe_top);
+      expect(resultado.formato.safe_bottom).toBe(preset.safe_bottom);
+    }
+  });
+});
+
+describe("FondoVideo · recorte temporal", () => {
+  it("salta al recorte_in_ms del clip base al cargar los metadatos", () => {
+    const doc = docVideoConClip(2000); // recorte_in_ms = 2 000 ms
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <PanelOverlay doc={doc} marca="unotv" capas={[]} onCapas={vi.fn()} videoBaseUrl="videos/x.mp4" />
+      </QueryClientProvider>,
+    );
+    const video = document.querySelector("video") as HTMLVideoElement;
+    expect(video).not.toBeNull();
+    fireEvent.loadedMetadata(video);
+    expect(video.currentTime).toBe(2); // 2 000 ms / 1 000 = 2 s
+  });
+
+  it("no modifica currentTime cuando recorte_in_ms es 0", () => {
+    const doc = docVideoConClip(0); // sin recorte
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <PanelOverlay doc={doc} marca="unotv" capas={[]} onCapas={vi.fn()} videoBaseUrl="videos/x.mp4" />
+      </QueryClientProvider>,
+    );
+    const video = document.querySelector("video") as HTMLVideoElement;
+    expect(video).not.toBeNull();
+    fireEvent.loadedMetadata(video);
+    expect(video.currentTime).toBe(0);
   });
 });

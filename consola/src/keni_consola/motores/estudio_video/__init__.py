@@ -260,6 +260,7 @@ def _hornear_overlay(
     documento_overlay = {
         "version": 1,
         "marca": marca or "",
+        "fuentes": {"sans": "Barlow", "condensada": "Barlow Condensed"},
         "formato": {"w": int(formato.get("w") or 0), "h": int(formato.get("h") or 0)},
         # Fondo transparente: el overlay solo aporta sus capas sobre el video.
         "fondo": {"tipo": "color", "color": "#00000000"},
