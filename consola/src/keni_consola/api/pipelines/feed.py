@@ -8,19 +8,26 @@ que la UI lo pinte con la misma tarjeta.
 
 from __future__ import annotations
 
+import logging
+import os
+
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from ... import actividad, agentes, generaciones, marcas, repos
 from ..._http_json import _entero_query, envoltura_paginacion
+from ...estados import CLASE_CONTENIDO, ORIGENES_AUTOGEN
 from ...pipeline_contenido import ORIGEN_PIPELINE
 from ..actividad import _es_marcador_pipeline
 from ._comun import (
     _CLASES,
+    _ENV_FUTUROS_MAX,
     _ESTADO_ACTIVIDAD,
+    _ESTADO_HECHA,
     _ESTADOS_GLOBAL,
     _ETAPA_CLAVES,
+    _FUTUROS_MAX_DEF,
     _LIMITE_DEF,
     _LIMITE_MAX,
     _METRICAS_CERO,
@@ -42,6 +49,8 @@ from ._metricas import (
     _runs_con_hashtags,
 )
 from ._runs import _run_de
+
+_log = logging.getLogger("keni_consola.api.pipelines.feed")
 
 
 def _item_de_actividad(it: dict) -> dict:
@@ -131,25 +140,25 @@ def _temas_trabajados(gens: list[dict]) -> set[str]:
     }
 
 
-def _runs_del_pipeline(marca: str | None, trabajados: set[str]) -> list[dict]:
+def _runs_del_pipeline(items: list[dict], trabajados: set[str]) -> list[dict]:
     """Temas que son RUNS del feed, más recientes primero, acotados a `_UNIVERSO_MAX`.
 
     Son runs: (a) todo contenido `origen='pipeline'` (recolectado por el propio pipeline) y
     (b) los temas del TABLERO (`ORIGENES_AUTOGEN`) que la máquina TRABAJÓ (`trabajados`:
     tienen generaciones del pipeline correlacionadas) — su copy/arte pertenece al pipeline
     y se muestra como run, no como entradas sueltas. Un alta manual sin trabajo IA no es
-    una run (no aparece aquí; vive solo en el tablero).
+    una run TRABAJADA (sale en su lugar como tema FUTURO; ver `_temas_futuros`).
 
-    `listar_publicacion` no filtra por `origen`, así que filtramos en memoria. El listado de
-    contenido ya viene acotado al tablero del equipo; reordenamos por recencia (`creado` desc) y
-    acotamos al universo máximo (los filtros y la paginación se aplican sobre este conjunto).
+    `items` es el tablero del equipo (`listar_publicacion`, ya acotado a la marca enfocada);
+    `listar_publicacion` no filtra por `origen`, así que filtramos en memoria. Reordenamos por
+    recencia (`creado` desc) y acotamos al universo máximo (los filtros y la paginación se
+    aplican sobre este conjunto).
 
     NO oculta runs por el toggle de la marca: un tema que NACIÓ del pipeline sigue siendo
     localizable aunque luego apaguen "Crear noticias" (antes se ocultaban y aparecían posts en
     el feed sin pipeline que encontrar). Con la marca apagada, la etapa CI se pinta "saltada"
     (lo refleja `_etapas_de_run`), pero la run NO desaparece de Pipelines.
     """
-    items = repos.listar_publicacion(marca=marca or None)
     pipeline = [
         it
         for it in items
@@ -158,6 +167,39 @@ def _runs_del_pipeline(marca: str | None, trabajados: set[str]) -> list[dict]:
     ]
     pipeline.sort(key=lambda it: (it.get("creado", "") or "", it.get("id", "")), reverse=True)
     return pipeline[:_UNIVERSO_MAX]
+
+
+def _futuros_max() -> int:
+    """Tope de temas FUTUROS a materializar (env `KENI_PIPELINES_FUTUROS_MAX`, def `_FUTUROS_MAX_DEF`)."""
+    crudo = os.environ.get(_ENV_FUTUROS_MAX, "")
+    try:
+        return max(1, int(crudo))
+    except (TypeError, ValueError):
+        return _FUTUROS_MAX_DEF
+
+
+def _temas_futuros(items: list[dict], trabajados: set[str]) -> list[dict]:
+    """Temas del TABLERO que la máquina AÚN no ha trabajado: el backlog FUTURO del feed.
+
+    Son los temas redactables (`clase='contenido'`, `origen` en `ORIGENES_AUTOGEN`, no cerrados)
+    que NO tienen ninguna generación de trabajo del pipeline correlacionada (`id` fuera de
+    `trabajados`). Esa misma condición GARANTIZA el dedup con las runs trabajadas: un tema que ya
+    es run (vía `_runs_del_pipeline`, condición (b)) está en `trabajados` y por tanto NO sale aquí.
+    Los `origen='pipeline'` tampoco caen aquí (no están en `ORIGENES_AUTOGEN`): son siempre runs.
+
+    Orden: más recientes primero (`creado` desc) — el recorte por `_futuros_max` se queda con los
+    más nuevos. El llamante los pinta DESPUÉS de los pasados/en curso (van al final del feed).
+    """
+    futuros = [
+        it
+        for it in items
+        if (it.get("clase") or CLASE_CONTENIDO) == CLASE_CONTENIDO
+        and (it.get("origen") or "") in ORIGENES_AUTOGEN
+        and (it.get("estado") or "") != _ESTADO_HECHA
+        and (it.get("id") or "") not in trabajados
+    ]
+    futuros.sort(key=lambda it: (it.get("creado", "") or "", it.get("id", "")), reverse=True)
+    return futuros
 
 
 async def listar(request: Request) -> Response:
@@ -213,7 +255,11 @@ def _feed(
     # tablero TRABAJADOS por el pipeline), las métricas por run, la evidencia del pool (fix
     # "Saltada") y los items sueltos del feed.
     gens = generaciones.listar(limite=None, marca=marca or None)
-    runs_items = _runs_del_pipeline(marca or None, _temas_trabajados(gens))
+    # UNA sola lectura del tablero (acotada a la marca): alimenta tanto las runs TRABAJADAS como
+    # los temas FUTUROS (backlog aún sin trabajar) — ambos salen de este mismo listado.
+    items_tablero = repos.listar_publicacion(marca=marca or None)
+    trabajados = _temas_trabajados(gens)
+    runs_items = _runs_del_pipeline(items_tablero, trabajados)
     ids_runs = {it.get("id", "") or "" for it in runs_items}
     met_por_run = _metricas_por_run(gens, ids_runs)
     pool_fusion = _marcas_con_pool(gens, _PREFIJO_POOL_FUSION)
@@ -253,8 +299,38 @@ def _feed(
         for it in runs_items
     ]
     todas.extend(_actividad_suelta(gens, ids_runs, marca or None))
-    # Mezcla cronológica (recientes primero) de runs + sueltos; empata por id (estable).
+    # Mezcla cronológica (recientes primero) de runs + sueltos; empata por id (estable). Los
+    # PASADOS/EN CURSO (con trabajo real) llevan `futuro=False`.
     todas.sort(key=lambda r: (r.get("creado", "") or "", r.get("id", "") or ""), reverse=True)
+    for r in todas:
+        r["futuro"] = False
+
+    # Temas FUTUROS: backlog del tablero AÚN sin trabajar (sin generaciones de trabajo). Se
+    # materializan como runs "en gris" (mismas 9 etapas, todas pendientes/saltadas al derivarse de
+    # un tema sin trabajo) con `futuro=True`. CAP anti-inundación: solo los `_futuros_max()` más
+    # recientes (el backlog puede tener cientos); `futuros_total`/`futuros_mostrados` reportan el
+    # recorte para que el front muestre "+N más".
+    futuros_cand = _temas_futuros(items_tablero, trabajados)
+    futuros_total = len(futuros_cand)
+    cap = _futuros_max()
+    if futuros_total > cap:
+        _log.info(
+            "Feed pipelines: %d temas futuros, recortados a %d (marca=%s)",
+            futuros_total, cap, marca or "todas",
+        )
+    futuros = [
+        {
+            **_run_de(it, por_contenido.get(it.get("id", ""), [])),
+            "futuro": True,
+        }
+        for it in futuros_cand[:cap]
+    ]
+    futuros_mostrados = len(futuros)
+
+    # Los FUTUROS van DESPUÉS de los pasados/en curso (ya ordenados desc): el feed muestra primero
+    # lo trabajado y al final el backlog en gris. Los filtros se aplican a AMBOS por igual
+    # (preservan el orden, así que los futuros siguen al final).
+    todas = todas + futuros
     if etapa:
         todas = [r for r in todas if r["clase"] == "run" and r["etapa_actual"] == etapa]
     if estado:
@@ -292,4 +368,9 @@ def _feed(
         # Suma de las métricas de TODOS los items que casan el filtro (tokens/coste/
         # duración; `items` = generaciones sumadas). La UI lo pinta junto al conteo.
         "totales": totales,
+        # Backlog FUTURO (temas del tablero sin trabajar, `futuro=True` en `pipelines`):
+        # `futuros_total` = todo el backlog de la marca; `futuros_mostrados` = los materializados
+        # tras el cap. `futuros_total - futuros_mostrados` = el "+N más" que el front anuncia.
+        "futuros_total": futuros_total,
+        "futuros_mostrados": futuros_mostrados,
     }

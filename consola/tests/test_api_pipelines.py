@@ -270,8 +270,10 @@ def test_estado_global_saltada_no_bloquea():
 
 
 def test_excluye_contenido_no_pipeline(cliente):
-    """Un contenido de otro origen NO aparece como pipeline."""
-    repos.crear_publicacion(clase="contenido", titulo="Manual", marca="unotv", origen="equipo")
+    """Un contenido cuyo origen NO es pipeline NI backlog redactable (`ORIGENES_AUTOGEN`) NO
+    aparece en el feed: ni como run (no lo trabajó la máquina) ni como futuro (su origen no es
+    del tablero redactable). `post-directo` teclea el copy final: no hay nada que redactar."""
+    repos.crear_publicacion(clase="contenido", titulo="Manual", marca="unotv", origen="post-directo")
     r = cliente.get("/api/pipelines")
     assert all(x["titulo"] != "Manual" for x in r.json()["pipelines"])
 
@@ -986,3 +988,80 @@ def test_totales_cuentan_el_pool_una_vez_no_por_run(cliente):
     assert t["tokens"] == 300 + 150
     assert t["coste_usd"] == pytest.approx(0.04 + 0.015)
     assert t["duration_ms"] == 6000 + 3000
+
+
+# --------------------------------------------------------------------------- #
+# Temas FUTUROS: backlog del tablero AÚN sin trabajar, pintado "en gris"       #
+# --------------------------------------------------------------------------- #
+
+
+def test_tema_futuro_sin_trabajo_sale_en_gris(cliente):
+    """Un tema del tablero redactable (`ORIGENES_AUTOGEN`) que la máquina AÚN no ha trabajado sale
+    en el feed como run con `futuro=True` (todas sus etapas pendientes/saltadas: un tema sin
+    trabajo). Las runs reales llevan `futuro=False`."""
+    _tema_pipeline("Run trabajada")  # pipeline-origin: run real, futuro=False
+    repos.crear_publicacion(
+        clase="contenido", titulo="Backlog sin tocar", marca="unotv", origen="equipo",
+    )
+    body = cliente.get("/api/pipelines").json()
+    por_titulo = {x["titulo"]: x for x in body["pipelines"]}
+    fut = por_titulo["Backlog sin tocar"]
+    assert fut["clase"] == "run"
+    assert fut["futuro"] is True
+    assert fut["estado_global"] == "pendiente"  # sin trabajo: parada al inicio
+    # Las 9 etapas se derivan del estado (mismas que cualquier run del tablero).
+    assert [e["clave"] for e in fut["etapas"]] == [
+        "fusionar", "priorizar", "admitir", "verificar", "redactar", "sugerir_hashtags",
+        "ilustrar", "aprobar", "critica",
+    ]
+    assert por_titulo["Run trabajada"]["futuro"] is False
+    # Los contadores reportan el backlog.
+    assert body["futuros_total"] == 1
+    assert body["futuros_mostrados"] == 1
+    # Los futuros van DESPUÉS de las runs/actividad trabajadas (al final del feed).
+    titulos = [x["titulo"] for x in body["pipelines"]]
+    assert titulos.index("Run trabajada") < titulos.index("Backlog sin tocar")
+
+
+def test_tema_trabajado_no_se_duplica_como_futuro(cliente):
+    """Un tema del tablero que la máquina YA trabajó (tiene generación de trabajo del pipeline)
+    sale UNA sola vez como run trabajada (`futuro=False`), nunca también como futuro."""
+    tema = repos.crear_publicacion(
+        clase="contenido", titulo="Tema ya trabajado", marca="unotv", origen="equipo",
+    )
+    generaciones.crear({
+        "tipo": "pipeline", "marca": "unotv", "publicacion_id": tema["id"],
+        "etiqueta": "Copy · UnoTV", "estado": generaciones.ESTADO_COMPLETADO,
+    })
+    body = cliente.get("/api/pipelines").json()
+    apariciones = [x for x in body["pipelines"] if x["titulo"] == "Tema ya trabajado"]
+    assert len(apariciones) == 1
+    assert apariciones[0]["futuro"] is False
+    assert body["futuros_total"] == 0
+    assert body["futuros_mostrados"] == 0
+
+
+def test_cap_futuros_limita_y_reporta(cliente, monkeypatch):
+    """El cap (`KENI_PIPELINES_FUTUROS_MAX`) limita los futuros materializados a los más recientes
+    y el payload reporta `futuros_total` (todo el backlog) vs `futuros_mostrados` (los pintados),
+    para que el front anuncie "+N más"."""
+    monkeypatch.setenv("KENI_PIPELINES_FUTUROS_MAX", "2")
+    for i in range(3):
+        repos.crear_publicacion(
+            clase="contenido", titulo=f"Backlog {i}", marca="unotv", origen="rss",
+        )
+    body = cliente.get("/api/pipelines").json()
+    futuros = [x for x in body["pipelines"] if x.get("futuro")]
+    assert len(futuros) == 2  # recortado al cap
+    assert body["futuros_total"] == 3
+    assert body["futuros_mostrados"] == 2
+
+
+def test_tema_hecho_no_es_futuro(cliente):
+    """Un tema del tablero CERRADO (`estado='hecha'`) sin trabajo NO es backlog futuro."""
+    repos.crear_publicacion(
+        clase="contenido", titulo="Backlog cerrado", marca="unotv", origen="rss", estado="hecha",
+    )
+    body = cliente.get("/api/pipelines").json()
+    assert all(x["titulo"] != "Backlog cerrado" for x in body["pipelines"])
+    assert body["futuros_total"] == 0

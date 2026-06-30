@@ -105,6 +105,15 @@ _METRICAS_CERO = {"items": 0, "tokens": 0, "coste_usd": 0.0, "duration_ms": 0}
 # más recientes). `log()` no aplica aquí: la paginación reporta el `total` ya acotado a esto.
 _UNIVERSO_MAX = 500
 
+# Estado terminal de un tema del tablero: ya cerrado, no es backlog FUTURO.
+_ESTADO_HECHA = "hecha"
+# Tope de temas FUTUROS (backlog del tablero AÚN sin trabajar por la máquina) que el feed
+# materializa como runs "en gris". El backlog puede tener cientos de temas (600+): el feed no
+# debe devolverlos todos. Se sirven los `_FUTUROS_MAX` más recientes y el payload reporta
+# `futuros_total`/`futuros_mostrados` para que el front muestre "+N más". Override por env.
+_ENV_FUTUROS_MAX = "KENI_PIPELINES_FUTUROS_MAX"
+_FUTUROS_MAX_DEF = 30
+
 # Estados de plataforma que cuentan como "aprobado" para la etapa de Aprobar: la pieza ya pasó
 # el gate humano (no hay estado de reposo `aprobado`: cuenta lo que salió).
 _ESTADOS_APROBADOS = frozenset({"programado", "publicado"})
