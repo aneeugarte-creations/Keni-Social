@@ -1,9 +1,9 @@
 """Utilidades de TEXTO del dominio STREAM: verdicto, emojis, titulo, normalizacion de redes.
 
 Helpers de texto PUROS extraidos del parseo del stream: derivacion del verdicto a partir
-de los simbolos ✅/⚠️/❌ (o las palabras del contrato), la limpieza determinista de
-emojis del copy, la derivacion del titulo legible y la normalizacion/orden de las redes
-pedidas. Sin I/O y sin dependencias de las otras areas del paquete.
+del simbolo ✅/⚠️/❌, la limpieza determinista de emojis del copy, la derivacion del
+titulo legible y la normalizacion/orden de las redes pedidas. Sin I/O y sin dependencias
+de las otras areas del paquete.
 """
 
 from __future__ import annotations
@@ -14,32 +14,19 @@ from collections.abc import Iterable
 from ...tiempo import hoy_utc
 
 # --------------------------------------------------------------------------- #
-# Verdicto del copy (primera linea ✅/⚠️/❌)                                    #
+# Verdicto desde el simbolo ✅/⚠️/❌ de la primera linea                        #
 # --------------------------------------------------------------------------- #
 
 # Mapa del simbolo de veredicto (primera linea) a su valor interno estable.
 _VEREDICTO_POR_SIMBOLO = {"✅": "listo", "⚠️": "revisar", "❌": "no_publicar"}
 
-# Veredicto en PALABRAS, por si la primera linea trae "LISTO PARA APROBAR" /
-# "REVISAR ANTES DE PUBLICAR" / "NO PUBLICAR" sin simbolo. Frases COMPLETAS, no palabras
-# sueltas: un copy cuyo primer renglon diga "...esta LISTO para la final" no debe colar
-# un veredicto.
-_VEREDICTO_POR_TEXTO: tuple[tuple[str, str], ...] = (
-    ("NO PUBLICAR", "no_publicar"),
-    ("REVISAR ANTES DE PUBLICAR", "revisar"),
-    ("LISTO PARA APROBAR", "listo"),
-)
-
 
 def derivar_verdicto(texto: str) -> str:
-    """Deriva el veredicto desde la PRIMERA linea con contenido (simbolo o palabras).
+    """Deriva el veredicto del simbolo ✅/⚠️/❌ de la PRIMERA linea con contenido.
 
-    Devuelve "listo"|"revisar"|"no_publicar" segun el simbolo ✅/⚠️/❌ o, si no hay
-    simbolo, segun las palabras del contrato del prompt de copy ("LISTO PARA APROBAR",
-    "REVISAR ANTES DE PUBLICAR", "NO PUBLICAR"); "" si no hay nada reconocible. Una
-    linea con DOS o mas veredictos en palabras (la leyenda del prompt enumera los
-    tres) es ambigua y NO deriva: solo cuenta la linea de veredicto real, que trae
-    uno solo. Mira solo la primera linea no vacia.
+    Devuelve "listo"|"revisar"|"no_publicar" segun el simbolo de la primera linea no
+    vacia; "" si esa linea no trae ninguno. Lo usa la verificacion de fuente como
+    fallback cuando su informe no abre con el semaforo 🟢/🟡/🔴 (`verificar_fuente`).
     """
     for linea in texto.splitlines():
         if not linea.strip():
@@ -47,10 +34,6 @@ def derivar_verdicto(texto: str) -> str:
         for simbolo, valor in _VEREDICTO_POR_SIMBOLO.items():
             if simbolo in linea:
                 return valor
-        mayus = linea.upper()
-        encontrados = {valor for token, valor in _VEREDICTO_POR_TEXTO if token in mayus}
-        if len(encontrados) == 1:
-            return encontrados.pop()
         return ""
     return ""
 
@@ -69,8 +52,7 @@ def derivar_verdicto(texto: str) -> str:
 #   - Misc Symbols (U+2600-U+26FF) y Dingbats (U+2700-U+27BF) -> incluye ✅⚠❌
 #   - Variation Selector U+FE0F y ZWJ U+200D (unen secuencias tipo familia/banderas)
 # NOTA: NO toca acentos (latin) ni los caracteres de las URLs (ASCII), porque esos
-# puntos de codigo caen fuera de estos rangos. El veredicto se deriva ANTES de
-# aplicar esto (ver `parsear_salida`), asi que su simbolo no se pierde.
+# puntos de codigo caen fuera de estos rangos.
 _RE_EMOJI = re.compile(
     "["
     "\U0001f600-\U0001f64f"  # emoticonos

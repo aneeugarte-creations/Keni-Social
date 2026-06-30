@@ -585,9 +585,10 @@ def construir_procesar_copy(
 ) -> generaciones.Procesar:
     """Callback de post-procesado de una generacion de PIEZAS (copy/RSS).
 
-    Parsea la salida en piezas/verdicto, registra el historial (con metricas), AUTO-GUARDA
+    Parsea la salida en piezas, registra el historial (con metricas), AUTO-GUARDA
     una pieza (borrador) por pieza y devuelve `{resultado, historial_id, verdicto,
-    piezas, piezas[, imagenes]}`. `prompt_id` es solo la etiqueta de origen del historial.
+    piezas, piezas[, imagenes]}` (el `verdicto` lo aporta la verificación de la fuente vía
+    `revision_inicial`). `prompt_id` es solo la etiqueta de origen del historial.
 
     `publicacion_id` (lista viva): si apunta a un tema del tablero existente, cada borrador se
     ADJUNTA a ese `contenido` (cuelga de su tarjeta); sin el (default ""), borrador suelto.
@@ -613,8 +614,9 @@ def construir_procesar_copy(
             prompt_id, marca, parsed["resultado"], piezas=parsed["piezas"], titulo=titulo,
             metricas=stream.metricas_a_dict(metricas), autor=autor,
         )
-        # El revision de la salida manda; si viene vacío, cae al inicial (p. ej. no_verificado).
-        verdicto = (str(parsed["verdicto"]) or "").strip() or (revision_inicial or "")
+        # La revisión la fija la verificación de la fuente (`revision_inicial`); el copy ya
+        # no trae veredicto propio.
+        verdicto = revision_inicial or ""
         # Verificacion de VOZ contra los patrones medidos de la marca: con avisos, un
         # `listo` del modelo baja a `revisar` y la nota viaja al tema (el humano decide).
         verdicto, avisos_voz = verificar_voz(marca, parsed["piezas"], verdicto)
@@ -681,13 +683,12 @@ def construir_procesar_documento(
 ) -> generaciones.Procesar:
     """Callback de post-procesado de salida `documento` (sin piezas, sin piezas).
 
-    Limpia emojis, deriva verdicto/titulo, registra el historial SIN piezas. Devuelve
-    `{documento, verdicto, historial_id, piezas: [], piezas: []}` (+ `imagenes`).
+    Limpia emojis, deriva el titulo, registra el historial SIN piezas. Devuelve
+    `{documento, historial_id, piezas: [], piezas: []}` (+ `imagenes`).
     """
 
     def procesar(salida: str, metricas: stream.MetricasRun | None) -> dict[str, object]:
         doc = stream.quitar_emojis(salida)
-        verdicto = stream.derivar_verdicto(salida)
         titulo = titulo_dado or stream.derivar_titulo(titulo_base or doc)
         historial_id = repos.registrar_historial_prompt(
             prompt_id, marca, doc, piezas=[], titulo=titulo,
@@ -695,7 +696,6 @@ def construir_procesar_documento(
         )
         resultado: dict[str, object] = {
             "documento": doc,
-            "verdicto": verdicto,
             "historial_id": historial_id,
             "piezas": [],
             "piezas": [],

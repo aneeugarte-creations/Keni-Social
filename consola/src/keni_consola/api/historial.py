@@ -94,7 +94,8 @@ def _historial_guardar(
         return 404, {"error": "No se encontró ese borrador en el historial."}
 
     marca = entrada["marca"]
-    verdicto = stream.derivar_verdicto(entrada["resultado"])
+    # El copy del historial no trae veredicto propio; la revisión la fija la verificación
+    # de la fuente sobre la pieza, no este re-guardado.
     titulo = titulo_dado or entrada["titulo"] or stream.derivar_titulo(entrada["resultado"])
     piezas = entrada["piezas"]
 
@@ -113,7 +114,7 @@ def _historial_guardar(
             }
         try:
             piezas = dom_copy.crear_publicaciones_desde_piezas(
-                piezas, marca=marca, titulo=titulo, verdicto=verdicto, origen=historial_id,
+                piezas, marca=marca, titulo=titulo, verdicto="", origen=historial_id,
                 redes_filtro=redes_filtro, autor=autor, atomico=True,
             )
         except Exception:  # noqa: BLE001 -- creación a medias: ya revirtió; error en español
@@ -129,7 +130,7 @@ def _historial_guardar(
     try:
         for red in sorted(redes_filtro):
             pub = dom_publicaciones.crear_borrador(
-                marca, red, titulo=titulo, contenido=entrada["resultado"], revision=verdicto,
+                marca, red, titulo=titulo, contenido=entrada["resultado"], revision="",
                 origen=historial_id, autor=autor,
             )
             creadas.append(pub)

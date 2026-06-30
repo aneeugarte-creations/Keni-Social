@@ -14,7 +14,7 @@ import json
 import re
 
 from ... import limites_plataforma
-from .texto import derivar_verdicto, quitar_emojis
+from .texto import quitar_emojis
 
 # Bloque ```json ... ``` cercado (el ultimo de la salida es el de las piezas).
 # Tolera "json"/"JSON" tras las comillas y espacios; captura el cuerpo (no greedy).
@@ -118,13 +118,12 @@ def _piezas_desde_por_red(
 
 
 def parsear_salida(salida: str, redes_ids: list[str]) -> dict[str, object]:
-    """Parte la salida cruda en `resultado` limpio + `piezas` + `verdicto`.
+    """Parte la salida cruda en `resultado` limpio + `piezas`.
 
     - Localiza el ULTIMO bloque ```json cercado y lo `json.loads`; mapea su clave
       `piezas` a `[{red, contenido, caracteres}]` (solo redes en `redes_ids`, en
       orden fijo; `caracteres` = len(contenido)).
     - QUITA ese bloque json del texto para que `resultado` quede limpio.
-    - Deriva `verdicto` de la primera linea con ✅/⚠️/❌ ANTES de tocar nada.
     - FALLBACK: si no hay bloque JSON valido (o no trae `piezas` utilizables), intenta
       repartir el texto por ENCABEZADOS de plataforma. Si tampoco hay encabezados
       reconocibles, `piezas=[]` (comportamiento previo).
@@ -132,11 +131,9 @@ def parsear_salida(salida: str, redes_ids: list[str]) -> dict[str, object]:
       escribio (la politica de emojis vive en el prompt + editorial de marca); solo el
       `copy_in` (texto de placa) se limpia con `quitar_emojis`.
 
-    Devuelve `{"resultado": str, "piezas": [...], "verdicto": str}`.
+    Devuelve `{"resultado": str, "piezas": [...]}`.
     """
     salida = salida or ""
-    # El veredicto se deriva PRIMERO, sobre el texto crudo, para no perder su simbolo.
-    verdicto = derivar_verdicto(salida)
 
     coincidencias = list(_RE_BLOQUE_JSON.finditer(salida))
     datos = None
@@ -179,7 +176,7 @@ def parsear_salida(salida: str, redes_ids: list[str]) -> dict[str, object]:
         por_red = _repartir_por_encabezados(limpio, redes_ids)
 
     piezas = _piezas_desde_por_red(por_red, redes_ids, copy_in_por_red)
-    return {"resultado": limpio, "piezas": piezas, "verdicto": verdicto}
+    return {"resultado": limpio, "piezas": piezas}
 
 
 def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, object]:
@@ -210,11 +207,10 @@ def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, obj
     `texto`. Si no hay JSON utilizable, el copy es el texto limpio entero (fallback). `resultado`
     y el `contenido` conservan los emojis que el modelo escribió (la política de emojis vive en
     el prompt + editorial de marca); el `copy_in` (placa) se limpia SIEMPRE con `quitar_emojis`.
-    Devuelve `{"resultado": str, "piezas": [...], "verdicto": str, "tipo": str, "slides": [...]}`
+    Devuelve `{"resultado": str, "piezas": [...], "tipo": str, "slides": [...]}`
     (misma forma que `parsear_salida` + el `tipo` elegido y sus `slides`).
     """
     salida = salida or ""
-    verdicto = derivar_verdicto(salida)
 
     coincidencias = list(_RE_BLOQUE_JSON.finditer(salida))
     datos = None
@@ -277,10 +273,7 @@ def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, obj
         piezas.append(
             {"red": r, "contenido": contenido, "caracteres": len(contenido), "copy_in": copy_in_base}
         )
-    return {
-        "resultado": limpio, "piezas": piezas, "verdicto": verdicto, "tipo": tipo,
-        "slides": slides,
-    }
+    return {"resultado": limpio, "piezas": piezas, "tipo": tipo, "slides": slides}
 
 
 # Claves del OBJETO PLANO del copy unificado. Las usa la reparación tolerante para anclar el FIN

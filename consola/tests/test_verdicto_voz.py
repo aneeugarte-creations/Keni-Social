@@ -1,4 +1,4 @@
-"""Veredicto del copy (símbolo Y palabras) + verificación de voz en el post-procesado.
+"""Veredicto por símbolo ✅/⚠️/❌ + verificación de voz en el post-procesado.
 
 PUROS (sin DB): `stream.derivar_verdicto` y `dominio.copy.verificar_voz`.
 """
@@ -11,33 +11,20 @@ from keni_consola.dominio import copy as dom_copy
 from keni_consola.dominio import stream
 
 # --------------------------------------------------------------------------- #
-# derivar_verdicto: símbolos y PALABRAS del contrato del prompt de copy        #
+# derivar_verdicto: símbolo ✅/⚠️/❌ de la primera línea                        #
 # --------------------------------------------------------------------------- #
 
 
-def test_verdicto_por_simbolo_sigue_mandando():
+def test_verdicto_por_simbolo():
     assert stream.derivar_verdicto("✅ Todo bien\n…") == "listo"
     assert stream.derivar_verdicto("⚠️ Ojo\n…") == "revisar"
     assert stream.derivar_verdicto("❌ No\n…") == "no_publicar"
 
 
-def test_verdicto_en_palabras_del_prompt_de_copy():
-    # Si la primera línea trae el veredicto EN PALABRAS, sin símbolo, se deriva
-    # igual del texto (tolerancia del parser).
-    assert stream.derivar_verdicto("LISTO PARA APROBAR\n\nLeyenda: …") == "listo"
-    assert stream.derivar_verdicto("REVISAR ANTES DE PUBLICAR\nuna cifra a confirmar") == "revisar"
-    assert stream.derivar_verdicto("NO PUBLICAR\nregla legal incumplida") == "no_publicar"
-
-
-def test_verdicto_leyenda_con_los_tres_no_deriva():
-    # La línea-leyenda enumera los tres veredictos: es ambigua, no cuenta.
-    leyenda = "LISTO PARA APROBAR   ·   REVISAR ANTES DE PUBLICAR   ·   NO PUBLICAR"
-    assert stream.derivar_verdicto(leyenda) == ""
-
-
-def test_verdicto_palabra_suelta_no_cola():
-    # Frases completas del contrato, no tokens sueltos: un copy que abre con "LISTO"
-    # a secas (o "listo para la final") no debe colar un veredicto.
+def test_verdicto_sin_simbolo_no_deriva():
+    # Sin un símbolo de veredicto en la primera línea no se deriva nada: ni las palabras
+    # del contrato viejo ("LISTO PARA APROBAR") ni un emoji cualquiera cuelan veredicto.
+    assert stream.derivar_verdicto("LISTO PARA APROBAR\n\nLeyenda: …") == ""
     assert stream.derivar_verdicto("EL TRI ESTÁ LISTO PARA LA FINAL 🔥") == ""
     assert stream.derivar_verdicto("Texto cualquiera sin veredicto") == ""
 
