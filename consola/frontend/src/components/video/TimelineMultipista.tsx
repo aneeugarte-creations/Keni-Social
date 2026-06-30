@@ -3,30 +3,38 @@
  * LineaTiempo a multipista). Componente HOJA: edita en TIEMPO DE SALIDA (el vídeo final
  * concatenado) y emite intenciones por callback; el padre muta el documento y guarda.
  *
- * Carriles (todos comparten la misma regla de tiempo y el mismo playhead):
+ * Estructura: una COLUMNA DE CABECERAS fija (etiqueta + controles de cada pista) y, a su
+ * derecha, un VIEWPORT con scroll horizontal cuyo eje escala con el zoom. Todos los carriles
+ * comparten ese mismo eje y el mismo playhead:
  *   1. Regla de tiempo + PLAYHEAD arrastrable (scrub con window-mousemove, flechas de teclado).
  *   2. VÍDEO — los segmentos de la pista base como tarjetas CONSECUTIVAS (ancho ∝ su duración
  *      de salida), con asas de trim en los bordes (commit al soltar → `onTrimSegmento`), una
- *      cuchilla global que divide en el playhead (`onDividirSegmento`) y, por segmento, mover
- *      ◀/▶ (`onMoverSegmento`) y eliminar (`onQuitarSegmento`, sólo si hay >1).
- *   3. AUDIO (base) — volumen + silenciar del audio de los segmentos base (`onAudioBase`).
- *   4. MÚSICA — volumen/silenciar/quitar si hay música, o «+ Música» si no (`onAnadirMusica`).
+ *      cuchilla que divide en el playhead (`onDividirSegmento`) y, por segmento, mover ◀/▶
+ *      (`onMoverSegmento`) y eliminar (`onQuitarSegmento`, sólo si hay >1).
+ *   3. AUDIO (base) — pista propia: una BARRA que abarca [0, total] reflejando volumen/silenciar
+ *      (`onAudioBase`), con sus controles en la cabecera.
+ *   4. MÚSICA — barra propia con su tramo, controles de volumen/silenciar/quitar, o «+ Música».
  *   5. PiP y SUBTÍTULOS — barras finas SOLO LECTURA, ancladas a sus tiempos.
  *
  * El eje es [0, duración total de la base]. Cada segmento ocupa [inicio acumulado, +duración de
- * salida]; el render server-side concatena los segmentos en ese orden. `disabled` apaga la
- * edición pero deja vivo el seek.
+ * salida]; el render server-side concatena los segmentos en ese orden. El zoom sólo escala el
+ * ancho del eje (px); las conversiones px↔ms leen el ancho REAL escalado vía
+ * `getBoundingClientRect`, así los gestos quedan correctos a cualquier zoom y scroll. `disabled`
+ * apaga la edición pero deja vivo el seek.
  */
 import * as React from "react";
 import {
   ChevronLeft,
   ChevronRight,
+  Maximize2,
   Music,
   Plus,
   Scissors,
   Trash2,
   Volume2,
   VolumeX,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 
 import {
@@ -84,6 +92,17 @@ function durSegMs(c: ClipVideo): number {
   return Math.max(0, out - inn);
 }
 
+// Límites y paso del zoom del eje (1 = ajustado al viewport; >1 = más detalle + scroll).
+const ZOOM_MIN = 1;
+const ZOOM_MAX = 8;
+const ZOOM_PASO = 1.5;
+
+// Altura de cada carril (compartida por su cabecera y su pista para que casen en vertical).
+const ALTO_REGLA = "h-5";
+const ALTO_VIDEO = "h-16";
+const ALTO_PISTA = "h-9";
+const ALTO_BARRAS = "h-7";
+
 export function TimelineMultipista({
   doc,
   tiempoSeg,
@@ -104,6 +123,8 @@ export function TimelineMultipista({
   const [arrastre, setArrastre] = React.useState<{ idx: number; asa: "in" | "out"; ms: number } | null>(
     null,
   );
+  // Zoom del eje (multiplicador del ancho). Sólo afecta a px; el modelo de tiempo no cambia.
+  const [zoom, setZoom] = React.useState(1);
 
   const segs = segmentosBase(doc);
   const total = duracionBaseMs(doc);
@@ -245,8 +266,18 @@ export function TimelineMultipista({
   const volBase = segs[0]?.volumen ?? VOLUMEN_DEFECTO;
   const mudoBase = segs[0]?.silenciar ?? false;
 
-  // Música (primer clip de la pista de audio), si existe.
+  // Música (primer clip de la pista de audio), si existe: tramo [offset, offset+dur] capado.
   const musica = pistaAudio(doc)?.clips[0] ?? null;
+  let barMusica: { ini: number; fin: number } | null = null;
+  if (musica) {
+    const durMus =
+      Math.max(0, (musica.recorte_out_ms ?? 0) - (musica.recorte_in_ms ?? 0)) ||
+      Math.max(0, (musica.fin_ms ?? 0) - (musica.inicio_ms ?? 0));
+    const ini = Math.min(Math.max(0, musica.offset_ms ?? 0), axisTotal);
+    barMusica = { ini, fin: durMus > 0 ? Math.min(axisTotal, ini + durMus) : axisTotal };
+  }
+  const mudoMus = musica?.silenciar ?? false;
+  const volMus = musica?.volumen ?? VOLUMEN_DEFECTO;
 
   // Barra informativa del PiP: arranca en 0 (salida) y dura su recorte, capado al total.
   const clipPip = pistaPip(doc)?.clips[0];
@@ -259,299 +290,381 @@ export function TimelineMultipista({
   }
 
   const segsSub = segmentos ?? [];
+  const hayBarras = !!barPip || segsSub.length > 0;
+
+  const acercar = () => setZoom((z) => Math.min(ZOOM_MAX, z * ZOOM_PASO));
+  const alejar = () => setZoom((z) => Math.max(ZOOM_MIN, z / ZOOM_PASO));
+  const ajustar = () => setZoom(1);
 
   return (
     <div className="select-none space-y-1" data-testid="timeline-multipista">
-      <div
-        ref={ejeRef}
-        aria-label="Pistas de la composición"
-        className="relative overflow-hidden rounded-md border border-border bg-muted/40"
-      >
-        {/* Carril 1 · Regla con marcas de tiempo (scrub al pulsar). */}
-        <div
-          onMouseDown={iniciarScrub}
-          aria-label="Regla de tiempo"
-          className="relative h-5 cursor-pointer touch-none border-b border-border/60"
+      {/* Barra de zoom del eje temporal. */}
+      <div className="flex items-center justify-end gap-1">
+        <button
+          type="button"
+          aria-label="Alejar"
+          disabled={zoom <= ZOOM_MIN}
+          onClick={alejar}
+          className="rounded border border-border p-1 text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-40"
         >
-          {marcas.map((ms) => (
-            <div
-              key={ms}
-              className="pointer-events-none absolute top-0 h-full border-l border-border/60"
-              style={{ left: pct(ms) }}
-            >
-              <span className="ml-0.5 text-[9px] tabular-nums leading-5 text-muted-foreground">
-                {formatearDuracionMs(ms)}
-              </span>
-            </div>
-          ))}
-        </div>
+          <ZoomOut className="h-3.5 w-3.5" />
+        </button>
+        <span className="w-10 text-center text-[10px] tabular-nums text-muted-foreground" aria-label="Nivel de zoom">
+          {Math.round(zoom * 100)}%
+        </span>
+        <button
+          type="button"
+          aria-label="Acercar"
+          disabled={zoom >= ZOOM_MAX}
+          onClick={acercar}
+          className="rounded border border-border p-1 text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-40"
+        >
+          <ZoomIn className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          aria-label="Ajustar zoom"
+          disabled={zoom === 1}
+          onClick={ajustar}
+          className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-1 text-[10px] font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-40"
+        >
+          <Maximize2 className="h-3 w-3" /> Ajustar
+        </button>
+      </div>
 
-        {/* Carril 2 · Vídeo: barra de acciones + segmentos consecutivos. */}
-        <div className="flex items-center gap-2 border-b border-border/40 px-2 py-1">
-          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Vídeo
-          </span>
-          {onDividirSegmento && (
-            <button
-              type="button"
-              aria-label="Dividir en el cursor"
-              disabled={!puedeDividir}
-              onClick={() => onDividirSegmento(segActivo, Math.round(msLocalCorte))}
-              className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-foreground hover:bg-accent/50 disabled:cursor-default disabled:opacity-40"
-            >
-              <Scissors className="h-3 w-3" /> Dividir aquí
-            </button>
-          )}
-        </div>
-        <div className="relative h-16">
-          {segs.map((seg, i) => {
-            const rIn = seg.recorte_in_ms ?? 0;
-            const rOut = seg.recorte_out_ms || seg.fin_ms || 0;
-            const dur = Math.max(0, rOut - rIn);
-            const ini = offsets[i];
-            let left = ini;
-            let width = dur;
-            if (arrastre?.idx === i) {
-              if (arrastre.asa === "in") {
-                left = arrastre.ms;
-                width = ini + dur - arrastre.ms;
-              } else {
-                width = arrastre.ms - ini;
-              }
-            }
-            return (
-              <div
-                key={seg.id}
-                data-testid={`segmento-${i}`}
-                className="absolute inset-y-1 overflow-hidden rounded border border-primary/60 bg-primary/15"
-                style={{ left: pct(left), width: pct(width) }}
+      <div className="flex overflow-hidden rounded-md border border-border bg-muted/40">
+        {/* Columna de CABECERAS (fija): etiqueta + controles de cada pista. */}
+        <div className="w-36 shrink-0 border-r border-border/60">
+          {/* Hueco bajo la regla. */}
+          <div className={`${ALTO_REGLA} border-b border-border/60`} />
+
+          {/* Vídeo: etiqueta + cuchilla. */}
+          <div className={`${ALTO_VIDEO} flex flex-col justify-center gap-1 border-b border-border/40 px-2`}>
+            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              Vídeo
+            </span>
+            {onDividirSegmento && (
+              <button
+                type="button"
+                aria-label="Dividir en el cursor"
+                disabled={!puedeDividir}
+                onClick={() => onDividirSegmento(segActivo, Math.round(msLocalCorte))}
+                className="inline-flex w-fit items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-foreground hover:bg-accent/50 disabled:cursor-default disabled:opacity-40"
               >
-                <div className="flex h-full flex-col items-center justify-center gap-1 px-2 text-center">
-                  <span className="pointer-events-none text-[10px] font-medium tabular-nums text-foreground/80">
-                    {formatearDuracionMs(width)}
-                  </span>
-                  {!disabled && (onMoverSegmento || onQuitarSegmento) && (
-                    <div className="flex items-center gap-0.5">
-                      {onMoverSegmento && (
-                        <>
-                          <button
-                            type="button"
-                            aria-label={`Mover segmento ${i + 1} a la izquierda`}
-                            disabled={i === 0}
-                            onClick={() => onMoverSegmento(i, i - 1)}
-                            className="rounded p-0.5 text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-30"
-                          >
-                            <ChevronLeft className="h-3 w-3" />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={`Mover segmento ${i + 1} a la derecha`}
-                            disabled={i === segs.length - 1}
-                            onClick={() => onMoverSegmento(i, i + 1)}
-                            className="rounded p-0.5 text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-30"
-                          >
-                            <ChevronRight className="h-3 w-3" />
-                          </button>
-                        </>
-                      )}
-                      {onQuitarSegmento && (
-                        <button
-                          type="button"
-                          aria-label={`Eliminar segmento ${i + 1}`}
-                          disabled={segs.length <= 1}
-                          onClick={() => onQuitarSegmento(i)}
-                          className="rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-30"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-                {onTrimSegmento && (
+                <Scissors className="h-3 w-3" /> Dividir
+              </button>
+            )}
+          </div>
+
+          {/* Audio (base): silenciar + volumen. */}
+          {onAudioBase && (
+            <div className={`${ALTO_PISTA} flex items-center gap-1 border-b border-border/40 px-2`}>
+              <button
+                type="button"
+                aria-label="Silenciar audio base"
+                aria-pressed={mudoBase}
+                disabled={disabled}
+                onClick={() => onAudioBase({ silenciar: !mudoBase })}
+                className={`rounded p-1 disabled:opacity-40 ${
+                  mudoBase ? "text-destructive" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {mudoBase ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+              </button>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={volBase}
+                disabled={disabled || mudoBase}
+                onChange={(e) => onAudioBase({ volumen: Number(e.target.value) })}
+                className="min-w-0 flex-1 disabled:opacity-40"
+                aria-label="Volumen del audio base"
+              />
+            </div>
+          )}
+
+          {/* Música: controles si hay, «+ Música» si no. */}
+          <div className={`${ALTO_PISTA} flex items-center gap-1 border-b border-border/40 px-2`}>
+            {musica ? (
+              <>
+                {onVolumenMusica && (
                   <>
                     <button
                       type="button"
-                      aria-label={`Recortar inicio del segmento ${i + 1}`}
+                      aria-label="Silenciar música"
+                      aria-pressed={mudoMus}
                       disabled={disabled}
-                      onMouseDown={iniciarTrim(i, "in")}
-                      className="absolute inset-y-0 left-0 z-10 w-2 cursor-ew-resize bg-primary/80 hover:bg-primary disabled:cursor-default disabled:opacity-30"
+                      onClick={() => onVolumenMusica({ silenciar: !mudoMus })}
+                      className={`rounded p-1 disabled:opacity-40 ${
+                        mudoMus ? "text-destructive" : "text-muted-foreground hover:text-foreground"
+                      }`}
                     >
-                      <span className="pointer-events-none mx-auto block h-4 w-0.5 rounded bg-primary-foreground/80" />
+                      {mudoMus ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
                     </button>
-                    <button
-                      type="button"
-                      aria-label={`Recortar fin del segmento ${i + 1}`}
-                      disabled={disabled}
-                      onMouseDown={iniciarTrim(i, "out")}
-                      className="absolute inset-y-0 right-0 z-10 w-2 cursor-ew-resize bg-primary/80 hover:bg-primary disabled:cursor-default disabled:opacity-30"
-                    >
-                      <span className="pointer-events-none mx-auto block h-4 w-0.5 rounded bg-primary-foreground/80" />
-                    </button>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={volMus}
+                      disabled={disabled || mudoMus}
+                      onChange={(e) => onVolumenMusica({ volumen: Number(e.target.value) })}
+                      className="min-w-0 flex-1 disabled:opacity-40"
+                      aria-label="Volumen de la música"
+                    />
                   </>
                 )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Carril 3 · Audio (base): volumen + silenciar. */}
-        {onAudioBase && (
-          <div className="flex items-center gap-2 border-t border-border/40 px-2 py-1.5">
-            <span className="w-16 shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              Audio
-            </span>
-            <button
-              type="button"
-              aria-label="Silenciar audio base"
-              aria-pressed={mudoBase}
-              disabled={disabled}
-              onClick={() => onAudioBase({ silenciar: !mudoBase })}
-              className={`rounded p-1 disabled:opacity-40 ${
-                mudoBase ? "text-destructive" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {mudoBase ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-            </button>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={volBase}
-              disabled={disabled || mudoBase}
-              onChange={(e) => onAudioBase({ volumen: Number(e.target.value) })}
-              className="flex-1 disabled:opacity-40"
-              aria-label="Volumen del audio base"
-            />
-            <span className="w-9 text-right text-[10px] tabular-nums text-muted-foreground">
-              {Math.round(volBase * 100)}%
-            </span>
-          </div>
-        )}
-
-        {/* Carril 4 · Música: controles si hay, «+ Música» si no. */}
-        <div className="flex items-center gap-2 border-t border-border/40 px-2 py-1.5">
-          <span className="w-16 shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Música
-          </span>
-          {musica ? (
-            <>
-              {onVolumenMusica && (
-                <>
+                {onQuitarMusica && (
                   <button
                     type="button"
-                    aria-label="Silenciar música"
-                    aria-pressed={musica.silenciar ?? false}
+                    aria-label="Quitar música"
                     disabled={disabled}
-                    onClick={() => onVolumenMusica({ silenciar: !(musica.silenciar ?? false) })}
-                    className={`rounded p-1 disabled:opacity-40 ${
-                      musica.silenciar ? "text-destructive" : "text-muted-foreground hover:text-foreground"
-                    }`}
+                    onClick={() => onQuitarMusica()}
+                    className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
                   >
-                    {musica.silenciar ? (
-                      <VolumeX className="h-3.5 w-3.5" />
-                    ) : (
-                      <Volume2 className="h-3.5 w-3.5" />
-                    )}
+                    <Trash2 className="h-3.5 w-3.5" />
                   </button>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={musica.volumen ?? VOLUMEN_DEFECTO}
-                    disabled={disabled || (musica.silenciar ?? false)}
-                    onChange={(e) => onVolumenMusica({ volumen: Number(e.target.value) })}
-                    className="flex-1 disabled:opacity-40"
-                    aria-label="Volumen de la música"
-                  />
-                  <span className="w-9 text-right text-[10px] tabular-nums text-muted-foreground">
-                    {Math.round((musica.volumen ?? VOLUMEN_DEFECTO) * 100)}%
-                  </span>
-                </>
-              )}
-              {onQuitarMusica && (
+                )}
+              </>
+            ) : (
+              onAnadirMusica && (
                 <button
                   type="button"
-                  aria-label="Quitar música"
+                  aria-label="Añadir música"
                   disabled={disabled}
-                  onClick={() => onQuitarMusica()}
-                  className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+                  onClick={() => onAnadirMusica()}
+                  className="inline-flex items-center gap-1 rounded border border-dashed border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-40"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <Plus className="h-3 w-3" />
+                  <Music className="h-3 w-3" /> Música
                 </button>
-              )}
-            </>
-          ) : (
-            onAnadirMusica && (
-              <button
-                type="button"
-                aria-label="Añadir música"
-                disabled={disabled}
-                onClick={() => onAnadirMusica()}
-                className="inline-flex items-center gap-1 rounded border border-dashed border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-40"
-              >
-                <Plus className="h-3 w-3" />
-                <Music className="h-3 w-3" /> Música
-              </button>
-            )
+              )
+            )}
+          </div>
+
+          {/* PiP / subtítulos: etiqueta de la pista informativa. */}
+          {hayBarras && (
+            <div className={`${ALTO_BARRAS} flex items-center px-2`}>
+              <span className="text-[9px] uppercase tracking-wide text-muted-foreground">PiP · Subs</span>
+            </div>
           )}
         </div>
 
-        {/* Carril 5 · PiP y subtítulos: barras finas SOLO LECTURA. */}
-        {(barPip || segsSub.length > 0) && (
-          <div className="pointer-events-none flex flex-col gap-1 border-t border-border/40 px-0 py-1.5">
-            {barPip && (
-              <div className="relative mx-2 h-1.5">
+        {/* VIEWPORT con scroll horizontal: el eje escala con el zoom. */}
+        <div className="flex-1 overflow-x-auto">
+          <div
+            ref={ejeRef}
+            aria-label="Pistas de la composición"
+            className="relative"
+            style={{ width: `${zoom * 100}%`, minWidth: "100%" }}
+          >
+            {/* Carril 1 · Regla con marcas de tiempo (scrub al pulsar). */}
+            <div
+              onMouseDown={iniciarScrub}
+              aria-label="Regla de tiempo"
+              className={`relative ${ALTO_REGLA} cursor-pointer touch-none border-b border-border/60`}
+            >
+              {marcas.map((ms) => (
                 <div
-                  title="PiP"
-                  aria-label="Barra de PiP"
-                  className="absolute inset-y-0 rounded-full bg-sky-400/70"
-                  style={{ left: pct(barPip.ini), width: pct(Math.max(0, barPip.fin - barPip.ini)) }}
-                />
-              </div>
-            )}
-            {segsSub.length > 0 && (
-              <div className="relative mx-2 h-1.5" aria-label="Barra de subtítulos">
-                {segsSub.map((s) => (
-                  <div
-                    key={s.id}
-                    title={s.texto}
-                    className="absolute inset-y-0 rounded-full bg-amber-400/70"
-                    style={{
-                      left: pct(s.inicio * 1000),
-                      width: pct(Math.max(0, (s.fin - s.inicio) * 1000)),
-                    }}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+                  key={ms}
+                  className="pointer-events-none absolute top-0 h-full border-l border-border/60"
+                  style={{ left: pct(ms) }}
+                >
+                  <span className="ml-0.5 text-[9px] tabular-nums leading-5 text-muted-foreground">
+                    {formatearDuracionMs(ms)}
+                  </span>
+                </div>
+              ))}
+            </div>
 
-        {/* Playhead: línea vertical sobre todos los carriles + cabeza arrastrable (role=slider). */}
-        <div
-          className="pointer-events-none absolute bottom-0 top-0 z-10 w-px bg-red-500"
-          style={{ left: pct(tiempoMs) }}
-        />
-        <div
-          role="slider"
-          tabIndex={0}
-          aria-label="Cursor de reproducción"
-          aria-valuemin={0}
-          aria-valuemax={Math.round(axisTotal / 1000)}
-          aria-valuenow={Math.round(Math.min(tiempoSeg, axisTotal / 1000))}
-          aria-valuetext={`${formatearDuracionMs(tiempoMs)} de ${formatearDuracionMs(axisTotal)}`}
-          onMouseDown={(e) => {
-            e.stopPropagation();
-            iniciarScrub(e);
-          }}
-          onKeyDown={onTeclaPlayhead}
-          className="absolute top-0 z-20 flex h-5 w-3 -translate-x-1/2 cursor-ew-resize items-start justify-center outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          style={{ left: pct(tiempoMs) }}
-        >
-          <span className="mt-0.5 block h-2.5 w-2.5 rounded-sm bg-red-500 shadow" />
+            {/* Carril 2 · Vídeo: segmentos consecutivos. */}
+            <div className={`relative ${ALTO_VIDEO} border-b border-border/40`}>
+              {segs.map((seg, i) => {
+                const rIn = seg.recorte_in_ms ?? 0;
+                const rOut = seg.recorte_out_ms || seg.fin_ms || 0;
+                const dur = Math.max(0, rOut - rIn);
+                const ini = offsets[i];
+                let left = ini;
+                let width = dur;
+                if (arrastre?.idx === i) {
+                  if (arrastre.asa === "in") {
+                    left = arrastre.ms;
+                    width = ini + dur - arrastre.ms;
+                  } else {
+                    width = arrastre.ms - ini;
+                  }
+                }
+                return (
+                  <div
+                    key={seg.id}
+                    data-testid={`segmento-${i}`}
+                    className="absolute inset-y-1 overflow-hidden rounded border border-primary/60 bg-primary/15"
+                    style={{ left: pct(left), width: pct(width) }}
+                  >
+                    <div className="flex h-full flex-col items-center justify-center gap-1 px-2 text-center">
+                      <span className="pointer-events-none text-[10px] font-medium tabular-nums text-foreground/80">
+                        {formatearDuracionMs(width)}
+                      </span>
+                      {!disabled && (onMoverSegmento || onQuitarSegmento) && (
+                        <div className="flex items-center gap-0.5">
+                          {onMoverSegmento && (
+                            <>
+                              <button
+                                type="button"
+                                aria-label={`Mover segmento ${i + 1} a la izquierda`}
+                                disabled={i === 0}
+                                onClick={() => onMoverSegmento(i, i - 1)}
+                                className="rounded p-0.5 text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-30"
+                              >
+                                <ChevronLeft className="h-3 w-3" />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`Mover segmento ${i + 1} a la derecha`}
+                                disabled={i === segs.length - 1}
+                                onClick={() => onMoverSegmento(i, i + 1)}
+                                className="rounded p-0.5 text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-30"
+                              >
+                                <ChevronRight className="h-3 w-3" />
+                              </button>
+                            </>
+                          )}
+                          {onQuitarSegmento && (
+                            <button
+                              type="button"
+                              aria-label={`Eliminar segmento ${i + 1}`}
+                              disabled={segs.length <= 1}
+                              onClick={() => onQuitarSegmento(i)}
+                              className="rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-30"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {onTrimSegmento && (
+                      <>
+                        <button
+                          type="button"
+                          aria-label={`Recortar inicio del segmento ${i + 1}`}
+                          disabled={disabled}
+                          onMouseDown={iniciarTrim(i, "in")}
+                          className="absolute inset-y-0 left-0 z-10 w-2 cursor-ew-resize bg-primary/80 hover:bg-primary disabled:cursor-default disabled:opacity-30"
+                        >
+                          <span className="pointer-events-none mx-auto block h-4 w-0.5 rounded bg-primary-foreground/80" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Recortar fin del segmento ${i + 1}`}
+                          disabled={disabled}
+                          onMouseDown={iniciarTrim(i, "out")}
+                          className="absolute inset-y-0 right-0 z-10 w-2 cursor-ew-resize bg-primary/80 hover:bg-primary disabled:cursor-default disabled:opacity-30"
+                        >
+                          <span className="pointer-events-none mx-auto block h-4 w-0.5 rounded bg-primary-foreground/80" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Carril 3 · Audio (base): pista propia (barra a lo largo de todo el eje). */}
+            {onAudioBase && (
+              <div className={`relative ${ALTO_PISTA} border-b border-border/40`}>
+                <div
+                  aria-label="Pista de audio base"
+                  data-silenciado={mudoBase}
+                  title={mudoBase ? "Audio base silenciado" : `Audio base · volumen ${Math.round(volBase * 100)}%`}
+                  className={`absolute inset-y-1 flex items-center overflow-hidden rounded px-2 ${
+                    mudoBase ? "bg-sky-400/25 ring-1 ring-inset ring-sky-400/40" : "bg-sky-400/50"
+                  }`}
+                  style={{ left: pct(0), width: pct(axisTotal) }}
+                >
+                  <span className="truncate text-[10px] font-medium text-sky-950/80">
+                    {mudoBase ? "Audio · silenciado" : `Audio · ${Math.round(volBase * 100)}%`}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Carril 4 · Música: barra de su tramo (si hay). */}
+            <div className={`relative ${ALTO_PISTA} border-b border-border/40`}>
+              {barMusica && (
+                <div
+                  aria-label="Pista de música"
+                  data-silenciado={mudoMus}
+                  title={mudoMus ? "Música silenciada" : `Música · volumen ${Math.round(volMus * 100)}%`}
+                  className={`absolute inset-y-1 flex items-center overflow-hidden rounded px-2 ${
+                    mudoMus ? "bg-violet-400/15 ring-1 ring-inset ring-violet-400/30" : "bg-violet-400/50"
+                  }`}
+                  style={{ left: pct(barMusica.ini), width: pct(Math.max(0, barMusica.fin - barMusica.ini)) }}
+                >
+                  <span className="truncate text-[10px] font-medium text-violet-950/80">
+                    {mudoMus ? "Música · silenciada" : `Música · ${Math.round(volMus * 100)}%`}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Carril 5 · PiP y subtítulos: barras finas SOLO LECTURA. */}
+            {hayBarras && (
+              <div className={`pointer-events-none flex ${ALTO_BARRAS} flex-col justify-center gap-1`}>
+                {barPip && (
+                  <div className="relative h-1.5">
+                    <div
+                      title="PiP"
+                      aria-label="Barra de PiP"
+                      className="absolute inset-y-0 rounded-full bg-sky-400/70"
+                      style={{ left: pct(barPip.ini), width: pct(Math.max(0, barPip.fin - barPip.ini)) }}
+                    />
+                  </div>
+                )}
+                {segsSub.length > 0 && (
+                  <div className="relative h-1.5" aria-label="Barra de subtítulos">
+                    {segsSub.map((s) => (
+                      <div
+                        key={s.id}
+                        title={s.texto}
+                        className="absolute inset-y-0 rounded-full bg-amber-400/70"
+                        style={{
+                          left: pct(s.inicio * 1000),
+                          width: pct(Math.max(0, (s.fin - s.inicio) * 1000)),
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Playhead: línea vertical sobre todos los carriles + cabeza arrastrable (role=slider). */}
+            <div
+              className="pointer-events-none absolute inset-y-0 z-10 w-px bg-red-500"
+              style={{ left: pct(tiempoMs) }}
+            />
+            <div
+              role="slider"
+              tabIndex={0}
+              aria-label="Cursor de reproducción"
+              aria-valuemin={0}
+              aria-valuemax={Math.round(axisTotal / 1000)}
+              aria-valuenow={Math.round(Math.min(tiempoSeg, axisTotal / 1000))}
+              aria-valuetext={`${formatearDuracionMs(tiempoMs)} de ${formatearDuracionMs(axisTotal)}`}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                iniciarScrub(e);
+              }}
+              onKeyDown={onTeclaPlayhead}
+              className="absolute top-0 z-20 flex h-5 w-3 -translate-x-1/2 cursor-ew-resize items-start justify-center outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              style={{ left: pct(tiempoMs) }}
+            >
+              <span className="mt-0.5 block h-2.5 w-2.5 rounded-sm bg-red-500 shadow" />
+            </div>
+          </div>
         </div>
       </div>
     </div>

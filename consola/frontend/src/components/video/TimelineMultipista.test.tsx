@@ -5,12 +5,13 @@
  *  - Playhead accesible (role=slider): flechas ±1 s, Shift ±5 s.
  *  - Cuchilla: divide en el playhead → onDividirSegmento(idx, msLocal).
  *  - Asas de trim: arrastrar fija recorte_in/out_ms del segmento (commit al soltar).
- *  - Audio base: el toggle de silenciar llama onAudioBase({silenciar}).
- *  - Música: «+ Música» (sin música) llama onAnadirMusica; con música hay controles.
+ *  - Audio base: pista separada (barra a lo largo del eje) + toggle de silenciar.
+ *  - Música: «+ Música» (sin música) llama onAnadirMusica; con música hay controles y barra.
+ *  - Zoom: los botones cambian el ancho del eje y los gestos siguen correctos al ancho escalado.
  *  - `disabled` apaga la edición; el seek sigue activo.
  *
  * jsdom no tiene layout: posiciones por estilo (% sobre el eje) y gestos que mockean el
- * `getBoundingClientRect` del eje (100px de ancho = todo el tiempo de salida).
+ * `getBoundingClientRect` del eje (su ancho en px = todo el tiempo de salida).
  */
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
@@ -18,6 +19,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   composicionVacia,
   dividirClipBase,
+  setAudioBase,
   setClipBase,
   setMusica,
   type ComposicionVideo,
@@ -143,6 +145,60 @@ describe("TimelineMultipista", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /silenciar audio base/i }));
     expect(onAudioBase).toHaveBeenCalledWith({ silenciar: true });
+  });
+
+  it("muestra el audio base como pista separada (barra a lo largo de todo el eje)", () => {
+    render(
+      <TimelineMultipista doc={doc30()} tiempoSeg={0} onSeek={() => {}} onAudioBase={() => {}} />,
+    );
+    const barra = screen.getByLabelText("Pista de audio base");
+    expect(barra.style.left).toBe("0%");
+    expect(barra.style.width).toBe("100%");
+    expect(barra).toHaveAttribute("data-silenciado", "false");
+  });
+
+  it("la barra de audio refleja el silencio del clip base", () => {
+    const doc = setAudioBase(doc30(), { silenciar: true });
+    render(<TimelineMultipista doc={doc} tiempoSeg={0} onSeek={() => {}} onAudioBase={() => {}} />);
+    expect(screen.getByLabelText("Pista de audio base")).toHaveAttribute("data-silenciado", "true");
+  });
+
+  it("con música muestra su pista (barra) además de los controles", () => {
+    const doc = setMusica(doc30(), "videos/song.mp4", 30000);
+    render(
+      <TimelineMultipista doc={doc} tiempoSeg={0} onSeek={() => {}} onVolumenMusica={() => {}} />,
+    );
+    const barra = screen.getByLabelText("Pista de música");
+    expect(barra.style.left).toBe("0%");
+    expect(barra.style.width).toBe("100%");
+  });
+
+  it("el zoom cambia el ancho del eje y conserva los gestos al ancho escalado", () => {
+    const onSeek = vi.fn();
+    render(<TimelineMultipista doc={doc30()} tiempoSeg={0} onSeek={onSeek} />);
+    const eje = screen.getByLabelText("Pistas de la composición");
+    // De partida el eje ajusta al viewport (100%); acercar/alejar lo escalan.
+    expect(eje.style.width).toBe("100%");
+    fireEvent.click(screen.getByRole("button", { name: /^acercar$/i }));
+    expect(parseFloat(eje.style.width)).toBeGreaterThan(100);
+    // Gestos correctos al ancho REAL escalado: con el eje a 200px, scrub en x=100 = 50% = 15 s.
+    vi.spyOn(eje, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      width: 200,
+      height: 200,
+      right: 200,
+      bottom: 200,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    fireEvent.mouseDown(screen.getByLabelText("Regla de tiempo"), { clientX: 100 });
+    expect(onSeek).toHaveBeenLastCalledWith(15);
+    fireEvent.mouseUp(window);
+    // «Ajustar» vuelve a encajar (100%).
+    fireEvent.click(screen.getByRole("button", { name: /ajustar zoom/i }));
+    expect(eje.style.width).toBe("100%");
   });
 
   it("«+ Música» llama onAnadirMusica cuando no hay música", () => {
