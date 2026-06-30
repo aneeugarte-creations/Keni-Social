@@ -639,6 +639,36 @@ export interface PipelineGeneracion {
   metricas: MetricasRun | null;
 }
 
+/** Una generación concreta dentro de una etapa de la línea de tiempo (cronológico, para expandir
+ *  intento a intento). `coste_usd`/`tokens` son `null` si la generación no los registró. */
+export interface LineaTiempoGen {
+  gen_id: string;
+  estado: string;
+  fecha: string;
+  coste_usd: number | null;
+  tokens: number | null;
+}
+
+/** Una entrada por ETAPA de la línea de tiempo unificada de un post: TODA la actividad real del
+ *  mismo `publicacion_id` con los reintentos COLAPSADOS (una entrada por etapa+post). La lista ya
+ *  viene ORDENADA por el flujo del pipeline; `fase_previa=true` marca lo ocurrido ANTES del tablero
+ *  (pool, a nivel marca). "Decisor · 3 intentos · Error" se arma de `etapa`+`intentos`+`estado_final`. */
+export interface LineaTiempoEtapa {
+  /** Etiqueta legible de la etapa (Recolectar, Fusionar, Decisor, Admitir, …). */
+  etapa: string;
+  /** Nº de generaciones colapsadas de esa etapa+post. */
+  intentos: number;
+  /** Estado de la última generación (terminal de la etapa). */
+  estado_final: string;
+  ultima_gen_id: string;
+  primera_fecha: string;
+  ultima_fecha: string;
+  /** `true` = antes del tablero (pool, nivel marca). */
+  fase_previa: boolean;
+  /** Generaciones en orden cronológico, para expandir intento a intento. */
+  generaciones: LineaTiempoGen[];
+}
+
 export interface RespuestaPipelineDetalle {
   pipeline: Pipeline;
   actividad: PipelineActividad[];
@@ -647,6 +677,9 @@ export interface RespuestaPipelineDetalle {
   /** Plantilla del prompt de cada etapa IA (para enseñar el prompt de entrada aunque no haya
    *  corrido aún; cuando corre, se prefiere el prompt real de la generación). */
   prompts_por_etapa?: Record<string, string>;
+  /** Línea de tiempo unificada por post: TODA la actividad real (incl. el Decisor) por etapa, con
+   *  los reintentos colapsados; ya ordenada por el flujo del pipeline. Aditivo. */
+  linea_tiempo?: LineaTiempoEtapa[];
 }
 
 // ── Ajustes de funcionalidad (admin, toggles + tuning en caliente) ──────────
