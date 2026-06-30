@@ -1,9 +1,9 @@
 {
-  "version": "0.4.0",
-  "notes": "Conexión de la cámara: la app detecta si el servidor SFTP está activo y te muestra los datos (IP, puerto, usuario, carpeta) para configurar la transferencia desde la cámara en el modo en vivo.",
+  "version": "0.5.0",
+  "notes": "Fases más fiables: la separación pre/in/post-partido ya no se descoloca por un disparo suelto de teleobjetivo en el calentamiento o el post-partido. La ventana de juego se calcula sobre el bloque denso de acción, no sobre sus extremos.",
   "pub_date": "2026-06-30T00:00:00Z",
   "darwin-aarch64": {
-    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcFp4blQzaU5Gd3Vwc3B4QlNOQzgvR0MxOEMzaXdqYXAyK3pZYTlBZzZQU0ZqUFVmd2lUN0xyc2pLVHNETTRWeUZmSWRXNlFaeHRud1pLQlNma0N4d0F3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyODM2MjQ3CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6Cm50WExFYW8xdklzMUdHMUg2ODl6czVrQ2I3bTQ0SmV2c0YzQzh0dDJpc3VJRC9UTFpFREdjaTlUZ3pnWGlzRU43cW5tbjJjajIweXVaUWtEeGNKSUJRPT0K",
+    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcGQyVEsyWDdORzA1aXNFSjg1cXBUa3BrN08yZU9yWkxiSGFkRTE4dno2N2FMS3NYQ1lRL0d4WG9sWHpUOUF4OGR2NGU1c0N4WUZTYXgxWG9iZW5VZ3djPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyODM5MzcxCWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6CllrQnhIR1E2MmRiUXJlamN5TGFKMjFLYzYvR1N6QUt4b0RCSzJnRlg5d3dwblpERjFvTU5NSGpCMldTWE1PUmhsNE13NDgrcTdld0tkdzZ2NzZEZ0RRPT0K",
     "url": "https://social.kenitech.io/api/fotos/updater"
   }
 }
