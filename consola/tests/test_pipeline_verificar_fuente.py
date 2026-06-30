@@ -72,10 +72,10 @@ def test_lanzar_verificacion_cluster_enlaza_generacion_y_marca_en_curso(entorno)
 
 
 def test_verificacion_cluster_persiste_veredicto_verificado(entorno):
-    """Una verificación 🟢 sin hallazgos -> verificación `verificado` persistido en el cluster."""
+    """Una verificación `verificado` sin hallazgos -> se persiste `verificado` en el cluster."""
     salida = (
-        "🟢 Fuente apta.\n\n"
-        '```json\n{"veredicto": "🟢", "resumen": "OK", "hallazgos": []}\n```\n'
+        "Fuente apta.\n\n"
+        '```json\n{"veredicto": "verificado", "resumen": "OK", "hallazgos": []}\n```\n'
     )
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(salida))  # noqa: F841
     cluster = _cluster()
@@ -86,10 +86,10 @@ def test_verificacion_cluster_persiste_veredicto_verificado(entorno):
 
 
 def test_verificacion_cluster_persiste_veredicto_rechazado(entorno):
-    """Una verificación 🔴 con hallazgo de error -> verificación `rechazado` + hallazgos persistidos."""
+    """Una verificación `rechazado` con hallazgo de error -> `rechazado` + hallazgos persistidos."""
     salida = (
-        "🔴 Problema de peso.\n\n"
-        '```json\n{"veredicto": "🔴", "resumen": "Dato falso", '
+        "Problema de peso.\n\n"
+        '```json\n{"veredicto": "rechazado", "resumen": "Dato falso", '
         '"hallazgos": [{"tipo": "dato", "gravedad": "error", "explicacion": "inventado"}]}\n```\n'
     )
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(salida))  # noqa: F841

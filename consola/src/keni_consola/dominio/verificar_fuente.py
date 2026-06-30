@@ -27,28 +27,8 @@ PROMPT_ID = "revision"
 _TIPOS = frozenset({"ortografia", "dato", "legal", "voz"})
 _GRAVEDADES = frozenset({"error", "aviso"})
 
-# Mapa del simbolo de semaforo (🟢/🟡/🔴) al verificacion interno estable, equivalente al
-# ✅/⚠️/❌ del resto del producto (`stream._VEREDICTO_POR_SIMBOLO`).
-_VERIFICACION_POR_SEMAFORO = {"🟢": "listo", "🟡": "revisar", "🔴": "no_publicar"}
-
 # Tope defensivo de hallazgos que devolvemos (evita una salida abusiva del modelo).
 _MAX_HALLAZGOS = 200
-
-
-def _verificacion_de_texto(texto: str) -> str:
-    """Deriva el verificacion del informe: primero el semaforo 🟢/🟡/🔴, luego ✅/⚠️/❌.
-
-    El prompt abre con la linea de semaforo (🟢/🟡/🔴); si por lo que sea saliera con los
-    simbolos clasicos, `stream.derivar_verdicto` los cubre. Devuelve "" si no hay ninguno.
-    """
-    for linea in texto.splitlines():
-        if not linea.strip():
-            continue
-        for simbolo, valor in _VERIFICACION_POR_SEMAFORO.items():
-            if simbolo in linea:
-                return valor
-        return stream.derivar_verdicto(texto)
-    return ""
 
 
 def _hallazgo_limpio(crudo: object) -> dict[str, object] | None:
@@ -86,15 +66,15 @@ def parsear_informe(salida: str) -> dict[str, object]:
     """Parsea la salida del prompt en un INFORME estructurado para la UI.
 
     Localiza el ULTIMO bloque ```json cercado (igual criterio que `stream.parsear_salida`)
-    y mapea `verificación`/`resumen`/`hallazgos`. El `informe_texto` es el documento legible
-    SIN ese bloque json y sin emojis del cuerpo (el verificacion se deriva ANTES de limpiar, asi
-    no se pierde el simbolo). Degradacion robusta: si no hay JSON valido, `hallazgos=[]` y el
-    informe queda como el texto completo (el verificación nunca se rompe por un formato inesperado).
+    y mapea `resumen`/`hallazgos`. El `informe_texto` es el documento legible SIN ese bloque
+    json y sin emojis del cuerpo. Degradacion robusta: si no hay JSON valido, `hallazgos=[]` y
+    el informe queda como el texto completo (el verificación nunca se rompe por un formato
+    inesperado). El veredicto NO se decide aquí: lo colapsa `parsear_verificacion_fuente` desde
+    el slug del JSON.
 
-    Devuelve `{verificacion, resumen, hallazgos: [...], informe_texto}`.
+    Devuelve `{resumen, hallazgos: [...], informe_texto}`.
     """
     salida = salida or ""
-    verificacion = _verificacion_de_texto(salida)
 
     coincidencias = list(stream._RE_BLOQUE_JSON.finditer(salida))
     datos: object = None
@@ -111,13 +91,6 @@ def parsear_informe(salida: str) -> dict[str, object]:
     hallazgos: list[dict[str, object]] = []
     resumen = ""
     if isinstance(datos, dict):
-        # El verificacion del JSON (semaforo) tiene prioridad si lo trae; si no, el de la 1a linea.
-        v = datos.get("veredicto")
-        if isinstance(v, str):
-            for simbolo, valor in _VERIFICACION_POR_SEMAFORO.items():
-                if simbolo in v:
-                    verificacion = valor
-                    break
         r = datos.get("resumen")
         if isinstance(r, str):
             resumen = r.strip()[:500]
@@ -129,7 +102,6 @@ def parsear_informe(salida: str) -> dict[str, object]:
                     hallazgos.append(limpio)
 
     return {
-        "verificacion_fuente": verificacion,
         "resumen": resumen,
         "hallazgos": hallazgos,
         "informe_texto": stream.quitar_emojis(texto_sin_json).strip(),
@@ -153,7 +125,7 @@ VERIFICACION_REQUIERE_HUMANO = "requiere_humano"
 VERIFICACION_RECHAZADO = "rechazado"
 
 # CONTRATO del prompt de fuente (`prompt/verificar`): el campo JSON `veredicto` va en slug ASCII
-# ("verificado" | "requiere_humano" | "rechazado"); acepta también el semáforo 🟢/🟡/🔴.
+# ("verificado" | "requiere_humano" | "rechazado").
 _FUENTE_SLUG_VERIFICADO = "verificado"
 _FUENTE_SLUG_REQUIERE_HUMANO = "requiere_humano"
 _FUENTE_SLUG_RECHAZADO = "rechazado"
@@ -163,8 +135,8 @@ _FUENTE_SLUGS = (_FUENTE_SLUG_VERIFICADO, _FUENTE_SLUG_REQUIERE_HUMANO, _FUENTE_
 def _slug_verificacion_fuente(salida: str) -> str:
     """Slug del ÚLTIMO bloque ```json de la verificación de FUENTE: uno de `_FUENTE_SLUGS` o "".
 
-    Acepta el slug ASCII del contrato y el semáforo 🟢/🟡/🔴. Cualquier otro valor (o sin
-    bloque/clave) devuelve "" y el llamante lo trata como `requiere_humano` (fail-closed). PURO.
+    Lee el slug ASCII del campo `veredicto`. Cualquier otro valor (o sin bloque/clave) devuelve
+    "" y el llamante lo trata como `requiere_humano` (fail-closed). PURO.
     """
     coincidencias = list(stream._RE_BLOQUE_JSON.finditer(salida or ""))
     if not coincidencias:
@@ -178,12 +150,6 @@ def _slug_verificacion_fuente(salida: str) -> str:
     v = datos.get("veredicto")
     if not isinstance(v, str):
         return ""
-    if "🔴" in v:
-        return _FUENTE_SLUG_RECHAZADO
-    if "🟡" in v:
-        return _FUENTE_SLUG_REQUIERE_HUMANO
-    if "🟢" in v:
-        return _FUENTE_SLUG_VERIFICADO
     v = v.strip().lower()
     return v if v in _FUENTE_SLUGS else ""
 
@@ -191,16 +157,16 @@ def _slug_verificacion_fuente(salida: str) -> str:
 def parsear_verificacion_fuente(salida: str) -> dict[str, object]:
     """Parsea la salida de la verificación de la FUENTE en un verificación ESTRUCTURADO fail-closed.
 
-    Reusa `parsear_informe` (mismo formato ```json con `verificación`/`resumen`/`hallazgos`), pero
-    COLAPSA el verificación a TRES valores de FUENTE:
-      - `rechazado` si el JSON dice "rechazado"/🔴 O trae algún hallazgo de gravedad `error` (algo
-        de peso en contra),
-      - `verificado` (CONFIRMADA) SOLO si el JSON dice "verificado"/🟢 y NO hay hallazgo de peso,
-      - `requiere_humano` en CUALQUIER otro caso: "requiere_humano"/🟡, formato inesperado, valor
+    Reusa `parsear_informe` (mismo formato ```json con `resumen`/`hallazgos`) y COLAPSA el
+    veredicto del slug JSON a TRES valores de FUENTE:
+      - `rechazado` si el slug es "rechazado" O hay algún hallazgo de gravedad `error` (algo de
+        peso en contra),
+      - `verificado` (CONFIRMADA) SOLO si el slug es "verificado" y NO hay hallazgo de peso,
+      - `requiere_humano` en CUALQUIER otro caso: slug "requiere_humano", formato inesperado, valor
         basura, salida vacía o timeout. FAIL-CLOSED: sin verificación positiva ni rechazo claro, al humano.
 
-    Devuelve `{verificacion, resumen, hallazgos: [...], informe_texto}` (mismas claves que
-    `parsear_informe`, con `verificacion` ya colapsado a los tres valores de FUENTE). PURO.
+    Devuelve `{verificacion_fuente, resumen, hallazgos: [...], informe_texto}` (las claves de
+    `parsear_informe` + `verificacion_fuente` colapsado a los tres valores de FUENTE). PURO.
     """
     informe = parsear_informe(salida)
     hallazgos = informe.get("hallazgos")

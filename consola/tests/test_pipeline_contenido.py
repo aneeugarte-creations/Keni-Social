@@ -27,14 +27,14 @@ from .conftest import _cliente, lanzador_generacion_completa
 
 _URL_OK = "https://ejemplo.test/feed.xml"
 
-# Salidas canned de Verificar la fuente (semáforo + bloque json estructurado).
+# Salidas canned de Verificar la fuente (bloque json estructurado con el slug del veredicto).
 _VERIFICACION_OK = (
-    "🟢 Fuente apta.\n\n"
-    '```json\n{"veredicto": "🟢", "resumen": "Sin problemas de peso", "hallazgos": []}\n```\n'
+    "Fuente apta.\n\n"
+    '```json\n{"veredicto": "verificado", "resumen": "Sin problemas de peso", "hallazgos": []}\n```\n'
 )
 _VERIFICACION_RECHAZADO = (
-    "🔴 Problema de peso.\n\n"
-    '```json\n{"veredicto": "🔴", "resumen": "Dato falso evidente", '
+    "Problema de peso.\n\n"
+    '```json\n{"veredicto": "rechazado", "resumen": "Dato falso evidente", '
     '"hallazgos": [{"tipo": "dato", "gravedad": "error", "fragmento": "x", '
     '"explicacion": "es falso", "sugerencia": "no publicar"}]}\n```\n'
 )

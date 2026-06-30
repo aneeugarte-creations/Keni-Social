@@ -1,10 +1,10 @@
 """Tests del veredicto de la verificación de la FUENTE (`dominio.verificar_fuente.parsear_verificacion_fuente`).
 
 PURO (sin Postgres ni claude). El contrato del prompt pide el campo JSON `veredicto` en slug ASCII
-("verificado" | "requiere_humano" | "rechazado"); el parser acepta TAMBIÉN el semáforo 🟢/🟡/🔴.
-Es FAIL-CLOSED de 3 niveles: solo una verificación POSITIVA (`verificado`/🟢, sin hallazgo de peso)
-pasa; solo un problema de PESO (`rechazado`/🔴 o un hallazgo `error`) rechaza; cualquier otra cosa
-—`requiere_humano`/🟡, vacío, malformado, timeout, slug irreconocible— cae a `requiere_humano`.
+("verificado" | "requiere_humano" | "rechazado"). Es FAIL-CLOSED de 3 niveles: solo una verificación
+POSITIVA (`verificado`, sin hallazgo de peso) pasa; solo un problema de PESO (`rechazado` o un
+hallazgo `error`) rechaza; cualquier otra cosa —`requiere_humano`, vacío, malformado, timeout, slug
+irreconocible— cae a `requiere_humano`.
 """
 
 from __future__ import annotations
@@ -40,11 +40,11 @@ def test_slug_tolera_mayusculas_y_espacios():
     assert verificar.parsear_verificacion_fuente(_salida("  Rechazado "))["verificacion_fuente"] == verificar.VERIFICACION_RECHAZADO
 
 
-def test_emoji_semaforo():
-    # El semáforo en el campo `veredicto` del JSON mapea a los tres niveles.
-    assert verificar.parsear_verificacion_fuente(_salida("🟢", linea="🟢 Confirmada."))["verificacion_fuente"] == verificar.VERIFICACION_VERIFICADO
-    assert verificar.parsear_verificacion_fuente(_salida("🟡"))["verificacion_fuente"] == verificar.VERIFICACION_REQUIERE_HUMANO
-    assert verificar.parsear_verificacion_fuente(_salida("🔴"))["verificacion_fuente"] == verificar.VERIFICACION_RECHAZADO
+def test_veredicto_emoji_no_es_slug_valido():
+    # El campo `veredicto` ya no acepta emojis: un semáforo no es un slug reconocible, así que
+    # cae a `requiere_humano` (fail-closed). El veredicto se lee SOLO del slug ASCII.
+    assert verificar.parsear_verificacion_fuente(_salida("🟢"))["verificacion_fuente"] == verificar.VERIFICACION_REQUIERE_HUMANO
+    assert verificar.parsear_verificacion_fuente(_salida("🔴"))["verificacion_fuente"] == verificar.VERIFICACION_REQUIERE_HUMANO
 
 
 def test_hallazgo_error_fuerza_rechazado():
@@ -53,9 +53,9 @@ def test_hallazgo_error_fuerza_rechazado():
     assert informe["verificacion_fuente"] == verificar.VERIFICACION_RECHAZADO
 
 
-def test_slug_del_json_manda_sobre_la_linea_de_semaforo():
-    # El JSON es el contrato; una línea 🔴 humana contradictoria no fuerza el rechazo si el JSON
-    # dice "verificado" (mismo criterio de prioridad que el resto del parseo del informe).
+def test_prosa_con_emoji_no_afecta_al_slug():
+    # El veredicto se lee SOLO del slug del JSON; un emoji suelto en la prosa del informe es
+    # ruido y no contradice un "verificado" del contrato.
     informe = verificar.parsear_verificacion_fuente(_salida("verificado", linea="🔴 ¿seguro?"))
     assert informe["verificacion_fuente"] == verificar.VERIFICACION_VERIFICADO
 

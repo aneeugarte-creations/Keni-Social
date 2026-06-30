@@ -176,7 +176,7 @@ VERIFICACION_RECHAZADO = dom_verificar.VERIFICACION_RECHAZADO  # ❗ falso/sáti
 # ORIGEN (no el copy, que aún no existe) ANTES de auto-producir. Es FAIL-CLOSED: confirma SOLO lo
 # que corrobora con la web; lo no confirmable va a revisión humana (`requiere_humano`) y solo lo
 # falso/de peso se rechaza (`rechazado`). El campo JSON `veredicto` va en slug ASCII
-# ("verificado"|"requiere_humano"|"rechazado"); el semáforo 🟢/🟡/🔴 queda como línea humana.
+# ("verificado"|"requiere_humano"|"rechazado").
 _DEFAULT_VERIFICACION_CRITERIOS = """\
 Eres el verificador editorial de AMX Contenido. En el bloque CONTEXTO tienes una historia (título,
 resumen y los enlaces de sus fuentes). Si la verificas, la máquina genera el copy y lo encola para
@@ -188,20 +188,15 @@ con fuentes fiables; si NO puedes confirmarlo, a revisión humana; rechaza solo 
 con un problema legal/ético de peso. Ante la duda, revisión humana. Respeta las reglas de la LÍNEA
 EDITORIAL adjunta.
 
-## Veredicto
-
-Primera línea, solo el semáforo: 🟢 (confirmada) · 🟡 (no confirmada, a revisión humana) · 🔴 (falsa
-o con un problema de peso).
-
 ## Salida
 
-Tras el semáforo, cierra con un bloque ```json con la forma:
+Responde con un único bloque ```json con la forma:
 {"veredicto": "verificado", "resumen": "una frase",
  "hallazgos": [{"tipo": "dato|legal|voz", "gravedad": "error|aviso",
                 "fragmento": "...", "explicacion": "...", "sugerencia": "..."}]}
 El campo "veredicto" va SIEMPRE en slug ASCII: "verificado" (confirmada), "requiere_humano" (no
-confirmada) o "rechazado" (de peso). El semáforo 🟢/🟡/🔴 es solo la línea humana, NO un valor del
-JSON. Usa gravedad "error" SOLO para lo de peso (lo que hace "rechazado"). Sin emojis en el JSON.
+confirmada) o "rechazado" (de peso). Usa gravedad "error" SOLO para lo de peso (lo que hace
+"rechazado"). Sin emojis en el cuerpo ni en el JSON.
 """
 
 

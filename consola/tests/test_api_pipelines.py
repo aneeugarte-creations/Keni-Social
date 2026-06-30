@@ -550,7 +550,7 @@ def test_problemas_lista_temas_bloqueados(cliente):
 
 
 def test_problemas_verificacion_roja_es_validacion(cliente):
-    """Un 🔴 de la propia verificación (hallazgo no-sistema) se atribuye a la etapa Verificar."""
+    """Un `rechazado` de la propia verificación (hallazgo no-sistema) se atribuye a la etapa Verificar."""
     hallazgos = json.dumps({
         "resumen": "Dato falso evidente",
         "hallazgos": [{"tipo": "dato", "gravedad": "error", "explicacion": "es falso"}],

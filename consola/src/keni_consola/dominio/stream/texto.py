@@ -1,9 +1,8 @@
-"""Utilidades de TEXTO del dominio STREAM: verdicto, emojis, titulo, normalizacion de redes.
+"""Utilidades de TEXTO del dominio STREAM: emojis, titulo, normalizacion de redes.
 
-Helpers de texto PUROS extraidos del parseo del stream: derivacion del verdicto a partir
-del simbolo ✅/⚠️/❌, la limpieza determinista de emojis del copy, la derivacion del
-titulo legible y la normalizacion/orden de las redes pedidas. Sin I/O y sin dependencias
-de las otras areas del paquete.
+Helpers de texto PUROS extraidos del parseo del stream: la limpieza determinista de emojis
+del copy, la derivacion del titulo legible y la normalizacion/orden de las redes pedidas.
+Sin I/O y sin dependencias de las otras areas del paquete.
 """
 
 from __future__ import annotations
@@ -12,31 +11,6 @@ import re
 from collections.abc import Iterable
 
 from ...tiempo import hoy_utc
-
-# --------------------------------------------------------------------------- #
-# Verdicto desde el simbolo ✅/⚠️/❌ de la primera linea                        #
-# --------------------------------------------------------------------------- #
-
-# Mapa del simbolo de veredicto (primera linea) a su valor interno estable.
-_VEREDICTO_POR_SIMBOLO = {"✅": "listo", "⚠️": "revisar", "❌": "no_publicar"}
-
-
-def derivar_verdicto(texto: str) -> str:
-    """Deriva el veredicto del simbolo ✅/⚠️/❌ de la PRIMERA linea con contenido.
-
-    Devuelve "listo"|"revisar"|"no_publicar" segun el simbolo de la primera linea no
-    vacia; "" si esa linea no trae ninguno. Lo usa la verificacion de fuente como
-    fallback cuando su informe no abre con el semaforo 🟢/🟡/🔴 (`verificar_fuente`).
-    """
-    for linea in texto.splitlines():
-        if not linea.strip():
-            continue
-        for simbolo, valor in _VEREDICTO_POR_SIMBOLO.items():
-            if simbolo in linea:
-                return valor
-        return ""
-    return ""
-
 
 # --------------------------------------------------------------------------- #
 # Limpieza de emojis del copy generado por IA (determinista)                   #

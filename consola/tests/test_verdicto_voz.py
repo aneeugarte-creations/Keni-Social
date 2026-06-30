@@ -1,6 +1,7 @@
-"""Veredicto por símbolo ✅/⚠️/❌ + verificación de voz en el post-procesado.
+"""Verificación de VOZ en el post-procesado del copy (`dominio.copy.verificar_voz`).
 
-PUROS (sin DB): `stream.derivar_verdicto` y `dominio.copy.verificar_voz`.
+PURO (sin DB): la degradación `listo` -> `revisar` cuando el copy se sale de los patrones
+medidos de la marca, y los avisos que viajan al humano.
 """
 
 from __future__ import annotations
@@ -8,26 +9,6 @@ from __future__ import annotations
 import json
 
 from keni_consola.dominio import copy as dom_copy
-from keni_consola.dominio import stream
-
-# --------------------------------------------------------------------------- #
-# derivar_verdicto: símbolo ✅/⚠️/❌ de la primera línea                        #
-# --------------------------------------------------------------------------- #
-
-
-def test_verdicto_por_simbolo():
-    assert stream.derivar_verdicto("✅ Todo bien\n…") == "listo"
-    assert stream.derivar_verdicto("⚠️ Ojo\n…") == "revisar"
-    assert stream.derivar_verdicto("❌ No\n…") == "no_publicar"
-
-
-def test_verdicto_sin_simbolo_no_deriva():
-    # Sin un símbolo de veredicto en la primera línea no se deriva nada: ni las palabras
-    # del contrato viejo ("LISTO PARA APROBAR") ni un emoji cualquiera cuelan veredicto.
-    assert stream.derivar_verdicto("LISTO PARA APROBAR\n\nLeyenda: …") == ""
-    assert stream.derivar_verdicto("EL TRI ESTÁ LISTO PARA LA FINAL 🔥") == ""
-    assert stream.derivar_verdicto("Texto cualquiera sin veredicto") == ""
-
 
 # --------------------------------------------------------------------------- #
 # verificar_voz: degradación listo -> revisar con avisos                       #

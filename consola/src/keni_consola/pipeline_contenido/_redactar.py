@@ -113,7 +113,7 @@ def lanzar_redactar_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | Non
         tipo_contenido=tipo_contenido,
         # Revisión inicial según el veredicto de FUENTE: `verificado` (la IA la confirmó a fondo)
         # -> pieza sin aviso (sujeta al chequeo de voz); `saltada` (fuente propia, sin verificar por
-        # IA) -> ⚠️ `no_verificado`. Si el copy trae su propio veredicto, ese manda.
+        # IA) -> `no_verificado`. El copy ya no trae veredicto propio: esta revisión es la que manda.
         revision_inicial=(
             _REVISION_PIEZA_VERIFICADA
             if (tema.get("verificacion_fuente") or "") == VERIFICACION_VERIFICADO
