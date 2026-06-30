@@ -116,6 +116,10 @@ def tokens_promedio_por_etapa() -> dict[str, int]:
     return db.tokens_promedio_por_etapa()
 
 
+def coste_promedio_por_etapa() -> dict[str, float]:
+    return db.coste_promedio_por_etapa()
+
+
 def gasto_ia_por_dia(dias: int = 14) -> list[dict[str, Any]]:
     return db.gasto_ia_por_dia(dias)
 

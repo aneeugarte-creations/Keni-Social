@@ -825,6 +825,34 @@ def tokens_promedio_por_etapa() -> dict[str, int]:
     return {etapa: tokens // n for etapa, (tokens, n) in acc.items() if n > 0}
 
 
+def coste_promedio_por_etapa() -> dict[str, float]:
+    """Promedio historico de coste USD por ETAPA del ledger `gasto_ia`.
+
+    Analogo en dinero a `tokens_promedio_por_etapa`: cuanto SUELE costar en USD un job de cada
+    etapa, para estimar a-priori lo que gastara uno que aun ESPERA. La etapa se resuelve igual que
+    en el resto de la economia: la `etapa` EXPLICITA de la fila si la trae, si no la derivada de
+    `proceso`+`tipo` (`etapa_economia`). Devuelve `{etapa: coste_medio_usd}` (media por generacion),
+    omitiendo las etapas sin muestras."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT proceso, tipo, etapa, "
+            "COALESCE(SUM(coste_usd), 0) AS coste, "
+            "COUNT(*) AS n FROM gasto_ia GROUP BY proceso, tipo, etapa"
+        ).fetchall()
+    finally:
+        con.close()
+    acc: dict[str, list[float]] = {}  # etapa -> [coste_acumulado, generaciones]
+    for f in filas:
+        etapa = str(f["etapa"] or "") or etapa_economia(
+            str(f["proceso"] or ""), str(f["tipo"] or "")
+        )
+        celda = acc.setdefault(etapa, [0.0, 0])
+        celda[0] += float(f["coste"])
+        celda[1] += int(f["n"])
+    return {etapa: coste / n for etapa, (coste, n) in acc.items() if n > 0}
+
+
 def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, dict[str, Any]]:
     """Desglose económico de los últimos `dias` (CDMX) DESDE el ledger `gasto_ia`, AGRUPADO en las
     4 PESTAÑAS de Contexto (investigacion/produccion/herramientas/desarrollo).

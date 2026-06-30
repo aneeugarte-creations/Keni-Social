@@ -7,6 +7,7 @@ en producción) y se mueven de estado por repos.
 
 from __future__ import annotations
 
+import pytest
 from starlette.testclient import TestClient
 
 from keni_consola import app as app_modulo
@@ -174,6 +175,9 @@ def test_backlog_forma_estable_todo_a_cero(entorno):
         assert all(v == 0 for v in fila["etapas"].values())
         assert fila["total"] == 0
         assert fila["nombre"] == marcas.etiqueta_de(fila["marca"])
+        # Estimado SIEMPRE presente (forma que consume Economía), a 0 sin backlog ni historia.
+        assert fila["estimado"] == {"tokens": 0, "coste_usd": 0.0}
+    assert data["estimado_total"] == {"tokens": 0, "coste_usd": 0.0}
 
 
 def test_backlog_esperando_copy_cuenta_autogen_sin_copy(entorno):
@@ -207,3 +211,74 @@ def test_backlog_agrupa_por_marca_y_etapa(entorno):
     assert por_marca["unotv"]["etapas"]["generando_arte"] == 0
     assert por_marca["claro-sports"]["etapas"]["generando_arte"] == 1
     assert por_marca["claro-sports"]["etapas"]["esperando_copy"] == 0
+
+
+def test_backlog_estimado_conteo_por_media(entorno):
+    """`estimado` = conteo de cada etapa × media histórica de su PRÓXIMA generación.
+
+    Siembra `gasto_ia` con una media conocida por etapa (una fila => n=1 => media exacta):
+    Redactar para `esperando_copy`, Ilustrar para `generando_arte`. Con backlog en ambas etapas
+    el estimado de la marca es la suma de conteo×media de cada una.
+    """
+    repos.registrar_gasto_ia(
+        "g-redactar", dia="2026-06-30", etapa="Redactar",
+        tokens_in=400, tokens_out=200, coste_usd=0.05,
+    )
+    repos.registrar_gasto_ia(
+        "g-ilustrar", dia="2026-06-30", etapa="Ilustrar",
+        tokens_in=100, tokens_out=50, coste_usd=0.02,
+    )
+    # unotv: un autogen sin copy (esperando_copy -> Redactar) + uno con copy sin arte
+    # (generando_arte -> Ilustrar).
+    repos.crear_publicacion(
+        clase="contenido", titulo="UnoTV en cola", marca="unotv", origen="equipo"
+    )
+    con_copy = repos.crear_publicacion(
+        clase="contenido", titulo="UnoTV con copy", marca="unotv", origen="equipo"
+    )
+    repos.crear_pieza_fila(publicacion_id=con_copy["id"], red="x", copy="Texto")
+
+    cli = _cli()
+    data = cli.get("/api/produccion/backlog").json()
+    por_marca = {m["marca"]: m for m in data["marcas"]}
+
+    estimado = por_marca["unotv"]["estimado"]
+    # 1×Redactar(600 tokens, 0.05) + 1×Ilustrar(150 tokens, 0.02).
+    assert estimado["tokens"] == 600 + 150
+    assert estimado["coste_usd"] == pytest.approx(0.05 + 0.02)
+
+
+def test_backlog_estimado_etapa_sin_media_es_cero(entorno):
+    """Backlog en una etapa sin media histórica en el ledger => estimado 0 (no casca)."""
+    repos.crear_publicacion(
+        clase="contenido", titulo="Sin historia", marca="unotv", origen="equipo"
+    )
+    cli = _cli()
+    por_marca = {m["marca"]: m for m in cli.get("/api/produccion/backlog").json()["marcas"]}
+
+    assert por_marca["unotv"]["etapas"]["esperando_copy"] == 1
+    assert por_marca["unotv"]["estimado"] == {"tokens": 0, "coste_usd": 0.0}
+
+
+def test_backlog_estimado_total_suma_marcas(entorno):
+    """`estimado_total` en la raíz es la suma del estimado de cada marca."""
+    repos.registrar_gasto_ia(
+        "g-redactar", dia="2026-06-30", etapa="Redactar",
+        tokens_in=400, tokens_out=200, coste_usd=0.05,
+    )
+    # Una pieza esperando_copy en unotv y otra en claro-sports.
+    repos.crear_publicacion(
+        clase="contenido", titulo="UnoTV", marca="unotv", origen="equipo"
+    )
+    repos.crear_publicacion(
+        clase="contenido", titulo="Claro", marca="claro-sports", origen="equipo"
+    )
+
+    cli = _cli()
+    data = cli.get("/api/produccion/backlog").json()
+    suma_tokens = sum(m["estimado"]["tokens"] for m in data["marcas"])
+    suma_coste = sum(m["estimado"]["coste_usd"] for m in data["marcas"])
+
+    assert data["estimado_total"]["tokens"] == suma_tokens == 1200
+    assert data["estimado_total"]["coste_usd"] == pytest.approx(suma_coste)
+    assert data["estimado_total"]["coste_usd"] == pytest.approx(0.10)

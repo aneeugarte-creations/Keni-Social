@@ -278,6 +278,7 @@ from .db_jobs import (  # noqa: F401
     registrar_gasto_ia,
     terminar_job,
     tokens_promedio_por_etapa,
+    coste_promedio_por_etapa,
 )
 from .db_intentos import (  # noqa: F401
     anotar_intento_etapa,
@@ -566,6 +567,7 @@ __all__ = [
     "etapa_economia",
     "max_prioridad_pendiente",
     "tokens_promedio_por_etapa",
+    "coste_promedio_por_etapa",
     "reencolar_job",
     "reiniciar_intentos_job",
     "intentos_etapa",

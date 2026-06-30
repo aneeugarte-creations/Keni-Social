@@ -264,6 +264,22 @@ _BACKLOG_ETAPAS = (
     "lista_para_revisar",   # [E] copy + arte listos / ya en el gate humano
 )
 
+# Estimación APROXIMADA de cuánto costará vaciar el backlog: cada etapa pendiente factura el
+# coste de la PRÓXIMA generación de IA que disparará (no la que ya consumió). Mapea la clave de
+# `etapas` a la ETAPA legible del ledger (`gasto_ia`) cuya media histórica se aplica por pieza:
+#   - pool_sin_admitir   -> Verificar (al admitirse se verificará la fuente; trabajo upstream que SÍ estimamos)
+#   - pipeline_en_proceso-> Verificar (lo que falta es verificar/decidir antes del copy)
+#   - esperando_copy     -> Redactar  (término dominante: la siguiente generación es el copy)
+#   - generando_arte     -> Ilustrar  (copy hecho, falta el arte)
+# Las etapas que NO disparan nueva generación de IA se omiten (cuestan 0):
+#   - generando_copy     (su copy ya está encolado/en curso) · lista_para_revisar (ya completas)
+_BACKLOG_ESTIMADO_ETAPA = {
+    "pool_sin_admitir": "Verificar",
+    "pipeline_en_proceso": "Verificar",
+    "esperando_copy": "Redactar",
+    "generando_arte": "Ilustrar",
+}
+
 
 def _pool_sin_admitir(marca: str) -> int:
     """[A] Clusters de noticia en `nuevo` (pool sin admitir) de una marca. 0 best-effort."""
@@ -313,7 +329,13 @@ def _backlog() -> dict:
         filas_por_item.setdefault(str(f.get("publicacion_id") or ""), []).append(f)
     etiquetas_por_item = repos.etiquetas_por_contenido()
 
+    # Medias históricas por etapa (una sola lectura del ledger), para estimar el coste de vaciar
+    # el backlog. Etapas sin muestra histórica no están en el dict -> cuentan 0 (sin cascar).
+    tokens_medios = repos.tokens_promedio_por_etapa()
+    coste_medio = repos.coste_promedio_por_etapa()
+
     salida: list[dict[str, Any]] = []
+    estimado_total = {"tokens": 0, "coste_usd": 0.0}
     for marca in sorted(marcas.ids()):
         etapas_tablero = pipeline_estado.contar_por_etapa(
             items_por_marca.get(marca, []),
@@ -328,15 +350,36 @@ def _backlog() -> dict:
             "generando_arte": etapas_tablero.get(pipeline_estado.ETAPA_GENERANDO_ARTE, 0),
             "lista_para_revisar": etapas_tablero.get(pipeline_estado.ETAPA_LISTA_REVISAR, 0),
         }
+        estimado = _estimar_backlog(etapas, tokens_medios, coste_medio)
+        estimado_total["tokens"] += estimado["tokens"]
+        estimado_total["coste_usd"] += estimado["coste_usd"]
         salida.append(
             {
                 "marca": marca,
                 "nombre": marcas.etiqueta_de(marca),
                 "etapas": etapas,
                 "total": sum(etapas.values()),
+                "estimado": estimado,
             }
         )
-    return {"marcas": salida}
+    return {"marcas": salida, "estimado_total": estimado_total}
+
+
+def _estimar_backlog(
+    etapas: dict[str, int],
+    tokens_medios: dict[str, int],
+    coste_medio: dict[str, float],
+) -> dict[str, Any]:
+    """Coste APROXIMADO de generar lo pendiente: conteo de cada etapa × media histórica de la
+    PRÓXIMA generación que dispara (`_BACKLOG_ESTIMADO_ETAPA`). Las etapas sin media histórica o
+    sin mapeo aportan 0. Es una estimación a-priori, no un gasto real."""
+    tokens = 0
+    coste_usd = 0.0
+    for clave, etapa_ledger in _BACKLOG_ESTIMADO_ETAPA.items():
+        n = etapas.get(clave, 0)
+        tokens += n * tokens_medios.get(etapa_ledger, 0)
+        coste_usd += n * coste_medio.get(etapa_ledger, 0.0)
+    return {"tokens": tokens, "coste_usd": coste_usd}
 
 
 RUTAS = [
