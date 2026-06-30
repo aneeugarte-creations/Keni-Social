@@ -364,12 +364,19 @@ function CeldaBacklog({ n, acento }: { n: number; acento?: boolean }) {
 /** EMBUDO del backlog por marca×etapa (`GET /api/produccion/backlog`, foto completa sin filtro): el
  *  EMBALSE que se acumula ANTES de la cola de jobs. Filas = marcas; columnas = las 6 etapas EN ORDEN
  *  DE CADENA (entrada → salida) + el total. Resalta `esperando_copy`, la cola oculta de temas sin
- *  copy que entra de golpe al activar «Generar copy». */
-export function TablaBacklog({ backlog }: { backlog: Backlog }) {
+ *  copy que entra de golpe al activar «Generar copy». `titulo` enmarca el mismo embudo según la
+ *  página que lo monta (p. ej. el coste pendiente en Economía); la tabla y su nota no cambian. */
+export function TablaBacklog({
+  backlog,
+  titulo = "Embalse del tablero (antes de la cola)",
+}: {
+  backlog: Backlog;
+  titulo?: string;
+}) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Embalse del tablero (antes de la cola)</CardTitle>
+        <CardTitle className="text-base">{titulo}</CardTitle>
         <p className="text-xs text-muted-foreground">
           El contenido se acumula a lo largo de la cadena ANTES de la cola de jobs. La columna{" "}
           <span className="font-medium text-amber-700 dark:text-amber-400">Esperando copy</span> es la

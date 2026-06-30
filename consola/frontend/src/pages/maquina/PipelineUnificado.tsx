@@ -38,6 +38,7 @@ import {
   slugFase,
   tieneContenido,
 } from "@/pages/maquina/fases";
+import { TablaBacklog } from "@/pages/maquina/cola-comun";
 import { SeccionCadenaAprobacion } from "@/pages/maquina/SeccionCadenaAprobacion";
 import { ServiciosMaquina } from "@/pages/maquina/ServiciosMaquina";
 import { FilaFasePipeline, type FasePipeline } from "@/pages/monitor/PanelPipeline";
@@ -225,6 +226,14 @@ export function PipelineUnificado({
     for (const p of preview.data?.marcas ?? []) m.set(p.marca, p.redactar);
     return m;
   }, [preview.data]);
+
+  // Embalse del tablero por marca×etapa: QUÉ hay esperando en cada etapa que gobiernan estos
+  // toggles (la foto completa sin filtro, la misma del Monitor).
+  const backlog = useQuery({
+    queryKey: ["produccion", "backlog"],
+    queryFn: ({ signal }) => api.produccionBacklog(signal),
+    refetchInterval: INTERVALO_VIVO_MS,
+  });
 
   // Encender Redactar de una marca con piezas en espera pide confirmación (un ON descarga la cola).
   const guardarRedactar = async (
@@ -423,6 +432,11 @@ export function PipelineUnificado({
           </div>
         </section>
       )}
+
+      {/* Embalse del tablero: qué hay esperando en cada etapa que gobiernan estos toggles. Sobre
+          la matriz, para leer el embudo antes de operar los switches. Sin filtro de marca (foto
+          completa, como el endpoint). */}
+      {backlog.data && <TablaBacklog backlog={backlog.data} />}
 
       {/* Direction hint */}
       <p className="text-xs font-medium text-muted-foreground">FUENTE → FEED</p>

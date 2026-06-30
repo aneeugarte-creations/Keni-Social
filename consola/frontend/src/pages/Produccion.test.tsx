@@ -71,11 +71,37 @@ const AGREGADOS = {
   por_dia: [{ dia: "2026-06-10", items: 4, coste_usd: 1.0 }],
 };
 
-function stubFetch(lista: unknown = LISTA, agregados: unknown = AGREGADOS) {
+// Embalse del tablero (foto completa por marca×etapa) que el feed muestra como contexto del flujo.
+const BACKLOG = {
+  marcas: [
+    {
+      marca: "unotv",
+      nombre: "UnoTV",
+      etapas: {
+        pool_sin_admitir: 0,
+        pipeline_en_proceso: 0,
+        esperando_copy: 4,
+        generando_copy: 0,
+        generando_arte: 0,
+        lista_para_revisar: 0,
+      },
+      total: 4,
+    },
+  ],
+};
+
+function stubFetch(
+  lista: unknown = LISTA,
+  agregados: unknown = AGREGADOS,
+  backlog: unknown = BACKLOG,
+) {
   const fn = vi.fn(async (url: string | URL) => {
     const s = String(url);
     if (s.includes("/api/actividad/agregados")) {
       return new Response(JSON.stringify(agregados), { status: 200 });
+    }
+    if (s.includes("/api/produccion/backlog")) {
+      return new Response(JSON.stringify(backlog), { status: 200 });
     }
     if (s.includes("/api/pipelines")) {
       return new Response(JSON.stringify(lista), { status: 200 });
@@ -113,6 +139,14 @@ describe("Producción (feed unificado: runs del pipeline + actividad suelta)", (
     expect(screen.queryByText("Coste total")).toBeNull();
     // El enlace «Economía de tokens → Agentes» desapareció: la economía es una pestaña hermana.
     expect(screen.queryByRole("link", { name: /Econom[ií]a de tokens/i })).toBeNull();
+  });
+
+  it("monta el embudo del backlog (embalse del tablero) como contexto del flujo", async () => {
+    stubFetch();
+    renderConProviders(<Produccion />);
+    expect(
+      await screen.findByText("Embalse del tablero (antes de la cola)"),
+    ).toBeInTheDocument();
   });
 
   it("junto a los filtros solo va el CONTEO del feed", async () => {

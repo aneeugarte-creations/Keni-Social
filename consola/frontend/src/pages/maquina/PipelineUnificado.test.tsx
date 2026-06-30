@@ -3,7 +3,7 @@
  * y la cascada de críticas (una CRÍTICA apagada oscurece todo lo que sigue).
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,19 +13,22 @@ import type { AjusteAdmin, UsuarioSesion } from "@/types";
 
 import { PipelineUnificado } from "./PipelineUnificado";
 
-const { mockAjustes, mockCola, mockPreview, mockConfirmar, mockGuardarAjuste } = vi.hoisted(() => ({
-  mockAjustes: vi.fn(),
-  mockCola: vi.fn(),
-  mockPreview: vi.fn(),
-  mockConfirmar: vi.fn(),
-  mockGuardarAjuste: vi.fn(),
-}));
+const { mockAjustes, mockCola, mockPreview, mockBacklog, mockConfirmar, mockGuardarAjuste } =
+  vi.hoisted(() => ({
+    mockAjustes: vi.fn(),
+    mockCola: vi.fn(),
+    mockPreview: vi.fn(),
+    mockBacklog: vi.fn(),
+    mockConfirmar: vi.fn(),
+    mockGuardarAjuste: vi.fn(),
+  }));
 
 vi.mock("@/lib/api", () => ({
   api: {
     ajustes: mockAjustes,
     cola: mockCola,
     colaPreview: mockPreview,
+    produccionBacklog: mockBacklog,
     guardarAjuste: mockGuardarAjuste,
   },
   mensajeError: (e: unknown) => String(e),
@@ -144,6 +147,7 @@ describe("PipelineUnificado", () => {
     });
     mockCola.mockResolvedValue({ en_curso: [], esperando: [] });
     mockPreview.mockResolvedValue({ marcas: [] });
+    mockBacklog.mockResolvedValue({ marcas: [] });
     mockConfirmar.mockResolvedValue(true);
     mockGuardarAjuste.mockResolvedValue({ ajuste: ajuste("KENI_PIPELINE_REDACTAR", true) });
   });
@@ -163,6 +167,33 @@ describe("PipelineUnificado", () => {
     expect(screen.getByText("Google Trends")).toBeInTheDocument();
     expect(screen.getByText("Redactar")).toBeInTheDocument();
     expect(screen.getByText("Publicar")).toBeInTheDocument();
+  });
+
+  it("monta el embudo del backlog (embalse del tablero) sobre el pipeline", async () => {
+    mockBacklog.mockResolvedValue({
+      marcas: [
+        {
+          marca: "unotv",
+          nombre: "UnoTV",
+          etapas: {
+            pool_sin_admitir: 0,
+            pipeline_en_proceso: 0,
+            esperando_copy: 9,
+            generando_copy: 0,
+            generando_arte: 0,
+            lista_para_revisar: 2,
+          },
+          total: 11,
+        },
+      ],
+    });
+    renderPipeline({ esAdmin: false });
+    expect(
+      await screen.findByText("Embalse del tablero (antes de la cola)"),
+    ).toBeInTheDocument();
+    const fila = (await screen.findByText("UnoTV")).closest("tr");
+    expect(within(fila as HTMLElement).getByText("9")).toBeInTheDocument();
+    expect(within(fila as HTMLElement).getByText("11")).toBeInTheDocument();
   });
 
   it("Avance y Programar NO se pintan como etapas (corren siempre; no son operables)", () => {

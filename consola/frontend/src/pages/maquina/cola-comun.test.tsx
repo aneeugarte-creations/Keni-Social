@@ -63,4 +63,13 @@ describe("TablaBacklog", () => {
     expect(within(filaClaro as HTMLElement).getByText("600")).toBeInTheDocument();
     expect(within(filaClaro as HTMLElement).getByText("615")).toBeInTheDocument();
   });
+
+  it("usa el título por defecto, y lo enmarca por página cuando se le pasa `titulo`", () => {
+    const { rerender } = render(<TablaBacklog backlog={BACKLOG} />);
+    expect(screen.getByText("Embalse del tablero (antes de la cola)")).toBeInTheDocument();
+
+    rerender(<TablaBacklog backlog={BACKLOG} titulo="Trabajo pendiente (backlog que costará)" />);
+    expect(screen.getByText("Trabajo pendiente (backlog que costará)")).toBeInTheDocument();
+    expect(screen.queryByText("Embalse del tablero (antes de la cola)")).toBeNull();
+  });
 });
