@@ -1,9 +1,9 @@
 {
-  "version": "0.1.11",
-  "notes": "El etiquetado con IA ya no pide permisos de carpetas en bucle al procesar un partido, y muestra el avance en directo (una línea por foto).",
+  "version": "0.1.12",
+  "notes": "Quitamos el título de página duplicado en Galería y Nuevo partido.",
   "pub_date": "2026-06-29T00:00:00Z",
   "darwin-aarch64": {
-    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcGFsYmZzRmRkOHVFS20zMDcyR0FTWnBsT1FYR1JXMXdsSkppOVN2SkhiTTVUSGV5eC9XMzcrREZLUUF3cWhwVmZtakx1Nmo4aTVsc0F3SUl6NkkzZ0FzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzc5NTA1CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6CnY0WVN0aktlbkpkL1pYaGMvd1RYalhFcWxwQW5sRWp6akRKSmNVMTJJSXprcmozTENlNlpWNTNZeS9OUEZXUlR4K01KYS8zaG1aL3dwQzRlc3RRWUF3PT0K",
+    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcFFQYkRweVJwRDFzOGlaMkpXbGROU29jNUs3RFQ2THlvZ3ZoQ2ZaaFlYUmJGdm1tL1pjdVNhMlBHSExUMExOandPMkF0bDJ3YUZ4bFBhQWxEbmRablE4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzc5ODI4CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6CncvTGdJaFJlNmVucGFHVDkydENaUUNFaXRXQllOcXNTM3lkMTI1RUh4L0pVUVNHMlZVQ3lGODVKdHorOW5nRkpEUm5kQWRDVERNcE1JamRxYkZPeUJ3PT0K",
     "url": "https://social.kenitech.io/api/fotos/updater"
   }
 }
