@@ -1,7 +1,11 @@
 /**
- * PipelineUnificado — vista única FUENTE→FEED: los 5 bloques del pipeline completo
+ * PipelineUnificado — vista única FUENTE→FEED: los bloques del pipeline completo
  * (Ingesta → Procesar → Admitir → Producir → Aprobar) en una secuencia vertical.
  * Cada etapa tiene su propio toggle; las CRÍTICAS apagadas cortan el flujo posterior.
+ *
+ * Las secciones y etapas se DERIVAN de las dos máquinas de `fases.ts` (fuente única): no hay tabla
+ * de etapas propia. `fases.ts` aporta por fase el `grupo` (sección), el `tipo` (criticidad/cascada),
+ * la `clave` (toggle), la `queue` (conteos) y los `ajustes` (⚙).
  */
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Settings2, Users } from "lucide-react";
@@ -25,10 +29,17 @@ import {
   FilaAjuste,
   useGuardarAjuste,
 } from "@/pages/configuracion/SeccionFuncionalidad";
-import { QUEUE_INVESTIGACION, QUEUE_PRODUCCION, slugFase } from "@/pages/maquina/fases";
+import {
+  FASES_INVESTIGACION,
+  FASES_PRODUCCION,
+  QUEUE_INVESTIGACION,
+  QUEUE_PRODUCCION,
+  slugFase,
+  tieneContenido,
+} from "@/pages/maquina/fases";
 import { SeccionCadenaAprobacion } from "@/pages/maquina/SeccionCadenaAprobacion";
 import { ServiciosMaquina } from "@/pages/maquina/ServiciosMaquina";
-import { FilaFasePipeline } from "@/pages/monitor/PanelPipeline";
+import { FilaFasePipeline, type FasePipeline } from "@/pages/monitor/PanelPipeline";
 import type { AjusteAdmin, ColaJob } from "@/types";
 
 type TipoEtapa = "CRITICA" | "OPCIONAL";
@@ -68,179 +79,51 @@ interface Fase {
 
 const CLAVE_MAQUINA = "KENI_MAQUINA";
 
-const PIPELINE: Fase[] = [
-  {
-    numero: "①",
-    titulo: "Ingesta",
-    etapas: [
-      {
-        nombre: "Recolectar",
-        tipo: "CRITICA",
-        es_ia: false,
-        ayuda: "Recolecta artículos de las fuentes y agrupa las notas idénticas",
-        proceso: "investigacion",
-        clave: "KENI_PIPELINE_RECOLECTAR",
-        queue: "recolectar",
-        navegable: true,
-      },
-      {
-        nombre: "Google Trends",
-        tipo: "OPCIONAL",
-        es_ia: false,
-        ayuda: "Ingiere las tendencias de Google al pool, como fuente extra",
-        proceso: "investigacion",
-        clave: "KENI_TRENDS",
-        navegable: true,
-      },
-    ],
-  },
-  {
-    numero: "②",
-    titulo: "Procesar el pool",
-    etapas: [
-      {
-        nombre: "Fusionar",
-        tipo: "OPCIONAL",
-        es_ia: true,
-        ayuda: "Funde las notas del mismo hecho",
-        proceso: "investigacion",
-        clave: "KENI_PIPELINE_FUSIONAR",
-        navegable: true,
-      },
-      {
-        nombre: "Traducir",
-        tipo: "OPCIONAL",
-        es_ia: true,
-        ayuda: "Adapta el texto al español de México",
-        proceso: "investigacion",
-        clave: "KENI_PIPELINE_TRADUCIR",
-        navegable: true,
-      },
-      {
-        nombre: "Priorizar",
-        tipo: "OPCIONAL",
-        es_ia: true,
-        ayuda: "Ordena por relevancia para la marca",
-        proceso: "investigacion",
-        clave: "KENI_PRIORIZAR_PERFIL_IA",
-        navegable: true,
-        ajustes: ["KENI_RENDIMIENTO_RANKING"],
-      },
-    ],
-  },
-  {
-    numero: "③",
-    titulo: "Admitir a la mesa",
-    etapas: [
-      {
-        nombre: "Verificar",
-        tipo: "CRITICA",
-        es_ia: true,
-        ayuda: "Contrasta las fuentes antes de la mesa (la noticia propia/portal se salta este paso)",
-        proceso: "investigacion",
-        clave: "KENI_PIPELINE_VERIFICAR",
-        queue: "verificar",
-        navegable: true,
-      },
-      {
-        nombre: "Admitir",
-        tipo: "CRITICA",
-        es_ia: false,
-        ayuda: "Crea el tema admitido en la mesa de redacción",
-        proceso: "investigacion",
-        clave: "KENI_PIPELINE_ADMITIR",
-        navegable: true,
-        ajustes: ["KENI_PROMOVER_MIN_SCORE"],
-      },
-    ],
-  },
-  {
-    numero: "④",
-    titulo: "Producir copy",
-    etapas: [
-      {
-        nombre: "Decisor",
-        tipo: "OPCIONAL",
-        es_ia: true,
-        ayuda: "Elige el formato (foto o carrusel) antes de redactar",
-        proceso: "produccion",
-        clave: "KENI_PIPELINE_DECISOR",
-        queue: "decisor",
-        navegable: true,
-      },
-      {
-        nombre: "Redactar",
-        tipo: "CRITICA",
-        es_ia: true,
-        ayuda: "Redacta el copy que convierte la noticia en pieza",
-        proceso: "produccion",
-        clave: "KENI_PIPELINE_REDACTAR",
-        queue: "redactar",
-        navegable: true,
-      },
-      {
-        nombre: "Keywords",
-        tipo: "OPCIONAL",
-        es_ia: true,
-        ayuda: "Propone hashtags y la imagen clave para el buscador de stock",
-        proceso: "produccion",
-        clave: "KENI_PIPELINE_SUGERIR_HASHTAGS",
-        queue: "sugerir-hashtags",
-        navegable: true,
-      },
-      {
-        nombre: "Ilustrar",
-        tipo: "OPCIONAL",
-        es_ia: true,
-        ayuda: "Genera imagen por IA para los temas con copy y sin imagen",
-        proceso: "produccion",
-        clave: "KENI_PIPELINE_ILUSTRAR",
-        queue: "ilustrar",
-        navegable: true,
-      },
-      {
-        nombre: "Stock",
-        tipo: "OPCIONAL",
-        es_ia: false,
-        ayuda: "Adjunta una foto de stock de referencia (sin licencia) para los temas sin imagen",
-        proceso: "produccion",
-        clave: "KENI_PIPELINE_STOCK",
-        navegable: true,
-      },
-    ],
-  },
-  {
-    numero: "⑤",
-    titulo: "Aprobar y publicar",
-    etapas: [
-      {
-        nombre: "Crítica",
-        tipo: "OPCIONAL",
-        es_ia: true,
-        ayuda: "Revisión IA con visión tras los OK humanos",
-        proceso: "produccion",
-        clave: "KENI_CRITICA_IA",
-        navegable: true,
-      },
-      {
-        nombre: "Pre-aprobación",
-        tipo: "OPCIONAL",
-        es_ia: false,
-        ayuda: "Auto-aprueba las piezas de bajo riesgo",
-        proceso: "produccion",
-        clave: "KENI_AUTO_PREAPROBACION",
-      },
-      {
-        nombre: "Publicar",
-        tipo: "CRITICA",
-        es_ia: false,
-        ayuda: "Publica de verdad en la red (apagado = simulación)",
-        proceso: "produccion",
-        clave: "KENI_PUBLICAR_REAL",
-      },
-    ],
-  },
-];
+/** Glifos de sección, por orden de aparición del `grupo` en las dos máquinas. */
+const NUMEROS = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"] as const;
+
+/** Una fase del catálogo (`fases.ts`) → la ETAPA operable de esta vista. `fases.ts` es la fuente
+ *  única: el toggle es su primera `clave`, la criticidad/cascada su `tipo` (OPCIONAL por defecto),
+ *  los conteos su `queue`, los knobs ⚙ sus `ajustes` y la navegación, si tiene contenido propio. */
+function aEtapa(f: FasePipeline, proceso: Etapa["proceso"]): Etapa {
+  return {
+    nombre: f.nombre,
+    tipo: f.tipo ?? "OPCIONAL",
+    es_ia: f.es_ia,
+    ayuda: f.ayuda,
+    proceso,
+    clave: f.claves[0],
+    navegable: tieneContenido(f),
+    queue: f.queue,
+    ajustes: f.ajustes,
+  };
+}
+
+/**
+ * Las secciones numeradas del pipeline FUENTE→FEED, DERIVADAS de las dos máquinas (`fases.ts`, la
+ * fuente única). Recorre Investigación y luego Producción en orden de flujo, agrupa las fases
+ * CONSECUTIVAS por su `grupo` (el encabezado «Ingesta», «Procesar el pool»…) y numera cada bloque
+ * por orden de aparición. Sin lista de etapas propia: lo que se ve aquí es lo que vive en `fases.ts`.
+ */
+function construirPipeline(): Fase[] {
+  const fuentes: { f: FasePipeline; proceso: Etapa["proceso"] }[] = [
+    ...FASES_INVESTIGACION.map((f) => ({ f, proceso: "investigacion" as const })),
+    ...FASES_PRODUCCION.map((f) => ({ f, proceso: "produccion" as const })),
+  ];
+  const fases: Fase[] = [];
+  for (const { f, proceso } of fuentes) {
+    const titulo = f.grupo ?? "Otras";
+    let seccion = fases.find((s) => s.titulo === titulo);
+    if (!seccion) {
+      seccion = { numero: NUMEROS[fases.length] ?? "•", titulo, etapas: [] };
+      fases.push(seccion);
+    }
+    seccion.etapas.push(aEtapa(f, proceso));
+  }
+  return fases;
+}
+
+const PIPELINE: Fase[] = construirPipeline();
 
 const TODAS_LAS_ETAPAS: Etapa[] = PIPELINE.flatMap((f) => f.etapas);
 

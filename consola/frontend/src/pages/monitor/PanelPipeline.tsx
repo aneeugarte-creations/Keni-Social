@@ -55,6 +55,17 @@ export interface FasePipeline {
   /** Panel PROPIO (no Prompt · Contexto · Logs) que es el contenido de la subpágina de la fase.
    *  Hace la fase navegable: su subpágina monta ese panel (p. ej. Stock → toggles de fuentes). */
   panel?: "stock";
+  /** Criticidad OPERATIVA de la etapa en la vista Pipeline (`PipelineUnificado`): una CRITICA
+   *  apagada CORTA todo lo que sigue (cascada); una OPCIONAL apagada solo se oscurece. Sin valor =
+   *  OPCIONAL (no corta). */
+  tipo?: "CRITICA" | "OPCIONAL";
+  /** Encabezado de la SECCIÓN numerada del Pipeline a la que pertenece la etapa («Ingesta»,
+   *  «Procesar el pool»…). `PipelineUnificado` agrupa las fases CONSECUTIVAS con el mismo `grupo` en
+   *  ese bloque y las numera por orden de aparición. */
+  grupo?: string;
+  /** Knobs OPERACIONALES extra (claves del catálogo) que la etapa edita en su popover ⚙ de la vista
+   *  Pipeline, aparte de su toggle on/off (umbrales/cupos/filtros). */
+  ajustes?: readonly string[];
 }
 
 /**

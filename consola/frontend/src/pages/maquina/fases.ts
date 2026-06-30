@@ -1,10 +1,10 @@
 /**
  * Las FASES de las dos máquinas (Investigación y Producción), en orden de flujo.
  *
- * Centralizadas aquí como el ESQUELETO de cada proceso: alimentan las subpáginas por fase
- * (`DetalleFase`) y el cálculo de qué daemons son «servicios» aparte (`ServiciosMaquina`, por
- * `claves`). La vista Pipeline (`PipelineUnificado`) tiene su propia tabla de etapas con la
- * criticidad y la cascada.
+ * Centralizadas aquí como el ESQUELETO y FUENTE ÚNICA de cada proceso: alimentan las subpáginas por
+ * fase (`DetalleFase`), el cálculo de qué daemons son «servicios» aparte (`ServiciosMaquina`, por
+ * `claves`) y la vista Pipeline (`PipelineUnificado`), que DERIVA sus secciones y etapas de aquí
+ * (agrupando por `grupo`, con la criticidad `tipo` que gobierna su cascada y los `ajustes` ⚙).
  */
 import type { FasePipeline } from "@/pages/monitor/PanelPipeline";
 
@@ -40,6 +40,8 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
     ayuda: "Recolecta artículos de las fuentes y agrupa las notas idénticas (misma url o titular)",
     queue: "recolectar",
     paralelo: "ingesta",
+    grupo: "Ingesta",
+    tipo: "CRITICA",
   },
   {
     // Fuente de ingesta PARALELA a las RSS: un daemon propio descarga las tendencias de Google
@@ -52,6 +54,8 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
     ayuda: "Ingiere las tendencias de Google al pool, como fuente extra junto a las fuentes RSS",
     daemon: "trends",
     paralelo: "ingesta",
+    grupo: "Ingesta",
+    tipo: "OPCIONAL",
   },
   {
     nombre: "Fusionar",
@@ -60,6 +64,8 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
     ayuda: "Propone qué notas son del mismo hecho y qué familias forman un mismo gran evento",
     doc: "prompt/fusionar",
     etapa: "fusionar",
+    grupo: "Procesar el pool",
+    tipo: "OPCIONAL",
   },
   {
     // Cotejar y Subtema son las dos SUB-LLAMADAS del job de Fusionar: corren DESPUÉS de la pasada
@@ -71,6 +77,7 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
     claves: [],
     ayuda: "Verifica cada grupo propuesto antes de fundir las notas del mismo hecho",
     doc: "prompt/fusionar-verificar",
+    grupo: "Procesar el pool",
   },
   {
     nombre: "Subtema",
@@ -78,13 +85,16 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
     claves: [],
     ayuda: "Parte un macro-evento en subtemas coherentes (un carrusel por faceta)",
     doc: "prompt/fusionar-subtema",
+    grupo: "Procesar el pool",
   },
   {
     nombre: "Traducir",
     es_ia: true,
-    claves: [],
+    claves: ["KENI_PIPELINE_TRADUCIR"],
     ayuda: "Adapta el texto al español de México",
     doc: "prompt/traducir",
+    grupo: "Procesar el pool",
+    tipo: "OPCIONAL",
   },
   {
     nombre: "Priorizar",
@@ -94,13 +104,19 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
     doc: "prompt/priorizar",
     contextoMarca: true,
     etapa: "priorizar",
+    grupo: "Procesar el pool",
+    tipo: "OPCIONAL",
+    ajustes: ["KENI_RENDIMIENTO_RANKING"],
   },
   {
     nombre: "Admitir",
     es_ia: false,
-    claves: [],
+    claves: ["KENI_PIPELINE_ADMITIR"],
     ayuda: "Crea el tema admitido en la mesa de redacción",
     etapa: "admitir",
+    grupo: "Admitir a la mesa",
+    tipo: "CRITICA",
+    ajustes: ["KENI_PROMOVER_MIN_SCORE"],
   },
   {
     nombre: "Verificar",
@@ -113,6 +129,8 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
     // Verificar (noticias) e Investigar evergreen son las dos vías de INVESTIGACIÓN —contrastar la
     // fuente de una historia vs. investigar una idea propia—: comparten fila horizontal (mismo `paralelo`).
     paralelo: "investigacion",
+    grupo: "Admitir a la mesa",
+    tipo: "CRITICA",
   },
   {
     // Rama PARALELA de Verificar: investiga una IDEA EVERGREEN aprobada (con web) y produce material
@@ -125,6 +143,7 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
     doc: "prompt/investigar-evergreen",
     contextoMarca: true,
     paralelo: "investigacion",
+    grupo: "Admitir a la mesa",
   },
 ];
 
@@ -153,6 +172,8 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
     contextoMarca: true,
     queue: "decisor",
     etapa: "decisor",
+    grupo: "Producir copy",
+    tipo: "OPCIONAL",
   },
   {
     nombre: "Redactar",
@@ -164,6 +185,8 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
     contextoMarca: true,
     queue: "redactar",
     etapa: "redactar",
+    grupo: "Producir copy",
+    tipo: "CRITICA",
     // RAMA del Decisor: Redactar (foto) y Carrusel son los dos caminos PARALELOS entre los que el
     // Decisor enruta; comparten fila horizontal (como Recolectar + Google Trends en ingesta).
     paralelo: "redactar",
@@ -188,6 +211,7 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
     doc: "prompt/redactar-carrusel",
     contextoMarca: true,
     paralelo: "redactar",
+    grupo: "Producir copy",
   },
   {
     nombre: "Keywords",
@@ -199,6 +223,8 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
     contextoMarca: true,
     queue: "sugerir-hashtags",
     etapa: "sugerir_hashtags",
+    grupo: "Producir copy",
+    tipo: "OPCIONAL",
   },
   {
     nombre: "Ilustrar",
@@ -208,6 +234,8 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
     doc: "prompt/ilustrar",
     queue: "ilustrar",
     etapa: "ilustrar",
+    grupo: "Producir copy",
+    tipo: "OPCIONAL",
   },
   {
     // Respaldo de imagen cuando Ilustrar no aplica: descarga inline una foto de stock (banco
@@ -219,6 +247,8 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
     ayuda: "Adjunta una foto de stock como referencia sin licencia para los temas sin imagen",
     // Su subpágina son los TOGGLES de fuentes de stock por marca (no Prompt · Contexto · Logs).
     panel: "stock",
+    grupo: "Producir copy",
+    tipo: "OPCIONAL",
   },
   {
     // Nivel de revisión IA de la pieza terminada: corre DENTRO de la cadena de aprobación (tras
@@ -230,6 +260,30 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
     ayuda: "Tras los dos OK humanos, revisa con visión la pieza terminada antes de auto-programar",
     doc: "prompt/critica",
     seccion: "Cadena de aprobación",
+    grupo: "Aprobar y publicar",
+    tipo: "OPCIONAL",
+  },
+  {
+    // Cierre de la CADENA DE APROBACIÓN: auto-aprueba las piezas de bajo riesgo sin OK humano
+    // (`KENI_AUTO_PREAPROBACION`, OFF por defecto). Determinista (no lanza `claude -p`): sin cola
+    // ni histórico, no es navegable.
+    nombre: "Pre-aprobación",
+    es_ia: false,
+    claves: ["KENI_AUTO_PREAPROBACION"],
+    ayuda: "Auto-aprueba las piezas de bajo riesgo sin OK humano",
+    grupo: "Aprobar y publicar",
+    tipo: "OPCIONAL",
+  },
+  {
+    // Interruptor de PIEZA REAL: con él, el programador postea de verdad en la red; apagado, queda
+    // en simulación (dry-run). Gate por marca (`KENI_PUBLICAR_REAL`/`publicar_real_para`). CRITICA:
+    // apagarlo corta la salida al feed. No es navegable (sin prompt/cola propios).
+    nombre: "Publicar",
+    es_ia: false,
+    claves: ["KENI_PUBLICAR_REAL"],
+    ayuda: "Publica de verdad en la red (apagado = simulación)",
+    grupo: "Aprobar y publicar",
+    tipo: "CRITICA",
   },
 ];
 
