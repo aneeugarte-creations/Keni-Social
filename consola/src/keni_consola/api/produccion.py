@@ -42,7 +42,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import bootstrap_categorias, config, marcas, redes, repos
+from .. import bootstrap_categorias, config, marcas, pipeline_estado, redes, repos
 from ..tiempo import ahora_iso, inicio_dia_cdmx_iso_utc
 
 _log = logging.getLogger("keni_consola.api.produccion")
@@ -250,4 +250,96 @@ def _dia(marca: str) -> dict:
     }
 
 
-RUTAS = [Route("/api/produccion/dia", dia, methods=["GET"])]
+# --------------------------------------------------------------------------- #
+# Backlog de la CADENA completa (no la jornada): el embalse oculto por marca    #
+# --------------------------------------------------------------------------- #
+# Claves de `etapas` en orden de la cadena (entrada -> salida). El front depende de que
+# SIEMPRE estén las seis, a 0 si no hay nada en esa etapa.
+_BACKLOG_ETAPAS = (
+    "pool_sin_admitir",     # [A] clusters de noticia `nuevo` aún sin admitir (pool de redacción)
+    "pipeline_en_proceso",  # [B] temas admitidos en proceso (sin verificar / verificado sin copy)
+    "esperando_copy",       # [C] autogen en el tablero priorizado, sin copy aún (= ETAPA_PRIORIZADA)
+    "generando_copy",       # [D1] copy ya encolado (etiqueta autogen), sin copy listo
+    "generando_arte",       # [D2] tiene copy pero le falta el arte
+    "lista_para_revisar",   # [E] copy + arte listos / ya en el gate humano
+)
+
+
+def _pool_sin_admitir(marca: str) -> int:
+    """[A] Clusters de noticia en `nuevo` (pool sin admitir) de una marca. 0 best-effort."""
+    try:
+        _, total = repos.listar_noticia_clusters(marca=marca, estado="nuevo", limite=1)
+        return int(total)
+    except Exception:  # noqa: BLE001 -- una sub-cuenta que falla cae a 0, no tumba el panel
+        _log.exception("backlog: fallo el conteo del pool sin admitir (%s).", marca)
+        return 0
+
+
+def _pipeline_en_proceso(marca: str) -> int:
+    """[B] Temas admitidos del pipeline EN PROCESO de una marca. 0 best-effort."""
+    try:
+        from ..pipeline_contenido import temas_en_proceso
+
+        return temas_en_proceso(marca)
+    except Exception:  # noqa: BLE001 -- una sub-cuenta que falla cae a 0, no tumba el panel
+        _log.exception("backlog: fallo el conteo del pipeline en proceso (%s).", marca)
+        return 0
+
+
+async def backlog(request: Request) -> Response:
+    """GET /api/produccion/backlog: el backlog HISTÓRICO de la cadena por marca × etapa."""
+    return JSONResponse(await run_in_threadpool(_backlog))
+
+
+def _backlog() -> dict:
+    """Recuento del backlog COMPLETO (todo el embalse, no solo la jornada) por marca × etapa.
+
+    A diferencia de `_dia` (que recorta a la JORNADA MX), aquí se cuenta TODO lo pendiente a lo
+    largo de la cadena: el pool de noticias sin admitir [A], el pipeline admitido en proceso [B]
+    y el backlog del tablero autogen por etapa [C-E]. Las tres lecturas globales del tablero se
+    hacen UNA vez y se agrupan por marca en Python (no una query por marca); el pool [A] y el
+    pipeline en proceso [B] sí se cuentan por marca (no hay lectura global por marca para ellos)
+    y caen a 0 best-effort si su fuente falla.
+    """
+    # Tablero (autogen [C-E]): los tres insumos PUROS de `pipeline_estado.contar_por_etapa`,
+    # leídos globales y agrupados por marca.
+    items = repos.listar_publicacion(clase="contenido")
+    items_por_marca: dict[str, list[dict[str, Any]]] = {}
+    for it in items:
+        items_por_marca.setdefault(str(it.get("marca") or ""), []).append(it)
+
+    filas_por_item: dict[str, list[dict[str, Any]]] = {}
+    for f in repos.listar_piezas_fila():
+        filas_por_item.setdefault(str(f.get("publicacion_id") or ""), []).append(f)
+    etiquetas_por_item = repos.etiquetas_por_contenido()
+
+    salida: list[dict[str, Any]] = []
+    for marca in sorted(marcas.ids()):
+        etapas_tablero = pipeline_estado.contar_por_etapa(
+            items_por_marca.get(marca, []),
+            plataformas_por_item=filas_por_item,
+            etiquetas_por_item=etiquetas_por_item,
+        )
+        etapas = {
+            "pool_sin_admitir": _pool_sin_admitir(marca),
+            "pipeline_en_proceso": _pipeline_en_proceso(marca),
+            "esperando_copy": etapas_tablero.get(pipeline_estado.ETAPA_PRIORIZADA, 0),
+            "generando_copy": etapas_tablero.get(pipeline_estado.ETAPA_GENERANDO_COPY, 0),
+            "generando_arte": etapas_tablero.get(pipeline_estado.ETAPA_GENERANDO_ARTE, 0),
+            "lista_para_revisar": etapas_tablero.get(pipeline_estado.ETAPA_LISTA_REVISAR, 0),
+        }
+        salida.append(
+            {
+                "marca": marca,
+                "nombre": marcas.etiqueta_de(marca),
+                "etapas": etapas,
+                "total": sum(etapas.values()),
+            }
+        )
+    return {"marcas": salida}
+
+
+RUTAS = [
+    Route("/api/produccion/dia", dia, methods=["GET"]),
+    Route("/api/produccion/backlog", backlog, methods=["GET"]),
+]

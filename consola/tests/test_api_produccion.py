@@ -151,3 +151,59 @@ def test_produccion_dia_filtra_por_marca(entorno):
 def test_produccion_dia_marca_invalida_400(entorno):
     cli = _cli()
     assert cli.get("/api/produccion/dia?marca=no-existe").status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# Backlog de la CADENA (`GET /api/produccion/backlog`): embalse por marca×etapa #
+# --------------------------------------------------------------------------- #
+
+from keni_consola import marcas  # noqa: E402 -- import local para los tests del backlog
+from keni_consola.api import produccion as produccion_api  # noqa: E402
+
+
+def test_backlog_forma_estable_todo_a_cero(entorno):
+    """Sin nada en la cadena: una fila por marca (ordenadas) con las 6 etapas a 0."""
+    cli = _cli()
+    data = cli.get("/api/produccion/backlog").json()
+
+    ids = [m["marca"] for m in data["marcas"]]
+    assert ids == sorted(marcas.ids())  # todas las marcas, ordenadas por id
+    for fila in data["marcas"]:
+        # Las 6 etapas SIEMPRE presentes (forma estable que consume el front).
+        assert set(fila["etapas"]) == set(produccion_api._BACKLOG_ETAPAS)
+        assert all(v == 0 for v in fila["etapas"].values())
+        assert fila["total"] == 0
+        assert fila["nombre"] == marcas.etiqueta_de(fila["marca"])
+
+
+def test_backlog_esperando_copy_cuenta_autogen_sin_copy(entorno):
+    """Un tema autogen sin copy (origen redactable, sin pieza) cae en `esperando_copy`."""
+    repos.crear_publicacion(
+        clase="contenido", titulo="Autogen en cola", marca="unotv", origen="equipo"
+    )
+    cli = _cli()
+    por_marca = {m["marca"]: m for m in cli.get("/api/produccion/backlog").json()["marcas"]}
+
+    assert por_marca["unotv"]["etapas"]["esperando_copy"] == 1
+    assert por_marca["unotv"]["total"] == 1
+
+
+def test_backlog_agrupa_por_marca_y_etapa(entorno):
+    """Cada tema cuenta en SU marca y en la etapa que le corresponde por sus señales."""
+    # unotv: un autogen sin copy (esperando_copy).
+    repos.crear_publicacion(
+        clase="contenido", titulo="UnoTV en cola", marca="unotv", origen="equipo"
+    )
+    # claro-sports: un autogen CON copy pero sin imagen (generando_arte).
+    con_copy = repos.crear_publicacion(
+        clase="contenido", titulo="Claro con copy", marca="claro-sports", origen="equipo"
+    )
+    repos.crear_pieza_fila(publicacion_id=con_copy["id"], red="x", copy="Texto")
+
+    cli = _cli()
+    por_marca = {m["marca"]: m for m in cli.get("/api/produccion/backlog").json()["marcas"]}
+
+    assert por_marca["unotv"]["etapas"]["esperando_copy"] == 1
+    assert por_marca["unotv"]["etapas"]["generando_arte"] == 0
+    assert por_marca["claro-sports"]["etapas"]["generando_arte"] == 1
+    assert por_marca["claro-sports"]["etapas"]["esperando_copy"] == 0
