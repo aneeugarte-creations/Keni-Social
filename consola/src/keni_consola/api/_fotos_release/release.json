@@ -1,9 +1,9 @@
 {
-  "version": "0.1.10",
-  "notes": "Puedes volver a pulsar «Buscar actualizaciones» aunque ya estés en la última versión.",
+  "version": "0.1.11",
+  "notes": "El etiquetado con IA ya no pide permisos de carpetas en bucle al procesar un partido, y muestra el avance en directo (una línea por foto).",
   "pub_date": "2026-06-29T00:00:00Z",
   "darwin-aarch64": {
-    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcGZKbmdtS1pQRExrSEtjSGlPMFhKZVNvdmdLdzRPVWFCeVY0NTV1R0Z6NjJ1RytMK1ZiRjhGUXcwS1pDbnh4WkZJUmRrT1doMW5LalltOTBsWXFDZndVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzc2NzU5CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6ClZEMWJQNGQybERFbVRMTXZHWUtNQ3YvdjdCZlhlRTA5SUxYelVGd05Pd1VXeFpjUUZub1EvSE5TQ084bHBXZTlsT2h6WmRqYVR6K2dBNDcwOVFJSEJRPT0K",
+    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcGFsYmZzRmRkOHVFS20zMDcyR0FTWnBsT1FYR1JXMXdsSkppOVN2SkhiTTVUSGV5eC9XMzcrREZLUUF3cWhwVmZtakx1Nmo4aTVsc0F3SUl6NkkzZ0FzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzc5NTA1CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6CnY0WVN0aktlbkpkL1pYaGMvd1RYalhFcWxwQW5sRWp6akRKSmNVMTJJSXprcmozTENlNlpWNTNZeS9OUEZXUlR4K01KYS8zaG1aL3dwQzRlc3RRWUF3PT0K",
     "url": "https://social.kenitech.io/api/fotos/updater"
   }
 }
