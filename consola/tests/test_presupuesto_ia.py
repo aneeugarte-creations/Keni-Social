@@ -17,6 +17,8 @@ TODO OFFLINE (nunca toca `claude` ni red). Cubre:
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
 from keni_consola import ajustes, cola, gate_diario, generaciones, presupuesto_ia, repos, ruteo_cuentas
@@ -876,8 +878,9 @@ def test_fraccion_dia_cdmx_deriva_del_reloj_canonico(monkeypatch):
 # Gate DIARIO por % del limite SEMANAL POR CUENTA de Claude (gate_diario)        #
 # --------------------------------------------------------------------------- #
 #
-# Hay DOS cuentas (A=claro-sports/fundacion, B=unotv/nacion-gamer/unotv-us). Cada cuenta reparte SU
-# limite semanal en 7 dias (umbral base ~14,3 pp/dia). Al alcanzar el umbral del dia de una cuenta,
+# Hay DOS cuentas (A=claro-sports/fundacion, B=unotv/nacion-gamer/unotv-us). Cada cuenta reparte el
+# cupo semanal que le QUEDA entre los dias hasta su reset (cupo del dia; ~14,3 pp/dia plano de
+# respaldo cuando falta el reset). Al alcanzar el umbral del dia de una cuenta,
 # pausa SOLO las marcas de esa cuenta; aceptar +10% sube el umbral del dia de ESA cuenta y reanuda.
 # La fuente del % vive tras UN accesor por cuenta (`consumo_semanal_hoy_pct(cuenta)`); None => NO
 # cortar (fallback seguro). El estado del dia (umbral/aceptados) es independiente por cuenta.
@@ -892,6 +895,35 @@ def _patch_consumo(monkeypatch, por_cuenta: dict[str, float | None]) -> None:
     monkeypatch.setattr(
         gate_diario, "consumo_semanal_hoy_pct", lambda cuenta: por_cuenta.get(cuenta)
     )
+
+
+# --- Cupo del dia adaptativo: lo que queda / dias hasta el reset (PURO, sin BD) --------------- #
+
+
+def test_umbral_base_reparte_lo_que_queda_entre_dias_restantes():
+    hoy = date(2026, 6, 29)
+    # Reset 1-jul 07:00 UTC = 1-jul 01:00 CDMX -> dia del reset 1-jul; dias desde hoy (incl.) = 2.
+    # Con 40% ya consumido al inicio del dia quedan 60 pp -> 60/2 = 30 pp de cupo HOY.
+    assert gate_diario._umbral_base_pct(40, "2026-07-01T07:00:00Z", hoy) == pytest.approx(30.0)
+    # Mismo restante pero a 6 dias del reset -> 60/6 = 10 pp/dia (semana sobrada => menos cupo/dia).
+    assert gate_diario._umbral_base_pct(40, "2026-07-05T07:00:00Z", hoy) == pytest.approx(10.0)
+
+
+def test_umbral_base_ultimo_dia_da_todo_lo_que_queda():
+    # Reset manana (30-jun) -> queda 1 dia -> hoy puedes gastar TODO lo que reste del cupo.
+    assert gate_diario._umbral_base_pct(70, "2026-06-30T07:00:00Z", date(2026, 6, 29)) == pytest.approx(30.0)
+
+
+def test_umbral_base_sin_reset_cae_a_reparto_plano():
+    # Sin fecha de reset fiable: reparto plano de la semana (1/7), el comportamiento de respaldo.
+    assert gate_diario._umbral_base_pct(0, "", date(2026, 6, 29)) == pytest.approx(_BASE)
+    assert gate_diario._umbral_base_pct(None, "2026-07-01T07:00:00Z", date(2026, 6, 29)) == pytest.approx(_BASE)
+
+
+def test_dias_hasta_reset_minimo_uno():
+    # En el dia del reset (o pasado) nunca divide por cero: minimo 1 dia.
+    assert gate_diario._dias_hasta_reset("2026-06-29T07:00:00Z", date(2026, 6, 29)) == 1
+    assert gate_diario._dias_hasta_reset("2026-06-28T07:00:00Z", date(2026, 6, 29)) == 1
 
 
 def _encolar_marca(marca: str, prioridad: int) -> str:

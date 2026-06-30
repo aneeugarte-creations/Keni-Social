@@ -5,11 +5,11 @@ reanudacion humana-en-el-bucle e INDEPENDIENTE por cuenta.
 POR QUE EXISTE: la generacion corre `claude -p` (ADR 0001) con suscripciones de equipo que tienen
 limite SEMANAL. Hay DOS cuentas (A/B; el reparto de marcas vive en `ruteo_cuentas`), cada una con
 SU propio cupo semanal. El gasto en USD (presupuesto_ia) es un proxy del coste, no del cupo real.
-Este gate vigila el cupo REAL de CADA cuenta: reparte su limite semanal en 7 dias (un septimo por
-dia, ~14,3%) y, cuando el consumo del dia de ESA cuenta alcanza su umbral, PAUSA la generacion de
-SUS marcas (automatica Y manual) y pide criterio humano a su gente. La otra cuenta sigue su ritmo
-aparte. Aceptar +10% sube el umbral del dia de ESA cuenta y reanuda; al cruzar el nuevo umbral,
-vuelve a pausar y pedir aceptar.
+Este gate vigila el cupo REAL de CADA cuenta: reparte el cupo semanal que le QUEDA entre los dias
+que faltan para SU reset (no un septimo fijo) y, cuando el consumo del dia de ESA cuenta alcanza ese
+cupo, PAUSA la generacion de SUS marcas (automatica Y manual) y pide criterio humano a su gente. La
+otra cuenta sigue su ritmo aparte. Aceptar +10% sube el umbral del dia de ESA cuenta y reanuda; al
+cruzar el nuevo umbral, vuelve a pausar y pedir aceptar.
 
 FUENTE DEL % (seam unico, `consumo_semanal_hoy_pct(cuenta)`): el % semanal real de cada cuenta lo
 persiste una FUNDACION aparte que muestrea el medidor "Current week (all models)" POR CUENTA y
@@ -20,7 +20,8 @@ TODO del accesor): hasta entonces el accesor devuelve None y el gate queda inert
 ESTADO DIARIO (mutable, pequeno) POR CUENTA: por dia CDMX y por cuenta se persiste cuantos "+10%" se
 han aceptado, en el store de ajustes compartido (`ajustes.py`, TOML en /data: lo ven
 back/worker/daemons en caliente, mismo patron que el kill switch). El umbral vigente de la cuenta
-se DERIVA: `BASE + aceptados * PASO`. Al cambiar de dia CDMX el contador se ignora (reset implicito):
+se DERIVA: `cupo_del_dia + aceptados * PASO` (cupo = lo que queda / dias hasta el reset). Al cambiar
+de dia CDMX el contador se ignora (reset implicito):
 un valor de ayer no cuenta para hoy. Cada cuenta tiene su propia clave -> su corte y su aceptar son
 independientes.
 
@@ -35,15 +36,18 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import date, datetime
 
 from . import ajustes
 from .dominio import jobspec
-from .tiempo import dia_cdmx
+from .tiempo import dia_cdmx, hoy_cdmx
 
 _log = logging.getLogger("keni_consola.gate_diario")
 
-# Umbral BASE del dia: un septimo del limite SEMANAL (100% / 7 dias ~= 14,3 puntos porcentuales
-# del semanal por dia). Cada "Aceptar +10%" sube el umbral del dia en PASO puntos porcentuales.
+# Reparto PLANO de respaldo: un septimo del limite SEMANAL (100% / 7 dias ~= 14,3 pp/dia). Es el
+# cupo del dia SOLO cuando aun no se conoce el reset o la base del dia de la cuenta; con esos datos
+# el cupo se calcula adaptativo (lo que queda / dias hasta el reset, ver `_umbral_base_pct`). Cada
+# "Aceptar +10%" sube el umbral del dia en PASO puntos porcentuales.
 BASE_UMBRAL_PCT = 100.0 / 7.0
 PASO_PCT = 10.0
 
@@ -87,13 +91,7 @@ def consumo_semanal_hoy_pct(cuenta: str) -> float | None:
     Implementacion: `repos.leer_uso_cuenta(cuenta)` (la fila de ESA cuenta del muestreo de fondo
     POR CUENTA). Best-effort: ante un fallo de lectura devuelve None (no corta).
     """
-    from . import repos  # perezoso: evita el ciclo de import (presupuesto_ia -> gate_diario)
-
-    try:
-        fila = repos.leer_uso_cuenta(cuenta)
-    except Exception:  # noqa: BLE001 -- un blip de BD no debe cortar las marcas de la cuenta
-        _log.warning("gate_diario: fallo al leer el uso de %s; no corto", cuenta, exc_info=True)
-        return None
+    fila = _leer_fila(cuenta)
     if not fila or not fila.get("conectada"):
         return None
     actual = fila.get("semana_pct")
@@ -101,6 +99,60 @@ def consumo_semanal_hoy_pct(cuenta: str) -> float | None:
     if actual is None or base is None:
         return None
     return max(0.0, float(actual) - float(base))
+
+
+def _leer_fila(cuenta: str) -> dict | None:
+    """Ultima fila del muestreo de fondo de `cuenta` (o None si no hay / blip de BD). Best-effort:
+    ante un fallo de lectura devuelve None para no cortar las marcas de la cuenta."""
+    from . import repos  # perezoso: evita el ciclo de import (presupuesto_ia -> gate_diario)
+
+    try:
+        return repos.leer_uso_cuenta(cuenta)
+    except Exception:  # noqa: BLE001 -- un blip de BD no debe cortar las marcas de la cuenta
+        _log.warning("gate_diario: fallo al leer el uso de %s; no corto", cuenta, exc_info=True)
+        return None
+
+
+def _dias_hasta_reset(reset_iso: str, hoy: date) -> int:
+    """Dias CDMX desde `hoy` (incluido) hasta el dia del reset semanal de la cuenta; minimo 1.
+
+    Reparte el cupo restante entre los dias que de verdad faltan. `reset_iso` es el instante del
+    reset (`reset_semana_iso` del muestreo, ISO-UTC). Sin fecha fiable cae a 7 (la semana entera),
+    recuperando el reparto plano de antes.
+    """
+    if not reset_iso:
+        return 7
+    try:
+        reset = datetime.fromisoformat(reset_iso.replace("Z", "+00:00"))
+    except ValueError:
+        return 7
+    return max(1, (hoy_cdmx(reset) - hoy).days)
+
+
+def _umbral_base_pct(semana_pct_inicio_dia: float | None, reset_iso: str, hoy: date) -> float:
+    """Cupo del dia (pp del semanal): el % del cupo SEMANAL que QUEDABA al inicio del dia, repartido
+    entre los dias que faltan hasta el reset.
+
+    `(100 - consumido_al_inicio_del_dia) / dias_hasta_reset`. Asi un dia flojo deja mas margen al
+    siguiente y uno intenso lo aprieta, convergiendo a agotar el cupo justo en la renovacion (en vez
+    de un septimo fijo que ignora si la semana va sobrada o pasada). Sin base fiable -> reparto
+    plano (`BASE_UMBRAL_PCT`).
+    """
+    if semana_pct_inicio_dia is None:
+        return BASE_UMBRAL_PCT
+    restante = max(0.0, 100.0 - float(semana_pct_inicio_dia))
+    return restante / _dias_hasta_reset(reset_iso, hoy)
+
+
+def _umbral_base_cuenta(cuenta: str) -> float:
+    """Cupo base del dia de `cuenta` leyendo su fila de uso (reset + base del dia). Sin fila ->
+    reparto plano (`BASE_UMBRAL_PCT`)."""
+    fila = _leer_fila(cuenta)
+    if not fila:
+        return BASE_UMBRAL_PCT
+    return _umbral_base_pct(
+        fila.get("semana_pct_inicio_dia"), str(fila.get("reset_semana_iso") or ""), hoy_cdmx()
+    )
 
 
 def _estado_persistido(cuenta: str) -> tuple[str, int]:
@@ -124,8 +176,9 @@ def aceptados_hoy(cuenta: str) -> int:
 
 
 def umbral_vigente(cuenta: str) -> float:
-    """Umbral del dia de `cuenta` (pp del semanal): BASE + aceptados_hoy(cuenta) * PASO."""
-    return BASE_UMBRAL_PCT + aceptados_hoy(cuenta) * PASO_PCT
+    """Umbral del dia de `cuenta` (pp del semanal): cupo base del dia (lo que queda del cupo semanal
+    repartido entre los dias hasta el reset) + aceptados_hoy(cuenta) * PASO."""
+    return _umbral_base_cuenta(cuenta) + aceptados_hoy(cuenta) * PASO_PCT
 
 
 def pausado_por_pct(cuenta: str) -> bool:
@@ -164,19 +217,21 @@ def estado(cuenta: str) -> dict:
        pausado_por_pct: bool, base_umbral_pct: float, paso_pct: float, dia: str}
 
     `consumo_hoy_pct` es None mientras la fuente del % de esa cuenta no exista (rollout): con None el
-    gate esta inerte y `pausado_por_pct` es False. `umbral_pct` es el umbral vigente del dia de la
-    cuenta (sube +10% por cada aceptar). El UI muestra "Aceptar continuar (+10%)" para la cuenta
-    cuando `pausado_por_pct`. `cuenta` rotula a quien pertenece el bloque (y a quien aplica aceptar).
+    gate esta inerte y `pausado_por_pct` es False. `base_umbral_pct` es el cupo base del dia (lo que
+    queda del cupo semanal repartido entre los dias hasta el reset) y `umbral_pct` ese cupo + los
+    +10% aceptados. El UI muestra "Aceptar continuar (+10%)" para la cuenta cuando `pausado_por_pct`.
+    `cuenta` rotula a quien pertenece el bloque (y a quien aplica aceptar).
     """
     consumo = consumo_semanal_hoy_pct(cuenta)
-    umbral = umbral_vigente(cuenta)
+    base = _umbral_base_cuenta(cuenta)
+    umbral = base + aceptados_hoy(cuenta) * PASO_PCT
     return {
         "cuenta": cuenta,
         "consumo_hoy_pct": round(consumo, 1) if consumo is not None else None,
         "umbral_pct": round(umbral, 1),
         "aceptados_hoy": aceptados_hoy(cuenta),
         "pausado_por_pct": consumo is not None and consumo >= umbral,
-        "base_umbral_pct": round(BASE_UMBRAL_PCT, 1),
+        "base_umbral_pct": round(base, 1),
         "paso_pct": PASO_PCT,
         "dia": _hoy_cdmx(),
     }
