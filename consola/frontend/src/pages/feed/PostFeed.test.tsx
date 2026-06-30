@@ -200,6 +200,19 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     expect(screen.getByRole("button", { name: /^abrir/i })).toBeInTheDocument();
   });
 
+  it("en «generando copy» la tarjeta es solo visual: rótulo presente, sin acciones ni opener", () => {
+    renderPost(pub({ etapa_ia: "generando_copy", contenido: "" }));
+    // El MISMO rótulo de etapa sigue presente (ahora centrado sobre la imagen).
+    expect(screen.getByText("Generando copy")).toBeInTheDocument();
+    // Nada interactivo mientras la IA redacta: ni acciones de la fila inferior ni opener de la imagen.
+    expect(
+      screen.queryByRole("button", { name: "Me gusta: no disponible" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Comentar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^quitar de/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^abrir/i })).not.toBeInTheDocument();
+  });
+
   it("«Me gusta» cuando NO toca no aprueba: avisa con un toast (falta la imagen) con acción 'Abrir'", () => {
     renderPost(pub({ etapa_ia: "generando_arte" }));
     fireEvent.click(screen.getByRole("button", { name: "Me gusta: no disponible" }));

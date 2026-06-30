@@ -102,6 +102,9 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
   const etapa = etapaDePieza(pieza);
   const enRevision = pieza.estado === "en_revision";
   const yaAprobada = etapa === "programada" || etapa === "publicada";
+  // La IA aún redacta el copy: la tarjeta es SOLO VISUAL (no se abre el editor, sin acciones), con
+  // el rótulo de etapa centrado sobre la imagen. Nada que tocar hasta que haya copy.
+  const generandoCopy = etapa === "generando_copy";
   // Autogenerada por la IA: sin autor humano (las piezas de la pipeline —pipeline/rss/radar— no
   // tienen autor; las que postea el equipo SÍ). En ese caso la firma es "IA", no "desconocido".
   const generadaPorIA = !pieza.autor_nombre?.trim();
@@ -507,8 +510,15 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
     // a naranja de marca como pista de que la tarjeta es accionable.
     <article
       aria-label={pieza.titulo}
-      onClick={onClickTarjeta}
-      className="cursor-pointer rounded-xl border border-border bg-card text-left text-card-foreground shadow-sm transition-colors hover:border-keni-300 focus-within:border-keni-300"
+      aria-busy={generandoCopy || undefined}
+      onClick={generandoCopy ? undefined : onClickTarjeta}
+      className={cn(
+        "rounded-xl border border-border bg-card text-left text-card-foreground shadow-sm transition-colors",
+        generandoCopy
+          ? // Solo visual: sin pista de clic y sin interacción en ningún hijo.
+            "select-none [&_*]:pointer-events-none"
+          : "cursor-pointer hover:border-keni-300 focus-within:border-keni-300",
+      )}
     >
       {/* Cabecera EN UNA SOLA LÍNEA (orden del rediseño aprobado): distintivo de FORMATO + RED
           (iconos pelados, sin nombre ni dos burbujas) → quién posteó (IA/autor) · tiempo. El
@@ -606,12 +616,18 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
         video_url={pieza.video || undefined}
         carrusel={pieza.carrusel}
         titulo={pieza.titulo}
-        onAbrir={() => void abrirEditor()}
+        onAbrir={generandoCopy ? undefined : () => void abrirEditor()}
         captionExpandido={captionExpandido}
         onAlternarCaption={() => setCaptionExpandido((v) => !v)}
         variante="limpia"
         overlayImagen={
-          bloqueoStock || stockAutorizado(pieza) ? (
+          generandoCopy ? (
+            // Velo gris sobre la imagen + el MISMO rótulo de etapa centrado encima (nítido): la
+            // pieza se está generando, aún no hay nada que revisar.
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-muted/70 backdrop-grayscale">
+              <BadgeEtapa etapa={etapa} formato={pieza.formato} />
+            </div>
+          ) : bloqueoStock || stockAutorizado(pieza) ? (
             <>
               {/* Marca central sobre la FOTO (no la tarjeta), discreta. Las agencias con licencia
                   libre (Pexels/Pixabay) rotulan "Autorizar"; el resto, "Sin licencia". */}
@@ -680,6 +696,9 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
           un clic en un botón/enlace hace SU acción, no expande. `stopPropagation` evita que la
           tarjeta abra además el editor. Like y dislike son un TOGGLE de tu reacción; marcar OK /
           marcar dislike solo cuando te toca, quitar tu reacción siempre. */}
+      {/* Mientras la IA redacta el copy el rótulo va centrado sobre la imagen y no hay acciones:
+          la fila inferior (badge + me gusta / comentar / quitar) se omite por completo. */}
+      {!generandoCopy && (
       <div
         className="flex flex-wrap items-center gap-2 gap-y-1 px-4 pb-2 pt-1"
         onClick={(e) => {
@@ -881,6 +900,7 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
           </Tooltip>
         </div>
       </div>
+      )}
 
       {/* Editor rico (reusa el de Piezas): copy + imagen (placa con titular inline). Se MONTA
           solo al editar. Es un modal (portal): los clics dentro no abren otra vez la tarjeta. */}
