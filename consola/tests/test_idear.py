@@ -209,15 +209,10 @@ def test_reaprobar_sin_tema_reintenta(cliente, monkeypatch):
 # --------------------------------------------------------------------------- #
 
 _SALIDA_VIABLE = (
-    "🟢 Hay material verificado suficiente.\n\n"
-    "Brief: la efeméride es real.\n\n"
     '```json\n{"viable": true, "material": "hechos verificados sobre el tema",'
     ' "fuentes": ["https://fuente-1", "https://fuente-2"]}\n```\n'
 )
-_SALIDA_NO_VIABLE = (
-    "🟡 Material flojo, no corroborable.\n\n"
-    '```json\n{"viable": false, "material": "", "fuentes": []}\n```\n'
-)
+_SALIDA_NO_VIABLE = '```json\n{"viable": false, "material": "", "fuentes": []}\n```\n'
 
 
 def test_investigar_viable_crea_tema_recogible_por_produccion(entorno):
