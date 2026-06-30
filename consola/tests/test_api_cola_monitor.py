@@ -58,6 +58,13 @@ def _encolar(etiqueta: str = "Copy de nota", marca: str = _MARCA) -> str:
     return gen["id"]
 
 
+def _encolar_huerfano(gen_id: str = "gen-fantasma") -> str:
+    """Encola un job cuyo `gen_id` NO tiene registro de generacion (job huerfano). Devuelve el gen_id."""
+    spec = jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib())
+    cola.encolar(gen_id, spec)
+    return gen_id
+
+
 # --------------------------------------------------------------------------- #
 # Snapshot en vivo                                                            #
 # --------------------------------------------------------------------------- #
@@ -155,6 +162,95 @@ def test_cola_jobs_traen_prioridad(entorno):
     data = _cli_token().get("/api/actividad/cola").json()
     job = next(j for j in data["esperando"] if j["gen_id"] == gen["id"])
     assert job["prioridad"] == 10
+
+
+def test_cola_conteo_marca_cuadra_con_listas(entorno):
+    """Con filtro de marca, `conteo_marca` CUADRA con las listas; sin filtro es None.
+
+    El KPI global (`conteo`) sigue siendo de toda la cola; el bloque nuevo `conteo_marca` se deriva
+    de los MISMOS jobs enriquecidos de la marca, asi que la UI puede mostrar conteos que casen con
+    `en_curso`/`esperando` en vez de mezclar un total global con listas por marca.
+    """
+    _encolar("Copy UnoTV", marca="unotv")
+    _encolar("Copy UnoTV 2", marca="unotv")
+    _encolar("Copy Claro", marca="claro-sports")
+
+    # Sin filtro: conteo_marca null (manda el global).
+    data = _cli_token().get("/api/actividad/cola").json()
+    assert data["conteo_marca"] is None
+
+    # Con filtro: conteo_marca == longitudes de las listas de esa marca.
+    data = _cli_token().get("/api/actividad/cola?marca=unotv").json()
+    assert data["conteo_marca"] == {
+        "pendientes": len(data["esperando"]),
+        "reclamados": len(data["en_curso"]),
+    }
+    assert data["conteo_marca"]["pendientes"] == 2
+    # El KPI global no se acota por marca: las 3 piezas siguen contando.
+    assert data["conteo"]["pendientes"] == 3
+
+
+def test_cola_huerfanos_en_snapshot(entorno):
+    """Un job sin registro de generacion aparece en `huerfanos` y se marca `huerfano` en la lista."""
+    _encolar_huerfano()
+    data = _cli_token().get("/api/actividad/cola").json()
+    assert data["huerfanos"]["pendientes"] == 1
+    assert data["huerfanos"]["reclamados"] == 0
+    # El job huerfano viaja en la lista de espera con su flag (marca/proceso sin registro real).
+    huerfano = next(j for j in data["esperando"] if j["gen_id"] == "gen-fantasma")
+    assert huerfano["huerfano"] is True
+    assert huerfano["marca"] == ""
+
+
+def test_cola_desglose_contrato(entorno):
+    """`/cola/desglose` agrupa por marca x proceso x estado y aisla los huerfanos."""
+    _encolar("Copy UnoTV", marca="unotv")
+    _encolar("Copy Claro", marca="claro-sports")
+    _encolar_huerfano()
+    # Un job reclamado: debe contarse como `reclamados` en alguna marca o en huerfanos.
+    clavado = cola.reclamar("w")
+    assert clavado is not None
+
+    data = _cli_token().get("/api/actividad/cola/desglose").json()
+    por_marca = {b["marca"]: b for b in data["marcas"]}
+    assert "unotv" in por_marca and "claro-sports" in por_marca
+    # Ambos procesos SIEMPRE presentes; el copy es produccion.
+    bloque = por_marca["unotv"]
+    assert set(bloque["por_proceso"]) == {
+        generaciones.PROCESO_INVESTIGACION, generaciones.PROCESO_PRODUCCION,
+    }
+    assert bloque["por_proceso"][generaciones.PROCESO_PRODUCCION]["pendientes"] >= 0
+    assert set(bloque["total"]) == {"pendientes", "reclamados"}
+    # Huerfano contado aparte, nunca en una marca.
+    assert data["huerfanos"]["pendientes"] == 1
+    assert "gen-fantasma" not in por_marca
+    # El unico reclamado del entorno cuadra entre marcas + huerfanos.
+    total_reclamados = (
+        sum(b["total"]["reclamados"] for b in data["marcas"])
+        + data["huerfanos"]["reclamados"]
+    )
+    assert total_reclamados == 1
+
+
+def test_cola_preview_redactar(entorno):
+    """`/cola/preview` cuenta los temas autogenerables sin copy que ENTRARIAN a Redactar por marca,
+    ignorando el gate por marca (sin encolar nada). Marca invalida -> 400."""
+    tema = repos.crear_publicacion(
+        clase="contenido", titulo="Noticia rss", marca="unotv", origen="rss",
+    )
+    repos.crear_pieza_fila(publicacion_id=tema["id"], red="x", falta_copy=True)
+
+    # Sin filtro: la marca con un tema redactable aparece con redactar>=1.
+    data = _cli_token().get("/api/actividad/cola/preview").json()
+    por_marca = {b["marca"]: b["redactar"] for b in data["marcas"]}
+    assert por_marca.get("unotv") == 1
+
+    # Con filtro: solo esa marca, mismo conteo.
+    solo = _cli_token().get("/api/actividad/cola/preview?marca=unotv").json()
+    assert solo["marcas"] == [{"marca": "unotv", "redactar": 1}]
+
+    # Marca invalida -> 400 (mismo contrato que el resto del hub).
+    assert _cli_token().get("/api/actividad/cola/preview?marca=no-existe").status_code == 400
 
 
 # --------------------------------------------------------------------------- #
@@ -283,6 +379,33 @@ def test_purgar_requiere_admin(entorno):
     assert _cli_como("editor").post("/api/actividad/cola/purgar", headers=_ORIGIN).status_code == 403
     assert _cli_token().post("/api/actividad/cola/purgar", headers=_ORIGIN).status_code == 403
     # El editor/token no purgaron nada.
+    assert repos.contar_jobs_activos() == 1
+
+
+def test_limpiar_huerfanos_saca_solo_los_huerfanos_admin(entorno):
+    """Limpiar huerfanos saca de la cola los PENDIENTES sin registro; respeta los jobs sanos."""
+    sano = _encolar()
+    _encolar_huerfano("gen-fantasma-1")
+    _encolar_huerfano("gen-fantasma-2")
+    assert repos.contar_jobs_activos() == 3
+
+    r = _cli_como("admin").post("/api/actividad/cola/limpiar-huerfanos", headers=_ORIGIN)
+    assert r.status_code == 200
+    assert r.json()["huerfanos_limpiados"] == 2
+    # Solo el job con registro vivo sigue en la cola.
+    activos = {j["gen_id"] for j in repos.jobs_activos()}
+    assert activos == {sano}
+
+
+def test_limpiar_huerfanos_requiere_admin(entorno):
+    _encolar_huerfano()
+    assert _cli_como("editor").post(
+        "/api/actividad/cola/limpiar-huerfanos", headers=_ORIGIN
+    ).status_code == 403
+    assert _cli_token().post(
+        "/api/actividad/cola/limpiar-huerfanos", headers=_ORIGIN
+    ).status_code == 403
+    # Nada se limpio: el huerfano sigue en la cola.
     assert repos.contar_jobs_activos() == 1
 
 

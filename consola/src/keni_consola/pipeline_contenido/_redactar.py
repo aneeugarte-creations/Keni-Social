@@ -30,6 +30,7 @@ __all__ = [
     "lanzar_redactar_de_tema",
     "temas_para_redactar",
     "temas_autogen_sin_copy",
+    "preview_redactar_por_marca",
     "encadenar_ilustrar_tras_redactar",
 ]
 
@@ -224,6 +225,48 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
         elegidos.append(item)
         por_marca[marca] = por_marca.get(marca, 0) + 1
     return elegidos
+
+
+def preview_redactar_por_marca() -> dict[str, int]:
+    """Cuenta, POR MARCA, cuántos temas autogenerables SIN copy entrarían a Redactar AHORA MISMO.
+
+    Es el MISMO cómputo de selección que `temas_autogen_sin_copy` (orígenes autogen, clase
+    contenido, no `hecha`, marca válida, título no vacío, no ya encolado, con pieza donde
+    aterrizar y sin copy) PERO ignorando el gate `etapa_activa(ENV_PIPELINE_REDACTAR, marca)`:
+    responde «cuántos habría SI la etapa estuviera encendida», agrupados por marca. PREVIEW puro:
+    NO lanza ni encola nada. Best-effort: `{}` si el tablero no es legible.
+    """
+    from .. import autogen_redactar
+
+    try:
+        items = repos.listar_publicaciones_origenes(
+            sorted(ORIGENES_AUTOGEN), excluir_estado="hecha"
+        )
+    except Exception:  # noqa: BLE001 -- sin tablero legible, el preview no puede contar
+        return {}
+    ya_generados = autogen_redactar.ids_ya_generados()
+    conteo: dict[str, int] = {}
+    for item in items:
+        if (item.get("clase") or CLASE_CONTENIDO) != CLASE_CONTENIDO:
+            continue
+        if (item.get("origen") or "") not in ORIGENES_AUTOGEN:
+            continue
+        if (item.get("estado") or "") == "hecha":
+            continue
+        marca = item.get("marca") or ""
+        if not marca or not marcas.es_marca(marca):
+            continue
+        if not (item.get("titulo") or "").strip():
+            continue
+        if item.get("id") in ya_generados:
+            continue
+        tema_id = item.get("id", "") or ""
+        if not repos.listar_piezas_fila(tema_id):
+            continue
+        if _tiene_copy(tema_id):
+            continue
+        conteo[marca] = conteo.get(marca, 0) + 1
+    return conteo
 
 
 # --------------------------------------------------------------------------- #

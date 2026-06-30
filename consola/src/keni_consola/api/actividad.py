@@ -25,6 +25,14 @@ Endpoints:
       -> series por dia: `encolados` (de la tabla de jobs) y `resultados` (completados/errores/
          cola_llena + desglose por proceso con tokens/coste, de las generaciones REALES; los
          MARCADORES de etapa quedan excluidos). Throughput de entrada vs salida de la cola.
+  - `GET /api/actividad/cola/desglose`
+      -> la cola en vuelo agrupada por marca x proceso x estado + bloque `huerfanos` (jobs sin
+         registro de generacion). Desglose AUTORITATIVO de en que se reparte el conteo global.
+  - `GET /api/actividad/cola/preview?marca=`
+      -> cuantas piezas ENTRARIAN a cada etapa autogenerable (hoy `redactar`) SI se activara, sin
+         encolar nada: `{"marcas": [{"marca", "redactar"}]}`. Para anticipar la avalancha.
+  - `POST /api/actividad/cola/limpiar-huerfanos` (admin)
+      -> saca de la cola los jobs PENDIENTES huerfanos (gen_id sin registro). `{huerfanos_limpiados}`.
 
 Solo LECTURA. Errores en espanol; sin tracebacks crudos.
 """
@@ -189,12 +197,18 @@ def _edad_s(iso: str | None, ahora: datetime) -> int | None:
 
 def _item_job(job: dict, ahora: datetime) -> dict:
     """Normaliza un job en proceso + su registro de generacion para el monitor (sin `spec`)."""
-    reg = generaciones.obtener(job["gen_id"]) or {}
+    reg = generaciones.obtener(job["gen_id"])
+    # HUERFANO: el job sobrevive en la cola pero su registro de generacion ya no existe (gen
+    # borrada/purgada). Sin registro no hay marca/proceso real: nunca aparece en una lista por
+    # marca y solo infla el conteo global. Se marca para poder aislarlo (desglose / limpieza).
+    huerfano = reg is None
+    reg = reg or {}
     corriendo = job["estado"] == repos.JOB_RECLAMADO
     return {
         "job_id": job["id"],
         "gen_id": job["gen_id"],
         "estado": job["estado"],
+        "huerfano": huerfano,
         "worker": job.get("worker") or "",
         "etiqueta": reg.get("etiqueta") or "",
         "tipo": reg.get("tipo") or "",
@@ -320,11 +334,28 @@ def _cola(marca: str) -> dict:
         admision = _admision_verificacion()
     except Exception:  # noqa: BLE001 -- el admision es observabilidad; su fallo no rompe el Monitor
         admision = {"en_proceso": 0, "tope_por_marca": 0, "marcas": []}
+    # Jobs HUERFANOS (sin registro de generacion): inflan el conteo GLOBAL pero no caen en
+    # ninguna marca. Se cuentan ANTES de acotar por marca para que el Monitor explique el hueco
+    # entre el conteo global y lo que suman las marcas. El desglose completo va en `/cola/desglose`.
+    huerfanos = {
+        "pendientes": sum(
+            1 for j in en_proceso if j["huerfano"] and j["estado"] == repos.JOB_PENDIENTE
+        ),
+        "reclamados": sum(
+            1 for j in en_proceso if j["huerfano"] and j["estado"] == repos.JOB_RECLAMADO
+        ),
+    }
     # Listas para mostrar: respetan el switch GLOBAL de marca (la capacidad/los conteos no).
     if marca:
         en_proceso = [j for j in en_proceso if j["marca"] == marca]
     en_curso = [j for j in en_proceso if j["estado"] == repos.JOB_RECLAMADO]
     esperando = [j for j in en_proceso if j["estado"] == repos.JOB_PENDIENTE]
+    # Conteo POR LA MARCA filtrada, derivado de los mismos jobs enriquecidos: CUADRA con las
+    # listas (`pendientes == len(esperando)`, `reclamados == len(en_curso)`) para que la UI no
+    # mezcle el KPI global con listas por marca. Sin filtro de marca queda None (manda `conteo`).
+    conteo_marca = (
+        {"pendientes": len(esperando), "reclamados": len(en_curso)} if marca else None
+    )
     workers = sorted({j.get("worker") for j in filas if j["estado"] == repos.JOB_RECLAMADO and j.get("worker")})
 
     return {
@@ -338,6 +369,10 @@ def _cola(marca: str) -> dict:
             "terminados": terminados,
             "activos": activos,
         },
+        # Conteo de la marca filtrada (None sin filtro): cuadra con `en_curso`/`esperando`.
+        "conteo_marca": conteo_marca,
+        # Jobs sin registro de generacion (parte del conteo global que no cae en ninguna marca).
+        "huerfanos": huerfanos,
         "procesando": reclamados,  # claude -p en proceso (acotado por max_jobs)
         "slots_libres": max(0, max_jobs - reclamados),
         "workers_activos": workers,
@@ -355,6 +390,81 @@ def _cola(marca: str) -> dict:
         # marca; "" = el control GLOBAL.
         "presupuesto": presupuesto_ia.estado(marca),
     }
+
+
+def _desglose_jobs(en_proceso: list[dict]) -> dict:
+    """Agrupa los jobs en vuelo YA enriquecidos por marca x proceso x estado + bloque huerfanos.
+
+    `en_proceso` son items de `_item_job` SIN filtrar por marca. Un job HUERFANO (su `gen_id` ya
+    no tiene registro: `huerfano=True`) no cae en ninguna marca —se agrega en `huerfanos`—; el
+    resto se agrupa por la marca de su registro ('' = feed compartido sin marca). Cada celda cuenta
+    `pendientes` (en cola) y `reclamados` (corriendo); ambos procesos van SIEMPRE presentes a cero.
+    """
+    procs = (generaciones.PROCESO_INVESTIGACION, generaciones.PROCESO_PRODUCCION)
+    por_marca: dict[str, dict] = {}
+    huerfanos = {"pendientes": 0, "reclamados": 0}
+    for j in en_proceso:
+        clave = "pendientes" if j["estado"] == repos.JOB_PENDIENTE else "reclamados"
+        if j["huerfano"]:
+            huerfanos[clave] += 1
+            continue
+        bloque = por_marca.setdefault(j["marca"], {
+            "marca": j["marca"],
+            "por_proceso": {p: {"pendientes": 0, "reclamados": 0} for p in procs},
+            "total": {"pendientes": 0, "reclamados": 0},
+        })
+        proc = j["proceso"] if j["proceso"] in bloque["por_proceso"] else generaciones.PROCESO_PRODUCCION
+        bloque["por_proceso"][proc][clave] += 1
+        bloque["total"][clave] += 1
+    return {
+        "marcas": [por_marca[m] for m in sorted(por_marca)],
+        "huerfanos": huerfanos,
+    }
+
+
+def _cola_desglose() -> dict:
+    ahora = datetime.now()
+    en_proceso = [_item_job(j, ahora) for j in repos.jobs_activos(limite=10_000)]
+    return _desglose_jobs(en_proceso)
+
+
+async def cola_desglose(request: Request) -> Response:
+    """GET /api/actividad/cola/desglose: la cola en vuelo agrupada por marca x proceso x estado.
+
+    Desglose AUTORITATIVO del pool en curso (todos los jobs, no acotado por marca): por cada marca
+    su `por_proceso` (investigacion/produccion -> pendientes/reclamados) y su `total`, mas un bloque
+    `huerfanos` con los jobs sin registro de generacion (lo que infla el conteo global y no cae en
+    ninguna marca). Solo lectura; sin filtro de marca (es la foto completa).
+    """
+    return JSONResponse(await run_in_threadpool(_cola_desglose))
+
+
+def _cola_preview(marca: str) -> dict:
+    from ..pipeline_contenido import preview_redactar_por_marca
+
+    try:
+        por_marca = preview_redactar_por_marca()
+    except Exception:  # noqa: BLE001 -- el preview es observabilidad; su fallo no rompe el panel
+        por_marca = {}
+    if marca:
+        filas = [(marca, int(por_marca.get(marca, 0)))]
+    else:
+        filas = sorted(por_marca.items())
+    return {"marcas": [{"marca": m, "redactar": n} for m, n in filas]}
+
+
+async def cola_preview(request: Request) -> Response:
+    """GET /api/actividad/cola/preview?marca=: cuantas piezas ENTRARIAN a cada etapa autogenerable.
+
+    Responde, SIN encolar nada, cuanto trabajo pondria en cola activar cada etapa autogenerable de
+    una marca. Hoy expone `redactar` (la etapa de copy, la de la avalancha): el MISMO computo de
+    seleccion que la etapa de Redactar PERO ignorando su gate por marca, asi se ve el volumen antes
+    de encender el toggle. `marca` ("" = todas) acota el resultado a esa marca.
+    """
+    marca = (request.query_params.get("marca") or "").strip()
+    if marca and not marcas.es_marca(marca):
+        return JSONResponse({"error": "Marca no permitida."}, status_code=400)
+    return JSONResponse(await run_in_threadpool(_cola_preview, marca))
 
 
 def _metricas_tokens(g: dict) -> tuple[int, float]:
@@ -483,6 +593,35 @@ def _cola_purgar() -> dict:
     return {"purgados": purgados}
 
 
+async def cola_limpiar_huerfanos(request: Request) -> Response:
+    """POST /api/actividad/cola/limpiar-huerfanos: saca de la cola los jobs PENDIENTES huerfanos. Admin.
+
+    Un job huerfano (su `gen_id` ya no tiene registro de generacion) jamas se procesa con sentido y
+    solo infla el conteo global. Solo se tocan los PENDIENTES (nunca corrieron: no hay arbol de
+    `claude` que matar ni post-procesado que duplicar); se marcan `terminado` (salen de la cola
+    activa; la retencion borra la fila despues). Devuelve cuantos limpio.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    return JSONResponse(await run_in_threadpool(_cola_limpiar_huerfanos))
+
+
+def _cola_limpiar_huerfanos() -> dict:
+    filas = repos.jobs_activos(limite=10_000)
+    limpiados = 0
+    for j in filas:
+        if j["estado"] != repos.JOB_PENDIENTE:
+            continue
+        if generaciones.obtener(j["gen_id"]) is not None:
+            continue
+        try:
+            repos.terminar_job(j["id"])
+            limpiados += 1
+        except Exception:  # noqa: BLE001 -- un fallo por job no aborta la limpieza del resto
+            continue
+    return {"huerfanos_limpiados": limpiados}
+
+
 async def cola_priorizar(request: Request) -> Response:
     """POST /api/actividad/cola/priorizar {gen_id}: adelanta un job ESPERANDO. Admin.
 
@@ -576,6 +715,9 @@ RUTAS = [
     Route("/api/actividad/economia", economia, methods=["GET"]),
     # Mas especificas ANTES que la generica para que Starlette case bien.
     Route("/api/actividad/cola/series", cola_series, methods=["GET"]),
+    Route("/api/actividad/cola/desglose", cola_desglose, methods=["GET"]),
+    Route("/api/actividad/cola/preview", cola_preview, methods=["GET"]),
+    Route("/api/actividad/cola/limpiar-huerfanos", cola_limpiar_huerfanos, methods=["POST"]),
     Route("/api/actividad/cola/purgar", cola_purgar, methods=["POST"]),
     Route("/api/actividad/cola/priorizar", cola_priorizar, methods=["POST"]),
     Route("/api/actividad/cola/reencolar", cola_reencolar, methods=["POST"]),
