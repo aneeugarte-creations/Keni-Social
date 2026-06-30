@@ -17,13 +17,11 @@ import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Button } from "@/components/ui/button";
 import { api, mensajeError } from "@/lib/api";
-import { useMejorHora } from "@/lib/api/programacion";
 import { estaVencida, horaUtcACdmx, hoyCDMX } from "@/lib/fecha";
 import { colorCategoria, ETIQUETA_CATEGORIA } from "@/lib/categorias";
 import { cn } from "@/lib/utils";
 import type { Pieza } from "@/types";
 
-import { BotonHoraPieza } from "./BotonHoraPieza";
 import { CLAVE_PIEZAS } from "./claves";
 import { DialogoReprogramar } from "./DialogoReprogramar";
 import {
@@ -132,30 +130,27 @@ function diasDeSemana(ancla: Date): Date[] {
 }
 
 /**
- * Una píldora de publicación: arrastrable, clic en el título abre el editor, clic-derecho el
- * menú. La HORA es editable EN SITIO: un botón aparte (`BotonHoraPieza`) abre un popover para
- * personalizar el instante de ese post sin salir del calendario (solo para piezas no publicadas).
+ * Una píldora de publicación: arrastrable, clic abre la pieza COMO SE VE EN EL FEED (`onVerFeed`),
+ * clic-derecho el menú. La HORA es texto plano: reprogramar (cambiar día y/u hora) vive en el menú
+ * contextual, no en el clic sobre la hora.
  *
- * La fila es un `<div>` arrastrable que envuelve dos botones (hora + título): así el editor de
- * hora y el del post no se anidan y cada uno recibe su propio clic.
+ * La fila es un `<div>` arrastrable que envuelve el botón del título.
  */
 function PildoraPub({
   pieza,
-  marca,
   onAbrir,
+  onVerFeed,
   onDesprogramar,
   onReprogramar,
-  onCambiarHora,
   onPublicarYa,
   ocupado,
 }: {
   pieza: Pieza;
-  /** Marca activa: con ella y la red de la pieza se pide la mejor hora sugerida. */
-  marca?: string | null;
   onAbrir: (p: Pieza) => void;
+  /** Clic en la pieza: abre la caja del feed (vista previa de la red), no el editor. */
+  onVerFeed: (p: Pieza) => void;
   onDesprogramar: (p: Pieza) => void;
   onReprogramar: (p: Pieza) => void;
-  onCambiarHora: (p: Pieza, hhmm: string) => void;
   onPublicarYa: (p: Pieza) => void;
   ocupado: boolean;
 }) {
@@ -164,9 +159,6 @@ function PildoraPub({
   // programado a futuro → ámbar.
   const publicado = pieza.estado === "publicado";
   const vencida = estaVencida(pieza.estado, pieza.fecha_programada);
-  // Mejor hora sugerida para esta red. Solo aplica a piezas no publicadas (la de una pieza ya
-  // salida es histórica); pasar marca=null cuando está publicada deshabilita la query.
-  const horaSugerida = useMejorHora(publicado ? null : marca, pieza.red).data ?? null;
 
   return (
     <MenuContextual
@@ -237,29 +229,19 @@ function PildoraPub({
         ) : (
           <Icono className="h-3 w-3 shrink-0" />
         )}
-        {/* Una pieza publicada ya salió: su hora es histórica (texto plano, no editable). */}
-        {publicado ? (
-          <span className="shrink-0 tabular-nums">
-            {formatearHoraOperativa(pieza.fecha_programada)}
-          </span>
-        ) : (
-          <BotonHoraPieza
-            iso={pieza.fecha_programada}
-            ocupado={ocupado}
-            horaSugerida={horaSugerida}
-            onGuardar={(hhmm) => onCambiarHora(pieza, hhmm)}
-            onOtroDia={() => onReprogramar(pieza)}
-          />
-        )}
+        {/* La hora es texto plano (la reprogramación vive en el menú contextual). */}
+        <span className="shrink-0 tabular-nums">
+          {formatearHoraOperativa(pieza.fecha_programada)}
+        </span>
         <button
           type="button"
-          onClick={() => onAbrir(pieza)}
+          onClick={() => onVerFeed(pieza)}
           title={
             publicado
-              ? `${pieza.titulo} (${nombreRed(pieza.red)}) · ya publicada · abre para ver`
+              ? `${pieza.titulo} (${nombreRed(pieza.red)}) · ya publicada · clic para verla en el feed`
               : vencida
                 ? `${pieza.titulo} (${nombreRed(pieza.red)}) · PASADA DE HORA, sin publicar · "Publicar ya" vive en el menú contextual (clic derecho)`
-                : `${pieza.titulo} (${nombreRed(pieza.red)}) · clic para editar · arrastra para mover · clic en la hora para reprogramarla`
+                : `${pieza.titulo} (${nombreRed(pieza.red)}) · clic para verla en el feed · arrastra para mover · reprograma desde el menú (clic derecho)`
           }
           className="min-w-0 flex-1 truncate text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         >
@@ -284,6 +266,7 @@ function PildoraPub({
 export function VistaCalendario({
   piezas,
   onEditar,
+  onVerFeed,
   marca,
   ancla: anclaProp,
   onAncla,
@@ -292,6 +275,11 @@ export function VistaCalendario({
 }: {
   piezas: Pieza[];
   onEditar: (p: Pieza) => void;
+  /**
+   * Clic en una pieza: abrir la caja del feed (vista previa de la red). Si se omite (uso suelto /
+   * tests), el clic cae al editor (`onEditar`).
+   */
+  onVerFeed?: (p: Pieza) => void;
   /** Reservado: marca activa (la usarán las franjas de horario por red). */
   marca?: string | null;
   /**
@@ -365,14 +353,8 @@ export function VistaCalendario({
   const ocupado = reprogramar.isPending || desprogramar.isPending || publicarYa.isPending;
   const haciaDesprogramar = (p: Pieza) => desprogramar.mutate(p.id);
   const haciaReprogramar = (p: Pieza) => setReprogramarPub(p);
-  // Cambia SOLO la hora (HH:MM CDMX) conservando el DÍA de la pieza; reusa la mutación de
-  // reprogramar (mismo toast/invalidación). El día sale del instante actual proyectado a CDMX.
-  const haciaCambiarHora = (p: Pieza, hhmm: string) => {
-    if (!p.fecha_programada) return;
-    const dia = isoADatetimeLocal(p.fecha_programada).slice(0, 10);
-    const iso = datetimeLocalAIso(`${dia}T${hhmm}`);
-    if (iso) reprogramar.mutate({ id: p.id, iso });
-  };
+  // Clic en una pieza → caja del feed. Sin `onVerFeed` (uso suelto / tests) cae al editor.
+  const haciaVerFeed = onVerFeed ?? onEditar;
   const haciaPublicarYa = async (p: Pieza) => {
     if (
       await confirmar({
@@ -600,15 +582,14 @@ export function VistaCalendario({
           <VistaSemana
             dias={diasSemana}
             porDia={porDia}
-            marca={marca}
             huecosDe={huecosDe}
             hoy={hoy}
             colActiva={colActiva}
             setColActiva={setColActiva}
             onAbrir={onEditar}
+            onVerFeed={haciaVerFeed}
             onDesprogramar={haciaDesprogramar}
             onReprogramar={haciaReprogramar}
-            onCambiarHora={haciaCambiarHora}
             onPublicarYa={haciaPublicarYa}
             onAbrirDia={abrirDia}
             onSoltarEnDia={moverADia}
@@ -620,11 +601,10 @@ export function VistaCalendario({
             huecosDe={huecosDe}
             diaClave={diaSel ?? claveDia(ancla)}
             porDia={porDia}
-            marca={marca}
             onAbrir={onEditar}
+            onVerFeed={haciaVerFeed}
             onDesprogramar={haciaDesprogramar}
             onReprogramar={haciaReprogramar}
-            onCambiarHora={haciaCambiarHora}
             onPublicarYa={haciaPublicarYa}
             onVolver={() => setVista("semana")}
             ocupado={ocupado}
@@ -814,14 +794,13 @@ function entradasDelDia(
 function VistaSemana({
   dias,
   porDia,
-  marca,
   hoy,
   colActiva,
   setColActiva,
   onAbrir,
+  onVerFeed,
   onDesprogramar,
   onReprogramar,
-  onCambiarHora,
   onPublicarYa,
   onAbrirDia,
   onSoltarEnDia,
@@ -830,14 +809,13 @@ function VistaSemana({
 }: {
   dias: Date[];
   porDia: Map<string, Pieza[]>;
-  marca?: string | null;
   hoy: string;
   colActiva: string | null;
   setColActiva: (v: string | null) => void;
   onAbrir: (p: Pieza) => void;
+  onVerFeed: (p: Pieza) => void;
   onDesprogramar: (p: Pieza) => void;
   onReprogramar: (p: Pieza) => void;
-  onCambiarHora: (p: Pieza, hhmm: string) => void;
   onPublicarYa: (p: Pieza) => void;
   onAbrirDia: (d: Date) => void;
   onSoltarEnDia: (diaClave: string, id: string) => void;
@@ -901,11 +879,10 @@ function VistaSemana({
                   <PildoraPub
                     key={e.p.id}
                     pieza={e.p}
-                    marca={marca}
                     onAbrir={onAbrir}
+                    onVerFeed={onVerFeed}
                     onDesprogramar={onDesprogramar}
                     onReprogramar={onReprogramar}
-                    onCambiarHora={onCambiarHora}
                     onPublicarYa={onPublicarYa}
                     ocupado={ocupado}
                   />
@@ -927,11 +904,10 @@ function VistaDia({
   huecosDe,
   diaClave,
   porDia,
-  marca,
   onAbrir,
+  onVerFeed,
   onDesprogramar,
   onReprogramar,
-  onCambiarHora,
   onPublicarYa,
   onVolver,
   ocupado,
@@ -939,11 +915,10 @@ function VistaDia({
   huecosDe: (dia: Date) => Hueco[];
   diaClave: string;
   porDia: Map<string, Pieza[]>;
-  marca?: string | null;
   onAbrir: (p: Pieza) => void;
+  onVerFeed: (p: Pieza) => void;
   onDesprogramar: (p: Pieza) => void;
   onReprogramar: (p: Pieza) => void;
-  onCambiarHora: (p: Pieza, hhmm: string) => void;
   onPublicarYa: (p: Pieza) => void;
   onVolver: () => void;
   ocupado: boolean;
@@ -982,11 +957,10 @@ function VistaDia({
               <PildoraPub
                 key={e.p.id}
                 pieza={e.p}
-                marca={marca}
                 onAbrir={onAbrir}
+                onVerFeed={onVerFeed}
                 onDesprogramar={onDesprogramar}
                 onReprogramar={onReprogramar}
-                onCambiarHora={onCambiarHora}
                 onPublicarYa={onPublicarYa}
                 ocupado={ocupado}
               />

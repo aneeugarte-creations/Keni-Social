@@ -23,6 +23,7 @@ import {
 } from "@/pages/feed/vistas";
 import { CLAVE_PIEZAS } from "@/pages/piezas/claves";
 import { DialogoEditar } from "@/pages/piezas/DialogoEditar";
+import { DialogoFeed } from "@/pages/piezas/DialogoFeed";
 import { VistaCalendario, rangoVisibleCalendario } from "@/pages/piezas/VistaCalendario";
 import { VistaLista } from "@/pages/piezas/VistaLista";
 import {
@@ -168,6 +169,8 @@ function Cuerpo({
   // plan se filtra con el dropdown de Categoría de los filtros de limpieza (eje `categoria`).
   const { red } = useFiltrosPublicacion();
   const [editando, setEditando] = React.useState<Pieza | null>(null);
+  // Pieza abierta como CAJA DEL FEED (vista previa de la red) desde el calendario; null = cerrada.
+  const [viendoFeed, setViendoFeed] = React.useState<Pieza | null>(null);
   // Filtros de LIMPIEZA por lotes (solo en modo lista): antigüedad/fase/tipo/categoría/fuente.
   // Acotan la lista —y por tanto lo que la selección múltiple borra— para barrer lo viejo o
   // incompleto sin tocar lo completado.
@@ -406,6 +409,7 @@ function Cuerpo({
         <VistaCalendario
           piezas={piezas}
           onEditar={setEditando}
+          onVerFeed={setViendoFeed}
           marca={marcaActiva}
           ancla={anclaCalendario}
           onAncla={setAnclaCalendario}
@@ -452,6 +456,10 @@ function Cuerpo({
       <DialogoEditar
         pieza={editando}
         onCerrar={() => setEditando(null)}
+      />
+      <DialogoFeed
+        pieza={viendoFeed}
+        onCerrar={() => setViendoFeed(null)}
       />
     </div>
   );

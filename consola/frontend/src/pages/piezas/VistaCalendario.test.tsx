@@ -63,14 +63,20 @@ function pub(over: Partial<Pieza> = {}): Pieza {
 }
 
 function renderCalendario(piezas: Pieza[], onEditar = vi.fn(), ancla?: Date) {
+  const onVerFeed = vi.fn();
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
       {/* marca sin pasar (undefined) => la query de franjas queda DESHABILITADA: sin red. */}
-      <VistaCalendario piezas={piezas} onEditar={onEditar} ancla={ancla} />
+      <VistaCalendario
+        piezas={piezas}
+        onEditar={onEditar}
+        onVerFeed={onVerFeed}
+        ancla={ancla}
+      />
     </QueryClientProvider>,
   );
-  return { onEditar };
+  return { onEditar, onVerFeed };
 }
 
 describe("VistaCalendario — aviso sin fecha y píldora terminal", () => {
@@ -110,20 +116,19 @@ describe("VistaCalendario — aviso sin fecha y píldora terminal", () => {
     expect(pildora).toHaveAttribute("draggable", "true");
   });
 
-  it("clic en la hora abre el editor EN SITIO (popover con campo de hora CDMX)", () => {
-    renderCalendario(
+  it("clic en una pieza abre la caja del feed (no el editor)", () => {
+    const { onVerFeed, onEditar } = renderCalendario(
       [pub({ titulo: "Gol", estado: "programado" })],
       vi.fn(),
       new Date(2026, 5, 15),
     );
     fireEvent.click(screen.getByRole("button", { name: "semana" }));
-    // La hora del chip es un botón aparte; lo identifica su `title` estable (no el texto,
-    // que depende de la zona). Al pulsarlo aparece el popover para personalizar la hora.
-    fireEvent.click(screen.getByTitle("Cambiar la hora de este post"));
-    expect(
-      screen.getByRole("dialog", { name: "Cambiar la hora del post" }),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Hora (CDMX)")).toBeInTheDocument();
+    // El título de la pieza es un botón: lo pulsa quien quiere VERLA en el feed. Reprogramar
+    // (cambiar día/hora) vive ahora solo en el menú contextual, no en el clic sobre la hora.
+    fireEvent.click(screen.getByText("Gol"));
+    expect(onVerFeed).toHaveBeenCalledTimes(1);
+    expect(onVerFeed.mock.calls[0][0]).toMatchObject({ titulo: "Gol" });
+    expect(onEditar).not.toHaveBeenCalled();
   });
 });
 
