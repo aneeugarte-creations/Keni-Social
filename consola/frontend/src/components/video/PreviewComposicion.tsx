@@ -37,19 +37,22 @@
 import { Pause, Play } from "lucide-react";
 import * as React from "react";
 
-import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaTexto } from "@/editor/documento";
+import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto } from "@/editor/documento";
 import { ControlesEncuadre } from "@/editor/lienzo/ControlesEncuadre";
 import { useEncuadre } from "@/editor/lienzo/useEncuadre";
 import { useZoomPan } from "@/editor/lienzo/useZoomPan";
 import { urlMedia } from "@/lib/api";
 import {
+  duracionBaseMs,
   formatearDuracionMs,
+  fuenteASalidaMs,
   MIN_PIP_PX,
   pistaBase,
   pistaOverlay,
   pistaPip,
   pistaSubtitulos,
   presetParaAspecto,
+  salidaAFuenteMs,
   segmentoEn,
   type ComposicionVideo,
   type SegmentoSub,
@@ -152,53 +155,66 @@ export function PreviewComposicion({
   const [tiempo, setTiempo] = React.useState(0); // segundos
   const [duracion, setDuracion] = React.useState(0); // segundos (de los metadatos del <video>)
 
-  // Duración total a mostrar: la real del <video> si ya cargó metadatos; si no, la del documento.
-  const durTotal = duracion > 0 ? duracion : (doc.duracion_ms || 0) / 1000;
+  // El reloj `tiempo` y el playhead trabajan en tiempo de SALIDA (vídeo final concatenado). El
+  // <video> reproduce tiempo de FUENTE; se convierte con `salidaAFuenteMs`/`fuenteASalidaMs`.
+  const segs = pistaBase(doc)?.clips ?? [];
+  const clipBase = segs[0];
+  // Duración de SALIDA: suma de segmentos tras recorte; cae a los metadatos si aún no se conoce.
+  const durSalida = duracionBaseMs(doc) / 1000 || (duracion > 0 ? duracion : 0);
+  // Segmento ACTIVO en reproducción (los segmentos comparten media_id; el <video> es uno solo).
+  const segIdxRef = React.useRef(0);
 
-  // ── RECORTE del clip base (en segundos, leído del documento: NO se duplica estado) ──────────
-  // El render solo incluirá [recorte_in, recorte_out]; la reproducción lo respeta (ver cabecera).
-  const clipBase = pistaBase(doc)?.clips[0];
-  const recInSeg = Math.max(0, (clipBase?.recorte_in_ms ?? 0) / 1000);
-  const recOutCrudo = (clipBase?.recorte_out_ms ?? 0) / 1000;
-  const recOutSeg = recOutCrudo > 0 ? recOutCrudo : durTotal;
-  // Hay recorte efectivo si algún borde deja fuera ≥ 50 ms (evita falsos positivos por redondeo
-  // entre la duración de los metadatos y el `recorte_out` guardado en ms).
-  const hayRecorte = durTotal > 0 && (recInSeg > 0.05 || recOutSeg < durTotal - 0.05);
+  // Tiempo de FUENTE (s) del frame actual: para situar los SUBTÍTULOS en el clip crudo.
+  const tiempoFuenteSeg = salidaAFuenteMs(doc, tiempo * 1000).fuenteMs / 1000;
 
-  // Cambiar de clip resetea el player (nuevo video = reloj a cero, en pausa).
+  // Cambiar de clip resetea el player (nuevo video = reloj a cero, en pausa, segmento 0).
   React.useEffect(() => {
     setReproduciendo(false);
     setTiempo(0);
     setDuracion(0);
+    segIdxRef.current = 0;
   }, [baseUrl]);
 
   /**
-   * Avanza el reloj con TOPE en `recorte_out`: mientras REPRODUCE, al alcanzar el corte pausa
-   * base y PiP y clava el frame ahí (igual que terminará el vídeo final; play de nuevo = replay
-   * desde `recorte_in` vía `alternar`). En pausa NO interviene: el scrubbing puede inspeccionar
-   * libremente la parte descartada del clip.
+   * Avanza el reloj de SALIDA mientras reproduce. Al alcanzar el `recorte_out` del segmento
+   * activo: si hay siguiente segmento salta a su `recorte_in` (concatenación, como FFmpeg); si es
+   * el último, pausa al final. En pausa solo refleja el tiempo de salida del frame actual.
    */
   const avanzarReloj = React.useCallback(
     (v: HTMLVideoElement) => {
+      const lista = pistaBase(doc)?.clips ?? [];
+      const idx = Math.min(segIdxRef.current, Math.max(0, lista.length - 1));
+      const seg = lista[idx];
       const t = v.currentTime || 0;
-      if (reproduciendo && hayRecorte && t >= recOutSeg) {
-        v.pause();
-        try {
-          videoPipRef.current?.pause();
-        } catch {
-          /* preview best-effort */
+      if (reproduciendo && seg) {
+        const out = (seg.recorte_out_ms || seg.fin_ms || 0) / 1000;
+        if (out > 0 && t >= out - 0.02) {
+          if (idx < lista.length - 1) {
+            const inn = (lista[idx + 1].recorte_in_ms ?? 0) / 1000;
+            segIdxRef.current = idx + 1;
+            try {
+              v.currentTime = inn;
+              if (videoPipRef.current) videoPipRef.current.currentTime = inn;
+            } catch {
+              /* metadatos aún no listos */
+            }
+            setTiempo(fuenteASalidaMs(doc, idx + 1, inn * 1000) / 1000);
+            return;
+          }
+          v.pause();
+          try {
+            v.currentTime = out; // clava el último frame en el corte (no más allá)
+            videoPipRef.current?.pause();
+          } catch {
+            /* preview best-effort */
+          }
+          setTiempo(durSalida);
+          return;
         }
-        try {
-          v.currentTime = recOutSeg;
-        } catch {
-          /* metadatos aún no listos */
-        }
-        setTiempo(recOutSeg);
-        return;
       }
-      setTiempo(t);
+      setTiempo(fuenteASalidaMs(doc, idx, t * 1000) / 1000);
     },
-    [reproduciendo, hayRecorte, recOutSeg],
+    [reproduciendo, doc, durSalida],
   );
 
   // Mientras reproduce, un rAF lee `currentTime` del <video> para un reloj fluido (los eventos
@@ -218,29 +234,34 @@ export function PreviewComposicion({
     return () => cancelAnimationFrame(raf);
   }, [reproduciendo, avanzarReloj]);
 
-  /** Busca a `t` segundos (clamp a [0, durTotal]) en base + PiP y refresca el reloj. */
+  /** Busca a `outSec` segundos de SALIDA: convierte a (segmento, tiempo de fuente) en base + PiP. */
   const buscarA = React.useCallback(
-    (t: number) => {
-      const destino = Math.min(Math.max(0, t), durTotal > 0 ? durTotal : t);
+    (outSec: number) => {
+      const total = durSalida > 0 ? durSalida : outSec;
+      const destino = Math.min(Math.max(0, outSec), total);
+      const { idx, fuenteMs } = salidaAFuenteMs(doc, destino * 1000);
+      segIdxRef.current = idx;
       setTiempo(destino);
       const v = videoBaseRef.current;
       if (v) {
         try {
-          v.currentTime = destino;
+          v.currentTime = fuenteMs / 1000;
         } catch {
           /* metadatos aún no listos: el reloj ya quedó posicionado */
         }
       }
       const pip = videoPipRef.current;
       if (pip) {
+        // El PiP tiene su propio recorte: su frame es el de la fuente + su recorte_in.
+        const pipIn = (pistaPip(doc)?.clips[0]?.recorte_in_ms ?? 0) / 1000;
         try {
-          pip.currentTime = destino;
+          pip.currentTime = fuenteMs / 1000 + pipIn;
         } catch {
           /* preview best-effort */
         }
       }
     },
-    [durTotal],
+    [durSalida, doc],
   );
 
   /** Play/pausa del base, arrastrando al PiP (best-effort; la sincronía fiel es del render). */
@@ -256,11 +277,18 @@ export function PreviewComposicion({
         /* preview best-effort */
       }
     } else {
-      // Respeta el recorte como lo hará el render: play desde FUERA del rango (antes de
-      // `recorte_in` o en/tras `recorte_out`) arranca en `recorte_in` (replay incluido).
-      if (hayRecorte) {
-        const t = v.currentTime || 0;
-        if (t < recInSeg || t >= recOutSeg - 0.05) buscarA(recInSeg);
+      // Al final del vídeo de salida, play = replay desde el inicio; si no, asegura el frame de
+      // fuente correcto para el tiempo de salida actual antes de arrancar.
+      if (durSalida > 0 && tiempo >= durSalida - 0.05) {
+        buscarA(0);
+      } else {
+        const { idx, fuenteMs } = salidaAFuenteMs(doc, tiempo * 1000);
+        segIdxRef.current = idx;
+        try {
+          v.currentTime = fuenteMs / 1000;
+        } catch {
+          /* metadatos aún no listos */
+        }
       }
       // `play()` puede devolver undefined (jsdom) o una promesa que rechaza (autoplay): ambas
       // se absorben — si no arranca, el estado simplemente no pasa a "reproduciendo".
@@ -271,7 +299,7 @@ export function PreviewComposicion({
         /* preview best-effort */
       }
     }
-  }, [reproduciendo, hayRecorte, recInSeg, recOutSeg, buscarA]);
+  }, [reproduciendo, durSalida, tiempo, doc, buscarA]);
 
   // Integración con el timeline: expone `buscarA` (seeks externos) y notifica reloj/duración.
   // Son props opcionales: sin ellas el player se comporta exactamente igual que antes.
@@ -287,13 +315,13 @@ export function PreviewComposicion({
   const buscarDesdePuntero = React.useCallback(
     (clientX: number) => {
       const barra = barraRef.current;
-      if (!barra || durTotal <= 0) return;
+      if (!barra || durSalida <= 0) return;
       const rect = barra.getBoundingClientRect();
       if (rect.width <= 0) return;
       const frac = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-      buscarA(frac * durTotal);
+      buscarA(frac * durSalida);
     },
-    [buscarA, durTotal],
+    [buscarA, durSalida],
   );
 
   /**
@@ -340,6 +368,29 @@ export function PreviewComposicion({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [atajoEspacio, conEncuadre, baseUrl, alternar]);
+
+  // Atajo K = play/pausa (estándar YouTube/Premiere/DaVinci). No choca con el pan (que usa Espacio),
+  // así que funciona también con `conEncuadre`. Ignora si el foco está en un control editable.
+  React.useEffect(() => {
+    if (!baseUrl) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "KeyK" || e.repeat) return;
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT" ||
+          t.isContentEditable ||
+          t.closest("[contenteditable]"))
+      )
+        return;
+      e.preventDefault();
+      alternar();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [baseUrl, alternar]);
 
   // ENCUADRE/ZOOM (igual que el Lienzo de imagen): zoom/pan + toggles de rejilla/zonas. Los hooks
   // se llaman SIEMPRE (reglas de hooks); su salida solo se usa con `conEncuadre`.
@@ -515,6 +566,7 @@ export function PreviewComposicion({
   // REENCUADRE inline: arrastrar sobre el vídeo mueve el foco del base   //
   // ------------------------------------------------------------------ //
   const [focoGesto, setFocoGesto] = React.useState<[number, number] | null>(null);
+  const [hoverReframe, setHoverReframe] = React.useState(false);
   const reframeInteractivo =
     reframeEditable && !!onFoco && !!clipBase && clipBase.ajuste === "cover";
   const focoActual: [number, number] = focoGesto ?? (clipBase ? clipBase.foco : [0.5, 0.5]);
@@ -547,14 +599,9 @@ export function PreviewComposicion({
     [onFoco],
   );
 
-  const segActivo = segmentos && segmentos.length > 0 ? segmentoEn(segmentos, tiempo) : null;
-  const progresoPct = durTotal > 0 ? Math.min(100, (tiempo / durTotal) * 100) : 0;
-  // Reloj del VÍDEO FINAL: con recorte, el contador corre desde `recorte_in` y el total es la
-  // duración recortada (lo que de verdad quedará tras el render). Sin recorte, el clip entero.
-  const durFinalSeg = hayRecorte ? Math.max(0, recOutSeg - recInSeg) : durTotal;
-  const tiempoFinalSeg = hayRecorte
-    ? Math.min(Math.max(0, tiempo - recInSeg), durFinalSeg)
-    : tiempo;
+  // Subtítulos: se buscan en TIEMPO DE FUENTE (los segmentos del ASR están en el clip crudo).
+  const segActivo = segmentos && segmentos.length > 0 ? segmentoEn(segmentos, tiempoFuenteSeg) : null;
+  const progresoPct = durSalida > 0 ? Math.min(100, (tiempo / durSalida) * 100) : 0;
   // Controles visibles en pausa; durante la reproducción solo al hover/foco (estilo Canva).
   const visControles = reproduciendo
     ? "opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100"
@@ -605,21 +652,29 @@ export function PreviewComposicion({
           </div>
         )}
 
-        {/* Reencuadre inline: capa de arrastre que mueve el foco del clip base + marcador. */}
+        {/* Reencuadre inline: arrastrar mueve el foco del clip base. RETÍCULA (cruz fina + anillo)
+            que solo aparece al pasar el ratón o durante el arrastre (no una "bolita" permanente);
+            cursor crosshair = "mover el foco en 2D". */}
         {reframeInteractivo && (
           <div
             data-testid="reframe-capa"
             role="application"
             aria-label="Arrastra para mover el foco del reencuadre"
             onMouseDown={iniciarReframe}
-            className="absolute inset-0 z-[1] cursor-move"
+            onMouseEnter={() => setHoverReframe(true)}
+            onMouseLeave={() => setHoverReframe(false)}
+            className="absolute inset-0 z-[1] cursor-crosshair"
           >
-            <div
-              className="pointer-events-none absolute h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/90 bg-white/10 shadow ring-1 ring-black/30"
-              style={{ left: focoActual[0] * anchoPx, top: focoActual[1] * altoPx }}
-            >
-              <span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white" />
-            </div>
+            {(hoverReframe || focoGesto !== null) && (
+              <div
+                className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
+                style={{ left: focoActual[0] * anchoPx, top: focoActual[1] * altoPx }}
+              >
+                <span className="absolute left-1/2 top-1/2 h-px w-9 -translate-x-1/2 -translate-y-1/2 bg-white/85 shadow-[0_0_1px_rgba(0,0,0,0.9)]" />
+                <span className="absolute left-1/2 top-1/2 h-9 w-px -translate-x-1/2 -translate-y-1/2 bg-white/85 shadow-[0_0_1px_rgba(0,0,0,0.9)]" />
+                <span className="absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/90 ring-1 ring-black/40" />
+              </div>
+            )}
           </div>
         )}
 
@@ -768,13 +823,9 @@ export function PreviewComposicion({
                 tabIndex={0}
                 aria-label="Posición de reproducción"
                 aria-valuemin={0}
-                aria-valuemax={Math.round(durTotal)}
-                aria-valuenow={Math.round(Math.min(tiempo, durTotal))}
-                aria-valuetext={`${formatearDuracionMs(tiempo * 1000)} de ${formatearDuracionMs(durTotal * 1000)}${
-                  hayRecorte
-                    ? ` (vídeo final: ${formatearDuracionMs(tiempoFinalSeg * 1000)} de ${formatearDuracionMs(durFinalSeg * 1000)})`
-                    : ""
-                }`}
+                aria-valuemax={Math.round(durSalida)}
+                aria-valuenow={Math.round(Math.min(tiempo, durSalida))}
+                aria-valuetext={`${formatearDuracionMs(tiempo * 1000)} de ${formatearDuracionMs(durSalida * 1000)}`}
                 onMouseDown={iniciarScrub}
                 onKeyDown={(e) => {
                   if (e.key === "ArrowRight") {
@@ -792,38 +843,15 @@ export function PreviewComposicion({
                   className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-white"
                   style={{ width: `${progresoPct}%` }}
                 />
-                {/* Zonas DESCARTADAS por el recorte, atenuadas (estilo Canva): se puede scrubbear
-                    sobre ellas para inspeccionar, pero NO estarán en el vídeo final. */}
-                {hayRecorte && recInSeg > 0 && (
-                  <div
-                    data-testid="barra-descarte-in"
-                    className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-l-full bg-black/60"
-                    style={{ width: `${Math.min(100, (recInSeg / durTotal) * 100)}%` }}
-                  />
-                )}
-                {hayRecorte && recOutSeg < durTotal && (
-                  <div
-                    data-testid="barra-descarte-out"
-                    className="absolute right-0 top-1/2 h-1 -translate-y-1/2 rounded-r-full bg-black/60"
-                    style={{ width: `${Math.min(100, ((durTotal - recOutSeg) / durTotal) * 100)}%` }}
-                  />
-                )}
                 <div
                   className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow"
                   style={{ left: `${progresoPct}%` }}
                 />
               </div>
 
-              {/* Reloj actual / total del VÍDEO FINAL (con recorte, lo que quedará tras el render). */}
-              <span
-                className="shrink-0 text-[10px] tabular-nums text-white/90"
-                title={
-                  hayRecorte
-                    ? `Tiempo del vídeo final (corte ${formatearDuracionMs(recInSeg * 1000)}–${formatearDuracionMs(recOutSeg * 1000)} del clip)`
-                    : undefined
-                }
-              >
-                {formatearDuracionMs(tiempoFinalSeg * 1000)} / {formatearDuracionMs(durFinalSeg * 1000)}
+              {/* Reloj del VÍDEO FINAL (tiempo de salida / duración total tras recortes y cortes). */}
+              <span className="shrink-0 text-[10px] tabular-nums text-white/90">
+                {formatearDuracionMs(tiempo * 1000)} / {formatearDuracionMs(durSalida * 1000)}
               </span>
             </div>
           </>
@@ -911,6 +939,18 @@ function CapaOverlayDOM({ capa, escala }: { capa: Capa; escala: number }) {
             ? "right"
             : "center";
     const decor = [t.subrayado && "underline", t.tachado && "line-through"].filter(Boolean).join(" ");
+    const sombraCss = t.sombra
+      ? `${(t.sombra.dx || 0) * escala}px ${(t.sombra.dy || 0) * escala}px ${(t.sombra.desenfoque || 0) * escala}px ${t.sombra.color}`
+      : undefined;
+    // Chip: fondo "pill" que abraza el texto (inline-block respeta la alineación de la caja).
+    const chipCss: React.CSSProperties = t.chip
+      ? {
+          display: "inline-block",
+          background: t.chip.color,
+          padding: `${(t.chip.pad_y || 0) * escala}px ${(t.chip.pad_x || 0) * escala}px`,
+          borderRadius: (t.chip.radio || 0) * escala,
+        }
+      : {};
     return (
       <div
         style={{ ...base, display: "flex", flexDirection: "column", justifyContent: justify, alignItems: items }}
@@ -931,12 +971,13 @@ function CapaOverlayDOM({ capa, escala }: { capa: Capa; escala: number }) {
             textDecoration: decor || undefined,
             whiteSpace: "pre-wrap",
             wordBreak: "break-word",
+            textShadow: sombraCss,
             WebkitTextStroke: t.contorno
               ? `${Math.max(0.4, t.contorno.grosor * escala)}px ${t.contorno.color}`
               : undefined,
           }}
         >
-          {t.texto || ""}
+          <span style={chipCss}>{t.texto || ""}</span>
         </div>
       </div>
     );
@@ -994,6 +1035,33 @@ function CapaOverlayDOM({ capa, escala }: { capa: Capa; escala: number }) {
           borderRadius: (mc.radio || 0) * escala,
         }}
       />
+    );
+  }
+
+  if (capa.tipo === "overlay") {
+    // Banda de legibilidad: gradiente full-width pegado a arriba/abajo de la caja, opaco en el
+    // borde y desvaneciéndose hacia dentro (aprox. de la rampa del render).
+    const ov = capa as CapaOverlay;
+    const m = /^#?([0-9a-fA-F]{6})([0-9a-fA-F]{2})?$/.exec(ov.color || "#000000");
+    const rgb = m ? m[1] : "000000";
+    const aHex = m && m[2] ? parseInt(m[2], 16) / 255 : 1;
+    const r = parseInt(rgb.slice(0, 2), 16);
+    const g = parseInt(rgb.slice(2, 4), 16);
+    const b = parseInt(rgb.slice(4, 6), 16);
+    const aMax = ((ov.alpha ?? 238) / 255) * aHex;
+    const arriba = ov.lado === "arriba";
+    const bandH = Math.max(1, Math.floor(capa.h * (ov.alto_frac ?? 0.58))) * escala;
+    return (
+      <div style={base}>
+        <div
+          className="absolute inset-x-0"
+          style={{
+            height: bandH,
+            ...(arriba ? { top: 0 } : { bottom: 0 }),
+            background: `linear-gradient(to ${arriba ? "top" : "bottom"}, transparent, rgba(${r},${g},${b},${aMax}))`,
+          }}
+        />
+      </div>
     );
   }
 

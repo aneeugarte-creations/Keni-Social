@@ -299,6 +299,61 @@ export function duracionBaseMs(doc: ComposicionVideo): number {
   return segmentosBase(doc).reduce((s, c) => s + durSegmento(c), 0);
 }
 
+// --------------------------------------------------------------------------- #
+// Conversión de tiempo SALIDA ↔ FUENTE (para el player del preview)            #
+// --------------------------------------------------------------------------- #
+// El timeline trabaja en tiempo de SALIDA (vídeo final concatenado: [0, suma de
+// segmentos]). El elemento <video> reproduce tiempo de FUENTE (currentTime del clip crudo).
+// Con recorte o segmentos múltiples ambos NO coinciden: estas funciones traducen entre ellos
+// para que el playhead, el seek y los subtítulos usen el dominio correcto.
+
+/** Recorte (in, out) de un segmento en ms (con respaldo a inicio/fin). */
+function recorteSeg(c: ClipVideo): { inn: number; out: number } {
+  const inn = c.recorte_in_ms ?? 0;
+  const out = c.recorte_out_ms || c.fin_ms || inn;
+  return { inn, out: Math.max(inn, out) };
+}
+
+/** Tiempo de salida (ms) acumulado ANTES del segmento `idx` (0 para el primero). */
+export function inicioSalidaSegmentoMs(doc: ComposicionVideo, idx: number): number {
+  const segs = segmentosBase(doc);
+  let acc = 0;
+  for (let i = 0; i < idx && i < segs.length; i++) acc += durSegmento(segs[i]);
+  return acc;
+}
+
+/**
+ * Tiempo de SALIDA (ms) → segmento + tiempo de FUENTE (ms) del <video>. Clampa al rango total.
+ * Para el caso de un solo segmento: `fuenteMs = salidaMs + recorte_in`.
+ */
+export function salidaAFuenteMs(
+  doc: ComposicionVideo,
+  salidaMs: number,
+): { idx: number; fuenteMs: number } {
+  const segs = segmentosBase(doc);
+  if (segs.length === 0) return { idx: 0, fuenteMs: Math.max(0, salidaMs) };
+  let restante = Math.max(0, salidaMs);
+  for (let i = 0; i < segs.length; i++) {
+    const dur = durSegmento(segs[i]);
+    if (restante <= dur || i === segs.length - 1) {
+      const { inn } = recorteSeg(segs[i]);
+      return { idx: i, fuenteMs: inn + Math.min(restante, dur) };
+    }
+    restante -= dur;
+  }
+  return { idx: segs.length - 1, fuenteMs: recorteSeg(segs[segs.length - 1]).out };
+}
+
+/** Segmento `idx` + tiempo de FUENTE (ms) → tiempo de SALIDA (ms). */
+export function fuenteASalidaMs(doc: ComposicionVideo, idx: number, fuenteMs: number): number {
+  const segs = segmentosBase(doc);
+  if (segs.length === 0) return Math.max(0, fuenteMs);
+  const i = Math.min(Math.max(0, idx), segs.length - 1);
+  const { inn, out } = recorteSeg(segs[i]);
+  const dentro = Math.min(Math.max(inn, fuenteMs), out) - inn;
+  return inicioSalidaSegmentoMs(doc, i) + dentro;
+}
+
 /** Reescribe los clips de la pista base y recalcula `duracion_ms` (= suma de segmentos). */
 function conSegmentosBase(doc: ComposicionVideo, clips: ClipVideo[]): ComposicionVideo {
   const duracion = clips.reduce((s, c) => s + durSegmento(c), 0);

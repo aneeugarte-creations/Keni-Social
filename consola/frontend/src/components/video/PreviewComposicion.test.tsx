@@ -94,18 +94,14 @@ describe("PreviewComposicion (player)", () => {
     expect(await screen.findByRole("button", { name: "Reproducir" })).toBeInTheDocument();
   });
 
-  it("el reloj cae a la duración del documento y adopta la real al cargar metadatos", () => {
+  it("el reloj usa la duración de SALIDA del documento, no la del clip crudo", () => {
     const { container } = render(<PreviewComposicion doc={docConBase(30000)} baseUrl="videos/abc.mp4" />);
     const barra = screen.getByRole("slider", { name: /posición de reproducción/i });
     expect(barra).toHaveAttribute("aria-valuetext", "00:00 de 00:30");
-    // Metadatos reales: 45 s (jsdom expone `duration` solo-lectura; se redefine en la instancia).
-    // El documento dice `recorte_out` = 30 s, así que los 15 s extra cuentan como RECORTE: el
-    // render aplicará -to 30 s y el slider lo expone como vídeo final (igual que la reproducción).
+    // Aunque los metadatos reales sean 45 s, el reloj es el del VÍDEO DE SALIDA (suma de
+    // segmentos tras recorte = 30 s del documento): los 15 s extra del archivo no se reproducen.
     cargarMetadatos(container, 45);
-    expect(barra).toHaveAttribute(
-      "aria-valuetext",
-      "00:00 de 00:45 (vídeo final: 00:00 de 00:30)",
-    );
+    expect(barra).toHaveAttribute("aria-valuetext", "00:00 de 00:30");
   });
 
   it("pinta el subtítulo activo SINCRONIZADO con el tiempo del video (timeupdate)", () => {
@@ -241,7 +237,7 @@ describe("PreviewComposicion (player)", () => {
     expect(video.currentTime).toBeCloseTo(6, 5);
   });
 
-  it("en pausa, el scrubbing puede inspeccionar la zona descartada sin que el player la corrija", () => {
+  it("el scrubbing recorre el VÍDEO DE SALIDA (no el clip crudo): mapea output→fuente", () => {
     const { container } = render(<PreviewComposicion doc={docRecortado()} baseUrl="videos/abc.mp4" />);
     const video = cargarMetadatos(container);
     const barra = screen.getByRole("slider", { name: /posición de reproducción/i });
@@ -256,38 +252,36 @@ describe("PreviewComposicion (player)", () => {
       y: 0,
       toJSON: () => ({}),
     } as DOMRect);
-    // 90 % de 30 s = 27 s, DESPUÉS de recorte_out: el seek se respeta (inspección libre).
+    // 90 % de la duración de SALIDA (15 s) = 13.5 s output → fuente = recorte_in(6) + 13.5 = 19.5 s.
     fireEvent.mouseDown(barra, { clientX: 90 });
     fireEvent.mouseUp(window);
-    expect(video.currentTime).toBeCloseTo(27, 5);
+    expect(video.currentTime).toBeCloseTo(19.5, 5);
     expect(pauseMock).not.toHaveBeenCalled();
   });
 
-  it("el reloj muestra el tiempo del VÍDEO FINAL y la barra atenúa las zonas descartadas", () => {
+  it("el reloj muestra el TIEMPO DE SALIDA (output) con recorte aplicado", () => {
     const { container } = render(<PreviewComposicion doc={docRecortado()} baseUrl="videos/abc.mp4" />);
     const video = cargarMetadatos(container);
-    // Zonas descartadas atenuadas: cabeza 6/30 = 20 %, cola (30−21)/30 = 30 %.
-    expect(screen.getByTestId("barra-descarte-in").style.width).toBe("20%");
-    expect(screen.getByTestId("barra-descarte-out").style.width).toBe("30%");
-    // Antes del corte, el reloj del vídeo final marca 0 de 15 s.
+    // Ya no hay barras de "descarte": la barra ES el vídeo de salida.
+    expect(screen.queryByTestId("barra-descarte-in")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("barra-descarte-out")).not.toBeInTheDocument();
+    // Antes del recorte_in (fuente 2 s) el output se clampa a 0; el reloj marca 0 de 15 s.
     video.currentTime = 2;
     fireEvent(video, new Event("timeupdate"));
     expect(screen.getByText("00:00 / 00:15")).toBeInTheDocument();
-    // Dentro del corte: 10 s del clip = 4 s del vídeo final; el slider expone ambos ejes.
+    // Dentro del recorte: fuente 10 s = output 4 s (10 − recorte_in 6).
     video.currentTime = 10;
     fireEvent(video, new Event("timeupdate"));
     expect(screen.getByText("00:04 / 00:15")).toBeInTheDocument();
     expect(screen.getByRole("slider", { name: /posición de reproducción/i })).toHaveAttribute(
       "aria-valuetext",
-      "00:10 de 00:30 (vídeo final: 00:04 de 00:15)",
+      "00:04 de 00:15",
     );
   });
 
-  it("sin recorte efectivo no hay zonas atenuadas y el reloj es el del clip", () => {
+  it("sin recorte efectivo el reloj es el del clip completo", () => {
     const { container } = render(<PreviewComposicion doc={docConBase(30000)} baseUrl="videos/abc.mp4" />);
     cargarMetadatos(container);
-    expect(screen.queryByTestId("barra-descarte-in")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("barra-descarte-out")).not.toBeInTheDocument();
     expect(screen.getByText("00:00 / 00:30")).toBeInTheDocument();
   });
 });

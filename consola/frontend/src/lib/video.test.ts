@@ -17,6 +17,8 @@ import {
   duracionBaseMs,
   formatearDuracionMs,
   formatearTiempo,
+  fuenteASalidaMs,
+  salidaAFuenteMs,
   MIN_RECORTE_MS,
   moverSegmentoBase,
   normalizarSegmentos,
@@ -352,5 +354,27 @@ describe("audio (silenciar/volumen base + música)", () => {
     expect(pistaAudio(sinAudio)).toBeNull();
     const doc = setMusica(sinAudio, "videos/m.mp3", 5000);
     expect(pistaAudio(doc)!.clips).toHaveLength(1);
+  });
+});
+
+describe("conversión tiempo salida ↔ fuente (player)", () => {
+  it("un solo segmento con recorte: salida 0 → fuente recorte_in", () => {
+    const doc = setRecorteBase(setClipBase(composicionVacia("9:16"), "v/a.mp4", 30000), 6000, 21000, 30000);
+    expect(salidaAFuenteMs(doc, 0)).toEqual({ idx: 0, fuenteMs: 6000 });
+    expect(salidaAFuenteMs(doc, 4000)).toEqual({ idx: 0, fuenteMs: 10000 });
+    // y la vuelta: fuente 10 s (dentro del recorte) → salida 4 s
+    expect(fuenteASalidaMs(doc, 0, 10000)).toBe(4000);
+    // antes del recorte_in se clampa a 0
+    expect(fuenteASalidaMs(doc, 0, 2000)).toBe(0);
+  });
+
+  it("multi-segmento (split): la salida recorre segmentos consecutivos", () => {
+    const doc = dividirClipBase(setClipBase(composicionVacia("9:16"), "v/a.mp4", 30000), 0, 10000); // [0..10][10..30]
+    // salida 5 s cae en el segmento 0 (fuente 5 s)
+    expect(salidaAFuenteMs(doc, 5000)).toEqual({ idx: 0, fuenteMs: 5000 });
+    // salida 12 s cae en el segmento 1: 2 s dentro → fuente recorte_in(10)+2 = 12 s
+    expect(salidaAFuenteMs(doc, 12000)).toEqual({ idx: 1, fuenteMs: 12000 });
+    // vuelta: segmento 1, fuente 12 s → salida 12 s
+    expect(fuenteASalidaMs(doc, 1, 12000)).toBe(12000);
   });
 });
