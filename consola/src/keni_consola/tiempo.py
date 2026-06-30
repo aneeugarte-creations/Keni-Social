@@ -41,6 +41,9 @@ from typing import Any
 # depender de la base IANA del sistema (las imágenes `python:3.12-slim` no traen `tzdata`).
 _TZ_CDMX = timezone(timedelta(hours=-6))
 
+# Segundos de un día completo, base de la fracción del día transcurrida.
+_SEGUNDOS_DIA = 86400
+
 
 def ahora_iso() -> str:
     """Instante ACTUAL en el formato canónico: ISO UTC sin offset, segundos.
@@ -120,3 +123,43 @@ def inicio_dia_cdmx_iso_utc(momento: datetime | None = None) -> str:
         dt = momento
     medianoche_mx = dt.astimezone(_TZ_CDMX).replace(hour=0, minute=0, second=0, microsecond=0)
     return medianoche_mx.astimezone(UTC).replace(tzinfo=None).isoformat(timespec="seconds")
+
+
+def ahora_cdmx(momento: datetime | None = None) -> datetime:
+    """`momento` en zona CDMX (aware, UTC-6 fijo). Convención de `momento` igual que `iso_utc`:
+    `None` = ahora; un naive se ASUME UTC; un aware se respeta."""
+    if momento is None:
+        dt = datetime.now(UTC)
+    elif momento.tzinfo is None:
+        dt = momento.replace(tzinfo=UTC)
+    else:
+        dt = momento
+    return dt.astimezone(_TZ_CDMX)
+
+
+def hoy_cdmx(momento: datetime | None = None) -> date:
+    """Fecha ACTUAL en la jornada CDMX (no UTC) de `momento` (def: ahora), como `date`.
+
+    Compañera de `hoy_utc` para los buckets-día del gasto, que se miden en jornada mexicana.
+    """
+    return ahora_cdmx(momento).date()
+
+
+def dia_cdmx(momento: datetime | None = None) -> str:
+    """Día CALENDARIO de CDMX (YYYY-MM-DD) de `momento` (def: ahora).
+
+    Bucket del día de los guardianes de gasto (presupuesto IA y gate diario): la jornada del
+    equipo es la mexicana, así que «hoy» rueda en la medianoche de México, no en la de UTC.
+    Mismo criterio de zona que `inicio_dia_cdmx_iso_utc`, devuelto como fecha-día.
+    """
+    return hoy_cdmx(momento).isoformat()
+
+
+def fraccion_dia_cdmx(momento: datetime | None = None) -> float:
+    """Fracción del día CDMX de `momento` ya transcurrida (0.0 a 1.0).
+
+    Para la proyección de burn-rate del gasto: extrapola a fin de la JORNADA mexicana, en fase
+    con el bucket `dia_cdmx`.
+    """
+    local = ahora_cdmx(momento)
+    return (local.hour * 3600 + local.minute * 60 + local.second) / _SEGUNDOS_DIA

@@ -13,7 +13,7 @@ from ._db_comun import (
     timedelta,
     uuid,
 )
-from .tiempo import ahora_iso, hoy_utc, iso_o_vacio, iso_utc
+from .tiempo import ahora_iso, hoy_cdmx, iso_o_vacio, iso_utc
 
 # --------------------------------------------------------------------------- #
 # Cola de jobs de generacion (ADR 0002)                                         #
@@ -556,7 +556,7 @@ def registrar_gasto_ia(
 ) -> None:
     """UPSERT del gasto de UNA generacion cerrada (idempotente por `gen_id`).
 
-    `dia` es el dia UTC (YYYY-MM-DD) en que se CERRO la generacion (cuando se gasto). Un
+    `dia` es el dia CDMX (YYYY-MM-DD) en que se CERRO la generacion (cuando se gasto). Un
     re-cierre sobreescribe tokens/coste con los ultimos valores (nunca suma dos veces).
     `prompt_chars` (economia de contexto): tamano del prompt que entro a `claude -p`.
     `cache_read`/`cache_creation` (prompt caching): tokens de cache leidos / creados, para medir
@@ -623,7 +623,7 @@ def coste_medio_imagen(modelo: str = "", limite: int = 50) -> dict[str, Any]:
 
 
 def gasto_ia_del_dia(dia: str, marca: str = "") -> dict[str, Any]:
-    """Gasto AGREGADO de un dia UTC: `{tokens, tokens_in, tokens_out, coste_usd, generaciones}`.
+    """Gasto AGREGADO de un dia CDMX: `{tokens, tokens_in, tokens_out, coste_usd, generaciones}`.
 
     Es la lectura del corte automatico (`presupuesto_ia.nivel()`): tokens = in + out del dia.
     `marca` ("" = TODAS, agregado global; un id acota a esa marca) para el corte POR MARCA.
@@ -655,7 +655,7 @@ def gasto_ia_del_dia(dia: str, marca: str = "") -> dict[str, Any]:
 
 
 def gasto_ia_del_dia_por_proceso(dia: str, marca: str = "") -> dict[str, dict[str, Any]]:
-    """Gasto del dia UTC DESGLOSADO por proceso (ADR 0011): investigacion vs produccion.
+    """Gasto del dia CDMX DESGLOSADO por proceso (ADR 0011): investigacion vs produccion.
 
     Mismo dia que `gasto_ia_del_dia`, agrupado por la columna `proceso` del ledger. Por cada
     proceso devuelve `{tokens_in, tokens_out, tokens (=in+out), coste_usd, generaciones}`.
@@ -773,7 +773,7 @@ def etapa_economia(proceso: str, tipo: str) -> str:
 
 
 def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, dict[str, Any]]:
-    """Desglose económico de los últimos `dias` (UTC) DESDE el ledger `gasto_ia`, AGRUPADO en las
+    """Desglose económico de los últimos `dias` (CDMX) DESDE el ledger `gasto_ia`, AGRUPADO en las
     4 PESTAÑAS de Contexto (investigacion/produccion/herramientas/desarrollo).
 
     Fuente ÚNICA y autoritativa de la página Economía: el mismo ledger que la tarjeta de
@@ -795,9 +795,9 @@ def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, d
     re-emite como string ISO `YYYY-MM-DD`.
     """
     n = max(1, int(dias))
-    hoy = hoy_utc()
+    hoy = hoy_cdmx()
     # Eje temporal esperado, antiguo -> reciente: el corte del SELECT es su primer dia
-    # (hoy_utc - (n-1)); zero-fill = sembrar estos n dias a cero y volcar encima lo agregado.
+    # (hoy_cdmx - (n-1)); zero-fill = sembrar estos n dias a cero y volcar encima lo agregado.
     dias_esperados = [(hoy - timedelta(days=n - 1 - i)).isoformat() for i in range(n)]
     corte = dias_esperados[0]
 

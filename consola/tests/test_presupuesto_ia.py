@@ -31,7 +31,9 @@ _ENCOLAR_REAL = generaciones.encolar_job_claude
 
 
 def _hoy() -> str:
-    return ahora_iso()[:10]
+    # Bucket-dia del ledger en jornada CDMX, igual que lo escribe/lee el producto: garantiza que
+    # `dia=` al insertar gasto case con el "hoy" que `presupuesto_ia` consulta.
+    return presupuesto_ia._dia_cdmx()
 
 
 def _gen(tipo: str = "copy", etiqueta: str = "X") -> str:
@@ -832,7 +834,7 @@ def _patch_gasto(monkeypatch, coste_usd: float) -> None:
 
 def test_proyeccion_extrapola_coste_segun_fraccion_del_dia(monkeypatch):
     # A un cuarto del dia con $2.5 gastados, la proyeccion a fin de dia es $10.
-    monkeypatch.setattr(presupuesto_ia, "_fraccion_dia_utc", lambda: 0.25)
+    monkeypatch.setattr(presupuesto_ia, "_fraccion_dia_cdmx", lambda: 0.25)
     _patch_gasto(monkeypatch, 2.5)
     monkeypatch.setenv("KENI_PRESUPUESTO_USD_DIA", "8")
     est = presupuesto_ia.estado()
@@ -843,7 +845,7 @@ def test_proyeccion_extrapola_coste_segun_fraccion_del_dia(monkeypatch):
 
 def test_proyeccion_arranque_del_dia_es_none(monkeypatch):
     # Fraccion ~0: no se proyecta (dividir por casi-cero dispararia la cifra).
-    monkeypatch.setattr(presupuesto_ia, "_fraccion_dia_utc", lambda: 0.001)
+    monkeypatch.setattr(presupuesto_ia, "_fraccion_dia_cdmx", lambda: 0.001)
     _patch_gasto(monkeypatch, 1.0)
     monkeypatch.setenv("KENI_PRESUPUESTO_USD_DIA", "8")
     est = presupuesto_ia.estado()
@@ -852,7 +854,7 @@ def test_proyeccion_arranque_del_dia_es_none(monkeypatch):
 
 
 def test_proyeccion_sin_presupuesto_usd_pct_proyectado_none(monkeypatch):
-    monkeypatch.setattr(presupuesto_ia, "_fraccion_dia_utc", lambda: 0.5)
+    monkeypatch.setattr(presupuesto_ia, "_fraccion_dia_cdmx", lambda: 0.5)
     _patch_gasto(monkeypatch, 3.0)
     monkeypatch.delenv("KENI_PRESUPUESTO_USD_DIA", raising=False)
     est = presupuesto_ia.estado()
@@ -860,12 +862,14 @@ def test_proyeccion_sin_presupuesto_usd_pct_proyectado_none(monkeypatch):
     assert est["pct_proyectado_usd"] is None  # sin cap USD
 
 
-def test_fraccion_dia_utc_deriva_del_reloj_canonico(monkeypatch):
-    # Mediodia UTC -> 0.5 del dia.
+def test_fraccion_dia_cdmx_deriva_del_reloj_canonico(monkeypatch):
+    # El reloj canonico es UTC; la fraccion es de la JORNADA CDMX (UTC-6).
+    # Mediodia UTC = 06:00 CDMX -> 0.25 del dia.
     monkeypatch.setattr(presupuesto_ia, "ahora_iso", lambda: "2026-06-21T12:00:00")
-    assert presupuesto_ia._fraccion_dia_utc() == pytest.approx(0.5)
+    assert presupuesto_ia._fraccion_dia_cdmx() == pytest.approx(0.25)
+    # Medianoche UTC = 18:00 CDMX (del dia anterior) -> 0.75 del dia.
     monkeypatch.setattr(presupuesto_ia, "ahora_iso", lambda: "2026-06-21T00:00:00")
-    assert presupuesto_ia._fraccion_dia_utc() == pytest.approx(0.0)
+    assert presupuesto_ia._fraccion_dia_cdmx() == pytest.approx(0.75)
 
 
 # --------------------------------------------------------------------------- #

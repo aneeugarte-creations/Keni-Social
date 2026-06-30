@@ -1,6 +1,6 @@
 """Gate DIARIO de consumo POR CUENTA de Claude: corta la generacion de las marcas de UNA cuenta
-cuando el % de SU limite SEMANAL consumido HOY (UTC) alcanza el umbral del dia, con reanudacion
-humana-en-el-bucle e INDEPENDIENTE por cuenta.
+cuando el % de SU limite SEMANAL consumido HOY (jornada CDMX) alcanza el umbral del dia, con
+reanudacion humana-en-el-bucle e INDEPENDIENTE por cuenta.
 
 POR QUE EXISTE: la generacion corre `claude -p` (ADR 0001) con suscripciones de equipo que tienen
 limite SEMANAL. Hay DOS cuentas (A/B; el reparto de marcas vive en `ruteo_cuentas`), cada una con
@@ -17,10 +17,10 @@ guarda snapshots. Este modulo NO muestrea: solo LEE, tras un unico accesor con f
 (None => NO cortar). El cableado a los repos por cuenta lo hace el orquestador al integrar (ver el
 TODO del accesor): hasta entonces el accesor devuelve None y el gate queda inerte (no corta).
 
-ESTADO DIARIO (mutable, pequeno) POR CUENTA: por dia UTC y por cuenta se persiste cuantos "+10%" se
+ESTADO DIARIO (mutable, pequeno) POR CUENTA: por dia CDMX y por cuenta se persiste cuantos "+10%" se
 han aceptado, en el store de ajustes compartido (`ajustes.py`, TOML en /data: lo ven
 back/worker/daemons en caliente, mismo patron que el kill switch). El umbral vigente de la cuenta
-se DERIVA: `BASE + aceptados * PASO`. Al cambiar de dia UTC el contador se ignora (reset implicito):
+se DERIVA: `BASE + aceptados * PASO`. Al cambiar de dia CDMX el contador se ignora (reset implicito):
 un valor de ayer no cuenta para hoy. Cada cuenta tiene su propia clave -> su corte y su aceptar son
 independientes.
 
@@ -38,7 +38,7 @@ import logging
 
 from . import ajustes
 from .dominio import jobspec
-from .tiempo import ahora_iso
+from .tiempo import dia_cdmx
 
 _log = logging.getLogger("keni_consola.gate_diario")
 
@@ -59,18 +59,18 @@ def _clave(cuenta: str) -> str:
     return f"{CLAVE_ESTADO}::{cuenta}"
 
 
-def _hoy_utc() -> str:
-    """Dia UTC actual (YYYY-MM-DD), el bucket del estado diario (mismo "hoy" que presupuesto_ia)."""
-    return ahora_iso()[:10]
+def _hoy_cdmx() -> str:
+    """Dia CDMX actual (YYYY-MM-DD), el bucket del estado diario (mismo "hoy" que presupuesto_ia)."""
+    return dia_cdmx()
 
 
 def consumo_semanal_hoy_pct(cuenta: str) -> float | None:
     """ACCESOR UNICO de la fuente del %: puntos porcentuales del limite SEMANAL de `cuenta`
-    consumidos HOY (UTC).
+    consumidos HOY (jornada CDMX).
 
     CONTRATO:
-      - Devuelve `pct_semanal_actual - pct_semanal_al_inicio_del_dia` (UTC) de ESA cuenta: cuanto de
-        su cupo semanal se ha gastado HOY, en puntos porcentuales del semanal (p. ej. 14.3 = se
+      - Devuelve `pct_semanal_actual - pct_semanal_al_inicio_del_dia` (CDMX) de ESA cuenta: cuanto de
+        su cupo semanal se ha gastado HOY (jornada CDMX), en puntos porcentuales del semanal (p. ej. 14.3 = se
         consumio hoy un septimo del cupo de la semana). Nunca negativo en uso normal; si el medidor
         retrocede (reset semanal a mitad de dia) la fundacion decide como reanclar el inicio del
         dia — este modulo solo consume el numero ya calculado.
@@ -80,7 +80,7 @@ def consumo_semanal_hoy_pct(cuenta: str) -> float | None:
         corte pararia las marcas de esa cuenta sin motivo.
 
     FUENTE: el muestreo de fondo POR CUENTA persiste, para cada cuenta, el medidor "Current week
-    (all models)" actual (`semana_pct`) y su valor AL INICIO DEL DIA UTC (`semana_pct_inicio_dia`,
+    (all models)" actual (`semana_pct`) y su valor AL INICIO DEL DIA CDMX (`semana_pct_inicio_dia`,
     reanclado por la fundacion en el rollover/reset); el consumo de hoy es su resta. NO muestrea
     aqui (no duplica).
 
@@ -118,9 +118,9 @@ def _estado_persistido(cuenta: str) -> tuple[str, int]:
 
 
 def aceptados_hoy(cuenta: str) -> int:
-    """Cuantos "+10%" se han aceptado HOY (UTC) en `cuenta`. 0 si el estado guardado es de otro dia."""
+    """Cuantos "+10%" se han aceptado HOY (CDMX) en `cuenta`. 0 si el estado guardado es de otro dia."""
     dia, aceptados = _estado_persistido(cuenta)
-    return aceptados if dia == _hoy_utc() else 0
+    return aceptados if dia == _hoy_cdmx() else 0
 
 
 def umbral_vigente(cuenta: str) -> float:
@@ -140,14 +140,14 @@ def pausado_por_pct(cuenta: str) -> bool:
 
 
 def aceptar_mas(cuenta: str) -> dict:
-    """Sube +10% el umbral del dia de `cuenta` (registra un "aceptar" del dia UTC) y devuelve su
+    """Sube +10% el umbral del dia de `cuenta` (registra un "aceptar" del dia CDMX) y devuelve su
     `estado(cuenta)`.
 
     Reancla el contador al dia de hoy: si el estado guardado era de un dia anterior, parte de 0 y
     suma 1 (el primer aceptar del dia). Escritura atomica via el store de ajustes compartido. Solo
     afecta a ESA cuenta: la otra conserva su umbral.
     """
-    hoy = _hoy_utc()
+    hoy = _hoy_cdmx()
     aceptados = aceptados_hoy(cuenta) + 1
     ajustes.guardar(_clave(cuenta), json.dumps({"dia": hoy, "aceptados": aceptados}))
     _log.info(
@@ -178,7 +178,7 @@ def estado(cuenta: str) -> dict:
         "pausado_por_pct": consumo is not None and consumo >= umbral,
         "base_umbral_pct": round(BASE_UMBRAL_PCT, 1),
         "paso_pct": PASO_PCT,
-        "dia": _hoy_utc(),
+        "dia": _hoy_cdmx(),
     }
 
 

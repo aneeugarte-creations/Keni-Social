@@ -8,7 +8,7 @@ y AGOTAR los tokens de todos sin que nadie lo vea venir. Este modulo es el guard
     (Postgres, UPSERT por gen_id = idempotente ante reintentos/re-encolados). Lo escribe el
     hook de cierre del almacen de generaciones (`generaciones._almacen`), asi cubre TODOS
     los caminos (claude, imagen, procesos) sin tocar cada lanzador.
-  - PRESUPUESTO: el corte GLOBAL es el cap de COSTE en USD por dia UTC (`KENI_PRESUPUESTO_USD_DIA`,
+  - PRESUPUESTO: el corte GLOBAL es el cap de COSTE en USD por dia CDMX (`KENI_PRESUPUESTO_USD_DIA`,
     mejor proxy del gasto: un token de input cacheado pesa mucho menos que uno de salida); 0 =
     apagado. Los topes de TOKENS son POR MOTOR (entrada/salida, ADR 0011) y cortan SOLO su motor.
     El "presupuesto global de tokens" que expone `estado()` es la SUMA informativa de esos 4 topes,
@@ -37,10 +37,11 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from datetime import datetime
 from typing import Any
 
 from . import config, gate_diario, ruteo_cuentas
-from .tiempo import ahora_iso
+from .tiempo import ahora_iso, dia_cdmx, fraccion_dia_cdmx
 
 _log = logging.getLogger("keni_consola.presupuesto_ia")
 
@@ -78,28 +79,24 @@ PROCESO_PRODUCCION = "produccion"
 _ULTIMO_NIVEL: str | None = None
 
 
-def _hoy_utc() -> str:
-    """Dia UTC actual (YYYY-MM-DD), el bucket del presupuesto."""
-    return ahora_iso()[:10]
+def _dia_cdmx() -> str:
+    """Dia CDMX actual (YYYY-MM-DD), el bucket del presupuesto.
 
-
-# Segundos de un dia completo, base de la fraccion del dia transcurrida.
-_SEGUNDOS_DIA = 86400
-
-
-def _fraccion_dia_utc() -> float:
-    """Fraccion del dia UTC de HOY ya transcurrida (0.0 a 1.0).
-
-    Misma nocion de "hoy" que `_hoy_utc`/`_gasto_hoy` (dia UTC via `ahora_iso`), para que la
-    proyeccion case con el bucket del gasto. Se deriva del timestamp ISO canonico (HH:MM:SS),
-    asi parchear `ahora_iso` en tests fija tambien la fraccion.
+    La jornada del equipo es la mexicana, asi que "hoy" rueda en la medianoche de Mexico. Se
+    deriva del reloj canonico (`ahora_iso`), asi parchear `ahora_iso` en tests fija tambien el
+    bucket.
     """
-    hms = ahora_iso()[11:19]  # "HH:MM:SS" del canon UTC
-    try:
-        h, m, s = (int(p) for p in hms.split(":"))
-    except (ValueError, TypeError):
-        return 0.0
-    return (h * 3600 + m * 60 + s) / _SEGUNDOS_DIA
+    return dia_cdmx(datetime.fromisoformat(ahora_iso()))
+
+
+def _fraccion_dia_cdmx() -> float:
+    """Fraccion del dia CDMX de HOY ya transcurrida (0.0 a 1.0).
+
+    Misma nocion de "hoy" que `_dia_cdmx`/`_gasto_hoy` (dia CDMX via `ahora_iso`), para que la
+    proyeccion case con el bucket del gasto. Se deriva del reloj canonico, asi parchear
+    `ahora_iso` en tests fija tambien la fraccion.
+    """
+    return fraccion_dia_cdmx(datetime.fromisoformat(ahora_iso()))
 
 
 def invalidar_cache() -> None:
@@ -115,7 +112,7 @@ def invalidar_cache() -> None:
 
 
 def _gasto_hoy(marca: str = "") -> dict[str, Any]:
-    """Gasto agregado del dia UTC actual, cacheado `_CACHE_TTL_S` segundos.
+    """Gasto agregado del dia CDMX actual, cacheado `_CACHE_TTL_S` segundos.
 
     `marca` ("" = GLOBAL, agregado de todas; un id = solo esa marca, para el corte POR MARCA). El
     camino GLOBAL (la mayoria de lecturas: gate del worker, nivel global) usa la cache; una marca
@@ -127,7 +124,7 @@ def _gasto_hoy(marca: str = "") -> dict[str, Any]:
     no un cinturon de seguridad funcional; un falso corte pararia la maquina entera por un parpadeo.
     """
     global _CACHE_GASTO, _CACHE_DIA, _CACHE_EXPIRA
-    dia = _hoy_utc()
+    dia = _dia_cdmx()
     if not marca:
         with _CACHE_LOCK:
             if _CACHE_GASTO is not None and _CACHE_DIA == dia and time.monotonic() < _CACHE_EXPIRA:
@@ -158,14 +155,14 @@ def _gasto_vacio_por_proceso() -> dict[str, dict[str, Any]]:
 
 
 def _gasto_por_proceso_hoy(marca: str = "") -> dict[str, dict[str, Any]]:
-    """Gasto del dia UTC actual DESGLOSADO por proceso, cacheado `_CACHE_TTL_S` segundos.
+    """Gasto del dia CDMX actual DESGLOSADO por proceso, cacheado `_CACHE_TTL_S` segundos.
 
     Mismo criterio best-effort y mismo trato de `marca` que `_gasto_hoy`: el camino GLOBAL ("")
     usa la cache; una marca concreta se lee sin cache. Garantiza siempre los dos motores
     (`investigacion`/`produccion`).
     """
     global _CACHE_PROC_GASTO, _CACHE_PROC_DIA, _CACHE_PROC_EXPIRA
-    dia = _hoy_utc()
+    dia = _dia_cdmx()
     if not marca:
         with _CACHE_LOCK:
             if (
@@ -446,7 +443,7 @@ def estado(marca: str = "") -> dict[str, Any]:
     la razon de un `nivel == pausado` con `pausada` (kill switch) en False: el UI distingue asi el
     corte por % del kill switch manual.
 
-    `proyeccion_usd_dia` es el coste estimado a fin de dia (coste actual / fraccion del dia UTC
+    `proyeccion_usd_dia` es el coste estimado a fin de dia (coste actual / fraccion del dia CDMX
     transcurrida); None al arranque del dia (fraccion <= 1%). `pct_proyectado_usd` es esa
     proyeccion sobre el cap de USD; None sin cap o sin proyeccion.
 
@@ -473,9 +470,9 @@ def estado(marca: str = "") -> dict[str, Any]:
     pct = round(100.0 * gastado / presupuesto, 1) if presupuesto > 0 else None
     pct_usd = round(100.0 * coste / presupuesto_usd, 1) if presupuesto_usd > 0 else None
     # Proyeccion de gasto a fin de dia: extrapola el coste actual al dia completo segun la
-    # fraccion del dia UTC ya transcurrida. Al arranque del dia (fraccion ~0) NO se proyecta
+    # fraccion del dia CDMX ya transcurrida. Al arranque del dia (fraccion ~0) NO se proyecta
     # (None): dividir por casi-cero dispararia la cifra a valores absurdos.
-    fraccion = _fraccion_dia_utc()
+    fraccion = _fraccion_dia_cdmx()
     proyeccion_usd = round(coste / fraccion, 4) if fraccion > 0.01 else None
     pct_proyectado_usd = (
         round(100.0 * proyeccion_usd / presupuesto_usd, 1)
@@ -496,7 +493,7 @@ def estado(marca: str = "") -> dict[str, Any]:
         "pct_usado_usd": pct_usd,
         "proyeccion_usd_dia": proyeccion_usd,
         "pct_proyectado_usd": pct_proyectado_usd,
-        "dia": _hoy_utc(),
+        "dia": _dia_cdmx(),
         "por_proceso": {
             PROCESO_INVESTIGACION: _bloque_proceso(PROCESO_INVESTIGACION, gasto_proc, marca),
             PROCESO_PRODUCCION: _bloque_proceso(PROCESO_PRODUCCION, gasto_proc, marca),
@@ -565,7 +562,13 @@ def registrar_cierre(registro: dict[str, Any]) -> None:
     modelo = str(metricas.get("modelo") or "")
     if tokens_in <= 0 and tokens_out <= 0 and coste <= 0:
         return  # sin consumo medible (imagen/proceso/fallo temprano): no ensuciar el ledger
-    dia = (str(registro.get("fecha_fin") or "") or ahora_iso())[:10]
+    # Bucket del ledger en jornada CDMX (mismo "hoy" que `_dia_cdmx`, que es como se LEE el gasto):
+    # el cierre lleva `fecha_fin` (canon ISO-UTC); un valor ilegible cae al dia CDMX de ahora.
+    fin = str(registro.get("fecha_fin") or "") or ahora_iso()
+    try:
+        dia = dia_cdmx(datetime.fromisoformat(fin))
+    except ValueError:
+        dia = _dia_cdmx()
     from . import repos
 
     try:

@@ -5,20 +5,23 @@ corre `claude -p /usage` por cuenta y deja aquí su última lectura, para que el
 barra lateral y el gate diario lean de la BD sin ejecutar `claude`. `cuenta` es la clave lógica
 (índice único + target del UPSERT); `id` la espeja por compat de PK.
 
-Además del snapshot, se mantiene —POR CUENTA— el `semana_pct` AL INICIO DEL DÍA UTC para derivar
+Además del snapshot, se mantiene —POR CUENTA— el `semana_pct` AL INICIO DEL DÍA CDMX para derivar
 el "consumo de HOY" (= `semana_pct` actual − `semana_pct_inicio_dia`): el medidor semanal es
 acumulativo y solo resetea su ventana semanal, así que dentro de un día crece de forma
-monótona. La línea base se RUEDA en la primera escritura de cada día UTC (se hereda el último
+monótona. La línea base se RUEDA en la primera escritura de cada día CDMX (se hereda el último
 `semana_pct` del día anterior como valor de medianoche) y se reajusta a la baja si la ventana
 semanal resetea a mitad del día (el porcentaje cae), para que el consumo de hoy nunca sea negativo.
+La jornada del equipo es la mexicana: el rollover en la medianoche de México (no la de UTC) evita
+que la base se reancle a media tarde y vacíe el consumo del día en plena operación. La columna
+`dia_utc` guarda ese día-bucket (ya en jornada CDMX).
 """
 from __future__ import annotations
 
 from ._db_comun import (
     Any,
     _conectar,
-    hoy_utc,
 )
+from .tiempo import dia_cdmx
 
 _COLS = (
     "id",
@@ -82,7 +85,7 @@ def _baseline_dia(
 ) -> tuple[int | None, str]:
     """Línea base del consumo de HOY: (`semana_pct_inicio_dia`, `dia_utc`) a persistir.
 
-    PURA (sin reloj ni BD): dado el snapshot previo, el día UTC actual y el `semana_pct` recién
+    PURA (sin reloj ni BD): dado el snapshot previo, el día CDMX actual y el `semana_pct` recién
     leído, decide la base del día. Reglas:
       - Día NUEVO (o sin fila previa): la base es el `semana_pct` del cierre del día anterior
         (la última lectura ≈ el valor de medianoche); si no hay previa, la lectura actual.
@@ -115,11 +118,11 @@ def guardar_uso_cuenta(
     """Persiste (UPSERT) el último snapshot del uso de una cuenta y devuelve la fila guardada.
 
     Rueda la línea base del día (`_baseline_dia`) leyendo el snapshot previo DE ESA CUENTA en la
-    misma conexión. `dia_utc` (opcional) fija el día UTC en tests; por defecto se toma `hoy_utc()`.
-    NO ejecuta `claude` (eso es del daemon): solo escribe lo ya leído.
+    misma conexión. `dia_utc` (opcional) fija el día-bucket en tests; por defecto se toma el día
+    CDMX de hoy (`dia_cdmx()`). NO ejecuta `claude` (eso es del daemon): solo escribe lo ya leído.
     """
     c = _normalizar_cuenta(cuenta)
-    dia = dia_utc if dia_utc is not None else hoy_utc().isoformat()
+    dia = dia_utc if dia_utc is not None else dia_cdmx()
     con = _conectar()
     try:
         prev = con.execute(_SELECT, (c,)).fetchone()
