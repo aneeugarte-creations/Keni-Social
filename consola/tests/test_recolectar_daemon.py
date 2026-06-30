@@ -1006,7 +1006,7 @@ def test_partir_en_subtemas_persiste_cada_faceta(monkeypatch):
     }
     monkeypatch.setattr(
         fusionar_semantica, "proponer_subtemas",
-        lambda familia, *, ejecutor=None: [
+        lambda familia, *, ejecutor=None, **_kw: [
             {"subtema": "Partidos", "ids": ["p1", "p2"]},
             {"subtema": "Espectáculo", "ids": ["show"]},
         ],

@@ -1183,7 +1183,7 @@ def test_crear_tema_tropicaliza_titulo_ingles_con_idioma_vacio(entorno, monkeypa
     # La traducción real (Haiku) se mockea: devuelve la tropicalización a ES MX.
     monkeypatch.setattr(
         _admitir, "traducir_par_ahora",
-        lambda titulo, resumen: ("Los niños indígenas pertenecen a sus comunidades", "Resumen en español"),
+        lambda titulo, resumen, **_kw: ("Los niños indígenas pertenecen a sus comunidades", "Resumen en español"),
     )
     cluster = _inicializar_cluster(
         "en-vacio",
@@ -1207,7 +1207,7 @@ def test_crear_tema_tropicaliza_titulo_ingles_mal_etiquetado_es(entorno, monkeyp
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     monkeypatch.setattr(
         _admitir, "traducir_par_ahora",
-        lambda titulo, resumen: ("Los mercados caen tras la señal de la Fed", "Resumen"),
+        lambda titulo, resumen, **_kw: ("Los mercados caen tras la señal de la Fed", "Resumen"),
     )
     cluster = _inicializar_cluster(
         "es-malo",
