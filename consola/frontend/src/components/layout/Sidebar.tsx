@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 
 import { CuentaUsuario } from "@/components/layout/CuentaUsuario";
@@ -43,9 +42,10 @@ function clasesIconoRail(activa: boolean) {
  * in-page (`SubnavHub`), no en el sidebar: así la barra no lista herramientas que se
  * usan dentro de un flujo, no sueltas.
  *
- * Toda la barra puede COLAPSARSE a un **rail** estrecho de solo iconos (los mismos
- * items, agrupados por bloque con un separador). El estado colapsado lo controla el
- * AppShell (persistido en localStorage) vía `colapsado`/`onToggleColapsar`.
+ * En escritorio la barra vive COLAPSADA a un **rail** estrecho de solo iconos (los mismos
+ * items, agrupados por bloque con un separador) y se EXPANDE al acercar el ratón (estilo Dock de
+ * macOS): el AppShell aloja ese estado de hover/foco y nos pasa `colapsado`; el panel expandido
+ * FLOTA sobre el contenido, sin botón ni persistencia. En móvil va siempre expandida (slide-over).
  */
 /**
  * ¿`pathname` cae dentro del hub de la entrada `ruta` (una pestaña suya o una sub-ruta de ella)?
@@ -62,11 +62,9 @@ function enHubDe(ruta: string, pathname: string): boolean {
 export function Sidebar({
   onNavegar,
   colapsado = false,
-  onToggleColapsar,
 }: {
   onNavegar?: () => void;
   colapsado?: boolean;
-  onToggleColapsar?: () => void;
 }) {
   const { pathname } = useLocation();
   // Sidebar DATA-DRIVEN (ADR 0005): se hidrata de `/api/catalogo`. El backend ya
@@ -97,7 +95,7 @@ export function Sidebar({
     return (
       <nav
         aria-label="Navegación principal"
-        className="flex h-full w-16 flex-col border-r border-border bg-background"
+        className="flex h-full w-full flex-col border-r border-border bg-background"
       >
         <div className="flex h-12 items-center justify-center border-b border-border">
           <CuentaUsuario soloIcono />
@@ -130,16 +128,6 @@ export function Sidebar({
 
         <div className="flex flex-col items-center gap-2 border-t border-border py-3">
           <IndicadorUso colapsado />
-          <Tooltip label="Expandir barra" side="right">
-            <button
-              type="button"
-              aria-label="Expandir barra"
-              className={clasesIconoRail(false)}
-              onClick={onToggleColapsar}
-            >
-              <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
-            </button>
-          </Tooltip>
         </div>
       </nav>
     );
@@ -149,7 +137,7 @@ export function Sidebar({
   return (
     <nav
       aria-label="Navegación principal"
-      className="flex h-full w-64 flex-col border-r border-border bg-background"
+      className="flex h-full w-full flex-col border-r border-border bg-background"
     >
       <div className="flex h-12 items-center border-b border-border px-2">
         <CuentaUsuario />
@@ -187,21 +175,11 @@ export function Sidebar({
         ))}
       </div>
 
-      {/* Pie: indicador sutil de uso de la cuenta + toggle del rail (colapsar a solo iconos). */}
-      {onToggleColapsar && (
-        <div className="space-y-1 border-t border-border px-3 py-2">
-          <IndicadorUso />
-          <button
-            type="button"
-            aria-label="Colapsar barra"
-            className={cn(clasesItem({ isActive: false }), "w-full")}
-            onClick={onToggleColapsar}
-          >
-            <PanelLeftClose className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>Colapsar</span>
-          </button>
-        </div>
-      )}
+      {/* Pie: indicador sutil de uso de la cuenta (la barra ya no se colapsa a mano: se expande al
+          acercar el ratón, ver AppShell). */}
+      <div className="space-y-1 border-t border-border px-3 py-2">
+        <IndicadorUso />
+      </div>
     </nav>
   );
 }

@@ -31,6 +31,7 @@ function cuenta(parcial: Partial<UsoCuenta>): UsoCuenta {
     sonnet_pct: null,
     reset_semana_iso: "2026-07-01T00:00:00Z",
     reset_semana_txt: "Jul 1 at 12:00am (UTC)",
+    reset_sesion_iso: null,
     actualizado_ts: 1_700_000_000,
     al_100: false,
     alerta_roja: false,
@@ -87,18 +88,20 @@ describe("IndicadorUso", () => {
     expect(screen.getByText("70%")).toBeInTheDocument(); // 10 / 14.3 ≈ 70 %
   });
 
-  it("una cuenta (marca concreta): pinta sus porcentajes, sin etiqueta de marca", () => {
+  it("una cuenta: cabecera «Cuenta A» (no la lista de marcas) y sus porcentajes", () => {
     renderIndicador({ data: { cuentas: [cuenta({})] } }, "claro-sports");
+    expect(screen.getByText("Cuenta A")).toBeInTheDocument();
     expect(screen.getByText("42%")).toBeInTheDocument();
     expect(screen.getByText("18%")).toBeInTheDocument();
-    // Con UNA cuenta no se rotula la etiqueta de marca (igual que antes).
+    // La cabecera es la cuenta, no la lista de marcas.
     expect(screen.queryByText("Claro Sports")).not.toBeInTheDocument();
   });
 
-  it("dos cuentas (Todas): pinta AMBAS, cada una etiquetada por sus marcas", () => {
+  it("dos cuentas (Todas): pinta AMBAS con cabecera «Cuenta A» / «Cuenta B»", () => {
     renderIndicador({ data: { cuentas: [cuenta({}), CUENTA_B] } }, null);
-    expect(screen.getByText("Claro Sports")).toBeInTheDocument();
-    expect(screen.getByText("UnoTV · Nación Gamer · Fundación")).toBeInTheDocument();
+    expect(screen.getByText("Cuenta A")).toBeInTheDocument();
+    expect(screen.getByText("Cuenta B")).toBeInTheDocument();
+    expect(screen.queryByText("UnoTV · Nación Gamer · Fundación")).not.toBeInTheDocument();
     expect(screen.getByText("42%")).toBeInTheDocument();
     expect(screen.getByText("70%")).toBeInTheDocument();
   });
@@ -145,7 +148,9 @@ describe("IndicadorUso", () => {
     expect(screen.getByText("Límite semanal al 100%")).toBeInTheDocument();
   });
 
-  it("colapsado: pinta un círculo (svg) con el número semanal, sin barras", () => {
+  it("colapsado: anillo (svg) con el % del que antes bloqueará (sin resets útiles, cae al semanal)", () => {
+    // Sin reset de sesión y con el semanal que resetea antes de llenarse, el burn rate no predice y
+    // el anillo cae al binding semanal (42).
     const { container } = renderIndicador({ data: { cuentas: [cuenta({ semana_pct: 42 })] } }, "claro-sports", true);
     expect(container.querySelector("svg")).toBeInTheDocument();
     expect(screen.getByText("42")).toBeInTheDocument();

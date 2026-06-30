@@ -190,7 +190,7 @@ function valorMarcaActiva(marcaActiva: string | null): ValorMarcaActiva {
 function renderSidebar(
   rol: RolUsuario,
   ruta = "/operacion/feed",
-  props: { colapsado?: boolean; onToggleColapsar?: () => void } = {},
+  props: { colapsado?: boolean } = {},
   marcaActiva: string | null = null,
 ) {
   stubCatalogo();
@@ -291,34 +291,20 @@ describe("Sidebar · bloques de flujo", () => {
   });
 });
 
-describe("Sidebar · rail colapsable", () => {
-  it("colapsado muestra solo iconos (enlaces por entrada) y un botón para expandir", async () => {
-    renderSidebar("editor", "/operacion/feed", { colapsado: true, onToggleColapsar: () => {} });
+describe("Sidebar · rail (colapsado)", () => {
+  it("colapsado muestra solo iconos (enlaces por entrada), sin botón ni encabezados de bloque", async () => {
+    renderSidebar("editor", "/operacion/feed", { colapsado: true });
     // Cada entrada sigue siendo un enlace, ahora solo-icono (nombre por aria-label).
     expect(await screen.findByRole("link", { name: /feed/i })).toHaveAttribute("href", "/operacion/feed");
     expect(screen.getByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/operacion/investigacion");
-    // Botón para volver a expandir la barra.
-    expect(screen.getByRole("button", { name: /expandir barra/i })).toBeInTheDocument();
+    // Ya no hay botón de colapsar/expandir: la barra se expande sola al hover (lo gobierna AppShell).
+    expect(screen.queryByRole("button", { name: /expandir barra|colapsar/i })).not.toBeInTheDocument();
     // En rail no se pintan los encabezados de bloque (solo iconos).
     expect(screen.queryByText("Contenido")).not.toBeInTheDocument();
   });
 
-  it("el toggle (colapsar / expandir) invoca onToggleColapsar", async () => {
-    const onToggle = vi.fn();
-    const { unmount } = renderSidebar("editor", "/operacion/feed", {
-      colapsado: false,
-      onToggleColapsar: onToggle,
-    });
-    fireEvent.click(await screen.findByRole("button", { name: /colapsar/i }));
-    expect(onToggle).toHaveBeenCalledTimes(1);
-    unmount();
-    renderSidebar("editor", "/operacion/feed", { colapsado: true, onToggleColapsar: onToggle });
-    fireEvent.click(await screen.findByRole("button", { name: /expandir barra/i }));
-    expect(onToggle).toHaveBeenCalledTimes(2);
-  });
-
   it("click en el icono de una entrada (en rail) navega a su ruta", async () => {
-    renderSidebar("editor", "/operacion/feed", { colapsado: true, onToggleColapsar: () => {} });
+    renderSidebar("editor", "/operacion/feed", { colapsado: true });
     fireEvent.click(await screen.findByRole("link", { name: /feed/i }));
     await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/operacion/feed"));
   });

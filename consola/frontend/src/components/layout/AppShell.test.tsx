@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Navigate, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -53,8 +53,8 @@ function stubFetch() {
 }
 
 /**
- * localStorage de juguete (jsdom no siempre expone `clear`). Persiste el estado
- * colapsado del rail; lo reseteamos entre tests.
+ * localStorage de juguete (jsdom no siempre expone `clear`), para el código del shell que lo
+ * consulta. Se resetea entre tests.
  */
 function instalarLocalStorage() {
   let store: Record<string, string> = {};
@@ -285,14 +285,21 @@ describe("AppShell · sidebar siempre presente", () => {
     expect(boton.parentElement?.className).not.toContain("justify-center");
   });
 
-  it("persiste el estado colapsado del rail en localStorage", async () => {
-    localStorage.setItem("keni:sidebar-colapsado", "1");
+  it("escritorio: el sidebar arranca en rail y se EXPANDE al pasar el ratón (sin botón)", async () => {
     renderShell("/configuracion");
     await screen.findByText("contenido config");
-    // En rail (colapsado) aparece el botón "Expandir barra"; no el "Colapsar".
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /expandir barra/i })).toBeInTheDocument(),
-    );
-    expect(screen.queryByRole("button", { name: /^colapsar$/i })).not.toBeInTheDocument();
+    // Rail por defecto: el enlace está (por aria-label) pero el ENCABEZADO de bloque no se pinta.
+    expect(await screen.findByRole("link", { name: /generación/i })).toBeInTheDocument();
+    expect(screen.queryByText("Operación")).not.toBeInTheDocument();
+    // Ya no hay botón de colapsar/expandir: lo gobierna el hover.
+    expect(
+      screen.queryByRole("button", { name: /expandir barra|^colapsar$/i }),
+    ).not.toBeInTheDocument();
+    // Al pasar el ratón por la barra se EXPANDE (aparece el encabezado de bloque); al salir se repliega.
+    const aside = screen.getByRole("complementary");
+    fireEvent.mouseEnter(aside);
+    await waitFor(() => expect(screen.getByText("Operación")).toBeInTheDocument());
+    fireEvent.mouseLeave(aside);
+    await waitFor(() => expect(screen.queryByText("Operación")).not.toBeInTheDocument());
   });
 });

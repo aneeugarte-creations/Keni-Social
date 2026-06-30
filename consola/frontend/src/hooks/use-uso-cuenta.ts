@@ -6,7 +6,8 @@
  *
  * Forma de respuesta ACORDADA con el backend (`GET /api/sistema/uso`, cualquier autenticado):
  *   { cuentas: [{ cuenta, etiqueta, marcas, conectada, semana_pct, sesion_5h_pct, sonnet_pct,
- *       reset_semana_iso, reset_semana_txt, actualizado_ts, al_100, alerta_roja }, ...] }
+ *       reset_semana_iso, reset_semana_txt, reset_sesion_iso, actualizado_ts, al_100, alerta_roja,
+ *       dia }, ...] }
  * El back devuelve SOLO las cuentas que el usuario puede ver (suelo de autorización por marcas);
  * el frontend elige cuál(es) MOSTRAR según el selector de marca activo. El back cachea (no ejecuta
  * `claude` por request), así que sondeamos con holgura.
@@ -48,6 +49,8 @@ export interface UsoCuenta {
   reset_semana_iso: string | null;
   /** Texto crudo del reset semanal tal cual lo da el CLI. `null` si no hay. */
   reset_semana_txt: string | null;
+  /** Instante UTC ISO del reset de la ventana de SESIÓN (5 h), para el burn rate. `null` si no. */
+  reset_sesion_iso: string | null;
   /** Epoch (segundos) de cuándo se capturó el medidor mostrado. `null` si nunca. */
   actualizado_ts: number | null;
   /** `true` si alguna ventana está al 100 %. */

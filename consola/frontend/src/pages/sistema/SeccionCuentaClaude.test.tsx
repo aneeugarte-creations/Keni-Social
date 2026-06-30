@@ -88,6 +88,7 @@ function cuentaUso(parcial: Partial<UsoCuenta>): UsoCuenta {
     sonnet_pct: null,
     reset_semana_iso: null,
     reset_semana_txt: null,
+    reset_sesion_iso: null,
     actualizado_ts: null,
     al_100: false,
     alerta_roja: false,

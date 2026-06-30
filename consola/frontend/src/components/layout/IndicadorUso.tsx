@@ -1,23 +1,27 @@
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useUsoCuenta, type UsoCuenta } from "@/hooks/use-uso-cuenta";
 import { Tooltip } from "@/components/ui/tooltip";
+import { limiteMasUrgente } from "@/lib/uso-burn";
 import { cn } from "@/lib/utils";
 
 /**
- * Indicador SUTIL del uso de las cuentas de Claude del servidor, alojado en el pie del sidebar
- * junto al control «Colapsar». Reutiliza el lenguaje visual de `PanelActualizando` (hilo de 1px,
- * avance discreto, nada de cajas ni alarmas): expandido pinta tres medidores mini (Semana / 24h /
- * 5h) por cuenta; colapsado, un único anillo fino con el % semanal (el resto va al tooltip).
+ * Indicador SUTIL del uso de las cuentas de Claude del servidor, alojado en el pie del sidebar.
+ * Reutiliza el lenguaje visual de `PanelActualizando` (hilo de 1px, avance discreto, nada de cajas
+ * ni alarmas): expandido pinta la cabecera «Cuenta A/B» + tres medidores mini (Semana / 24h / 5h)
+ * por cuenta; colapsado, un anillo fino con el % del límite que ANTES bloqueará (burn rate, el
+ * resto va al tooltip).
  *
- * EL QUE PRIMERO SE AGOTA: «Semana» es el mayor de all-models vs cuota Sonnet, y «24h» el cupo del
- * día del límite que primero se agota (lo expone el backend en `uso.dia`). Así cada barra muestra
- * el límite que de verdad frena; el tooltip rotula "(Sonnet)" cuando es ese el que ata.
+ * EL QUE PRIMERO SE AGOTA / BLOQUEA: «Semana» es el mayor de all-models vs cuota Sonnet, «24h» el
+ * cupo del día del límite que primero se agota (backend `uso.dia`), y el anillo colapsado el que
+ * antes tocará el 100 % por burn rate (`limiteMasUrgente`, ventanas duras 5h/semana/Sonnet). Así
+ * cada barra muestra el límite que de verdad frena; el tooltip rotula "(Sonnet)" cuando ata Sonnet
+ * y "Antes al 100%: …" con la predicción.
  *
  * QUÉ CUENTAS muestra: el backend devuelve solo las que el usuario PUEDE ver (suelo por marcas);
  * de esas, el selector de marca activo (`useMarcaActiva`) decide cuál(es) PINTAR — en "Todas"
- * (`marcaActiva===null`) todas las permitidas (cada una etiquetada por sus marcas); con una marca
- * concreta, solo la cuenta que sirve esa marca. Si no queda ninguna (editor sin marcas o la marca
- * activa no es de una cuenta permitida), no renderiza nada.
+ * (`marcaActiva===null`) todas las permitidas; con una marca concreta, solo la cuenta que sirve esa
+ * marca. Si no queda ninguna (editor sin marcas o la marca activa no es de una cuenta permitida),
+ * no renderiza nada.
  *
  * Estados: neutro cuando aún no hay dato (`undefined`/cargando, nunca rojo) y ROJO por cuenta
  * cuando `alerta_roja` (sin cuenta o alguna ventana al 100 %).
@@ -42,6 +46,17 @@ function dia24hPct(uso: UsoCuenta): number | null {
   const { consumo_pct, umbral_pct } = uso.dia;
   if (consumo_pct == null || umbral_pct <= 0) return null;
   return (consumo_pct / umbral_pct) * 100;
+}
+
+/** Rótulo de la cabecera del bloque: "Cuenta A" / "Cuenta B". */
+function etiquetaCuenta(uso: UsoCuenta): string {
+  return `Cuenta ${uso.cuenta.toUpperCase()}`;
+}
+
+/** % que pinta el anillo colapsado: el límite que ANTES bloqueará (burn rate); si aún no hay resets
+ *  para predecir, cae al binding semanal de hoy (el mayor de all-models vs Sonnet). */
+function pctColapsado(uso: UsoCuenta): number | null {
+  return limiteMasUrgente(uso)?.pct ?? semanaBinding(uso).pct;
 }
 
 /** Mensaje breve del estado rojo (sin cuenta / al 100 %), o `null` si no hay alerta. */
@@ -78,6 +93,12 @@ function tooltipCompleto(uso: UsoCuenta): string {
       ` · 24h ${dia == null ? "—" : `${dia}%`}${notaDia}` +
       ` · 5h ${v == null ? "—" : `${v}%`}`,
   );
+  const urgente = limiteMasUrgente(uso);
+  if (urgente) {
+    const cuando =
+      urgente.horas === 0 ? "ya" : urgente.horas < 1 ? "<1 h" : `~${Math.round(urgente.horas)} h`;
+    partes.push(`Antes al 100%: ${urgente.etiqueta} (${cuando})`);
+  }
   const reset = etiquetaReset(uso);
   if (reset) partes.push(reset);
   return partes.join(" · ");
@@ -125,11 +146,12 @@ function MiniMedidor({
   );
 }
 
-/** Círculo del rail colapsado: un único anillo fino con el % semanal; la ventana de 5 h va al tooltip. */
-function CirculoUso({ semana, rojo }: { semana: number | null; rojo: boolean }) {
+/** Círculo del rail colapsado: un anillo fino con el % del límite que ANTES bloqueará (burn rate);
+ *  el desglose va al tooltip. */
+function CirculoUso({ pct, rojo }: { pct: number | null; rojo: boolean }) {
   const r = 15.5;
   const c = 2 * Math.PI * r;
-  const sem = pctEntero(semana);
+  const sem = pctEntero(pct);
   const colorTrazo = rojo ? "hsl(var(--destructive))" : "hsl(var(--foreground))";
   return (
     <svg viewBox="0 0 36 36" className="h-[22px] w-[22px]" aria-hidden="true">
@@ -164,18 +186,16 @@ function CirculoUso({ semana, rojo }: { semana: number | null; rojo: boolean }) 
   );
 }
 
-/** Bloque expandido de UNA cuenta: medidores Semana/5h, su aviso rojo y —si hay varias— su etiqueta. */
-function BloqueCuenta({ uso, etiquetada }: { uso: UsoCuenta; etiquetada: boolean }) {
+/** Bloque expandido de UNA cuenta: cabecera "Cuenta A/B", sus tres medidores y el aviso rojo. */
+function BloqueCuenta({ uso }: { uso: UsoCuenta }) {
   const rojo = uso.alerta_roja;
   const alerta = mensajeRojo(uso);
   return (
-    <Tooltip label={etiquetaReset(uso) ?? tooltipCompleto(uso)} side="top">
+    <Tooltip label={tooltipCompleto(uso)} side="top">
       <div className="w-full space-y-1" aria-label={tooltipCompleto(uso)}>
-        {etiquetada ? (
-          <p className="truncate px-0.5 text-[10px] font-medium text-muted-foreground/80">
-            {uso.etiqueta}
-          </p>
-        ) : null}
+        <p className="truncate px-0.5 text-[10px] font-medium text-muted-foreground/80">
+          {etiquetaCuenta(uso)}
+        </p>
         {alerta ? <p className="px-0.5 text-[10px] font-medium text-destructive">{alerta}</p> : null}
         <MiniMedidor etiqueta="Semana" pct={semanaBinding(uso).pct} rojo={rojo} />
         <MiniMedidor etiqueta="24h" pct={dia24hPct(uso)} rojo={rojo} />
@@ -191,7 +211,7 @@ function CirculoCuenta({ uso }: { uso: UsoCuenta }) {
   return (
     <Tooltip label={etiqueta} side="right">
       <div aria-label={etiqueta} className="flex items-center justify-center">
-        <CirculoUso semana={semanaBinding(uso).pct} rojo={uso.alerta_roja} />
+        <CirculoUso pct={pctColapsado(uso)} rojo={uso.alerta_roja} />
       </div>
     </Tooltip>
   );
@@ -215,7 +235,7 @@ function IndicadorUsoContenido({ colapsado }: { colapsado: boolean }) {
       return (
         <Tooltip label="Uso de la cuenta" side="right">
           <div aria-label="Uso de la cuenta" className="flex items-center justify-center">
-            <CirculoUso semana={null} rojo={false} />
+            <CirculoUso pct={null} rojo={false} />
           </div>
         </Tooltip>
       );
@@ -233,7 +253,6 @@ function IndicadorUsoContenido({ colapsado }: { colapsado: boolean }) {
   // Sin cuentas que mostrar (editor sin marcas, o la marca activa no es de una cuenta permitida).
   if (cuentas.length === 0) return null;
 
-  const etiquetada = cuentas.length > 1;
   if (colapsado) {
     return (
       <div className="flex flex-col items-center gap-1.5">
@@ -246,7 +265,7 @@ function IndicadorUsoContenido({ colapsado }: { colapsado: boolean }) {
   return (
     <div className="w-full space-y-2">
       {cuentas.map((c) => (
-        <BloqueCuenta key={c.cuenta} uso={c} etiquetada={etiquetada} />
+        <BloqueCuenta key={c.cuenta} uso={c} />
       ))}
     </div>
   );

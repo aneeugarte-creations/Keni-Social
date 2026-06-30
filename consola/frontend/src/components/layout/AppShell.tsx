@@ -29,9 +29,6 @@ function CargandoPagina() {
   );
 }
 
-/** Clave de localStorage del estado colapsado del sidebar (rail). */
-const CLAVE_SIDEBAR_COLAPSADO = "keni:sidebar-colapsado";
-
 /**
  * Cascaron de la aplicacion: sidebar a la izquierda, topbar con el titulo de la
  * seccion, y el area de contenido (Outlet del router). En pantallas chicas el
@@ -59,23 +56,10 @@ export function AppShell() {
   const conexionDegradada = useConexionDegradada();
   const motivoConexion = useMotivoConexion();
 
-  // Estado colapsado del sidebar (rail de solo iconos), persistido en
-  // localStorage para que sobreviva al refresco. Inicializa leyéndolo (lazy).
-  const [colapsado, setColapsado] = React.useState<boolean>(() => {
-    try {
-      return localStorage.getItem(CLAVE_SIDEBAR_COLAPSADO) === "1";
-    } catch {
-      return false;
-    }
-  });
-  React.useEffect(() => {
-    try {
-      localStorage.setItem(CLAVE_SIDEBAR_COLAPSADO, colapsado ? "1" : "0");
-    } catch {
-      // localStorage no disponible (modo privado / SSR): el estado vive en memoria.
-    }
-  }, [colapsado]);
-  const alternarColapsado = React.useCallback(() => setColapsado((v) => !v), []);
+  // Sidebar estilo Dock (escritorio): vive como rail estrecho de iconos y se EXPANDE al acercar el
+  // ratón o al recibir foco de teclado; al salir/perder el foco se repliega. El panel expandido
+  // FLOTA sobre el contenido (overlay absoluto, sin reflujo). Sin botón ni persistencia.
+  const [expandido, setExpandido] = React.useState(false);
 
   // Huecos de la barra superior que las páginas rellenan por portal (vía contexto): inicio
   // (título de página plana, junto a las pestañas en `EncabezadoSeccion`) y acciones (el menú
@@ -130,9 +114,26 @@ export function AppShell() {
   return (
     <PaletaProvider>
     <div className="flex h-dvh w-full overflow-hidden bg-background">
-      {/* Sidebar fijo (escritorio). En rail (colapsado) queda estrecho. */}
-      <aside className="hidden md:block">
-        <Sidebar colapsado={colapsado} onToggleColapsar={alternarColapsado} />
+      {/* Sidebar estilo Dock (escritorio): el `<aside>` reserva el ancho del RAIL (w-16) en el flujo
+          y el panel interior, ABSOLUTO, se ensancha sobre el contenido al hover/foco (no empuja el
+          layout). `z-40` para flotar sobre el header (z-30); por debajo de overlays en portal. */}
+      <aside
+        className="relative z-40 hidden w-16 shrink-0 md:block"
+        onMouseEnter={() => setExpandido(true)}
+        onMouseLeave={() => setExpandido(false)}
+        onFocus={() => setExpandido(true)}
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setExpandido(false);
+        }}
+      >
+        <div
+          className={cn(
+            "absolute inset-y-0 left-0 transition-[width] duration-200 ease-out",
+            expandido ? "w-64 shadow-xl" : "w-16",
+          )}
+        >
+          <Sidebar colapsado={!expandido} />
+        </div>
       </aside>
 
       {/* Sidebar deslizable (movil). Siempre completo (sin rail en móvil). */}
