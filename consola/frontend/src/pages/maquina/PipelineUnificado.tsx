@@ -12,6 +12,7 @@ import { ChevronDown, Settings2, Users } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
+import { confirmar } from "@/components/comunes/confirmar";
 import {
   Dialog,
   DialogContent,
@@ -78,6 +79,10 @@ interface Fase {
 }
 
 const CLAVE_MAQUINA = "KENI_MAQUINA";
+
+// Toggle de la etapa Redactar (generar copy): la de la avalancha. Es la única con preview "si
+// activas: entran ~N piezas" + confirmación al encenderla, porque es donde un ON descarga la cola.
+const CLAVE_REDACTAR = "KENI_PIPELINE_REDACTAR";
 
 /** Glifos de sección, por orden de aparición del `grupo` en las dos máquinas. */
 const NUMEROS = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"] as const;
@@ -207,6 +212,42 @@ export function PipelineUnificado({
     [cola.data],
   );
 
+  // Preview "si activas Redactar, entran ~N piezas" por marca (no encola nada). Una sola lectura de
+  // todas las marcas alimenta tanto la vista de una marca como la matriz.
+  const preview = useQuery({
+    queryKey: ["actividad", "cola", "preview"],
+    queryFn: ({ signal }) => api.colaPreview("", signal),
+    refetchInterval: INTERVALO_VIVO_MS,
+    enabled: esAdmin,
+  });
+  const previewPorMarca = React.useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of preview.data?.marcas ?? []) m.set(p.marca, p.redactar);
+    return m;
+  }, [preview.data]);
+
+  // Encender Redactar de una marca con piezas en espera pide confirmación (un ON descarga la cola).
+  const guardarRedactar = async (
+    clave: string,
+    marca: string,
+    actual: boolean,
+    valor: boolean,
+    nombre: string,
+  ) => {
+    if (valor && !actual) {
+      const n = previewPorMarca.get(marca) ?? 0;
+      if (n > 0) {
+        const ok = await confirmar({
+          titulo: "Habilitar copy",
+          mensaje: `Vas a habilitar copy de ${nombre}: entrarán ~${n} piezas a la cola (a ritmo de hasta 12 por barrido). ¿Continuar?`,
+          textoConfirmar: "Habilitar",
+        });
+        if (!ok) return;
+      }
+    }
+    guardar.mutate({ clave, valor });
+  };
+
   const porClave = React.useMemo(() => {
     const mapa = new Map<string, AjusteAdmin>();
     for (const g of data?.grupos ?? []) for (const a of g.ajustes) mapa.set(a.clave, a);
@@ -220,6 +261,13 @@ export function PipelineUnificado({
         .flatMap((g) => g.ajustes),
     [data],
   );
+
+  // Nombre legible de la marca activa para los avisos (de un ajuste por marca; cae al id si no hay).
+  const etqMarcaActiva = React.useMemo(() => {
+    if (!marcaActiva) return "";
+    const a = porMarca.find((x) => x.clave.endsWith(`::${marcaActiva}`));
+    return a ? nombreDeMarcaAjuste(a) : marcaActiva;
+  }, [marcaActiva, porMarca]);
 
   // La cascada (crítica apaga lo posterior) es POR MARCA: solo se pinta con una marca concreta.
   // En «Todas las marcas» (la matriz) cada marca diverge, así que no hay un único corte que pintar.
@@ -257,34 +305,68 @@ export function PipelineUnificado({
     let control: React.ReactNode = null;
     if (esAdmin && etapa.clave) {
       const claveBase = etapa.clave;
+      const esRedactar = claveBase === CLAVE_REDACTAR;
       // MATRIZ: en «Todas las marcas» cada etapa con toggle por marca muestra UN switch por marca
       // (con su etiqueta), para ver y gobernar todas a la vez. Con una marca concreta, su columna.
       const deMarca = porMarca.filter((a) => a.clave.startsWith(`${claveBase}::`));
       if (marcaActiva === null && deMarca.length > 0) {
         control = (
           <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
-            {deMarca.map((a) => (
-              <label key={a.clave} className="flex items-center gap-1.5 text-xs">
-                <span className="text-muted-foreground">{nombreDeMarcaAjuste(a)}</span>
-                <Switch
-                  checked={Boolean(a.valor)}
-                  disabled={guardar.isPending}
-                  onCheckedChange={(v) => guardar.mutate({ clave: a.clave, valor: v })}
-                  aria-label={`${a.etiqueta}`}
-                />
-              </label>
-            ))}
+            {deMarca.map((a) => {
+              const marca = a.clave.split("::")[1] ?? "";
+              const nombre = nombreDeMarcaAjuste(a);
+              const nEntran = previewPorMarca.get(marca) ?? 0;
+              return (
+                <label key={a.clave} className="flex items-center gap-1.5 text-xs">
+                  <span className="text-muted-foreground">{nombre}</span>
+                  {esRedactar && !a.valor && nEntran > 0 && (
+                    <span className="text-amber-600" title={`Si activas: entran ~${nEntran} piezas`}>
+                      ~{nEntran}
+                    </span>
+                  )}
+                  <Switch
+                    checked={Boolean(a.valor)}
+                    disabled={guardar.isPending}
+                    onCheckedChange={(v) => {
+                      if (esRedactar) {
+                        void guardarRedactar(a.clave, marca, Boolean(a.valor), v, nombre);
+                      } else {
+                        guardar.mutate({ clave: a.clave, valor: v });
+                      }
+                    }}
+                    aria-label={`${a.etiqueta}`}
+                  />
+                </label>
+              );
+            })}
           </div>
         );
       } else {
         const ajuste = porClave.get(claveConMarca(claveBase, marcaActiva, porClave));
+        const marca = marcaActiva ?? "";
+        const nEntran = previewPorMarca.get(marca) ?? 0;
+        const pista =
+          esRedactar && ajuste && !ajuste.valor && nEntran > 0 ? (
+            <span className="text-xs text-amber-600" title={`Si activas: entran ~${nEntran} piezas`}>
+              si activas: ~{nEntran} piezas
+            </span>
+          ) : null;
         control = ajuste ? (
-          <Switch
-            checked={Boolean(ajuste.valor)}
-            disabled={guardar.isPending}
-            onCheckedChange={(v) => guardar.mutate({ clave: ajuste.clave, valor: v })}
-            aria-label={`${ajuste.etiqueta} (${etapa.nombre})`}
-          />
+          <>
+            {pista}
+            <Switch
+              checked={Boolean(ajuste.valor)}
+              disabled={guardar.isPending}
+              onCheckedChange={(v) => {
+                if (esRedactar) {
+                  void guardarRedactar(ajuste.clave, marca, Boolean(ajuste.valor), v, etqMarcaActiva);
+                } else {
+                  guardar.mutate({ clave: ajuste.clave, valor: v });
+                }
+              }}
+              aria-label={`${ajuste.etiqueta} (${etapa.nombre})`}
+            />
+          </>
         ) : (
           <span className="text-xs text-muted-foreground">vía env</span>
         );

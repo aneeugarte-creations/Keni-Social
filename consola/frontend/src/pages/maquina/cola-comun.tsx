@@ -34,7 +34,15 @@ import { costeUsd, numeroCompacto } from "@/lib/formato";
 import { cn } from "@/lib/utils";
 import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
 import { PROC_META } from "@/pages/monitor/comun";
-import type { ColaJob, GateDiarioIA, PresupuestoIA, PresupuestoProcesoIA, Proceso } from "@/types";
+import type {
+  ColaDesglose,
+  ColaJob,
+  ConteoCola,
+  GateDiarioIA,
+  PresupuestoIA,
+  PresupuestoProcesoIA,
+  Proceso,
+} from "@/types";
 
 /** Tarjeta KPI: icono, valor grande y subtítulo. `tono` colorea el valor ante alerta. Si se
  *  pasa `href`, la tarjeta ENTERA es un enlace con realce naranja al hover, en vez de un botón
@@ -175,6 +183,11 @@ export function TablaJobs({
                       prioritario
                     </Badge>
                   )}
+                  {j.huerfano && (
+                    <Badge variant="aviso" className="text-[10px]" title="Su generación ya no existe: no se procesa">
+                      huérfano
+                    </Badge>
+                  )}
                 </span>
               </TableCell>
               <TableCell className="hidden sm:table-cell text-muted-foreground">{j.tipo || "—"}</TableCell>
@@ -192,6 +205,98 @@ export function TablaJobs({
         })}
       </TableBody>
     </Table>
+  );
+}
+
+/** Dos celdas (pendientes · en curso) de un proceso en la tabla de desglose. «En curso» (reclamados)
+ *  se realza cuando hay algo corriendo. */
+function CeldasProceso({ c }: { c: ConteoCola }) {
+  return (
+    <>
+      <TableCell className="text-right tabular-nums text-muted-foreground">{c.pendientes}</TableCell>
+      <TableCell
+        className={cn(
+          "text-right tabular-nums",
+          c.reclamados > 0 ? "font-medium text-foreground" : "text-muted-foreground",
+        )}
+      >
+        {c.reclamados}
+      </TableCell>
+    </>
+  );
+}
+
+/** Cola DESGLOSADA por marca×etapa×estado (`GET /api/actividad/cola/desglose`, foto completa sin
+ *  filtro). Filas = marcas (la de feed sin id se rotula «Sin marca»), más una fila «Huérfanos» (jobs
+ *  cuya generación ya no existe). Columnas = Investigación / Producción, cada una con Pendientes y En
+ *  curso, más el total. `nombrePorMarca` resuelve el nombre legible de cada id. */
+export function TablaDesglose({
+  desglose,
+  nombrePorMarca,
+}: {
+  desglose: ColaDesglose;
+  nombrePorMarca: Record<string, string>;
+}) {
+  const huerfTotal = desglose.huerfanos.pendientes + desglose.huerfanos.reclamados;
+  const nombreMarca = (id: string) =>
+    id === "" ? "Sin marca (feed)" : nombrePorMarca[id] ?? id;
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Cola por marca y etapa</CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="pl-6">Marca</TableHead>
+              <TableHead className="text-right">
+                <span className={PROC_META.investigacion.texto}>Investigación</span> · pend.
+              </TableHead>
+              <TableHead className="text-right">curso</TableHead>
+              <TableHead className="text-right">
+                <span className={PROC_META.produccion.texto}>Producción</span> · pend.
+              </TableHead>
+              <TableHead className="text-right">curso</TableHead>
+              <TableHead className="pr-6 text-right">Total</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {desglose.marcas.map((m) => (
+              <TableRow key={m.marca || "__feed__"}>
+                <TableCell className="pl-6 font-medium">{nombreMarca(m.marca)}</TableCell>
+                <CeldasProceso c={m.por_proceso.investigacion} />
+                <CeldasProceso c={m.por_proceso.produccion} />
+                <TableCell className="pr-6 text-right tabular-nums text-muted-foreground">
+                  {m.total.pendientes + m.total.reclamados}
+                </TableCell>
+              </TableRow>
+            ))}
+            {huerfTotal > 0 && (
+              <TableRow className="bg-amber-50/60 dark:bg-amber-950/20">
+                <TableCell className="pl-6 font-medium text-amber-700 dark:text-amber-400">
+                  Huérfanos
+                </TableCell>
+                <TableCell className="text-right tabular-nums text-muted-foreground" colSpan={4}>
+                  {desglose.huerfanos.pendientes} pend. · {desglose.huerfanos.reclamados} en curso ·
+                  sin generación
+                </TableCell>
+                <TableCell className="pr-6 text-right tabular-nums text-amber-700 dark:text-amber-400">
+                  {huerfTotal}
+                </TableCell>
+              </TableRow>
+            )}
+            {desglose.marcas.length === 0 && huerfTotal === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
+                  Cola vacía: nada encolado ni en curso.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
   );
 }
 

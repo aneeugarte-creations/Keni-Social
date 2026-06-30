@@ -3,7 +3,7 @@
  * y la cascada de críticas (una CRÍTICA apagada oscurece todo lo que sigue).
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,12 +13,26 @@ import type { AjusteAdmin, UsuarioSesion } from "@/types";
 
 import { PipelineUnificado } from "./PipelineUnificado";
 
-const { mockAjustes } = vi.hoisted(() => ({ mockAjustes: vi.fn() }));
+const { mockAjustes, mockCola, mockPreview, mockConfirmar, mockGuardarAjuste } = vi.hoisted(() => ({
+  mockAjustes: vi.fn(),
+  mockCola: vi.fn(),
+  mockPreview: vi.fn(),
+  mockConfirmar: vi.fn(),
+  mockGuardarAjuste: vi.fn(),
+}));
 
 vi.mock("@/lib/api", () => ({
-  api: { ajustes: mockAjustes },
+  api: {
+    ajustes: mockAjustes,
+    cola: mockCola,
+    colaPreview: mockPreview,
+    guardarAjuste: mockGuardarAjuste,
+  },
   mensajeError: (e: unknown) => String(e),
+  ApiError: class ApiError extends Error {},
 }));
+
+vi.mock("@/components/comunes/confirmar", () => ({ confirmar: mockConfirmar }));
 
 function ajuste(clave: string, valor: boolean): AjusteAdmin {
   return {
@@ -128,6 +142,10 @@ describe("PipelineUnificado", () => {
     mockAjustes.mockResolvedValue({
       grupos: [{ id: "pipeline", titulo: "Pipeline", ajustes: todosActivos() }],
     });
+    mockCola.mockResolvedValue({ en_curso: [], esperando: [] });
+    mockPreview.mockResolvedValue({ marcas: [] });
+    mockConfirmar.mockResolvedValue(true);
+    mockGuardarAjuste.mockResolvedValue({ ajuste: ajuste("KENI_PIPELINE_REDACTAR", true) });
   });
 
   it("pinta las 5 fases con sus encabezados y todas las etapas clave", () => {
@@ -270,5 +288,28 @@ describe("PipelineUnificado", () => {
     expect(screen.getByRole("switch", { name: "Claro Sports · Recolectar" })).toBeInTheDocument();
     expect(screen.getByText("UnoTV")).toBeInTheDocument();
     expect(screen.getByText("Claro Sports")).toBeInTheDocument();
+  });
+
+  it("Redactar apagado con piezas en espera: muestra la pista y pide confirmación al encenderlo", async () => {
+    mockAjustes.mockResolvedValue({
+      grupos: [
+        {
+          id: "pipeline",
+          titulo: "Pipeline",
+          ajustes: [
+            ...todosActivos().filter((a) => a.clave !== "KENI_PIPELINE_REDACTAR"),
+            ajuste("KENI_PIPELINE_REDACTAR", false),
+          ],
+        },
+      ],
+    });
+    mockPreview.mockResolvedValue({ marcas: [{ marca: "unotv", redactar: 7 }] });
+    renderPipeline({ marcaActiva: "unotv" });
+    // La pista "si activas: ~N piezas" acompaña al toggle de Redactar.
+    expect(await screen.findByText(/si activas: ~7 piezas/)).toBeInTheDocument();
+    // Encender el toggle pide confirmación antes de persistir.
+    const sw = await screen.findByRole("switch", { name: /KENI_PIPELINE_REDACTAR \(Redactar\)/ });
+    fireEvent.click(sw);
+    await waitFor(() => expect(mockConfirmar).toHaveBeenCalled());
   });
 });

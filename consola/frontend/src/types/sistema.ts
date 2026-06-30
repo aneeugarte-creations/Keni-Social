@@ -154,6 +154,16 @@ export interface ColaJob {
   prioridad: number;
   encolado_hace_s: number | null;
   corriendo_hace_s: number | null;
+  /** `true` si el job es HUÉRFANO: su generación ya no existe, así que no se procesa. Opcional
+   *  para compatibilidad con backs anteriores. */
+  huerfano?: boolean;
+}
+
+/** Conteo pendientes/reclamados de un segmento de la cola (una marca, los huérfanos o una etapa).
+ *  `reclamados` = jobs con `claude -p` corriendo (en curso); `pendientes` = esperando slot. */
+export interface ConteoCola {
+  pendientes: number;
+  reclamados: number;
 }
 
 /** Estado ON/OFF de un daemon de fondo. `activo: null` = desconocido. */
@@ -291,6 +301,13 @@ export interface ColaMonitor {
   marca: string;
   capacidad: { max_jobs: number; max_cola: number; tope: number };
   conteo: { pendientes: number; reclamados: number; terminados: number; activos: number };
+  /** Conteo de la MARCA filtrada (cuadra con `len(esperando)`/`len(en_curso)`). Llega solo cuando
+   *  la petición lleva `?marca=`; `null` sin filtro (entonces manda `conteo`, que es global).
+   *  Opcional para compatibilidad con backs anteriores. */
+  conteo_marca?: ConteoCola | null;
+  /** Parte del conteo GLOBAL que no pertenece a ninguna marca: jobs cuya generación ya no existe
+   *  (no se procesan). Opcional para compatibilidad con backs anteriores. */
+  huerfanos?: ConteoCola;
   cola_llena: boolean;
   procesando: number;
   slots_libres: number;
@@ -345,6 +362,37 @@ export interface RespuestaReencolarCola {
 export interface RespuestaPriorizarCola {
   priorizado: boolean;
   gen_id: string;
+}
+
+/** Desglose de UNA marca en la cola: ambos procesos (siempre presentes) + su total. La marca de
+ *  feed (sin id) llega como `marca: ""`. */
+export interface ColaDesgloseMarca {
+  marca: string;
+  por_proceso: Record<Proceso, ConteoCola>;
+  total: ConteoCola;
+}
+
+/** Foto completa de la cola por marca×proceso×estado (`GET /api/actividad/cola/desglose`, sin
+ *  filtro). `marcas` ordenado por id; `huerfanos` es la parte sin marca (generación inexistente). */
+export interface ColaDesglose {
+  marcas: ColaDesgloseMarca[];
+  huerfanos: ConteoCola;
+}
+
+/** Preview por marca de cuántos temas entrarían a la etapa Redactar (copy) SI esa marca estuviera ON. */
+export interface ColaPreviewMarca {
+  marca: string;
+  redactar: number;
+}
+
+/** Respuesta de `GET /api/actividad/cola/preview` (no encola nada). */
+export interface ColaPreview {
+  marcas: ColaPreviewMarca[];
+}
+
+/** Respuesta de `POST /api/actividad/cola/limpiar-huerfanos` (admin). */
+export interface RespuestaLimpiarHuerfanos {
+  huerfanos_limpiados: number;
 }
 
 /** Una línea del plan editorial diario: generados/publicados vs objetivo en la ventana. */

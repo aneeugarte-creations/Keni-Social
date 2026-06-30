@@ -5,7 +5,7 @@
  * el presupuesto y la economía viven en su pestaña hermana «Economía».
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Clock, Cpu, type LucideIcon, Trash2, Users } from "lucide-react";
+import { Activity, AlertTriangle, Clock, Cpu, type LucideIcon, Trash2, Users } from "lucide-react";
 import * as React from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -14,13 +14,14 @@ import { BloqueError } from "@/components/comunes/BloqueError";
 import { confirmar } from "@/components/comunes/confirmar";
 import { AccionesPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { INTERVALO_VIVO_MS } from "@/lib/refresco";
-import { Kpi, TablaJobs } from "@/pages/maquina/cola-comun";
+import { Kpi, TablaDesglose, TablaJobs } from "@/pages/maquina/cola-comun";
 import { PROC_META } from "@/pages/monitor/comun";
 import type { ColaJob, Proceso } from "@/types";
 
@@ -62,7 +63,7 @@ function ColaCard({
 export default function Computo() {
   const { usuario } = useSesion();
   const esAdmin = usuario?.rol === "admin";
-  const { marcaActiva } = useMarcaActiva();
+  const { marcaActiva, nombreActiva } = useMarcaActiva();
   const [searchParams] = useSearchParams();
   const crudoProceso = searchParams.get("proceso");
   const proceso: Proceso | undefined =
@@ -77,6 +78,25 @@ export default function Computo() {
     queryFn: ({ signal }) => api.cola({ marca: marcaActiva ?? undefined }, signal),
     refetchInterval: INTERVALO_VIVO_MS,
   });
+
+  // Foto completa por marca×etapa×estado (sin filtro): siempre visible bajo las listas.
+  const desglose = useQuery({
+    queryKey: ["actividad", "cola", "desglose"],
+    queryFn: ({ signal }) => api.colaDesglose(signal),
+    refetchInterval: INTERVALO_VIVO_MS,
+  });
+
+  // Nombre legible de cada marca para la tabla de desglose (cae al id si no está en el catálogo).
+  const catalogo = useQuery({
+    queryKey: ["marcas-catalogo"],
+    queryFn: ({ signal }) => api.catalogoMarcas(signal),
+    staleTime: 60_000,
+  });
+  const nombrePorMarca = React.useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const marca of catalogo.data?.marcas ?? []) m[marca.id] = marca.etiqueta;
+    return m;
+  }, [catalogo.data]);
 
   // Invalida la cola para repintar al instante tras una acción (la vista ya auto-refresca, pero
   // así el feedback es inmediato y no espera al siguiente tick).
@@ -122,6 +142,18 @@ export default function Computo() {
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+  const limpiarHuerfanos = useMutation({
+    mutationFn: () => api.colaLimpiarHuerfanos(),
+    onSuccess: (r) => {
+      toast.success(
+        r.huerfanos_limpiados > 0
+          ? `${r.huerfanos_limpiados} jobs huérfanos limpiados.`
+          : "No quedaban jobs huérfanos.",
+      );
+      refrescar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
 
   if (cola.isError) {
     return (
@@ -147,6 +179,13 @@ export default function Computo() {
   const snap = cola.data;
   const enCurso = proceso ? snap.en_curso.filter((j) => j.proceso === proceso) : snap.en_curso;
   const esperando = proceso ? snap.esperando.filter((j) => j.proceso === proceso) : snap.esperando;
+  // Con una marca seleccionada, los CONTEOS de jobs son los de la marca (cuadran con las listas de
+  // abajo); el global se rotula aparte. La CAPACIDAD (slots/workers) es legítimamente global.
+  const cm = marcaActiva ? snap.conteo_marca ?? null : null;
+  const etqMarca = nombreActiva ?? marcaActiva ?? "";
+  const huerf = snap.huerfanos ?? null;
+  const totalHuerf = huerf ? huerf.pendientes + huerf.reclamados : 0;
+  const enColaValor = cm ? cm.pendientes : snap.conteo.pendientes;
 
   return (
     <div className="space-y-6">
@@ -190,24 +229,61 @@ export default function Computo() {
         </p>
       )}
 
-      {/* Estado en vivo. (El presupuesto y la parada de emergencia viven en «Economía».) */}
+      {/* Jobs huérfanos: parte del conteo global sin generación detrás (no se procesan). El botón
+          de limpiarlos es admin (el back responde 403 si no lo es). */}
+      {totalHuerf > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/50 bg-amber-50 px-4 py-3 dark:bg-amber-950/30">
+          <p className="flex items-center gap-2 text-sm text-amber-900 dark:text-amber-200">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+            <span>
+              <span className="font-semibold tabular-nums">{totalHuerf}</span> jobs huérfanos: sin
+              generación, no se procesan.
+              {!esAdmin && " Un administrador puede limpiarlos."}
+            </span>
+          </p>
+          {esAdmin && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={limpiarHuerfanos.isPending}
+              onClick={() => limpiarHuerfanos.mutate()}
+            >
+              Limpiar huérfanos
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Estado en vivo. (El presupuesto y la parada de emergencia viven en «Economía».) Con marca
+          activa los conteos son de la marca (cuadran con las listas); la capacidad sigue global. */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <Kpi
           icono={Cpu}
-          titulo="En curso"
-          valor={`${snap.procesando} / ${snap.capacidad.max_jobs}`}
-          tono={snap.procesando >= snap.capacidad.max_jobs ? "alerta" : undefined}
+          titulo={cm ? `En curso · ${etqMarca}` : "En curso"}
+          valor={cm ? cm.reclamados : `${snap.procesando} / ${snap.capacidad.max_jobs}`}
+          subtitulo={cm ? `Global ${snap.procesando} / ${snap.capacidad.max_jobs} slots` : undefined}
+          tono={
+            cm
+              ? cm.reclamados > 0
+                ? "ok"
+                : undefined
+              : snap.procesando >= snap.capacidad.max_jobs
+                ? "alerta"
+                : undefined
+          }
         />
         <Kpi
           icono={Clock}
-          titulo="En cola"
-          valor={snap.conteo.pendientes}
-          tono={snap.conteo.pendientes > 0 ? "espera" : undefined}
+          titulo={cm ? `En cola · ${etqMarca}` : "En cola"}
+          valor={enColaValor}
+          subtitulo={cm ? `Global ${snap.conteo.pendientes}` : undefined}
+          tono={enColaValor > 0 ? "espera" : undefined}
         />
         <Kpi
           icono={Users}
-          titulo="Workers activos"
+          titulo={cm ? "Workers · global" : "Workers activos"}
           valor={snap.workers_activos.length}
+          subtitulo={cm ? `${snap.procesando} / ${snap.capacidad.max_jobs} slots usados` : undefined}
           tono={snap.workers_activos.length > 0 ? "ok" : undefined}
         />
       </div>
@@ -246,6 +322,11 @@ export default function Computo() {
           />
         </ColaCard>
       </div>
+
+      {/* Foto completa por marca×etapa×estado (siempre visible, sin filtro de marca). */}
+      {desglose.data && (
+        <TablaDesglose desglose={desglose.data} nombrePorMarca={nombrePorMarca} />
+      )}
     </div>
   );
 }

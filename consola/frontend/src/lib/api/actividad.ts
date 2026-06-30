@@ -3,11 +3,14 @@
 import { peticion, query } from "./_core";
 import type {
   ActividadAgregados,
+  ColaDesglose,
   ColaMonitor,
+  ColaPreview,
   ColaSerie,
   EconomiaPorProceso,
   GateDiarioIA,
   ProduccionDia,
+  RespuestaLimpiarHuerfanos,
   RespuestaPriorizarCola,
   RespuestaPurgarCola,
   RespuestaReencolarCola,
@@ -34,7 +37,16 @@ export const apiActividad = {
     peticion<ColaMonitor>(`/actividad/cola${query({ marca: params.marca })}`, { signal }),
   colaSeries: (dias = 14, signal?: AbortSignal) =>
     peticion<ColaSerie>(`/actividad/cola/series${query({ dias: String(dias) })}`, { signal }),
+  // Foto completa de la cola por marca×proceso×estado (sin filtro): la consume la vista de desglose.
+  colaDesglose: (signal?: AbortSignal) =>
+    peticion<ColaDesglose>("/actividad/cola/desglose", { signal }),
+  // Preview "si activas esto, entran ~N piezas a Redactar". `marca` vacía/omisión = todas. No encola.
+  colaPreview: (marca?: string, signal?: AbortSignal) =>
+    peticion<ColaPreview>(`/actividad/cola/preview${query({ marca })}`, { signal }),
   // Acciones ADMIN (el backend devuelve 403 si no es una sesión admin).
+  // Borra los jobs HUÉRFANOS (sin generación) del conteo global. Devuelve cuántos limpió.
+  colaLimpiarHuerfanos: () =>
+    peticion<RespuestaLimpiarHuerfanos>("/actividad/cola/limpiar-huerfanos", { metodo: "POST" }),
   colaPurgar: () =>
     peticion<RespuestaPurgarCola>("/actividad/cola/purgar", { metodo: "POST" }),
   colaReencolar: (genId: string) =>
