@@ -31,12 +31,10 @@ _VERDADEROS = frozenset({"1", "true", "yes", "si", "sí", "on"})
 _FALSOS = frozenset({"0", "false", "no", "off", ""})
 
 # Titulos humanos de cada grupo (orden estable del contrato GET /api/ajustes). El orden manda
-# el de aparición en la UI. Reparto (Fase 3: UN solo sitio para los ajustes de la máquina): TODO
-# lo de la máquina de contenido —interruptor general, maestros de etapa, excepciones por marca,
-# topes de admisión, el MOTOR DE NOTICIAS completo y los finos operacionales (limpieza,
-# alertas, caducidades)— vive en el drawer de ajustes del MONITOR, repartido en secciones (`GRUPOS_MAQUINA` +
-# `GRUPOS_INVESTIGACION` + sistema). Publicación se edita en Programación, junto a lo que
-# programa; el plan diario por marca, en su diálogo «Plan y horarios» (también Programación).
+# el de aparición en la UI. Cada grupo lo edita su superficie propia: los toggles de etapa y sus
+# knobs operacionales en la vista Pipeline (por etapa), el presupuesto y el esfuerzo en Economía,
+# los automatismos en el detalle de cada daemon (/sistema), la publicación en Programación y el
+# plan diario por marca en «Plan y horarios» (también Programación).
 GRUPOS: tuple[tuple[str, str], ...] = (
     ("maquina_global", "Máquina de contenido"),
     ("maestros_investigacion", "Todas las marcas"),
@@ -62,34 +60,6 @@ GRUPOS: tuple[tuple[str, str], ...] = (
 # pesos/umbrales del algoritmo de ranking/clustering (tunables de ingeniería). Sus claves
 # `KENI_SCORE_*`/`KENI_CLUSTER_BREAKING_*` viven en el código y se leen de env/defecto
 # (`config._crudo`); no se editan en UI.
-
-# Grupos de la sección «Investigación» del drawer del MONITOR: el proceso de investigación (su
-# maestro y sus excepciones por marca) + el MOTOR DE NOTICIAS en lenguaje editorial (qué entra →
-# orden del pool → rendimiento → última hora → producción automática → técnico). Viven en el
-# drawer del Monitor (UN solo sitio para los ajustes de la máquina).
-# `noticias_produccion_marca` (el plan
-# diario por marca) NO está aquí: su editor único es el diálogo «Plan y horarios» de
-# Programación. El orden de la tupla es el de las secciones en pantalla.
-GRUPOS_INVESTIGACION: tuple[str, ...] = (
-    "maestros_investigacion",
-    "automatizacion_marca_investigacion",
-    "noticias_entrada",
-    "noticias_rendimiento",
-    "noticias_produccion",
-)
-
-# Grupos de la sección «Máquina de contenido» del drawer del MONITOR (proceso de PRODUCCIÓN,
-# ADR 0011): el interruptor general, el maestro de Producción (Redactar/Ilustrar), sus excepciones
-# por marca y los topes de admisión. El proceso de INVESTIGACIÓN vive en el MISMO drawer, en su
-# propia sección (`GRUPOS_INVESTIGACION`). Estos grupos se editan en el Monitor, junto a la cola
-# que controlan. La fuente de verdad de "qué pinta el Monitor" son estas tuplas; el front las usa
-# para repartir grupos.
-GRUPOS_MAQUINA: tuple[str, ...] = (
-    "maquina_global",
-    "maestros_produccion",
-    "automatizacion_marca_produccion",
-    "pipeline_topes",
-)
 
 
 

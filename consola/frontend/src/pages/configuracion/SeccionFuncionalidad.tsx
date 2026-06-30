@@ -22,7 +22,7 @@ import type { AjusteAdmin, RespuestaAjustes } from "@/types";
 
 import { useSesion } from "@/hooks/sesion-contexto";
 
-import { CLAVE_AJUSTES, GRUPOS_INVESTIGACION, mensajeError } from "./lib";
+import { CLAVE_AJUSTES, mensajeError } from "./lib";
 import { SeccionColapsable } from "./SeccionColapsable";
 
 /** Una fila de ajuste: toggle (bool), número (int/float) o selector (select).
@@ -526,46 +526,4 @@ export function PanelAjustes({
   );
 }
 
-/** Sección «Investigación» del drawer del MONITOR (Fase 3: UN solo sitio para los ajustes de la
- * máquina): el motor de noticias completo (entrada al pool, rendimiento, producción automática
- * y técnico). Ni el MAESTRO «Investigación» ni las EXCEPCIONES
- * por marca se pintan aquí: los switches de etapa (Selección/Validación) viven en la tira
- * «Pipeline en vivo» del propio Monitor y las excepciones por marca, en el diálogo de cada
- * etapa de esa tira (sin duplicar el control). Mismo motor (`/api/ajustes`); aplican en
- * caliente. */
-export function PanelInvestigacion() {
-  const { data, isPending, isError, error, refetch, isFetching, guardar } = useAjustesAdmin();
-  const orden = new Map<string, number>(GRUPOS_INVESTIGACION.map((id, i) => [id, i]));
-  const grupos = (data?.grupos ?? [])
-    .filter(
-      (g) =>
-        orden.has(g.id) &&
-        g.id !== "maestros_investigacion" &&
-        g.id !== "automatizacion_marca_investigacion",
-    )
-    .sort((a, b) => orden.get(a.id)! - orden.get(b.id)!);
-
-  return (
-    <SeccionColapsable
-      titulo="Investigación"
-      descripcion={
-        <>
-          El motor de noticias (entrada, rendimiento, producción automática). Los switches de
-          etapa y sus excepciones por marca están en la tira «Pipeline en vivo». Los cambios
-          aplican <strong>en caliente</strong>.
-        </>
-      }
-    >
-      {isPending || isError ? (
-        <EstadoAjustes isError={isError} error={error} refetch={refetch} isFetching={isFetching} />
-      ) : (
-        <GruposAjustes
-          grupos={grupos}
-          onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
-          guardando={guardar.isPending}
-        />
-      )}
-    </SeccionColapsable>
-  );
-}
 

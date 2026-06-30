@@ -3,7 +3,7 @@
  * y la cascada de críticas (una CRÍTICA apagada oscurece todo lo que sigue).
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -34,6 +34,15 @@ function ajuste(clave: string, valor: boolean): AjusteAdmin {
   };
 }
 
+function knob(
+  clave: string,
+  tipo: AjusteAdmin["tipo"],
+  valor: number | string,
+  etiqueta: string,
+): AjusteAdmin {
+  return { clave, tipo, valor, etiqueta, ayuda: "", grupo: "pipeline", peligroso: false, fuente: "store", defecto: valor, min: 0 };
+}
+
 function todosActivos(): AjusteAdmin[] {
   return [
     ajuste("KENI_MAQUINA", true),
@@ -53,6 +62,13 @@ function todosActivos(): AjusteAdmin[] {
     ajuste("KENI_CRITICA_IA", false),
     ajuste("KENI_AUTO_PREAPROBACION", false),
     ajuste("KENI_PUBLICAR_REAL", false),
+    // Knobs operacionales por etapa (se editan en el ⚙ de su fila).
+    ajuste("KENI_INGESTA_FILTRO", true),
+    ajuste("KENI_RENDIMIENTO_RANKING", false),
+    knob("KENI_PROMOVER_MIN_SCORE", "float", 0.45, "Relevancia mínima"),
+    knob("KENI_PROMOVER_MIN_MARCA", "float", 0.2, "Encaje de marca"),
+    knob("KENI_CUPO_DIA", "int", 8, "Cupo diario sin plan"),
+    knob("KENI_PLAN_DIA", "texto", "", "Plan por defecto"),
   ];
 }
 
@@ -213,5 +229,23 @@ describe("PipelineUnificado", () => {
     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
     // Static content still renders
     expect(screen.getByText("Recolectar")).toBeInTheDocument();
+  });
+
+  it("las etapas con knobs muestran su ⚙ y abren su diálogo de ajustes; las demás no", async () => {
+    renderPipeline();
+    // Admitir tiene knobs operacionales → su ⚙ aparece...
+    const gear = await screen.findByRole("button", { name: "Ajustes de Admitir" });
+    // ...y Verificar (sin knobs) no lo tiene.
+    expect(screen.queryByRole("button", { name: "Ajustes de Verificar" })).not.toBeInTheDocument();
+    // El ⚙ abre el diálogo con los knobs de ESA etapa (no su toggle on/off).
+    fireEvent.click(gear);
+    expect(await screen.findByText("Admitir · ajustes")).toBeInTheDocument();
+    expect(screen.getByText("Cupo diario sin plan")).toBeInTheDocument();
+    expect(screen.getByText("Relevancia mínima")).toBeInTheDocument();
+  });
+
+  it("el ⚙ no se pinta para un editor (no admin)", () => {
+    renderPipeline({ esAdmin: false });
+    expect(screen.queryByRole("button", { name: /^Ajustes de / })).not.toBeInTheDocument();
   });
 });

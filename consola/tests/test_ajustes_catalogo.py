@@ -205,9 +205,6 @@ def test_grupos_estables(store):
         "noticias_produccion", "noticias_produccion_marca",
         "tuning",
     }
-    # GRUPOS_INVESTIGACION (la sección «Investigación» del drawer del Monitor) referencia
-    # grupos reales.
-    assert set(ajustes_catalogo.GRUPOS_INVESTIGACION) <= ids
 
 
 def test_noticias_reparto_en_secciones(store):
@@ -330,32 +327,6 @@ def test_esfuerzo_es_select_del_catalogo(store, monkeypatch):
     # serialización: el select lleva sus opciones en el dict de API.
     d = ajustes_catalogo.a_dict(a)
     assert [o["id"] for o in d["opciones"]] == ["", *preferencias.ESFUERZOS_VALIDOS]
-
-
-def test_grupos_maquina_son_los_del_monitor(store):
-    """`GRUPOS_MAQUINA` y `GRUPOS_INVESTIGACION` referencian grupos REALES; son las dos secciones
-    de máquina del drawer del Monitor (Fase 3: UN solo sitio para los ajustes de la máquina):
-    «Máquina de contenido» (master + etapas de Producción + por marca + topes) e «Investigación»
-    (maestro + excepciones por marca + el motor de noticias completo)."""
-    ids_grupo = {g[0] for g in ajustes_catalogo.GRUPOS}
-    assert set(ajustes_catalogo.GRUPOS_MAQUINA) <= ids_grupo
-    assert set(ajustes_catalogo.GRUPOS_INVESTIGACION) <= ids_grupo
-    assert set(ajustes_catalogo.GRUPOS_MAQUINA) == {
-        "maquina_global", "maestros_produccion",
-        "automatizacion_marca_produccion", "pipeline_topes",
-    }
-    # Investigación: proceso + motor de noticias, SIN `noticias_produccion_marca` (el plan
-    # diario por marca se edita en «Plan y horarios» de Programación) y sin solaparse con
-    # los grupos de la sección «Máquina de contenido». `noticias_orden`/`noticias_breaking`
-    # se retiraron (degradados a solo-env).
-    assert set(ajustes_catalogo.GRUPOS_INVESTIGACION) == {
-        "maestros_investigacion", "automatizacion_marca_investigacion",
-        "noticias_entrada", "noticias_rendimiento",
-        "noticias_produccion",
-    }
-    assert not (
-        set(ajustes_catalogo.GRUPOS_MAQUINA) & set(ajustes_catalogo.GRUPOS_INVESTIGACION)
-    )
 
 
 def test_claves_degradadas_fuera_del_catalogo_pero_vivas_en_config(store, monkeypatch):

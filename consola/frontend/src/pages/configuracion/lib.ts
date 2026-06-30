@@ -17,20 +17,6 @@ export const CLAVE_AJUSTES = ["ajustes"];
 /** Proveedores de imagen IA disponibles (gateway único OpenRouter). */
 export const PROVEEDORES = [{ id: "openrouter", nombre: "OpenRouter (gateway de IA)" }];
 
-/** Grupos del drawer «Ajustes de la máquina» (⋮ de la vista Pipeline): los controles EDITORIALES
- *  del motor de noticias (entrada al pool, rendimiento, umbral/cupos de producción automática).
- *  `noticias_produccion_marca` (plan diario por marca) NO se pinta: su editor único es «Plan y
- *  horarios» de Programación. Debe coincidir con `ajustes_catalogo.GRUPOS_INVESTIGACION` del
- *  backend; el orden es el de pintado. El presupuesto/esfuerzo viven en Economía y los toggles de
- *  daemon en /sistema, no aquí. */
-export const GRUPOS_INVESTIGACION = [
-  "maestros_investigacion",
-  "automatizacion_marca_investigacion",
-  "noticias_entrada",
-  "noticias_rendimiento",
-  "noticias_produccion",
-] as const;
-
 /**
  * Limpia emojis de estado (❌ ✅ ⚠️ …) que pueda traer el backend y normaliza
  * espacios y puntuación, para mostrar un texto sobrio en la consola.

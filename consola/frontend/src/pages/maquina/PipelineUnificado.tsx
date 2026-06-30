@@ -4,11 +4,10 @@
  * Cada etapa tiene su propio toggle; las CRÍTICAS apagadas cortan el flujo posterior.
  */
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, Users } from "lucide-react";
+import { ChevronDown, Settings2, Users } from "lucide-react";
 import * as React from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
-import { MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -24,7 +23,7 @@ import { cn } from "@/lib/utils";
 import { CLAVE_AJUSTES } from "@/pages/configuracion/lib";
 import {
   ExcepcionesPorMarca,
-  PanelInvestigacion,
+  FilaAjuste,
   useGuardarAjuste,
 } from "@/pages/configuracion/SeccionFuncionalidad";
 import { QUEUE_INVESTIGACION, QUEUE_PRODUCCION, slugFase } from "@/pages/maquina/fases";
@@ -45,6 +44,9 @@ interface Etapa {
   navegable?: boolean;
   /** Clave de cola de la etapa (índice en los conteos en_curso/esperando), si tiene jobs. */
   queue?: string;
+  /** Knobs OPERACIONALES de la etapa (claves del catálogo) que se editan en su popover ⚙
+   *  (umbrales/cupos/filtros), aparte de su toggle on/off. */
+  ajustes?: readonly string[];
 }
 
 // Job-tipo → cola de la etapa (para los conteos en curso/en cola), unión de los dos motores.
@@ -81,6 +83,7 @@ const PIPELINE: Fase[] = [
         clave: "KENI_PIPELINE_RECOLECTAR",
         queue: "recolectar",
         navegable: true,
+        ajustes: ["KENI_INGESTA_FILTRO"],
       },
       {
         nombre: "Google Trends",
@@ -123,6 +126,7 @@ const PIPELINE: Fase[] = [
         proceso: "investigacion",
         clave: "KENI_PRIORIZAR_PERFIL_IA",
         navegable: true,
+        ajustes: ["KENI_RENDIMIENTO_RANKING"],
       },
     ],
   },
@@ -148,6 +152,12 @@ const PIPELINE: Fase[] = [
         proceso: "investigacion",
         clave: "KENI_PIPELINE_ADMITIR",
         navegable: true,
+        ajustes: [
+          "KENI_PROMOVER_MIN_SCORE",
+          "KENI_PROMOVER_MIN_MARCA",
+          "KENI_CUPO_DIA",
+          "KENI_PLAN_DIA",
+        ],
       },
     ],
   },
@@ -302,8 +312,8 @@ export function PipelineUnificado({
 }) {
   const navigate = useNavigate();
   const guardar = useGuardarAjuste();
-  const [searchParams] = useSearchParams();
   const [excepEtapa, setExcepEtapa] = React.useState<string | null>(null);
+  const [ajustesEtapa, setAjustesEtapa] = React.useState<string | null>(null);
 
   const { data } = useQuery({
     queryKey: CLAVE_AJUSTES,
@@ -348,18 +358,17 @@ export function PipelineUnificado({
 
   const ajusteMaquina = esAdmin ? porClave.get(CLAVE_MAQUINA) : undefined;
 
-  // Ajustes del «⋮» del header: los controles EDITORIALES del motor de noticias (entrada al
-  // pool, rendimiento, umbral/cupos de producción automática). El presupuesto y el esfuerzo se
-  // editan en Economía; los toggles de daemon, en el detalle de cada daemon (/sistema); la
-  // conexión de imagen, en /sistema → Conexiones.
-  const ajustesDrawer = <PanelInvestigacion />;
-
   const excepEtapaObj = excepEtapa
     ? TODAS_LAS_ETAPAS.find((e) => e.nombre === excepEtapa)
     : null;
   const excepDeEtapa = excepEtapaObj?.clave
     ? porMarca.filter((a) => a.clave.startsWith(`${excepEtapaObj.clave}::`))
     : [];
+
+  // Etapa cuyo diálogo de AJUSTES (knobs operacionales) está abierto, y sus claves.
+  const ajustesEtapaObj = ajustesEtapa
+    ? TODAS_LAS_ETAPAS.find((e) => e.nombre === ajustesEtapa)
+    : null;
 
   const renderDerecha = (etapa: Etapa): React.ReactNode => {
     const conteos = etapa.queue ? (
@@ -390,10 +399,26 @@ export function PipelineUnificado({
         <span className="text-xs text-muted-foreground">vía env</span>
       );
     }
-    if (!conteos && !control) return null;
+    const tuning =
+      esAdmin && etapa.ajustes && etapa.ajustes.length > 0 ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setAjustesEtapa(etapa.nombre);
+          }}
+          aria-label={`Ajustes de ${etapa.nombre}`}
+          title={`Ajustes de ${etapa.nombre}`}
+          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <Settings2 className="h-4 w-4" aria-hidden="true" />
+        </button>
+      ) : null;
+    if (!conteos && !control && !tuning) return null;
     return (
       <div className="flex shrink-0 items-center gap-3">
         {conteos}
+        {tuning}
         {control}
       </div>
     );
@@ -404,15 +429,7 @@ export function PipelineUnificado({
       {/* Master controls: admin only */}
       {esAdmin && ajusteMaquina && (
         <section className="rounded-lg border border-border bg-card p-4">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <p className="text-sm font-semibold">Estado global</p>
-            <MenuAcciones
-              etiqueta="Ajustes de la máquina"
-              ajustesTitulo="Ajustes de la máquina"
-              ajustesAbiertoInicial={searchParams.get("tab") === "ajustes"}
-              ajustes={ajustesDrawer}
-            />
-          </div>
+          <p className="mb-3 text-sm font-semibold">Estado global</p>
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-4">
               <div>
@@ -563,6 +580,42 @@ export function PipelineUnificado({
                 [excepEtapaObj.clave]: Boolean(porClave.get(excepEtapaObj.clave)?.valor),
               }}
             />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Per-stage operational settings dialog (⚙) */}
+      {ajustesEtapaObj?.ajustes && (
+        <Dialog
+          open={ajustesEtapa !== null}
+          onOpenChange={(v) => {
+            if (!v) setAjustesEtapa(null);
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{ajustesEtapa} · ajustes</DialogTitle>
+              <DialogDescription>
+                Knobs operacionales de esta etapa. Las excepciones por marca van en su propio menú.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              {ajustesEtapaObj.ajustes.map((clave) => {
+                const a = porClave.get(clave);
+                return a ? (
+                  <FilaAjuste
+                    key={clave}
+                    ajuste={a}
+                    onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
+                    guardando={guardar.isPending}
+                  />
+                ) : (
+                  <p key={clave} className="text-xs text-muted-foreground">
+                    {clave} · vía env
+                  </p>
+                );
+              })}
+            </div>
           </DialogContent>
         </Dialog>
       )}
