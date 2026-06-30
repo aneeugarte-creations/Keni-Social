@@ -272,7 +272,7 @@ export function DialogoCrearPost({
 
   return (
     <Dialog open={abierto} onOpenChange={(o) => { if (!o) onCerrar(); }}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg gap-3">
         <DialogHeader>
           <DialogTitle>Crear post</DialogTitle>
           <DialogDescription>
@@ -281,7 +281,7 @@ export function DialogoCrearPost({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           {/* Selector de marca SOLO cuando no hay una marca concreta activa (vista "Todas"):
               con una marca activa, el post va a esa marca y no se pregunta de nuevo. */}
           {marcaFija ? null : (
@@ -305,7 +305,6 @@ export function DialogoCrearPost({
           <Campo
             etiqueta="Categoría"
             htmlFor="crear-post-categoria"
-            ayuda="Define la franja del plan; así la pieza se programa sola al aprobarse."
             error={intentado ? errCategoria : null}
           >
             <Select
@@ -384,7 +383,7 @@ export function DialogoCrearPost({
                 onChange={(e) => setTexto(e.target.value)}
                 onPaste={alPegar}
                 placeholder="Pega aquí un enlace, el texto de una nota o un documento… o pega/arrastra una imagen."
-                rows={5}
+                rows={4}
                 disabled={crear.isPending}
               />
             </div>
@@ -419,9 +418,6 @@ export function DialogoCrearPost({
                 </Button>
               </div>
             )}
-            <p className="text-xs text-muted-foreground">
-              La IA convierte lo que aportes en un borrador por red. Nada se publica sin tu OK.
-            </p>
           </div>
 
           <SelectorRedMultiple
