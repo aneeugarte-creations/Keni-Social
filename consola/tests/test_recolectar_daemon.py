@@ -390,6 +390,9 @@ def _parchear_encolado(monkeypatch, *, marcados=None, encolar=None):
     `cola.encolar`. `marcados` mapea id->lo-que-devuelve `marcar_clusters_traduccion_encolada`
     (por defecto marca TODO el lote). Devuelve `(encoladas, marcadas, limpiadas)` (listas captura)."""
     monkeypatch.setattr(recolectar_daemon.repos, "reparar_traduccion_encolada_atascada", lambda _u: 0)
+    monkeypatch.setattr(recolectar_daemon.repos, "intentos_etapa", lambda _s, _e: 0)
+    monkeypatch.setattr(recolectar_daemon.repos, "intento_ts", lambda _s, _e: None)
+    monkeypatch.setattr(recolectar_daemon.repos, "anotar_intento_etapa", lambda _s, _e: 1)
     marcadas: list[list[str]] = []
     limpiadas: list[list[str]] = []
 
@@ -890,6 +893,9 @@ def test_paso_fusionar_semantica_salta_si_el_lote_no_cambio(monkeypatch):
     re-evalúa; un artículo más a la MISMA historia (solo avanza `ultimo_visto`) NO la mueve."""
     from keni_consola.recolectar_daemon.pasos import fusionar_semantica as paso
 
+    monkeypatch.setattr(recolectar_daemon.repos, "intentos_etapa", lambda _s, _e: 0)
+    monkeypatch.setattr(recolectar_daemon.repos, "intento_ts", lambda _s, _e: None)
+    monkeypatch.setattr(recolectar_daemon.repos, "anotar_intento_etapa", lambda _s, _e: 1)
     monkeypatch.setattr(recolectar_daemon.config, "fusionar_semantica_activo", lambda: True)
     recientes = [
         {"id": "c1", "titulo": "A", "estado": "nuevo", "marca": "unotv", "ultimo_visto": "t1"},

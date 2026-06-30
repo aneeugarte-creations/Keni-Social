@@ -21,6 +21,15 @@ from keni_consola.recolectar_daemon.pasos import fusionar_semantica as paso
 
 
 @pytest.fixture(autouse=True)
+def _sin_intentos_bd(monkeypatch):
+    """Los tests de este módulo son OFFLINE; mockea las llamadas a Postgres del contador de intentos."""
+    from keni_consola.pipeline_contenido import _intentos as _int
+    monkeypatch.setattr(_int, "tope_alcanzado", lambda *_: False)
+    monkeypatch.setattr(_int, "en_backoff", lambda *_: False)
+    monkeypatch.setattr(_int, "anotar", lambda *_: 1)
+
+
+@pytest.fixture(autouse=True)
 def _reset_throttle_fusionar():
     """Resetea el throttle/huella globales: ni una pasada sellada por otro test la frena, ni una
     huella previa la hace saltar por skip-if-unchanged."""

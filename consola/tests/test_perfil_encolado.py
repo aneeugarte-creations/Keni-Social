@@ -10,10 +10,21 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
+
 from keni_consola import config, generaciones, ruteo_cuentas
 from keni_consola.dominio import jobspec
 from keni_consola.dominio import perfil_editorial as pe
 from keni_consola.recolectar_daemon.pasos import agrupar
+
+
+@pytest.fixture(autouse=True)
+def _sin_intentos_bd(monkeypatch):
+    """Los tests de este módulo son OFFLINE; mockea las llamadas a Postgres del contador de intentos."""
+    from keni_consola.pipeline_contenido import _intentos as _int
+    monkeypatch.setattr(_int, "tope_alcanzado", lambda *_: False)
+    monkeypatch.setattr(_int, "en_backoff", lambda *_: False)
+    monkeypatch.setattr(_int, "anotar", lambda *_: 1)
 
 
 def _capturar_encolado(monkeypatch):
