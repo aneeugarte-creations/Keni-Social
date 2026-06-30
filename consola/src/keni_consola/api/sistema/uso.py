@@ -8,7 +8,8 @@ lateral consulta un dato barato y persistido, sin ejecutar `claude` ni depender 
 Endpoint (bajo `/api/sistema`, CONTRATO con el frontend):
   - GET /api/sistema/uso -> {cuentas: [{cuenta, etiqueta, marcas, conectada, semana_pct,
       sesion_5h_pct, sonnet_pct, reset_semana_iso, reset_semana_txt, actualizado_ts, al_100,
-      alerta_roja}, ...]}
+      alerta_roja, dia: {consumo_pct, umbral_pct, limite, pausado}}, ...]}
+    `dia` es el cupo del dia (gate diario) del limite que primero se agota -> barra «24h».
 
 Cualquier usuario AUTENTICADO lo consulta, pero solo recibe LAS CUENTAS DE SUS MARCAS (suelo de
 autorización): admin/superadmin reciben ambas; un editor la(s) cuenta(s) de sus marcas
@@ -18,7 +19,8 @@ frontend DECIDA cuál mostrar según el selector de marca activo (solo la cuenta
 ambas en "Todas").
 
 `alerta_roja` por cuenta (la señal que enciende el indicador en rojo) = cuenta DESCONECTADA o
-semana al 100%+. Sin snapshot todavía (cold start) se trata como desconectada: `alerta_roja=true`.
+alguna ventana semanal (all-models o Sonnet) al 100%+. Sin snapshot todavía (cold start) se trata
+como desconectada: `alerta_roja=true`.
 """
 
 from __future__ import annotations
@@ -27,7 +29,23 @@ from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ... import permisos, repos, ruteo_cuentas
+from ... import gate_diario, permisos, repos, ruteo_cuentas
+
+
+def _forma_dia(cuenta: str) -> dict:
+    """Cupo del dia de la cuenta (gate diario) para la barra «24h» del indicador.
+
+    Refleja el limite que PRIMERO se agota (`limite`: "semanal" all-models o "sonnet"): su consumo
+    de hoy (`consumo_pct`, None mientras no haya dato => gate inerte) y su umbral del dia. El front
+    pinta la barra como `consumo_pct / umbral_pct`.
+    """
+    g = gate_diario.estado(cuenta)
+    return {
+        "consumo_pct": g["consumo_hoy_pct"],
+        "umbral_pct": g["umbral_pct"],
+        "limite": g["limite"],
+        "pausado": g["pausado_por_pct"],
+    }
 
 
 def _forma_respuesta(fila: dict | None) -> dict:
@@ -50,7 +68,11 @@ def _forma_respuesta(fila: dict | None) -> dict:
         }
     conectada = bool(fila.get("conectada"))
     semana_pct = fila.get("semana_pct")
-    al_100 = semana_pct is not None and semana_pct >= 100
+    sonnet_pct = fila.get("sonnet_pct")
+    # Al 100 % por CUALQUIER ventana semanal: all-models o Sonnet (el que primero se agota).
+    al_100 = (semana_pct is not None and semana_pct >= 100) or (
+        sonnet_pct is not None and sonnet_pct >= 100
+    )
     alerta_roja = (not conectada) or al_100
     return {
         "conectada": conectada,
@@ -75,6 +97,7 @@ def _forma_cuenta(cuenta: str, fila: dict | None) -> dict:
         "cuenta": cuenta,
         "etiqueta": ruteo_cuentas.etiqueta_de_cuenta(cuenta),
         "marcas": ruteo_cuentas.marcas_de_cuenta(cuenta),
+        "dia": _forma_dia(cuenta),
         **_forma_respuesta(fila),
     }
 

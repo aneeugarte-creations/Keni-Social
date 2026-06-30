@@ -91,6 +91,7 @@ function cuentaUso(parcial: Partial<UsoCuenta>): UsoCuenta {
     actualizado_ts: null,
     al_100: false,
     alerta_roja: false,
+    dia: { consumo_pct: null, umbral_pct: 14.3, limite: "semanal", pausado: false },
     ...parcial,
   };
 }

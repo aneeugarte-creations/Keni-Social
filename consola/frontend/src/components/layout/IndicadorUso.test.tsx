@@ -34,6 +34,7 @@ function cuenta(parcial: Partial<UsoCuenta>): UsoCuenta {
     actualizado_ts: 1_700_000_000,
     al_100: false,
     alerta_roja: false,
+    dia: { consumo_pct: 5, umbral_pct: 14.3, limite: "semanal", pausado: false },
     ...parcial,
   };
 }
@@ -58,12 +59,32 @@ function renderIndicador(
 }
 
 describe("IndicadorUso", () => {
-  it("estado de carga (sin dato) es NEUTRO, no rojo: muestra «—» y los medidores", () => {
+  it("estado de carga (sin dato) es NEUTRO, no rojo: muestra «—» y los tres medidores", () => {
     renderIndicador({ data: undefined });
     expect(screen.getByText("Semana")).toBeInTheDocument();
+    expect(screen.getByText("24h")).toBeInTheDocument();
     expect(screen.getByText("5h")).toBeInTheDocument();
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
     expect(screen.queryByText(/Sin cuenta|100%/)).not.toBeInTheDocument();
+  });
+
+  it("«Semana» muestra el límite que primero se agota: con Sonnet por encima, pinta Sonnet", () => {
+    renderIndicador({ data: { cuentas: [cuenta({ semana_pct: 40, sonnet_pct: 78 })] } }, "claro-sports");
+    expect(screen.getByText("78%")).toBeInTheDocument(); // toma el mayor (Sonnet), no all-models
+    expect(screen.queryByText("40%")).not.toBeInTheDocument();
+  });
+
+  it("barra «24h»: pinta el cupo del día (consumo/umbral del límite que primero se agota)", () => {
+    renderIndicador(
+      {
+        data: {
+          cuentas: [cuenta({ dia: { consumo_pct: 10, umbral_pct: 14.3, limite: "sonnet", pausado: false } })],
+        },
+      },
+      "claro-sports",
+    );
+    expect(screen.getByText("24h")).toBeInTheDocument();
+    expect(screen.getByText("70%")).toBeInTheDocument(); // 10 / 14.3 ≈ 70 %
   });
 
   it("una cuenta (marca concreta): pinta sus porcentajes, sin etiqueta de marca", () => {

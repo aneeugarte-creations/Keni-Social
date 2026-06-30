@@ -54,6 +54,20 @@ export interface UsoCuenta {
   al_100: boolean;
   /** `true` si hay que pintar la cuenta en ROJO (sin cuenta o al 100 %). */
   alerta_roja: boolean;
+  /** Cupo del DÍA (gate diario) del límite que primero se agota -> barra «24h». */
+  dia: UsoCuentaDia;
+}
+
+/** Cupo del día (gate diario) de una cuenta: el límite que PRIMERO se agota y su margen de hoy. */
+export interface UsoCuentaDia {
+  /** % del cupo SEMANAL de ese límite consumido HOY (jornada CDMX). `null` si no hay dato. */
+  consumo_pct: number | null;
+  /** Umbral del día de ese límite (cupo base + los +10 % aceptados). */
+  umbral_pct: number;
+  /** Cuál ata: "semanal" (all models) o "sonnet". */
+  limite: string;
+  /** `true` si el consumo de hoy ya alcanzó el umbral (gate pausando). */
+  pausado: boolean;
 }
 
 /** Respuesta del endpoint: las cuentas que el usuario puede ver (puede ir vacía). */

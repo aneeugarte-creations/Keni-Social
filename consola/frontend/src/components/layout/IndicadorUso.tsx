@@ -6,8 +6,12 @@ import { cn } from "@/lib/utils";
 /**
  * Indicador SUTIL del uso de las cuentas de Claude del servidor, alojado en el pie del sidebar
  * junto al control «Colapsar». Reutiliza el lenguaje visual de `PanelActualizando` (hilo de 1px,
- * avance discreto, nada de cajas ni alarmas): expandido pinta dos medidores mini (Semana / 5h) por
- * cuenta; colapsado, un único anillo fino con el % semanal (la ventana de 5 h va al tooltip).
+ * avance discreto, nada de cajas ni alarmas): expandido pinta tres medidores mini (Semana / 24h /
+ * 5h) por cuenta; colapsado, un único anillo fino con el % semanal (el resto va al tooltip).
+ *
+ * EL QUE PRIMERO SE AGOTA: «Semana» es el mayor de all-models vs cuota Sonnet, y «24h» el cupo del
+ * día del límite que primero se agota (lo expone el backend en `uso.dia`). Así cada barra muestra
+ * el límite que de verdad frena; el tooltip rotula "(Sonnet)" cuando es ese el que ata.
  *
  * QUÉ CUENTAS muestra: el backend devuelve solo las que el usuario PUEDE ver (suelo por marcas);
  * de esas, el selector de marca activo (`useMarcaActiva`) decide cuál(es) PINTAR — en "Todas"
@@ -24,11 +28,28 @@ function pctEntero(pct: number | null): number | null {
   return pct == null ? null : Math.max(0, Math.min(100, Math.round(pct)));
 }
 
+/** Ventana SEMANAL que primero se agota: el mayor de all-models vs cuota Sonnet (y si ata Sonnet).
+ *  Es la barra «Semana» que pinta el indicador: el límite que de verdad frena la semana. */
+function semanaBinding(uso: UsoCuenta): { pct: number | null; sonnet: boolean } {
+  const { semana_pct: s, sonnet_pct: son } = uso;
+  if (son != null && (s == null || son > s)) return { pct: son, sonnet: true };
+  return { pct: s, sonnet: false };
+}
+
+/** Barra «24h»: % del cupo del DÍA ya consumido (consumo/umbral del límite que primero se agota).
+ *  `null` mientras no haya dato del día (gate inerte). */
+function dia24hPct(uso: UsoCuenta): number | null {
+  const { consumo_pct, umbral_pct } = uso.dia;
+  if (consumo_pct == null || umbral_pct <= 0) return null;
+  return (consumo_pct / umbral_pct) * 100;
+}
+
 /** Mensaje breve del estado rojo (sin cuenta / al 100 %), o `null` si no hay alerta. */
 function mensajeRojo(uso: UsoCuenta): string | null {
   if (!uso.alerta_roja) return null;
   if (!uso.conectada) return "Sin cuenta";
   if (uso.semana_pct != null && uso.semana_pct >= 100) return "Límite semanal al 100%";
+  if (uso.sonnet_pct != null && uso.sonnet_pct >= 100) return "Límite de Sonnet al 100%";
   if (uso.sesion_5h_pct != null && uso.sesion_5h_pct >= 100) return "Límite de sesión al 100%";
   return "Límite al 100%";
 }
@@ -39,15 +60,24 @@ function etiquetaReset(uso: UsoCuenta): string | null {
   return txt ? `Se renueva: ${txt}` : null;
 }
 
-/** Tooltip COMPLETO de una cuenta: etiqueta + reset + ambos porcentajes + alerta, en una línea. */
+/** Tooltip COMPLETO de una cuenta: etiqueta + reset + los tres porcentajes + alerta, en una línea.
+ *  «Semana» y «24h» rotulan "(Sonnet)" cuando es Sonnet el límite que primero se agota. */
 function tooltipCompleto(uso: UsoCuenta): string {
   const partes: string[] = [];
   if (uso.etiqueta) partes.push(uso.etiqueta);
   const rojo = mensajeRojo(uso);
   if (rojo) partes.push(rojo);
-  const s = pctEntero(uso.semana_pct);
+  const sb = semanaBinding(uso);
+  const s = pctEntero(sb.pct);
+  const dia = pctEntero(dia24hPct(uso));
   const v = pctEntero(uso.sesion_5h_pct);
-  partes.push(`Semana ${s == null ? "—" : `${s}%`} · 5h ${v == null ? "—" : `${v}%`}`);
+  const notaSem = sb.sonnet ? " (Sonnet)" : "";
+  const notaDia = uso.dia.limite === "sonnet" ? " (Sonnet)" : "";
+  partes.push(
+    `Semana ${s == null ? "—" : `${s}%`}${notaSem}` +
+      ` · 24h ${dia == null ? "—" : `${dia}%`}${notaDia}` +
+      ` · 5h ${v == null ? "—" : `${v}%`}`,
+  );
   const reset = etiquetaReset(uso);
   if (reset) partes.push(reset);
   return partes.join(" · ");
@@ -147,7 +177,8 @@ function BloqueCuenta({ uso, etiquetada }: { uso: UsoCuenta; etiquetada: boolean
           </p>
         ) : null}
         {alerta ? <p className="px-0.5 text-[10px] font-medium text-destructive">{alerta}</p> : null}
-        <MiniMedidor etiqueta="Semana" pct={uso.semana_pct} rojo={rojo} />
+        <MiniMedidor etiqueta="Semana" pct={semanaBinding(uso).pct} rojo={rojo} />
+        <MiniMedidor etiqueta="24h" pct={dia24hPct(uso)} rojo={rojo} />
         <MiniMedidor etiqueta="5h" pct={uso.sesion_5h_pct} rojo={rojo} />
       </div>
     </Tooltip>
@@ -160,7 +191,7 @@ function CirculoCuenta({ uso }: { uso: UsoCuenta }) {
   return (
     <Tooltip label={etiqueta} side="right">
       <div aria-label={etiqueta} className="flex items-center justify-center">
-        <CirculoUso semana={uso.semana_pct} rojo={uso.alerta_roja} />
+        <CirculoUso semana={semanaBinding(uso).pct} rojo={uso.alerta_roja} />
       </div>
     </Tooltip>
   );
@@ -192,6 +223,7 @@ function IndicadorUsoContenido({ colapsado }: { colapsado: boolean }) {
     return (
       <div className="space-y-1">
         <MiniMedidor etiqueta="Semana" pct={null} rojo={false} />
+        <MiniMedidor etiqueta="24h" pct={null} rojo={false} />
         <MiniMedidor etiqueta="5h" pct={null} rojo={false} />
       </div>
     );

@@ -22,7 +22,7 @@ CLAVE = "clave-de-prueba"
 # Campos del contrato de CADA cuenta del payload (lo que consume el indicador del sidebar).
 _CAMPOS_CUENTA = {
     "cuenta", "etiqueta", "marcas", "conectada", "semana_pct", "sesion_5h_pct", "sonnet_pct",
-    "reset_semana_iso", "reset_semana_txt", "actualizado_ts", "al_100", "alerta_roja",
+    "reset_semana_iso", "reset_semana_txt", "actualizado_ts", "al_100", "alerta_roja", "dia",
 }
 
 
@@ -70,6 +70,8 @@ def test_editor_unotv_solo_ve_cuenta_b(entorno):
     assert set(b) == _CAMPOS_CUENTA
     assert "unotv" in b["marcas"]
     assert b["semana_pct"] == 80 and b["conectada"] is True
+    # `dia` (cupo del dia del limite que primero se agota) -> barra «24h» del indicador.
+    assert set(b["dia"]) == {"consumo_pct", "umbral_pct", "limite", "pausado"}
 
 
 def test_editor_claro_solo_ve_cuenta_a(entorno):
