@@ -151,8 +151,10 @@ def temas_para_redactar(marca: str | None = None) -> list[dict[str, Any]]:
         if _tiene_copy(tema.get("id", "") or ""):
             continue
         listos.append(tema)
-        # SIN recorte: el volumen lo acota la ADMISIÓN (gate serial en curso por marca) y el
-        # backpressure de la cola (`ColaLlenaError` corta la fase; el siguiente tick reintenta).
+        # Carril 1 (temas del propio pipeline): el volumen lo acota la ADMISIÓN (gate serial en
+        # curso por marca) y el backpressure de la cola (`ColaLlenaError` corta la fase; el
+        # siguiente tick reintenta). El tope por marca/barrido vive en el carril 2
+        # (`temas_autogen_sin_copy`, vía `config.autogen_copy_max`), no aquí.
     return listos
 
 
@@ -168,9 +170,11 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
       - con marca válida y título no vacío,
       - per-marca: salta las marcas apagadas a mano para «Generar copy» (`ENV_PIPELINE_REDACTAR`),
       - dedup: salta los ya encolados (etiqueta `autogen`, vía `autogen_redactar.ids_ya_generados`) y
-        los que ya tienen copy.
-    SIN cap propio: el backpressure lo pone la cola de generación. Best-effort: una lectura
-    fallida devuelve [].
+        los que ya tienen copy,
+      - tope por marca y barrido: como mucho `config.autogen_copy_max(marca)` temas de cada marca
+        (override por marca > default global), para que activar una marca con backlog no dispare
+        una ráfaga de copy; conserva el orden de selección (se quedan los primeros N por marca).
+    Best-effort: una lectura fallida devuelve [].
     """
     from .. import autogen_redactar
 
@@ -182,6 +186,11 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
         return []
     ya_generados = autogen_redactar.ids_ya_generados()
     elegidos: list[dict[str, Any]] = []
+    # Tope POR MARCA Y BARRIDO (`config.autogen_copy_max`): cuántos temas de cada marca caben en
+    # esta pasada. `por_marca` cuenta los ya elegidos; `caps` cachea el tope por marca (una lectura
+    # del store por marca y barrido). Conserva el orden de selección: se quedan los primeros N.
+    por_marca: dict[str, int] = {}
+    caps: dict[str, int] = {}
     for item in items:
         if (item.get("clase") or CLASE_CONTENIDO) != CLASE_CONTENIDO:
             continue
@@ -206,7 +215,14 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
             continue
         if _tiene_copy(tema_id):
             continue
+        cap = caps.get(marca)
+        if cap is None:
+            cap = config.autogen_copy_max(marca)
+            caps[marca] = cap
+        if por_marca.get(marca, 0) >= cap:
+            continue
         elegidos.append(item)
+        por_marca[marca] = por_marca.get(marca, 0) + 1
     return elegidos
 
 

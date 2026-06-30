@@ -303,6 +303,10 @@ ENV_FUENTES_BAJA_CONFIANZA = "KENI_FUENTES_BAJA_CONFIANZA"
 # publica. CONSERVADOR por defecto (OFF): sin `KENI_PIPELINE_REDACTAR` el comportamiento no cambia.
 ENV_PIPELINE_REDACTAR = "KENI_PIPELINE_REDACTAR"
 ENV_PIPELINE_MAX = "KENI_PIPELINE_MAX"
+# Tope POR MARCA Y BARRIDO de copy auto-generado del news-pool (carril 2 de Redactar): cuántos
+# temas autogen sin copy se encolan como máximo para cada marca en cada barrido. Override por
+# marca (`KENI_AUTOGEN_COPY_MAX::marca`) > default global; cada job es un `claude -p` (coste).
+ENV_AUTOGEN_COPY_MAX = "KENI_AUTOGEN_COPY_MAX"
 # FLUJO CONTINUO: el pipeline no barre por tandas (sin intervalo configurable: tick corto
 # constante en `pipeline_contenido._barrido`) ni tiene topes por etapa (Verificar/Redactar/Ilustrar/Revisar):
 # el volumen lo regula Admitir (gate serial en proceso por marca) + el backpressure de la cola.
@@ -718,6 +722,10 @@ FUENTES_BAJA_CONFIANZA_DEF: tuple[str, ...] = (
 # proveedor de imagen (coste).
 AUTOGEN_ARTE_MAX_DEF = 3
 
+# Etapa de Redactar (carril 2): tope por marca y barrido de copy auto-generado del news-pool
+# (def 12), porque cada tema acaba en un `claude -p`.
+AUTOGEN_COPY_MAX_DEF = 12
+
 # Pipeline de contenido (FLUJO CONTINUO): Admitir admite hasta este nº de historias por
 # marca en cada pasada, acotada además por el gate serial en proceso. Cada admisión acaba en
 # `claude -p` (coste); el cap del worker (`KENI_MAX_JOBS`) sigue aplicando más adelante en el flujo.
@@ -873,6 +881,7 @@ __all__ = [
     'ALERTAS_UMBRAL_ENGAGEMENT_DEF',
     'ALGORITMOS_INTERVALO_HORAS_DEF',
     'AUTOGEN_ARTE_MAX_DEF',
+    'AUTOGEN_COPY_MAX_DEF',
     'CLAUDE_TIMEOUT_DEF',
     'CLAUDE_IDLE_TIMEOUT_DEF',
     'VERIFICACION_EN_CURSO_TTL_MIN_DEF',
@@ -907,6 +916,7 @@ __all__ = [
     'ENV_PIPELINE_TRADUCIR',
     'ENV_PIPELINE_ADMITIR',
     'ENV_AUTOGEN_ARTE_MAX',
+    'ENV_AUTOGEN_COPY_MAX',
     'ENV_AUTO_PREAPROBACION',
     'ENV_PROMPTS_DIR',
     'ENV_PROMPTS_DIR_LEGACY',

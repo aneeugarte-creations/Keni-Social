@@ -490,7 +490,8 @@ def _construir_catalogo() -> list[Ajuste]:
         # (Los CAPS de admisión del flujo continuo —KENI_PIPELINE_MAX (historias admitidas por
         # marca) y KENI_PIPELINE_EN_PROCESO_MAX (piezas en proceso por marca)— se DEGRADARON a
         # solo-env: topes de capacidad de ingeniería, no controles editoriales. Igual que
-        # KENI_AUTOGEN_ARTE_MAX y KENI_MAX_JOBS. Siguen leyéndose de env/defecto.)
+        # KENI_AUTOGEN_ARTE_MAX, KENI_AUTOGEN_COPY_MAX y KENI_MAX_JOBS. Siguen leyéndose de
+        # env/defecto, con override por marca vía store para los caps por marca.)
         # --- Economía de tokens (presupuesto diario + kill switch; `presupuesto_ia.py`) --- #
         # NOTA: estos topes de presupuesto se editan en la página de ECONOMÍA (gasto real +
         # proyección), no en el drawer «Ajustes de la máquina»; siguen en el catálogo para que

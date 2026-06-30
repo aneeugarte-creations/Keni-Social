@@ -336,7 +336,7 @@ def test_claves_degradadas_fuera_del_catalogo_pero_vivas_en_config(store, monkey
         config.ENV_NOTICIAS_GC_SCORE_UMBRAL, config.ENV_NOTICIAS_GC_INACTIVIDAD_HORAS,
         config.ENV_NOTICIAS_TTL_H, config.ENV_NOTICIAS_RETENCION_H,
         config.ENV_PERFIL_EDITORIAL_TTL_HORAS,
-        config.ENV_AUTOGEN_ARTE_MAX, config.ENV_PROMPT_MAX_CHARS,
+        config.ENV_AUTOGEN_ARTE_MAX, config.ENV_AUTOGEN_COPY_MAX, config.ENV_PROMPT_MAX_CHARS,
         config.ENV_MAX_JOBS,
         config.ENV_ALERTAS_INTERVALO_HORAS,
         config.ENV_MEDIA_GC_INTERVALO_HORAS, config.ENV_NOTICIAS_GC_INTERVALO_HORAS,

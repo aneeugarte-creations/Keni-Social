@@ -100,6 +100,7 @@ from ._config_comun import (  # noqa: F401
     ALERTAS_UMBRAL_ENGAGEMENT_DEF,
     ALGORITMOS_INTERVALO_HORAS_DEF,
     AUTOGEN_ARTE_MAX_DEF,
+    AUTOGEN_COPY_MAX_DEF,
     CLAUDE_TIMEOUT_DEF,
     CLUSTER_BREAKING_FUENTES_DEF,
     BREAKING_EXTRA_DIA_DEF,
@@ -121,6 +122,7 @@ from ._config_comun import (  # noqa: F401
     ENV_ALGORITMOS_INTERVALO_HORAS,
     ENV_AUTO_PREAPROBACION,
     ENV_AUTOGEN_ARTE_MAX,
+    ENV_AUTOGEN_COPY_MAX,
     ENV_CLAUDE_DISALLOWED_TOOLS,
     ENV_CLAUDE_EXCLUDE_DYNAMIC_SECTIONS,
     ENV_CLAUDE_FALLBACK_MODEL,
@@ -536,6 +538,7 @@ from .config_observabilidad import (  # noqa: F401
 from .config_produccion import (  # noqa: F401
     SEP_MARCA,
     autogen_arte_max,
+    autogen_copy_max,
     clave_por_marca,
     consola_url_publica,
     generaciones_ttl_seg,

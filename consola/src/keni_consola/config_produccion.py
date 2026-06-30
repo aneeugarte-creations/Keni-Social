@@ -4,7 +4,9 @@ from __future__ import annotations
 from ._config_comun import (
     _VERDADEROS,
     AUTOGEN_ARTE_MAX_DEF,
+    AUTOGEN_COPY_MAX_DEF,
     ENV_AUTOGEN_ARTE_MAX,
+    ENV_AUTOGEN_COPY_MAX,
     ENV_CONSOLA_URL_PUBLICA,
     ENV_GENERACIONES_TTL_HORAS,
     ENV_MEDIA_GC,
@@ -92,6 +94,26 @@ def autogen_arte_max() -> int:
     Cada item llama al proveedor de imagen (coste): el cap evita rafagas por barrido.
     """
     return _entero(ENV_AUTOGEN_ARTE_MAX, AUTOGEN_ARTE_MAX_DEF, minimo=1)
+
+
+def autogen_copy_max(marca: str) -> int:
+    """Maximo de temas autogen a redactar por marca y barrido (`KENI_AUTOGEN_COPY_MAX`, def 12, min 1).
+
+    Tope del carril 2 de Redactar (news-pool): acota cuantos temas sin copy de UNA marca se
+    encolan en cada barrido, para que activar el toggle de una marca con backlog no dispare una
+    rafaga de `claude -p`. El override por marca del store (`KENI_AUTOGEN_COPY_MAX::marca`) MANDA
+    sobre el default; sin override, cae al env/default global. Min 1.
+    """
+    from . import ajustes  # perezoso: evita el ciclo config <- ajustes
+
+    if marca:
+        crudo = ajustes.obtener(clave_por_marca(ENV_AUTOGEN_COPY_MAX, marca))
+        if crudo is not None and crudo.strip():
+            try:
+                return max(1, int(crudo.strip()))
+            except ValueError:
+                pass
+    return _entero(ENV_AUTOGEN_COPY_MAX, AUTOGEN_COPY_MAX_DEF, minimo=1)
 
 
 def generaciones_ttl_seg() -> int:

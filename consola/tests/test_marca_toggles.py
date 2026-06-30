@@ -31,6 +31,27 @@ def test_override_truthy_no_apaga(monkeypatch):
     assert config.marca_apagada(config.ENV_PIPELINE_ILUSTRAR, "claro-sports") is False
 
 
+def test_autogen_copy_max_default_global_sin_override(monkeypatch):
+    """Sin override por marca, `autogen_copy_max` cae al env/default global (store > env > def 12)."""
+    _store(monkeypatch, {})  # sin store: cae a env; sin env: default 12
+    monkeypatch.delenv(config.ENV_AUTOGEN_COPY_MAX, raising=False)
+    assert config.autogen_copy_max("unotv") == 12
+    _store(monkeypatch, {config.ENV_AUTOGEN_COPY_MAX: "7"})  # global por store
+    assert config.autogen_copy_max("unotv") == 7
+
+
+def test_autogen_copy_max_override_por_marca_manda(monkeypatch):
+    """El override por marca (`KENI_AUTOGEN_COPY_MAX::marca`) MANDA sobre el global; min 1."""
+    _store(monkeypatch, {
+        config.ENV_AUTOGEN_COPY_MAX: "5",  # global
+        config.clave_por_marca(config.ENV_AUTOGEN_COPY_MAX, "unotv"): "20",  # override unotv
+        config.clave_por_marca(config.ENV_AUTOGEN_COPY_MAX, "claro-sports"): "0",  # min 1
+    })
+    assert config.autogen_copy_max("unotv") == 20  # override gana al global
+    assert config.autogen_copy_max("claro-sports") == 1  # min 1
+    assert config.autogen_copy_max("nacion-gamer") == 5  # sin override -> global
+
+
 def test_clave_por_marca_formato():
     assert config.clave_por_marca("KENI_PIPELINE_REDACTAR", "unotv") == "KENI_PIPELINE_REDACTAR::unotv"
 

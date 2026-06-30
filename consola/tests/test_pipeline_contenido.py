@@ -1885,6 +1885,21 @@ def test_temas_autogen_sin_copy_incluye_temas_con_piezas_vacias(entorno, monkeyp
     assert con_copy["id"] not in ids  # ya tiene copy -> no se reescribe
 
 
+def test_temas_autogen_sin_copy_topa_por_marca_y_barrido(entorno, monkeypatch):
+    """El carril 2 encola como mucho `config.autogen_copy_max(marca)` temas de cada marca por
+    barrido: una marca con backlog (30 temas sin copy) no dispara una ráfaga de copy."""
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")  # «Generar copy» POR MARCA: sin la etapa ON, temas_autogen_sin_copy filtra todo
+    monkeypatch.delenv("KENI_AUTOGEN_COPY_MAX", raising=False)  # cae al default global (12)
+    for i in range(30):
+        tema = repos.crear_publicacion(
+            clase="contenido", titulo=f"Noticia rss {i}", marca="unotv", origen="rss",
+        )
+        repos.crear_pieza_fila(publicacion_id=tema["id"], red="x", falta_copy=True)
+    elegidos = pc.temas_autogen_sin_copy()
+    assert len(elegidos) == 12 == config.autogen_copy_max("unotv")  # recortado por el tope
+    assert all(t["marca"] == "unotv" for t in elegidos)
+
+
 def test_ejecutar_cd_funde_pool_via_autogen_lanzar(entorno, monkeypatch):
     """`ejecutar_redactar` lanza copy de los temas del pool vía `autogen_redactar.lanzar_para_topic`."""
     monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")  # etapa Redactar activa (sin el global, ejecutar_redactar no corre)

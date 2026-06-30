@@ -381,10 +381,11 @@ def ejecutar_redactar(*, autor: dict[str, str] | None = None) -> list[dict[str, 
          (`temas_para_redactar` → `lanzar_redactar_de_tema`),
       2) temas que las FUENTES de noticias metieron al tablero sin copy
          (`temas_autogen_sin_copy` → `autogen_redactar.lanzar_para_topic`).
-    SIN topes propios (flujo continuo): el carril 1 lo acota la ADMISIÓN (gate serial en curso);
-    el carril 2, el dedup por etiqueta + el backpressure de la cola. Si la cola se llena, corta la
-    fase (el siguiente tick reintenta). REINTENTOS ACOTADOS en el carril 1: al agotar
-    `_MAX_INTENTOS_ETAPA`, el tema se marca `problema` (sale del cupo en curso, fallo visible).
+    Topes: el carril 1 lo acota la ADMISIÓN (gate serial en curso); el carril 2 aplica un tope POR
+    MARCA Y BARRIDO (`config.autogen_copy_max(marca)`, override por marca > default global) sobre el
+    dedup por etiqueta + el backpressure de la cola. Si la cola se llena, corta la fase (el siguiente
+    tick reintenta). REINTENTOS ACOTADOS en el carril 1: al agotar `_MAX_INTENTOS_ETAPA`, el tema se
+    marca `problema` (sale del cupo en curso, fallo visible).
     Best-effort por tema. Devuelve las generaciones de copy lanzadas.
     """
     if autor is None:
