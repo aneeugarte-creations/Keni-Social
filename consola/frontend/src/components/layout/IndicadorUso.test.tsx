@@ -88,12 +88,12 @@ describe("IndicadorUso", () => {
     expect(screen.getByText("70%")).toBeInTheDocument(); // 10 / 14.3 ≈ 70 %
   });
 
-  it("una cuenta: cabecera «Cuenta A» (no la lista de marcas) y sus porcentajes", () => {
+  it("una cuenta (marca concreta): SIN cabecera (es su cuenta siempre), solo sus porcentajes", () => {
     renderIndicador({ data: { cuentas: [cuenta({})] } }, "claro-sports");
-    expect(screen.getByText("Cuenta A")).toBeInTheDocument();
     expect(screen.getByText("42%")).toBeInTheDocument();
     expect(screen.getByText("18%")).toBeInTheDocument();
-    // La cabecera es la cuenta, no la lista de marcas.
+    // Con una sola cuenta no se rotula cabecera: ni "Cuenta A" ni la lista de marcas.
+    expect(screen.queryByText("Cuenta A")).not.toBeInTheDocument();
     expect(screen.queryByText("Claro Sports")).not.toBeInTheDocument();
   });
 
@@ -140,12 +140,13 @@ describe("IndicadorUso", () => {
     expect(aviso.className).toContain("text-destructive");
   });
 
-  it("rojo al 100%: mensaje «Límite semanal al 100%»", () => {
+  it("al 100% NO repite el texto «Límite … al 100%»: ya se ve en la barra roja al tope", () => {
     renderIndicador(
       { data: { cuentas: [cuenta({ semana_pct: 100, sesion_5h_pct: 60, al_100: true, alerta_roja: true })] } },
       "claro-sports",
     );
-    expect(screen.getByText("Límite semanal al 100%")).toBeInTheDocument();
+    expect(screen.getByText("100%")).toBeInTheDocument(); // el % sigue
+    expect(screen.queryByText(/Límite.*100%/)).not.toBeInTheDocument(); // sin el texto redundante
   });
 
   it("colapsado: anillo (svg) con el % del que antes bloqueará (sin resets útiles, cae al semanal)", () => {

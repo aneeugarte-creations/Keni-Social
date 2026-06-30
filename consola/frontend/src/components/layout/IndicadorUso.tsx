@@ -6,10 +6,10 @@ import { cn } from "@/lib/utils";
 
 /**
  * Indicador SUTIL del uso de las cuentas de Claude del servidor, alojado en el pie del sidebar.
- * Reutiliza el lenguaje visual de `PanelActualizando` (hilo de 1px, avance discreto, nada de cajas
- * ni alarmas): expandido pinta la cabecera «Cuenta A/B» + tres medidores mini (Semana / 24h / 5h)
- * por cuenta; colapsado, un anillo fino con el % del límite que ANTES bloqueará (burn rate, el
- * resto va al tooltip).
+ * Expandido pinta, por cuenta, tres BARRAS DE PROGRESO a ANCHO COMPLETO (Semana / 24h / 5h) con su
+ * %; la cabecera «Cuenta A/B» solo aparece en la vista "Todas" (varias cuentas), porque con una
+ * sola es su cuenta siempre. Colapsado, un anillo fino con el % del límite que ANTES bloqueará
+ * (burn rate, el resto va al tooltip).
  *
  * EL QUE PRIMERO SE AGOTA / BLOQUEA: «Semana» es el mayor de all-models vs cuota Sonnet, «24h» el
  * cupo del día del límite que primero se agota (backend `uso.dia`), y el anillo colapsado el que
@@ -24,7 +24,8 @@ import { cn } from "@/lib/utils";
  * no renderiza nada.
  *
  * Estados: neutro cuando aún no hay dato (`undefined`/cargando, nunca rojo) y ROJO por cuenta
- * cuando `alerta_roja` (sin cuenta o alguna ventana al 100 %).
+ * cuando `alerta_roja` (sin cuenta o alguna ventana al 100 %). El 100 % se ve en la barra al tope en
+ * rojo; el único texto de alerta es "Sin cuenta" (no hay barra que lo muestre).
  */
 
 /** Redondea un porcentaje (0–100) a entero; `null` => `null`. */
@@ -59,14 +60,12 @@ function pctColapsado(uso: UsoCuenta): number | null {
   return limiteMasUrgente(uso)?.pct ?? semanaBinding(uso).pct;
 }
 
-/** Mensaje breve del estado rojo (sin cuenta / al 100 %), o `null` si no hay alerta. */
+/** Mensaje breve del estado rojo, o `null` si no hay alerta. Solo "Sin cuenta": el 100 % ya se ve
+ *  en la barra roja al tope, sin repetirlo en texto. */
 function mensajeRojo(uso: UsoCuenta): string | null {
   if (!uso.alerta_roja) return null;
   if (!uso.conectada) return "Sin cuenta";
-  if (uso.semana_pct != null && uso.semana_pct >= 100) return "Límite semanal al 100%";
-  if (uso.sonnet_pct != null && uso.sonnet_pct >= 100) return "Límite de Sonnet al 100%";
-  if (uso.sesion_5h_pct != null && uso.sesion_5h_pct >= 100) return "Límite de sesión al 100%";
-  return "Límite al 100%";
+  return null;
 }
 
 /** Texto del reset semanal para el tooltip ("Se renueva: …"), o `null` si no se conoce. */
@@ -104,7 +103,8 @@ function tooltipCompleto(uso: UsoCuenta): string {
   return partes.join(" · ");
 }
 
-/** Medidor mini (etiqueta + hilo de 1px + %), del mismo lenguaje calmado que `PanelActualizando`. */
+/** Medidor: etiqueta + % en una fila y, debajo, una BARRA DE PROGRESO rellena a ANCHO COMPLETO
+ *  (track tenue + relleno). */
 function MiniMedidor({
   etiqueta,
   pct,
@@ -117,12 +117,20 @@ function MiniMedidor({
   const valor = pctEntero(pct);
   const tiene = valor != null;
   return (
-    <div className="flex items-center gap-2">
-      <span className="w-12 shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground/70">
-        {etiqueta}
-      </span>
+    <div className="space-y-1">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-[10px] uppercase tracking-wide text-muted-foreground/70">{etiqueta}</span>
+        <span
+          className={cn(
+            "text-[10px] tabular-nums",
+            rojo ? "text-destructive" : "text-muted-foreground",
+          )}
+        >
+          {tiene ? `${valor}%` : "—"}
+        </span>
+      </div>
       <div
-        className="h-px flex-1 overflow-hidden bg-border"
+        className="h-1.5 w-full overflow-hidden rounded-full bg-border"
         role="progressbar"
         aria-label={`Uso ${etiqueta}`}
         aria-valuemin={0}
@@ -130,18 +138,13 @@ function MiniMedidor({
         aria-valuenow={valor ?? 0}
       >
         <div
-          className={cn("h-full transition-[width] duration-500", rojo ? "bg-destructive" : "bg-foreground")}
+          className={cn(
+            "h-full rounded-full transition-[width] duration-500",
+            rojo ? "bg-destructive" : "bg-foreground",
+          )}
           style={{ width: `${tiene ? valor : 0}%` }}
         />
       </div>
-      <span
-        className={cn(
-          "w-8 shrink-0 text-right text-[10px] tabular-nums",
-          rojo ? "text-destructive" : "text-muted-foreground",
-        )}
-      >
-        {tiene ? `${valor}%` : "—"}
-      </span>
     </div>
   );
 }
@@ -186,16 +189,19 @@ function CirculoUso({ pct, rojo }: { pct: number | null; rojo: boolean }) {
   );
 }
 
-/** Bloque expandido de UNA cuenta: cabecera "Cuenta A/B", sus tres medidores y el aviso rojo. */
-function BloqueCuenta({ uso }: { uso: UsoCuenta }) {
+/** Bloque expandido de UNA cuenta: sus tres medidores a ancho completo + el aviso rojo. La cabecera
+ *  "Cuenta A/B" solo cuando hay VARIAS cuentas (vista "Todas"): con una sola es su cuenta siempre. */
+function BloqueCuenta({ uso, etiquetada }: { uso: UsoCuenta; etiquetada: boolean }) {
   const rojo = uso.alerta_roja;
   const alerta = mensajeRojo(uso);
   return (
     <Tooltip label={tooltipCompleto(uso)} side="top">
-      <div className="w-full space-y-1" aria-label={tooltipCompleto(uso)}>
-        <p className="truncate px-0.5 text-[10px] font-medium text-muted-foreground/80">
-          {etiquetaCuenta(uso)}
-        </p>
+      <div className="w-full space-y-1.5" aria-label={tooltipCompleto(uso)}>
+        {etiquetada ? (
+          <p className="truncate px-0.5 text-[10px] font-medium text-muted-foreground/80">
+            {etiquetaCuenta(uso)}
+          </p>
+        ) : null}
         {alerta ? <p className="px-0.5 text-[10px] font-medium text-destructive">{alerta}</p> : null}
         <MiniMedidor etiqueta="Semana" pct={semanaBinding(uso).pct} rojo={rojo} />
         <MiniMedidor etiqueta="24h" pct={dia24hPct(uso)} rojo={rojo} />
@@ -262,10 +268,11 @@ function IndicadorUsoContenido({ colapsado }: { colapsado: boolean }) {
       </div>
     );
   }
+  const etiquetada = cuentas.length > 1;
   return (
-    <div className="w-full space-y-2">
+    <div className="w-full space-y-3">
       {cuentas.map((c) => (
-        <BloqueCuenta key={c.cuenta} uso={c} />
+        <BloqueCuenta key={c.cuenta} uso={c} etiquetada={etiquetada} />
       ))}
     </div>
   );
