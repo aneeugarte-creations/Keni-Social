@@ -807,5 +807,13 @@ def construir_procesar_fusionar(marca: str, recientes: list[dict[str, Any]]):  #
             )
         finally:
             limpiar_fusion_encolada(marca)
+            # Fusión TERMINADA (el job corrió): limpia su contador de intentos (vive aparte,
+            # sobrevive a la purga) para no arrastrar reintentos a la próxima ventana de la marca.
+            try:
+                from ..pipeline_contenido import _intentos
+
+                _intentos.reset(marca, _intentos.ETAPA_FUSIONAR)
+            except Exception:  # noqa: BLE001 -- el reset es best-effort; la fusión ya completó
+                pass
 
     return procesar

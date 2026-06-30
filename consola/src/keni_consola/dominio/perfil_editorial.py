@@ -289,6 +289,14 @@ def construir_procesar_perfil(marca: str):  # noqa: ANN201 -- generaciones.Proce
             "generado_en": datetime.now(UTC).isoformat(),
         }
         _guardar(cache)
+        # Éxito de la etapa Priorizar (perfil refrescado): limpia su contador de intentos (vive
+        # aparte, sobrevive a la purga) para no arrastrar reintentos al próximo refresco de la marca.
+        try:
+            from ..pipeline_contenido import _intentos
+
+            _intentos.reset(marca, _intentos.ETAPA_PERFIL)
+        except Exception:  # noqa: BLE001 -- el reset es best-effort; el perfil ya se guardó
+            pass
         _log.info("perfil_editorial(%s): perfil refrescado vía job (%d keywords).", marca, len(kws))
         return {"keywords": len(kws), "marca": marca}
 

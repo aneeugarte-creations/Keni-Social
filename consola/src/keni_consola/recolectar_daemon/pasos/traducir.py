@@ -59,6 +59,8 @@ def paso_traducir() -> dict[str, Any]:
     if not candidatos:
         return {"encolados": 0, "marcas": 0, "candidatos": 0}
 
+    from ...pipeline_contenido import _intentos  # perezoso: evita ciclo daemon<->pipeline en carga
+
     por_marca: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for c in candidatos:
         por_marca[str(c.get("marca") or "")].append(c)
@@ -68,6 +70,15 @@ def paso_traducir() -> dict[str, Any]:
     for marca, clusters in por_marca.items():
         # Respeta el toggle por marca: una marca con Traducir apagado no encola traducción.
         if not config.etapa_activa(config.ENV_PIPELINE_TRADUCIR, marca):
+            continue
+        # Reintentos acotados POR CLUSTER: una traducción que nunca completa se re-abre por TTL y se
+        # re-encolaría sin fin. Excluye los clusters que agotaron el tope o están en backoff.
+        clusters = [
+            c for c in clusters
+            if not _intentos.tope_alcanzado(str(c["id"]), _intentos.ETAPA_TRADUCIR)
+            and not _intentos.en_backoff(str(c["id"]), _intentos.ETAPA_TRADUCIR)
+        ]
+        if not clusters:
             continue
         ids = [str(c["id"]) for c in clusters]
         # IDEMPOTENCIA: marca el lote ANTES de encolar; solo entran al job los que esta llamada
@@ -81,6 +92,8 @@ def paso_traducir() -> dict[str, Any]:
         if not marcados:
             continue
         if _encolar_traduccion(marca, clusters):
+            for c in clusters:
+                _intentos.anotar(str(c["id"]), _intentos.ETAPA_TRADUCIR)
             encolados += len(clusters)
             marcas_encoladas += 1
         else:

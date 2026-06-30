@@ -43,10 +43,17 @@ def _encolar_perfil(marca: str, *, ttl_horas: int, ahora: datetime) -> None:
     """
     from ... import cola, generaciones, ruteo_cuentas  # noqa: PLC0415 -- import perezoso (paquete raíz)
     from ...dominio import jobspec  # noqa: PLC0415 -- import perezoso (evita ciclo dominio<->daemon)
+    from ...pipeline_contenido import _intentos  # noqa: PLC0415 -- perezoso (evita ciclo daemon<->pipeline)
 
     if not perfil_editorial.necesita_refresco(marca, ttl_horas=ttl_horas, ahora=ahora):
         return
     if perfil_editorial.refresco_en_curso(marca, ahora=ahora, ttl_min=_PERFIL_ENCOLADO_TTL_MIN):
+        return
+    # Reintentos acotados: un refresco que nunca completa (claude cae) se re-abre por TTL y se
+    # re-encolaría sin fin. Al agotar el tope se deja de re-encolar esa marca; el backoff espacia.
+    if _intentos.tope_alcanzado(marca, _intentos.ETAPA_PERFIL):
+        return
+    if _intentos.en_backoff(marca, _intentos.ETAPA_PERFIL):
         return
     prompt = perfil_editorial.construir_prompt_perfil(marca)
     if not prompt:
@@ -81,6 +88,7 @@ def _encolar_perfil(marca: str, *, ttl_horas: int, ahora: datetime) -> None:
             prioridad=jobspec.PRIORIDAD_AUTOMATICO,
         )
         cola.encolar(gen_id, spec, proceso=generaciones.PROCESO_INVESTIGACION, marca=marca)
+        _intentos.anotar(marca, _intentos.ETAPA_PERFIL)
     except generaciones.ColaLlenaError:
         # Admisión rechazada (presupuesto/pausa): borra el registro recién creado y RE-ABRE la marca
         # (no es un fallo real) para que un barrido posterior la reintente sin esperar al TTL.

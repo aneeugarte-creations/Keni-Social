@@ -19,8 +19,9 @@ from __future__ import annotations
 
 import json
 
-from keni_consola import config, generaciones, redes, repos
+from keni_consola import config, db_intentos, generaciones, redes, repos
 from keni_consola import pipeline_contenido as pc
+from keni_consola.pipeline_contenido import _intentos
 
 from .conftest import _cliente, lanzador_generacion_completa
 
@@ -61,11 +62,21 @@ def _mock_og_image(monkeypatch, url=""):
     monkeypatch.setattr(pc, "_FETCH_OG_IMAGE", lambda enlace: url)
 
 
-def _envejecer_intento(tema_id, campo):
-    """Retrasa el timestamp del último intento de la etapa (saca el tema del backoff)."""
-    pend = json.loads(repos.obtener_publicacion(tema_id)["copy_pendiente"])
-    pend[f"{campo}_ts"] = "2020-01-01T00:00:00"
-    repos.actualizar_publicacion(tema_id, {"copy_pendiente": json.dumps(pend)})
+def _envejecer_intento(sujeto, etapa):
+    """Retrasa el timestamp del último intento de la etapa (saca el sujeto del backoff).
+
+    El contador vive en la tabla `intentos_etapa` (no en `copy_pendiente`), así que envejecemos su
+    `actualizado` por conexión directa, igual que el test del propio contador.
+    """
+    con = db_intentos._conectar()
+    try:
+        con.execute(
+            "UPDATE intentos_etapa SET actualizado = ? WHERE sujeto = ? AND etapa = ?",
+            ("2020-01-01T00:00:00+00:00", sujeto, etapa),
+        )
+        con.commit()
+    finally:
+        con.close()
 
 
 def _temas_sin_verdicto(marca=None):
@@ -940,13 +951,13 @@ def test_copy_fallido_se_reintenta_tras_el_backoff(entorno, monkeypatch):
     assert len(llamadas) == 1
 
     # Pasada la espera (timestamp envejecido), el barrido sí lo reintenta.
-    _envejecer_intento(tema["id"], "redactar_intentos")
+    _envejecer_intento(tema["id"], _intentos.ETAPA_REDACTAR)
     pc.ejecutar_redactar(autor=None)
     assert len(llamadas) == 2
 
     # Éxito (pieza creada): deja de relanzarse.
     repos.crear_pieza_fila(publicacion_id=tema["id"], red="x", copy="Listo")
-    _envejecer_intento(tema["id"], "redactar_intentos")
+    _envejecer_intento(tema["id"], _intentos.ETAPA_REDACTAR)
     pc.ejecutar_redactar(autor=None)
     assert len(llamadas) == 2
 
@@ -991,8 +1002,11 @@ def test_redactar_reintentos_agotados_marca_requiere_humano_sin_lanzar(entorno, 
 
     monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")
     llamadas = _mock_lanzar_copy(monkeypatch)
-    pend = json.dumps({"nota": "n", "redes_ids": ["x"], "redactar_intentos": pc._MAX_INTENTOS_ETAPA})
+    pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     tema = _tema_pipeline(titulo="Copy agotado", verificacion_fuente=pc.VERIFICACION_VERIFICADO, copy_pendiente=pend)
+    # Contador (en `intentos_etapa`, NO en copy_pendiente) ya en el tope: el barrido no debe relanzar.
+    for _ in range(pc._MAX_INTENTOS_ETAPA):
+        _intentos.anotar(tema["id"], _intentos.ETAPA_REDACTAR)
 
     lanzados = pc.ejecutar_redactar(autor=None)
 
@@ -1005,19 +1019,136 @@ def test_redactar_reintentos_agotados_marca_requiere_humano_sin_lanzar(entorno, 
 
 def test_redactar_reintento_anota_intentos_acumulados(entorno, monkeypatch):
     """Cada relanzamiento de copy suma su intento (el tope corta el bucle de reintentos)."""
-    import json
-
     monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")
     llamadas = _mock_lanzar_copy(monkeypatch)
     tema = _tema_pipeline(titulo="Suma intentos", verificacion_fuente=pc.VERIFICACION_VERIFICADO)
 
     pc.ejecutar_redactar(autor=None)  # 1er intento (el copy mockeado "falla": no nace pieza)
-    _envejecer_intento(tema["id"], "redactar_intentos")  # fuera del backoff: el barrido reintenta
+    _envejecer_intento(tema["id"], _intentos.ETAPA_REDACTAR)  # fuera del backoff: el barrido reintenta
     pc.ejecutar_redactar(autor=None)  # 2º intento
 
     assert len(llamadas) == 2
-    pend = json.loads(repos.obtener_publicacion(tema["id"])["copy_pendiente"])
-    assert pend["redactar_intentos"] == 2
+    assert _intentos.intentos(tema["id"], _intentos.ETAPA_REDACTAR) == 2
+
+
+def test_redactar_tope_sobrevive_a_la_purga(entorno, monkeypatch):
+    """El contador vive en `intentos_etapa`, NO en la cola: una PURGA del job no resetea el tope.
+
+    Simulamos la purga vaciando `copy_pendiente`-libre (el contador no está ahí) y verificando que,
+    una vez en el tope, el barrido NO relanza aunque la cola se hubiera limpiado. Es el bug raíz:
+    purgar mataba el job sin disparar el dedup-al-éxito y la etapa re-encolaba sin fin."""
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")
+    llamadas = _mock_lanzar_copy(monkeypatch)
+    tema = _tema_pipeline(titulo="Tope purga", verificacion_fuente=pc.VERIFICACION_VERIFICADO)
+    for _ in range(pc._MAX_INTENTOS_ETAPA):
+        _intentos.anotar(tema["id"], _intentos.ETAPA_REDACTAR)
+
+    # "Purga": no hay nada que el barrido pueda borrar del contador (vive aparte de la cola).
+    pc.ejecutar_redactar(autor=None)
+    assert llamadas == []  # tope alcanzado: NO se relanza, ni siquiera tras una purga
+
+
+def test_redactar_exito_resetea_el_contador(entorno, monkeypatch):
+    """Un copy que CREA borradores resetea el contador de Redactar (la etapa vuelve a permitirse)."""
+    from keni_consola.dominio import copy as dom_copy
+    from keni_consola.dominio import jobspec
+
+    tema = _tema_pipeline(titulo="Reset al éxito", verificacion_fuente=pc.VERIFICACION_VERIFICADO)
+    _intentos.anotar(tema["id"], _intentos.ETAPA_REDACTAR)
+    _intentos.anotar(tema["id"], _intentos.ETAPA_REDACTAR)
+    assert _intentos.intentos(tema["id"], _intentos.ETAPA_REDACTAR) == 2
+
+    def fake_base(prompt_id, marca, **kw):
+        def procesar(salida, metricas):
+            return {"piezas": [{"id": "p1"}], "resultado": "ok"}  # borradores creados
+        return procesar
+
+    monkeypatch.setattr(dom_copy, "construir_procesar_copy", fake_base)
+    spec = jobspec.construir_copy(
+        prompt_id="prompt/x", marca="unotv", redes_ids=["x"], titulo_dado="T",
+        texto_base="n", publicacion_id=tema["id"], limpiar_pendiente=True,
+    )
+    jobspec.reconstruir_procesar({"procesar": spec})("", None)
+
+    assert _intentos.intentos(tema["id"], _intentos.ETAPA_REDACTAR) == 0  # éxito => contador a cero
+    assert (repos.obtener_publicacion(tema["id"])["copy_pendiente"] or "") == ""  # dedup al éxito
+
+
+def test_copy_vacio_no_limpia_copy_pendiente(entorno, monkeypatch):
+    """Fix de jobspec: un copy SIN borradores NO limpia `copy_pendiente` (no es un éxito real)."""
+    from keni_consola.dominio import copy as dom_copy
+    from keni_consola.dominio import jobspec
+
+    tema = _tema_pipeline(titulo="Copy vacío", verificacion_fuente=pc.VERIFICACION_VERIFICADO)
+    pend_antes = repos.obtener_publicacion(tema["id"])["copy_pendiente"]
+    assert (pend_antes or "").strip()  # precondición: hay pendiente que un éxito vacío NO debe borrar
+
+    def fake_base(prompt_id, marca, **kw):
+        def procesar(salida, metricas):
+            return {"piezas": [], "resultado": ""}  # el modelo no devolvió piezas
+        return procesar
+
+    monkeypatch.setattr(dom_copy, "construir_procesar_copy", fake_base)
+    spec = jobspec.construir_copy(
+        prompt_id="prompt/x", marca="unotv", redes_ids=["x"], titulo_dado="T",
+        texto_base="n", publicacion_id=tema["id"], limpiar_pendiente=True,
+    )
+    jobspec.reconstruir_procesar({"procesar": spec})("", None)
+
+    assert repos.obtener_publicacion(tema["id"])["copy_pendiente"] == pend_antes  # intacto
+
+
+def test_decisor_respeta_backoff_y_tope(entorno, monkeypatch):
+    """DECISOR cableado: respeta el backoff (no 3 jobs seguidos) y, tras el tope, redacta directo."""
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")
+    monkeypatch.setenv("KENI_PIPELINE_DECISOR", "1")
+    from keni_consola.dominio import decisor as dom_decisor
+
+    decisiones: list[str] = []
+    monkeypatch.setattr(
+        dom_decisor, "lanzar_para_tema",
+        lambda tema: (decisiones.append(tema["id"]) or {"id": f"d-{len(decisiones)}"}),
+    )
+    copias = _mock_lanzar_copy(monkeypatch)
+    tema = _tema_pipeline(titulo="Con decisor", verificacion_fuente=pc.VERIFICACION_VERIFICADO)
+
+    pc.ejecutar_redactar(autor=None)  # 1er Decisor
+    assert len(decisiones) == 1
+    # Tick INMEDIATO: el Decisor recién lanzado está en backoff -> NO se relanza (el bug de los 3 seguidos).
+    pc.ejecutar_redactar(autor=None)
+    assert len(decisiones) == 1
+
+    # Tras agotar el tope (envejeciendo entre intentos), el Decisor para y se redacta DIRECTO.
+    _envejecer_intento(tema["id"], _intentos.ETAPA_DECISOR)
+    pc.ejecutar_redactar(autor=None)  # 2º Decisor
+    _envejecer_intento(tema["id"], _intentos.ETAPA_DECISOR)
+    pc.ejecutar_redactar(autor=None)  # 3er Decisor -> alcanza el tope
+    assert len(decisiones) == pc._MAX_INTENTOS_ETAPA
+    assert _intentos.tope_alcanzado(tema["id"], _intentos.ETAPA_DECISOR)
+
+    _envejecer_intento(tema["id"], _intentos.ETAPA_DECISOR)
+    pc.ejecutar_redactar(autor=None)  # tope: ya no decide, redacta directo
+    assert len(decisiones) == pc._MAX_INTENTOS_ETAPA  # el Decisor NO vuelve a lanzarse
+    assert len(copias) == 1  # cae al carril de Redactar directo
+
+
+def test_verificar_tope_deja_de_reencolar(entorno, monkeypatch):
+    """VERIFICAR cableado: al agotar el tope NO se re-lanza la verificación del cluster."""
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
+    monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
+    monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
+
+    lanzados: list[str] = []
+    monkeypatch.setattr(
+        "keni_consola.pipeline_contenido._barrido.lanzar_verificar_cluster",
+        lambda cluster, *, autor: (lanzados.append(cluster["id"]) or {"id": "g1"}),
+    )
+    _inicializar_cluster("c-verif", titulo="Por verificar", score=0.8)
+    for _ in range(pc._MAX_INTENTOS_ETAPA):
+        _intentos.anotar("c-verif", _intentos.ETAPA_VERIFICAR)
+
+    pc.ejecutar_verificar_clusters(autor=None)
+    assert lanzados == []  # tope: el cluster ya no se re-encola para verificación
 
 
 # --------------------------------------------------------------------------- #

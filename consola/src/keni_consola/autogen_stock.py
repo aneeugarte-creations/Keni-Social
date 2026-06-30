@@ -351,6 +351,14 @@ def _marcar_procesado(item_id: str) -> None:
             repos.asignar_etiqueta(item_id, et_id)
     except Exception:  # noqa: BLE001 -- el dedup es una optimización, no una garantía
         _log.debug("auto-stock: no se pudo etiquetar el tema %s.", item_id, exc_info=True)
+    # Éxito de la etapa Stock (se intentó y se marcó): limpia el contador de intentos (vive aparte,
+    # sobrevive a la purga) para que el tema pueda volver a procesarse si se le quita el dedup.
+    try:
+        from .pipeline_contenido import _intentos
+
+        _intentos.reset(item_id, _intentos.ETAPA_STOCK)
+    except Exception:  # noqa: BLE001 -- el reset es best-effort
+        pass
 
 
 def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
@@ -446,6 +454,8 @@ def ejecutar_stock() -> list[dict[str, Any]]:
     except Exception:  # noqa: BLE001 -- sin tablero legible, no hay etapa este tick
         _log.exception("auto-stock: no se pudo leer el tablero.")
         return []
+    from .pipeline_contenido import _intentos
+
     plataformas_por_item = autogen_ilustrar._plataformas_por_item(items)
     elegidos = topics_sin_stock(
         items,
@@ -453,9 +463,18 @@ def ejecutar_stock() -> list[dict[str, Any]]:
         ya_procesados=ids_ya_procesados(),
         maximo=config.stock_max_por_barrido(),
     )
+    # Reintentos acotados: un tema sin foto encontrable se re-elige cada barrido (la búsqueda gasta
+    # APIs). Al agotar el tope se deja de re-buscar; el backoff espacia los reintentos. El éxito
+    # (etiqueta `autogen-stock` en `_marcar_procesado`) resetea el contador.
+    elegidos = [
+        it for it in elegidos
+        if not _intentos.tope_alcanzado(str(it.get("id") or ""), _intentos.ETAPA_STOCK)
+        and not _intentos.en_backoff(str(it.get("id") or ""), _intentos.ETAPA_STOCK)
+    ]
     adjuntadas: list[dict[str, Any]] = []
     for item in elegidos:
         res = lanzar_para_topic(item)
+        _intentos.anotar(str(item.get("id") or ""), _intentos.ETAPA_STOCK)
         if res is not None:
             adjuntadas.append(res)
     return adjuntadas

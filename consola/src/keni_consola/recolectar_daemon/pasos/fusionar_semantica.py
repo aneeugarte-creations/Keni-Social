@@ -81,6 +81,8 @@ def paso_fusionar_semantica(
     """
     if not config.alguna_marca_con_etapa(config.ENV_PIPELINE_FUSIONAR):
         return {"encolados": 0, "marcas": 0, "candidatos": 0}
+    from ...pipeline_contenido import _intentos  # perezoso: evita ciclo daemon<->pipeline en carga
+
     ahora_mono = time.monotonic()
     if (
         not forzar
@@ -134,6 +136,12 @@ def paso_fusionar_semantica(
         if fusionar_semantica.fusion_en_curso(
             marca_f, ahora=ahora, ttl_min=_FUSION_ENCOLADA_TTL_MIN
         ):
+            continue
+        # Reintentos acotados: una fusión que nunca completa (claude cae) se re-abre por TTL y se
+        # re-encolaría sin fin. Al agotar el tope se deja de re-encolar esa marca; el backoff espacia.
+        if _intentos.tope_alcanzado(marca_f, _intentos.ETAPA_FUSIONAR):
+            continue
+        if _intentos.en_backoff(marca_f, _intentos.ETAPA_FUSIONAR):
             continue
         if _encolar_fusion(marca_f, clusters, ahora=ahora):
             encolados += len(clusters)
@@ -200,6 +208,9 @@ def _encolar_fusion(marca: str, clusters: list[dict[str, Any]], *, ahora: dateti
             prioridad=jobspec.PRIORIDAD_AUTOMATICO,
         )
         cola.encolar(gen_id, spec, proceso=generaciones.PROCESO_INVESTIGACION, marca=marca)
+        from ...pipeline_contenido import _intentos
+
+        _intentos.anotar(marca, _intentos.ETAPA_FUSIONAR)
         return True
     except generaciones.ColaLlenaError:
         # Admisión rechazada (presupuesto/pausa): borra el registro recién creado y RE-ABRE la marca

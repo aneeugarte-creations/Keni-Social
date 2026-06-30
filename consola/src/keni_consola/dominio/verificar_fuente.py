@@ -266,6 +266,14 @@ def construir_procesar_verificacion_fuente(  # noqa: ANN201
         # copy aquí (la pieza aún no existe; nace en la admisión).
         if cluster_id:
             repos.marcar_cluster_verificacion(cluster_id, verificacion, serializar_hallazgos(informe))
+            # Verificación TERMINADA (el job corrió y persistió un verdicto): limpia el contador de
+            # intentos del cluster (vive aparte, sobrevive a la purga) para no arrastrar reintentos.
+            try:
+                from ..pipeline_contenido import _intentos
+
+                _intentos.reset(cluster_id, _intentos.ETAPA_VERIFICAR)
+            except Exception:  # noqa: BLE001 -- el reset es best-effort; el verdicto ya está sellado
+                pass
         return {
             "informe": informe,
             "verificacion_fuente": verificacion,

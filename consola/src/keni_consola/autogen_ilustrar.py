@@ -313,6 +313,15 @@ def ejecutar_arte_job(gen_id: str, spec: dict[str, Any]) -> None:
         et_id = _id_etiqueta_autogen_arte()
         if et_id and publicacion_id:
             repos.asignar_etiqueta(publicacion_id, et_id)
+        # Éxito de la etapa Ilustrar: limpia el contador de intentos (vive aparte, sobrevive a la
+        # purga) para que el tema pueda volver a ilustrarse legítimamente si se le quita el dedup.
+        if publicacion_id:
+            try:
+                from .pipeline_contenido import _intentos
+
+                _intentos.reset(publicacion_id, _intentos.ETAPA_ILUSTRAR)
+            except Exception:  # noqa: BLE001 -- el reset es best-effort; el arte ya está hecho
+                pass
         registrar_arte(
             publicacion_id=publicacion_id, marca=marca, titulo=titulo, prompt=prompt, imagen=nombre,
         )

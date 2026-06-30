@@ -18,7 +18,7 @@ from typing import Any
 
 from .. import config, daemon_util, generaciones, marcas, repos
 from ..tiempo import hoy_utc
-from . import _admitir, _ref
+from . import _admitir, _intentos, _ref
 from ._comun import (
     _MAX_INTENTOS_ETAPA,
     VERIFICACION_EN_CURSO,
@@ -27,9 +27,6 @@ from ._comun import (
     VERIFICADAS_OK,
     _copy_pendiente_leido,
     _log,
-    anotar_intento,
-    en_backoff,
-    intentos_de,
     marcar_fallo_etapa,
 )
 from ._avance import ejecutar_avance
@@ -317,6 +314,14 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
             # verificar en el pool para que el humano la decida (nada ajeno se auto-produce sin verificar).
             if not validacion_on:
                 continue
+            # REINTENTOS ACOTADOS: una verificación que muere se re-abre por TTL (`en_curso` atascada)
+            # y se relanzaría sin fin. Al agotar el tope se DEJA DE RE-ENCOLAR ese cluster (queda en el
+            # pool sin verdicto, visible); el backoff espacia los reintentos entre fallos transitorios.
+            if _intentos.tope_alcanzado(cid, _intentos.ETAPA_VERIFICAR):
+                _log.debug("pipeline: verificación del cluster %s agotó sus intentos; no se re-encola.", cid)
+                continue
+            if _intentos.en_backoff(cid, _intentos.ETAPA_VERIFICAR):
+                continue
             try:
                 gen = lanzar_verificar_cluster(cluster, autor=autor)
             except generaciones.ColaLlenaError as e:
@@ -326,6 +331,7 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
                 _log.exception("pipeline: fallo la verificación de la fuente (verificación) de la historia %s (marca %s).", cid, marca)
                 continue
             if gen is not None:
+                _intentos.anotar(cid, _intentos.ETAPA_VERIFICAR)
                 verificados.append({"id": cid, "gen_id": gen.get("id", "") if isinstance(gen, dict) else "", "verificacion_fuente": VERIFICACION_EN_CURSO})
     return verificados
 
@@ -403,16 +409,22 @@ def ejecutar_redactar(*, autor: dict[str, str] | None = None) -> list[dict[str, 
         # ya estuvieran ingeridos antes de apagarla). Misma FUENTE ÚNICA que la vista/catálogo.
         if not config.etapa_activa(config.ENV_PIPELINE_REDACTAR, tema.get("marca") or ""):
             continue
+        tid = tema.get("id", "") or ""
         # DECISOR (etapa PREVIA): si está activo para la marca y el tema aún no tiene camino, decide
         # primero (foto|carrusel) y redacta en el siguiente tick (el camino se guarda en
-        # `copy_pendiente`, que lee `lanzar_redactar_de_tema`). Acotado por intentos: si el Decisor
-        # falla repetidamente, se redacta directo (camino="" → el modelo decide) para no bloquear el
-        # tema. Sin el flag (`KENI_PIPELINE_DECISOR` OFF), se redacta directo como hoy.
-        if (
+        # `copy_pendiente`, que lee `lanzar_redactar_de_tema`). Acotado por intentos: tras el tope se
+        # redacta directo (camino="" → el modelo decide) para no bloquear el tema. Sin el flag
+        # (`KENI_PIPELINE_DECISOR` OFF), se redacta directo como hoy.
+        decisor_pendiente = (
             config.etapa_activa(config.ENV_PIPELINE_DECISOR, tema.get("marca") or "")
             and not str(_copy_pendiente_leido(tema).get("camino") or "").strip()
-            and intentos_de(tema, "decisor_intentos") < _MAX_INTENTOS_ETAPA
-        ):
+        )
+        if decisor_pendiente and not _intentos.tope_alcanzado(tid, _intentos.ETAPA_DECISOR):
+            # Backoff creciente entre reintentos (1/4/16 min): un Decisor que acaba de fallar espera
+            # antes de reintentar (no redacta directo todavía, para no perder la decisión de formato
+            # por un fallo transitorio); un tick posterior lo reevalúa.
+            if _intentos.en_backoff(tid, _intentos.ETAPA_DECISOR):
+                continue
             try:
                 gen = decisor_dom.lanzar_para_tema(tema)
             except generaciones.ColaLlenaError as e:
@@ -425,19 +437,19 @@ def ejecutar_redactar(*, autor: dict[str, str] | None = None) -> list[dict[str, 
                 )
             else:
                 if gen:
-                    anotar_intento(tema, "decisor_intentos")
+                    _intentos.anotar(tid, _intentos.ETAPA_DECISOR)
                     lanzados.append(gen)
                     continue  # decide ahora; redacta en el siguiente tick
         # Reintentos acotados: un copy fallido conserva `copy_pendiente` (dedup al éxito) y se
         # relanzaría cada tick para siempre; al agotar los intentos, salida TERMINAL (problema).
-        if intentos_de(tema, "redactar_intentos") >= _MAX_INTENTOS_ETAPA:
+        if _intentos.tope_alcanzado(tid, _intentos.ETAPA_REDACTAR):
             marcar_fallo_etapa(
-                tema.get("id", "") or "", "Copy",
+                tid, "Copy",
                 f"La generación de copy falló {_MAX_INTENTOS_ETAPA} veces.",
             )
             continue
         # Backoff creciente entre intentos (1/4/16 min): mismo rationale que en la fase verificación.
-        if en_backoff(tema, "redactar_intentos"):
+        if _intentos.en_backoff(tid, _intentos.ETAPA_REDACTAR):
             continue
         try:
             gen = lanzar_redactar_de_tema(tema, autor=autor)
@@ -451,15 +463,26 @@ def ejecutar_redactar(*, autor: dict[str, str] | None = None) -> list[dict[str, 
             )
             continue
         if gen:
-            # Tras el lanzamiento efectivo (cola llena o fallo previo no gastan intentos). Si el
-            # copy completó EN LÍNEA (tests síncronos), `copy_pendiente` ya se limpió y no anota.
-            anotar_intento(tema, "redactar_intentos")
+            # Anota el intento SOLO si el copy sigue PENDIENTE: con el lanzador síncrono de los tests
+            # el post-procesado ya pudo limpiar `copy_pendiente` (éxito) y resetear el contador;
+            # anotar entonces dejaría un intento fantasma tras un éxito. La cola llena / un fallo
+            # previo (return/continue arriba) tampoco gastan intento.
+            fresco = repos.obtener_publicacion(tid)
+            if fresco is not None and (fresco.get("copy_pendiente") or "").strip():
+                _intentos.anotar(tid, _intentos.ETAPA_REDACTAR)
             lanzados.append(gen)
     # Fundido de la selección de autogen_redactar: la etapa de Redactar también redacta los temas del
     # news-pool/tablero (orígenes de noticias) que aún no tienen copy, vía el lanzador NEUTRO.
     from .. import autogen_redactar
 
     for item in temas_autogen_sin_copy():
+        tid = item.get("id", "") or ""
+        # Reintentos acotados (mismo contador REDACTAR, keyed por tema): un copy del pool que falla
+        # repetidamente deja de re-encolarse al agotar el tope; el éxito (etiqueta `autogen`) resetea.
+        if _intentos.tope_alcanzado(tid, _intentos.ETAPA_REDACTAR):
+            continue
+        if _intentos.en_backoff(tid, _intentos.ETAPA_REDACTAR):
+            continue
         try:
             gen = autogen_redactar.lanzar_para_topic(item)
         except generaciones.ColaLlenaError as e:
@@ -472,6 +495,7 @@ def ejecutar_redactar(*, autor: dict[str, str] | None = None) -> list[dict[str, 
             )
             continue
         if gen:
+            _intentos.anotar(tid, _intentos.ETAPA_REDACTAR)
             lanzados.append(gen)
     return lanzados
 
@@ -522,6 +546,14 @@ def ejecutar_ilustrar() -> list[dict[str, Any]]:
         etiquetas_por_item=autogen_ilustrar._etiquetas_por_item(),
         hoy=hoy_utc(),
     )
+    # Reintentos acotados: un arte que falla NO queda etiquetado `autogen-arte`, así que el barrido
+    # lo re-elige cada tick. Al agotar el tope se deja de re-encolar; el backoff espacia los reintentos.
+    # El éxito (etiqueta `autogen-arte` en `ejecutar_arte_job`) resetea el contador.
+    elegidos = [
+        it for it in elegidos
+        if not _intentos.tope_alcanzado(str(it.get("id") or ""), _intentos.ETAPA_ILUSTRAR)
+        and not _intentos.en_backoff(str(it.get("id") or ""), _intentos.ETAPA_ILUSTRAR)
+    ]
 
     # EN PARALELO: `lanzar_para_topic` no genera la imagen en línea; solo SELECCIONA y ENCOLA un
     # job de proceso (el WORKER genera la imagen en su carril, fuera del barrido). El encolado es
@@ -531,7 +563,10 @@ def ejecutar_ilustrar() -> list[dict[str, Any]]:
 
     def _ilustrar(item: dict[str, Any]) -> dict[str, Any] | None:
         try:
-            return autogen_ilustrar.lanzar_para_topic(item)
+            gen = autogen_ilustrar.lanzar_para_topic(item)
+            if gen is not None:
+                _intentos.anotar(str(item.get("id") or ""), _intentos.ETAPA_ILUSTRAR)
+            return gen
         except generaciones.ColaLlenaError:
             # BACKPRESSURE (cola llena / presupuesto / pausa), NO un fallo del proveedor: el
             # siguiente tick reintenta. NO lo contamos como `fallido` (no debe disparar la alerta

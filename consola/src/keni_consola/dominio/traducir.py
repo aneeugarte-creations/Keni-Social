@@ -558,6 +558,14 @@ def construir_procesar_traducir(originales: list[dict[str, Any]]):  # noqa: ANN2
                     titulo_original=str(orig.get("titulo") or ""),
                 )
                 guardados += 1
+                # Éxito de la etapa Traducir (cluster traducido): limpia su contador de intentos
+                # (vive aparte, sobrevive a la purga) para no arrastrar reintentos.
+                try:
+                    from ..pipeline_contenido import _intentos
+
+                    _intentos.reset(cid, _intentos.ETAPA_TRADUCIR)
+                except Exception:  # noqa: BLE001 -- el reset es best-effort; ya está traducido
+                    pass
             except Exception:  # noqa: BLE001 -- persistir una traducción no aborta el resto del lote
                 _log.exception("traducir: fallo al guardar la traducción del cluster %s.", cid)
         return {"traducidos": guardados, "candidatos": len(por_id_orig)}

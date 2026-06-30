@@ -3,7 +3,7 @@
 Antes de redactar, un `claude -p` READ-ONLY y BARATO (Haiku) mira SEÑALES ligeras del tema (marca,
 evento, nº de sub-historias, titulares, fuentes) y decide si la pieza luce mejor como un único post
 de foto o como un carrusel de varias tarjetas. El post-procesado guarda el camino elegido en
-`contenido.copy_pendiente` (JSON, SIN migración de esquema, igual que los contadores de intentos);
+`contenido.copy_pendiente` (JSON, SIN migración de esquema);
 la etapa de Redactar lo lee y usa el prompt del camino (foto o carrusel). Así la decisión de formato
 sale del prompt de Redactar a una etapa propia, visible y editable.
 
@@ -199,6 +199,15 @@ def aplicar_camino(publicacion_id: str, camino: str) -> str:
         )
     except Exception:  # noqa: BLE001 -- sin persistir, Redactar decide el formato como sin Decisor
         _log.warning("decisor: no se pudo guardar el camino del tema %s", publicacion_id, exc_info=True)
+        return camino
+    # Éxito del Decisor (camino persistido): limpia su contador de intentos (vive aparte, sobrevive
+    # a la purga) — la etapa ya no volverá a correr para este tema mientras el camino siga puesto.
+    try:
+        from ..pipeline_contenido import _intentos
+
+        _intentos.reset(publicacion_id, _intentos.ETAPA_DECISOR)
+    except Exception:  # noqa: BLE001 -- el reset es best-effort; el camino ya está guardado
+        pass
     return camino
 
 

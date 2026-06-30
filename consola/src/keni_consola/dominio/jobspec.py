@@ -956,15 +956,28 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
             resultado = base(salida, metricas)
             from .. import repos
 
-            if limpiar_pendiente:
+            # ÉXITO REAL = se crearon borradores. Un copy "vacío" (el modelo no devolvió piezas) NO
+            # limpia `copy_pendiente` ni etiqueta: si lo hiciera, un éxito vacío borraría el estado y
+            # el tema no se volvería a redactar. Sin borradores, el barrido lo REINTENTA (acotado).
+            hubo_borradores = bool(resultado.get("piezas"))
+            if hubo_borradores:
+                if limpiar_pendiente:
+                    try:
+                        repos.actualizar_publicacion(publicacion_id, {"copy_pendiente": ""})
+                    except Exception:  # noqa: BLE001 -- dedup best-effort; el copy ya esta hecho
+                        pass
+                if etiqueta_exito:
+                    try:
+                        _asignar_etiqueta_por_nombre(publicacion_id, etiqueta_exito)
+                    except Exception:  # noqa: BLE001 -- dedup best-effort; el copy ya esta hecho
+                        pass
+                # Éxito de la etapa Redactar: limpia su contador de intentos (vive aparte, sobrevive
+                # a la purga) para que el tema pueda volver a redactarse legítimamente en el futuro.
                 try:
-                    repos.actualizar_publicacion(publicacion_id, {"copy_pendiente": ""})
-                except Exception:  # noqa: BLE001 -- dedup best-effort; el copy ya esta hecho
-                    pass
-            if etiqueta_exito:
-                try:
-                    _asignar_etiqueta_por_nombre(publicacion_id, etiqueta_exito)
-                except Exception:  # noqa: BLE001 -- dedup best-effort; el copy ya esta hecho
+                    from ..pipeline_contenido import _intentos
+
+                    _intentos.reset(publicacion_id, _intentos.ETAPA_REDACTAR)
+                except Exception:  # noqa: BLE001 -- el reset es best-effort; el copy ya esta hecho
                     pass
             try:
                 from ..pipeline_contenido import encadenar_ilustrar_tras_redactar
