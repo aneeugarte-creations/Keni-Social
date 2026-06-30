@@ -203,8 +203,20 @@ function PildoraPub({
           : []),
       ]}
     >
+      {/* TODA la píldora abre la caja del feed (clic / Enter / Espacio); arrastra para mover y
+          clic-derecho para el menú. Es un `role="button"` y no un `<button>` real porque también
+          es el manejador de arrastre (un botón nativo arrastrable se porta de forma errática). */}
       <div
+        role="button"
+        tabIndex={0}
         draggable={!publicado}
+        onClick={() => onVerFeed(pieza)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onVerFeed(pieza);
+          }
+        }}
         onDragStart={(e) => {
           if (publicado) {
             e.preventDefault();
@@ -213,9 +225,16 @@ function PildoraPub({
           e.dataTransfer.setData("text/plain", pieza.id);
           e.dataTransfer.effectAllowed = "move";
         }}
+        title={
+          publicado
+            ? `${pieza.titulo} (${nombreRed(pieza.red)}) · ya publicada · clic para verla en el feed`
+            : vencida
+              ? `${pieza.titulo} (${nombreRed(pieza.red)}) · PASADA DE HORA, sin publicar · "Publicar ya" vive en el menú contextual (clic derecho)`
+              : `${pieza.titulo} (${nombreRed(pieza.red)}) · clic para verla en el feed · arrastra para mover · reprograma desde el menú (clic derecho)`
+        }
         className={cn(
           CLASES_ENTRADA_CALENDARIO,
-          "w-full max-w-full border-transparent transition-colors",
+          "w-full max-w-full border-transparent text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           publicado ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
           publicado
             ? "bg-emerald-500/15 text-emerald-800 hover:bg-emerald-500/25 dark:text-emerald-200"
@@ -233,20 +252,7 @@ function PildoraPub({
         <span className="shrink-0 tabular-nums">
           {formatearHoraOperativa(pieza.fecha_programada)}
         </span>
-        <button
-          type="button"
-          onClick={() => onVerFeed(pieza)}
-          title={
-            publicado
-              ? `${pieza.titulo} (${nombreRed(pieza.red)}) · ya publicada · clic para verla en el feed`
-              : vencida
-                ? `${pieza.titulo} (${nombreRed(pieza.red)}) · PASADA DE HORA, sin publicar · "Publicar ya" vive en el menú contextual (clic derecho)`
-                : `${pieza.titulo} (${nombreRed(pieza.red)}) · clic para verla en el feed · arrastra para mover · reprograma desde el menú (clic derecho)`
-          }
-          className="min-w-0 flex-1 truncate text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        >
-          {pieza.titulo}
-        </button>
+        <span className="min-w-0 flex-1 truncate">{pieza.titulo}</span>
       </div>
     </MenuContextual>
   );
