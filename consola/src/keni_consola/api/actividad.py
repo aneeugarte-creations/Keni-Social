@@ -33,6 +33,8 @@ Endpoints:
          encolar nada: `{"marcas": [{"marca", "redactar"}]}`. Para anticipar la avalancha.
   - `POST /api/actividad/cola/limpiar-huerfanos` (admin)
       -> saca de la cola los jobs PENDIENTES huerfanos (gen_id sin registro). `{huerfanos_limpiados}`.
+  - `POST /api/actividad/cola/eliminar` (admin)
+      -> saca UN job concreto de la cola por `{gen_id}` (cancela su arbol si corria). `{eliminado, gen_id}`.
 
 Solo LECTURA. Errores en espanol; sin tracebacks crudos.
 """
@@ -195,8 +197,31 @@ def _edad_s(iso: str | None, ahora: datetime) -> int | None:
         return None
 
 
-def _item_job(job: dict, ahora: datetime) -> dict:
-    """Normaliza un job en proceso + su registro de generacion para el monitor (sin `spec`)."""
+def _tokens_vivo(reg: dict) -> tuple[int, int, float] | None:
+    """`(tokens_in, tokens_out, coste_usd)` reales del run desde `reg.metricas` (None si no reporta).
+
+    Solo aplica a un job EN CURSO cuyo run ya emitio metricas: hasta entonces no hay tokens reales.
+    """
+    m = reg.get("metricas")
+    if not isinstance(m, dict):
+        return None
+    try:
+        return (
+            int(m.get("tokens_in") or 0),
+            int(m.get("tokens_out") or 0),
+            float(m.get("total_cost_usd") or 0.0),
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def _item_job(
+    job: dict, ahora: datetime, promedios: dict[str, int] | None = None
+) -> dict:
+    """Normaliza un job en proceso + su registro de generacion para el monitor (sin `spec`).
+
+    `promedios` (etapa -> tokens medios historicos) se calcula UNA vez por peticion y se pasa para
+    estimar el gasto de un job que aun ESPERA (no hay metricas en vivo hasta que corre)."""
     reg = generaciones.obtener(job["gen_id"])
     # HUERFANO: el job sobrevive en la cola pero su registro de generacion ya no existe (gen
     # borrada/purgada). Sin registro no hay marca/proceso real: nunca aparece en una lista por
@@ -204,6 +229,18 @@ def _item_job(job: dict, ahora: datetime) -> dict:
     huerfano = reg is None
     reg = reg or {}
     corriendo = job["estado"] == repos.JOB_RECLAMADO
+    tipo = reg.get("tipo") or ""
+    # Proceso (ADR 0011): investigacion (verificación) | produccion (copy/arte). La cola es
+    # COMPARTIDA; esto solo clasifica cada job para desglosar el pool por proceso.
+    proceso = generaciones.proceso_de(reg)
+    # Etapa LEGIBLE (fase del pipeline: Verificar/Redactar/Ilustrar/…): la explicita del registro
+    # si la trae (fases inline), si no la derivada de proceso+tipo. `tipo`/`proceso` siguen como
+    # origen crudo.
+    etapa = reg.get("etapa") or repos.etapa_economia(proceso, tipo)
+    # Tokens estimados (a-priori): media historica de la etapa, para el job que aun espera.
+    tokens_estimados = (promedios or {}).get(etapa)
+    # Tokens REALES en vivo: solo de un job EN CURSO cuyo run ya reporto metricas; si no, null.
+    vivo = _tokens_vivo(reg) if corriendo else None
     return {
         "job_id": job["id"],
         "gen_id": job["gen_id"],
@@ -211,11 +248,11 @@ def _item_job(job: dict, ahora: datetime) -> dict:
         "huerfano": huerfano,
         "worker": job.get("worker") or "",
         "etiqueta": reg.get("etiqueta") or "",
-        "tipo": reg.get("tipo") or "",
+        "tipo": tipo,
         "marca": reg.get("marca") or "",
-        # Proceso (ADR 0011): investigacion (verificación/verificación) | produccion (copy/arte). La cola es
-        # COMPARTIDA; esto solo clasifica cada job para desglosar el pool por proceso.
-        "proceso": generaciones.proceso_de(reg),
+        "proceso": proceso,
+        # Etapa legible derivada (origen para la columna del Monitor); `tipo`/`proceso` crudos arriba.
+        "etapa": etapa,
         "gen_estado": reg.get("estado") or "",
         "fase": reg.get("fase") or "",
         # Prioridad de cola (mayor = adelanta): los lanzamientos manuales van por delante
@@ -225,6 +262,13 @@ def _item_job(job: dict, ahora: datetime) -> dict:
         "intentos": int(job.get("intentos") or 0),
         "encolado_hace_s": _edad_s(job.get("creado"), ahora),
         "corriendo_hace_s": _edad_s(job.get("claimed_at"), ahora) if corriendo else None,
+        # Tokens: `prompt_chars` (tamano exacto del prompt encolado), `tokens_estimados` (a-priori
+        # por etapa) y, para un job en curso que ya reporta, los tokens/coste REALES (si no, null).
+        "prompt_chars": int(job.get("prompt_chars") or 0),
+        "tokens_estimados": tokens_estimados,
+        "tokens_in": vivo[0] if vivo else None,
+        "tokens_out": vivo[1] if vivo else None,
+        "coste_usd": vivo[2] if vivo else None,
     }
 
 
@@ -306,8 +350,9 @@ def _cola(marca: str) -> dict:
     activos = snap["activos"]
 
     ahora = datetime.now()
+    promedios = repos.tokens_promedio_por_etapa()
     filas = repos.jobs_activos(limite=200)
-    en_proceso = [_item_job(j, ahora) for j in filas]
+    en_proceso = [_item_job(j, ahora, promedios) for j in filas]
     # Desglose del pool COMPARTIDO por proceso (ADR 0011): se calcula sobre TODOS los jobs en
     # vuelo (global, como los KPIs de capacidad), ANTES de acotar las listas por marca. La cola y
     # el pool son UNICOS; esto solo dice cuanto del trabajo en proceso es Investigacion (verificación/verificación)
@@ -424,7 +469,10 @@ def _desglose_jobs(en_proceso: list[dict]) -> dict:
 
 def _cola_desglose() -> dict:
     ahora = datetime.now()
-    en_proceso = [_item_job(j, ahora) for j in repos.jobs_activos(limite=10_000)]
+    promedios = repos.tokens_promedio_por_etapa()
+    en_proceso = [
+        _item_job(j, ahora, promedios) for j in repos.jobs_activos(limite=10_000)
+    ]
     return _desglose_jobs(en_proceso)
 
 
@@ -593,6 +641,51 @@ def _cola_purgar() -> dict:
     return {"purgados": purgados}
 
 
+async def cola_eliminar(request: Request) -> Response:
+    """POST /api/actividad/cola/eliminar {gen_id}: saca UN job concreto de la cola. Admin.
+
+    A diferencia de `purgar` (vacia toda la cola), borra solo el job del `gen_id` dado. Si estaba
+    RECLAMADO (corriendo), primero cancela su arbol (igual que `purgar`: marca `cancelado` para que
+    un worker vivo mate su `claude` y cierra el registro `ejecutando` como error); luego lo saca de
+    la cola (`terminar`, libera el cupo). 400 sin `gen_id`; 404 si no hay job activo para ese
+    `gen_id`. Devuelve `{eliminado, gen_id}`.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    try:
+        cuerpo = await request.json()
+    except Exception:  # noqa: BLE001 -- body no-JSON
+        cuerpo = {}
+    gen_id = (cuerpo.get("gen_id") or "").strip() if isinstance(cuerpo, dict) else ""
+    if not gen_id:
+        return JSONResponse({"error": "Falta el identificador de la generación."}, status_code=400)
+    status, cuerpo_resp = await run_in_threadpool(_cola_eliminar, gen_id)
+    return JSONResponse(cuerpo_resp, status_code=status)
+
+
+def _cola_eliminar(gen_id: str) -> tuple[int, dict]:
+    job = next(
+        (j for j in repos.jobs_activos(limite=10_000) if j["gen_id"] == gen_id), None
+    )
+    if job is None:
+        return 404, {"error": "No hay un job activo para esa generación."}
+    if job["estado"] == repos.JOB_RECLAMADO:
+        repos.cancelar_job(gen_id)  # cross-proceso: un worker vivo mata su claude
+        g = generaciones.obtener(gen_id)
+        if g and g.get("estado") == generaciones.ESTADO_EJECUTANDO:
+            generaciones.actualizar(
+                gen_id,
+                {
+                    "estado": generaciones.ESTADO_ERROR,
+                    "motivo": generaciones.MOTIVO_CANCELADO,
+                    "error": "Eliminada de la cola (administrador).",
+                    "fecha_fin": generaciones.ahora_iso(),
+                },
+            )
+    repos.terminar_job(job["id"])  # fuera de la cola: libera el cupo
+    return 200, {"eliminado": True, "gen_id": gen_id}
+
+
 async def cola_limpiar_huerfanos(request: Request) -> Response:
     """POST /api/actividad/cola/limpiar-huerfanos: saca de la cola los jobs PENDIENTES huerfanos. Admin.
 
@@ -622,12 +715,18 @@ def _cola_limpiar_huerfanos() -> dict:
     return {"huerfanos_limpiados": limpiados}
 
 
-async def cola_priorizar(request: Request) -> Response:
-    """POST /api/actividad/cola/priorizar {gen_id}: adelanta un job ESPERANDO. Admin.
+_PRIORIDAD_MIN = 0
+_PRIORIDAD_MAX = 100
 
-    Sube su prioridad de despacho a la de un lanzamiento manual (`PRIORIDAD_MANUAL`): el
-    worker lo clavará antes que todo el lote de fondo pendiente. Solo aplica a jobs aún
-    `pendiente` (los reclamados ya corren); 404 si no hay job pendiente para ese `gen_id`.
+
+async def cola_priorizar(request: Request) -> Response:
+    """POST /api/actividad/cola/priorizar {gen_id, prioridad?, a_tope?}: adelanta un job ESPERANDO. Admin.
+
+    Sin `prioridad` ni `a_tope` sube su despacho al de un lanzamiento manual (`PRIORIDAD_MANUAL`).
+    Con `prioridad` (entero 0..100) clava ESE valor. Con `a_tope=true` lo deja un escalon por
+    encima de todo lo pendiente (lo primero del proximo claim). Solo aplica a jobs aún `pendiente`
+    (los reclamados ya corren); 404 si no hay job pendiente para ese `gen_id`; 400 si `prioridad`
+    no es un entero del rango.
     """
     if not permisos.es_admin(request):
         return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
@@ -635,19 +734,42 @@ async def cola_priorizar(request: Request) -> Response:
         cuerpo = await request.json()
     except Exception:  # noqa: BLE001 -- body no-JSON
         cuerpo = {}
-    gen_id = (cuerpo.get("gen_id") or "").strip() if isinstance(cuerpo, dict) else ""
+    if not isinstance(cuerpo, dict):
+        cuerpo = {}
+    gen_id = (cuerpo.get("gen_id") or "").strip()
     if not gen_id:
         return JSONResponse({"error": "Falta el identificador de la generación."}, status_code=400)
-    status, cuerpo_resp = await run_in_threadpool(_cola_priorizar, gen_id)
+    a_tope = bool(cuerpo.get("a_tope"))
+    prioridad: int | None = None
+    crudo = cuerpo.get("prioridad")
+    if not a_tope and crudo is not None:
+        try:
+            prioridad = int(crudo)
+        except (TypeError, ValueError):
+            return JSONResponse({"error": "La prioridad debe ser un número entero."}, status_code=400)
+        if not (_PRIORIDAD_MIN <= prioridad <= _PRIORIDAD_MAX):
+            return JSONResponse(
+                {"error": f"La prioridad debe estar entre {_PRIORIDAD_MIN} y {_PRIORIDAD_MAX}."},
+                status_code=400,
+            )
+    status, cuerpo_resp = await run_in_threadpool(_cola_priorizar, gen_id, prioridad, a_tope)
     return JSONResponse(cuerpo_resp, status_code=status)
 
 
-def _cola_priorizar(gen_id: str) -> tuple[int, dict]:
+def _cola_priorizar(
+    gen_id: str, prioridad: int | None = None, a_tope: bool = False
+) -> tuple[int, dict]:
     from ..dominio import jobspec
 
-    if not repos.priorizar_job(gen_id, jobspec.PRIORIDAD_MANUAL):
+    if a_tope:
+        objetivo = repos.max_prioridad_pendiente() + 1
+    elif prioridad is not None:
+        objetivo = prioridad
+    else:
+        objetivo = jobspec.PRIORIDAD_MANUAL
+    if not repos.priorizar_job(gen_id, objetivo):
         return 404, {"error": "No hay un job esperando para esa generación."}
-    return 200, {"priorizado": True, "gen_id": gen_id}
+    return 200, {"priorizado": True, "gen_id": gen_id, "prioridad": objetivo}
 
 
 async def cola_reencolar(request: Request) -> Response:
@@ -719,6 +841,7 @@ RUTAS = [
     Route("/api/actividad/cola/preview", cola_preview, methods=["GET"]),
     Route("/api/actividad/cola/limpiar-huerfanos", cola_limpiar_huerfanos, methods=["POST"]),
     Route("/api/actividad/cola/purgar", cola_purgar, methods=["POST"]),
+    Route("/api/actividad/cola/eliminar", cola_eliminar, methods=["POST"]),
     Route("/api/actividad/cola/priorizar", cola_priorizar, methods=["POST"]),
     Route("/api/actividad/cola/reencolar", cola_reencolar, methods=["POST"]),
     Route("/api/actividad/cola/gate-diario/aceptar", gate_diario_aceptar, methods=["POST"]),

@@ -582,3 +582,154 @@ def test_reencolar_requiere_admin(entorno):
         "/api/actividad/cola/reencolar", json={"gen_id": gen_id}, headers=_ORIGIN
     )
     assert r.status_code == 403
+
+
+# --------------------------------------------------------------------------- #
+# Eliminar UN job concreto (admin)                                            #
+# --------------------------------------------------------------------------- #
+
+
+def test_eliminar_saca_un_job_de_la_cola_admin(entorno):
+    """Eliminar saca SOLO el job pedido de la cola; el resto sigue en curso."""
+    objetivo = _encolar("Copy a eliminar")
+    superviviente = _encolar("Copy que sigue")
+    assert repos.contar_jobs_activos() == 2
+
+    r = _cli_como("admin").post(
+        "/api/actividad/cola/eliminar", json={"gen_id": objetivo}, headers=_ORIGIN
+    )
+    assert r.status_code == 200
+    assert r.json() == {"eliminado": True, "gen_id": objetivo}
+    # Salio de la cola; el otro job intacto.
+    activos = {j["gen_id"] for j in repos.jobs_activos()}
+    assert activos == {superviviente}
+
+
+def test_eliminar_job_reclamado_cancela_y_cierra_registro(entorno):
+    """Un job RECLAMADO se cancela (arbol) y su registro `ejecutando` cierra como error."""
+    gen_id = _encolar()
+    cola.reclamar("w")
+    assert generaciones.obtener(gen_id)["estado"] == generaciones.ESTADO_EJECUTANDO
+
+    r = _cli_como("admin").post(
+        "/api/actividad/cola/eliminar", json={"gen_id": gen_id}, headers=_ORIGIN
+    )
+    assert r.status_code == 200 and r.json()["eliminado"] is True
+    assert repos.contar_jobs_activos() == 0
+    assert generaciones.obtener(gen_id)["estado"] == generaciones.ESTADO_ERROR
+
+
+def test_eliminar_gen_inexistente_404(entorno):
+    r = _cli_como("admin").post(
+        "/api/actividad/cola/eliminar", json={"gen_id": "no-existe"}, headers=_ORIGIN
+    )
+    assert r.status_code == 404
+
+
+def test_eliminar_sin_gen_id_400(entorno):
+    r = _cli_como("admin").post(
+        "/api/actividad/cola/eliminar", json={}, headers=_ORIGIN
+    )
+    assert r.status_code == 400
+
+
+def test_eliminar_requiere_admin(entorno):
+    gen_id = _encolar()
+    assert _cli_como("editor").post(
+        "/api/actividad/cola/eliminar", json={"gen_id": gen_id}, headers=_ORIGIN
+    ).status_code == 403
+    assert _cli_token().post(
+        "/api/actividad/cola/eliminar", json={"gen_id": gen_id}, headers=_ORIGIN
+    ).status_code == 403
+    # Nada se elimino: el job sigue en la cola.
+    assert repos.contar_jobs_activos() == 1
+
+
+# --------------------------------------------------------------------------- #
+# Priorizar con valor explicito / a tope                                      #
+# --------------------------------------------------------------------------- #
+
+
+def _encolar_auto(etiqueta: str) -> str:
+    gen = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": etiqueta})
+    cola.encolar(gen["id"], jobspec.construir(
+        prompt="p", procesar=jobspec.construir_prompt_lib(),
+        prioridad=jobspec.PRIORIDAD_AUTOMATICO,
+    ))
+    return gen["id"]
+
+
+def _prioridad_en_cola(c: TestClient, gen_id: str) -> int:
+    job = next(
+        j for j in c.get("/api/actividad/cola").json()["esperando"] if j["gen_id"] == gen_id
+    )
+    return job["prioridad"]
+
+
+def test_priorizar_con_valor_usa_ese_valor(entorno):
+    """Con `prioridad` en el payload se clava ESE valor (no el manual por defecto)."""
+    gen_id = _encolar_auto("Automatico")
+    c = _cli_como("admin")
+    r = c.post(
+        "/api/actividad/cola/priorizar",
+        json={"gen_id": gen_id, "prioridad": 42}, headers=_ORIGIN,
+    )
+    assert r.status_code == 200
+    assert r.json()["prioridad"] == 42
+    assert _prioridad_en_cola(_cli_token(), gen_id) == 42
+
+
+def test_priorizar_sin_valor_mantiene_manual(entorno):
+    """Sin `prioridad` se conserva el comportamiento de siempre (`PRIORIDAD_MANUAL`)."""
+    gen_id = _encolar_auto("Automatico")
+    r = _cli_como("admin").post(
+        "/api/actividad/cola/priorizar", json={"gen_id": gen_id}, headers=_ORIGIN
+    )
+    assert r.status_code == 200
+    assert r.json()["prioridad"] == jobspec.PRIORIDAD_MANUAL
+    assert _prioridad_en_cola(_cli_token(), gen_id) == jobspec.PRIORIDAD_MANUAL
+
+
+def test_priorizar_a_tope_supera_lo_pendiente(entorno):
+    """`a_tope` deja el job un escalon por encima de la mayor prioridad pendiente."""
+    alto = _encolar_auto("Alto")
+    objetivo = _encolar_auto("Objetivo")
+    c = _cli_como("admin")
+    # Sube `alto` a 50; luego `objetivo` a_tope debe quedar en 51.
+    c.post("/api/actividad/cola/priorizar", json={"gen_id": alto, "prioridad": 50}, headers=_ORIGIN)
+    r = c.post(
+        "/api/actividad/cola/priorizar", json={"gen_id": objetivo, "a_tope": True}, headers=_ORIGIN
+    )
+    assert r.status_code == 200 and r.json()["prioridad"] == 51
+
+
+def test_priorizar_valor_fuera_de_rango_400(entorno):
+    gen_id = _encolar_auto("Automatico")
+    r = _cli_como("admin").post(
+        "/api/actividad/cola/priorizar", json={"gen_id": gen_id, "prioridad": 999}, headers=_ORIGIN
+    )
+    assert r.status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# Campos nuevos por job: etapa legible + tokens (prompt_chars / estimados)     #
+# --------------------------------------------------------------------------- #
+
+
+def test_item_job_expone_etapa_y_tokens(entorno):
+    """Cada job trae `etapa` legible, `prompt_chars` y `tokens_estimados` (media historica)."""
+    # Historial de gasto: un copy (fase Redactar) con 100+40 tokens -> media 140 para "Redactar".
+    repos.registrar_gasto_ia(
+        "hist-1", dia=generaciones.ahora_iso()[:10], proceso="produccion",
+        tipo="copy", marca=_MARCA, tokens_in=100, tokens_out=40, coste_usd=0.01,
+    )
+    gen_id = _encolar("Copy de nota")  # tipo copy -> etapa Redactar; prompt="p" -> 1 char
+
+    data = _cli_token().get("/api/actividad/cola").json()
+    job = next(j for j in data["esperando"] if j["gen_id"] == gen_id)
+    assert job["etapa"] == "Redactar"
+    assert job["prompt_chars"] == 1
+    assert job["tokens_estimados"] == 140
+    # Un job que espera no tiene tokens reales en vivo todavia.
+    assert job["tokens_in"] is None and job["tokens_out"] is None
+    assert job["coste_usd"] is None

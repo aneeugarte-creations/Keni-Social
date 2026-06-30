@@ -72,6 +72,10 @@ def priorizar_job(gen_id: str, prioridad: int) -> bool:
     return db.priorizar_job(gen_id, prioridad)
 
 
+def max_prioridad_pendiente() -> int:
+    return db.max_prioridad_pendiente()
+
+
 def cancelar_job(gen_id: str) -> bool:
     return db.cancelar_job(gen_id)
 
@@ -101,6 +105,15 @@ def gasto_ia_del_dia_por_proceso(dia: str, marca: str = "") -> dict[str, dict[st
 
 def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, dict[str, Any]]:
     return db.gasto_ia_economia_por_proceso(dias, marca)
+
+
+def etapa_economia(proceso: str, tipo: str) -> str:
+    """Etapa legible (fase del pipeline) de un job a partir de su `proceso`+`tipo`. Delegado en `db.py`."""
+    return db.etapa_economia(proceso, tipo)
+
+
+def tokens_promedio_por_etapa() -> dict[str, int]:
+    return db.tokens_promedio_por_etapa()
 
 
 def gasto_ia_por_dia(dias: int = 14) -> list[dict[str, Any]]:

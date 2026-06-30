@@ -118,16 +118,18 @@ def jobs_activos(limite: int = 200) -> list[dict[str, Any]]:
     """Jobs EN CURSO (`pendiente` + `reclamado`) con sus metadatos de despacho, mas antiguos primero.
 
     Para el monitor de cola: cada fila lleva `id`, `gen_id`, `estado`, `worker` (quien lo clavo),
-    `creado` (cuando se encolo), `claimed_at` (cuando empezo a correr) y `prioridad` (mayor =
-    adelanta en la cola; el Monitor distingue los manuales del lote de fondo). El front deriva
-    la EDAD y enriquece con el registro de generacion (etiqueta/tipo/marca). Sin `spec` (pesado).
+    `creado` (cuando se encolo), `claimed_at` (cuando empezo a correr), `prioridad` (mayor =
+    adelanta en la cola; el Monitor distingue los manuales del lote de fondo) y `prompt_chars`
+    (tamano del prompt del spec, sin cargar el spec entero). El front deriva la EDAD y enriquece
+    con el registro de generacion (etiqueta/tipo/marca). Sin `spec` (pesado).
     `creado`/`claimed_at` son timestamptz (migracion 0033): se re-emiten al canon ISO
     ('' si `claimed_at` aun es NULL), tal como los consumia el monitor (`_edad_s`).
     """
     con = _conectar()
     try:
         filas = con.execute(
-            "SELECT id, gen_id, estado, worker, creado, claimed_at, prioridad, intentos "
+            "SELECT id, gen_id, estado, worker, creado, claimed_at, prioridad, intentos, "
+            "length(spec->>'prompt') AS prompt_chars "
             "FROM jobs WHERE estado <> ? ORDER BY creado ASC, id ASC LIMIT ?",
             (JOB_TERMINADO, int(limite)),
         ).fetchall()
@@ -143,9 +145,26 @@ def jobs_activos(limite: int = 200) -> list[dict[str, Any]]:
             "claimed_at": iso_o_vacio(f["claimed_at"]),
             "prioridad": int(f["prioridad"] or 0),
             "intentos": int(f["intentos"] or 0),
+            "prompt_chars": int(f["prompt_chars"] or 0),
         }
         for f in filas
     ]
+
+
+def max_prioridad_pendiente() -> int:
+    """Mayor `prioridad` entre los jobs `pendiente` (0 si la cola no espera nada).
+
+    Para priorizar "a tope" desde el Monitor: subir un job UN escalon por encima de todo lo
+    pendiente lo deja primero en el proximo claim sin clavar un valor arbitrario."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            "SELECT COALESCE(MAX(prioridad), 0) AS m FROM jobs WHERE estado = ?",
+            (JOB_PENDIENTE,),
+        ).fetchone()
+    finally:
+        con.close()
+    return int(fila["m"]) if fila is not None else 0
 
 
 def encolados_por_dia(dias: int = 14) -> list[dict[str, Any]]:
@@ -776,6 +795,34 @@ def etapa_economia(proceso: str, tipo: str) -> str:
     if tipo == "pipeline":
         return "Verificar" if proceso == PESTANA_INVESTIGACION else "Redactar"
     return _ETAPA_POR_TIPO.get(tipo, tipo or "—")
+
+
+def tokens_promedio_por_etapa() -> dict[str, int]:
+    """Promedio historico de tokens (in+out) por ETAPA del ledger `gasto_ia`.
+
+    A-priori para el Monitor: cuanto SUELE costar en tokens un job de cada etapa, para estimar
+    lo que gastara uno que aun ESPERA (no hay metricas en vivo hasta que corre). La etapa se
+    resuelve igual que en el resto de la economia: la `etapa` EXPLICITA de la fila si la trae, si
+    no la derivada de `proceso`+`tipo` (`etapa_economia`). Devuelve `{etapa: tokens_medios}` (media
+    entera por generacion), omitiendo las etapas sin muestras."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT proceso, tipo, etapa, "
+            "COALESCE(SUM(tokens_in), 0) + COALESCE(SUM(tokens_out), 0) AS tokens, "
+            "COUNT(*) AS n FROM gasto_ia GROUP BY proceso, tipo, etapa"
+        ).fetchall()
+    finally:
+        con.close()
+    acc: dict[str, list[int]] = {}  # etapa -> [tokens_acumulados, generaciones]
+    for f in filas:
+        etapa = str(f["etapa"] or "") or etapa_economia(
+            str(f["proceso"] or ""), str(f["tipo"] or "")
+        )
+        celda = acc.setdefault(etapa, [0, 0])
+        celda[0] += int(f["tokens"])
+        celda[1] += int(f["n"])
+    return {etapa: tokens // n for etapa, (tokens, n) in acc.items() if n > 0}
 
 
 def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, dict[str, Any]]:
