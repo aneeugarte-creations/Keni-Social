@@ -50,8 +50,8 @@ def test_estado_tras_fase():
 
 def test_modelo_por_fase_nolan_v2():
     assert desarrollo.modelo_de("analyze") == "sonnet"
-    assert desarrollo.modelo_de("plan") == "sonnet"
-    assert desarrollo.modelo_de("build") == "opus"
+    assert desarrollo.modelo_de("plan") == "opus"
+    assert desarrollo.modelo_de("build") == "sonnet"
     assert desarrollo.modelo_de("review") == "sonnet"
     assert desarrollo.modelo_de("desconocida") == desarrollo.MODELO_DEFECTO
 

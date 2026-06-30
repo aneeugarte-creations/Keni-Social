@@ -173,7 +173,7 @@ def test_promover_sugerencia_push_falla(monkeypatch, tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# Resolución de conflictos de rebase con agente Opus (claude -p parcheado)      #
+# Resolución de conflictos de rebase con agente Sonnet (claude -p parcheado)    #
 # --------------------------------------------------------------------------- #
 
 

@@ -732,17 +732,17 @@ def verificar_activo() -> bool:
 
 
 def verificacion_fuente_modelo() -> str:
-    """Modelo de claude de la VERIFICACIÓN de la fuente (`KENI_VERIFICACION_FUENTE_MODELO`, def "opus").
+    """Modelo de claude de la VERIFICACIÓN de la fuente (`KENI_VERIFICACION_FUENTE_MODELO`, def "sonnet").
 
-    Verificar es LA compuerta editorial y la fase más crítica y compleja: abre las fuentes y
-    corrobora con la web, así que corre con el modelo más fuerte (opus; el resto de etapas —copy,
-    inferencias, tareas mecánicas— van con sonnet/haiku). Mismas semanticas que `insumos_modelo`:
-    var no fijada -> "opus"; fijada a "" -> sin `--model` (default de claude); fijada a un valor
-    (p. ej. "sonnet" para abaratar) -> ese modelo.
+    Verificar es LA compuerta editorial: abre las fuentes y corrobora con la web antes de redactar.
+    Sonnet 5 es el modelo por defecto de toda la consola (ver `copy_modelo`); el resto de etapas
+    —inferencias, tareas mecánicas— van con haiku. Mismas semanticas que `insumos_modelo`:
+    var no fijada -> "sonnet"; fijada a "" -> sin `--model` (default de claude); fijada a un valor
+    (p. ej. "opus" si la verificación necesita más margen de precisión) -> ese modelo.
     """
     raw = os.environ.get(ENV_VERIFICACION_FUENTE_MODELO)
     if raw is None:
-        return "opus"
+        return "sonnet"
     return raw.strip()
 
 

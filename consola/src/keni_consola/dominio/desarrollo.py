@@ -6,8 +6,8 @@ testeable. El `worker_dev` y la API consumen estas funciones para encadenar el p
 
 Pipeline (Nolan v2): analyze → plan → build → review.
   - analyze (sonnet): entiende el problema y el repo.
-  - plan    (sonnet): diseña el cambio (qué tocar, qué tests).
-  - build   (opus):   implementa el cambio en el worktree.
+  - plan    (opus):   diseña el cambio (qué tocar, qué tests) — la fase de más criterio.
+  - build   (sonnet): implementa el cambio en el worktree siguiendo el plan.
   - review  (sonnet): revisa el diff y los tests antes del checkpoint humano.
 
 Complejidad → forma del pipeline y checkpoints:
@@ -31,12 +31,13 @@ FASES: tuple[str, ...] = (FASE_ANALYZE, FASE_PLAN, FASE_BUILD, FASE_REVIEW)
 # Clase editorial de los prompts de desarrollo (semillas en `prompts_inicial/editorial/desarrollo/`).
 CLASE_EDITORIAL = "desarrollo"
 
-# Modelo por fase (Nolan v2): razonamiento/plan/revisión en sonnet; construcción pesada en opus.
+# Modelo por fase (Nolan v2): el diseño del cambio (plan) en opus; el resto, incluida la
+# construcción, en sonnet.
 MODELO_DEFECTO = "sonnet"
 MODELO_FASE: dict[str, str] = {
     FASE_ANALYZE: "sonnet",
-    FASE_PLAN: "sonnet",
-    FASE_BUILD: "opus",
+    FASE_PLAN: "opus",
+    FASE_BUILD: "sonnet",
     FASE_REVIEW: "sonnet",
 }
 

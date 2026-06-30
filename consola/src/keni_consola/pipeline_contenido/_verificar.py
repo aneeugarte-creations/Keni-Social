@@ -113,7 +113,7 @@ def _contexto_verificacion_fuente(nota: str) -> str:
 def _endurecer_verificacion_fuente() -> dict[str, Any] | None:
     """Overrides `endurecer` de la verificación de la fuente: modelo fuerte + esfuerzo alto + timeout holgado.
 
-    Es la compuerta editorial: abre fuentes y corrobora con la web. Corre con Opus + `high` + ~600 s
+    Es la compuerta editorial: abre fuentes y corrobora con la web. Corre con Sonnet + `high` + ~600 s
     (configurables: `KENI_VERIFICACION_FUENTE_MODELO`, `KENI_VERIFICACION_FUENTE_ESFUERZO`,
     `KENI_VERIFICACION_FUENTE_TIMEOUT`). Se omiten las claves vacías (cada una cae a su global). None si
     no hay ningún override.
@@ -143,7 +143,7 @@ def lanzar_verificar_cluster(
     existe). El barrido de investigación admite luego solo las `no_verificado` (hereda el verificación
     al contenido) y deja fuera las `problema`. ASÍNCRONO: marca el cluster `en_curso` y devuelve la
     generación; None si no se pudo lanzar (sin doc / sin marca / sin nota). `ColaLlenaError` se PROPAGA
-    (corta la fase verificación de esa marca). Runtime fuerte (Opus/high/timeout holgado,
+    (corta la fase verificación de esa marca). Runtime fuerte (Sonnet/high/timeout holgado,
     `_endurecer_verificacion_fuente`).
     """
     from . import _admitir

@@ -102,16 +102,16 @@ def test_verificacion_cluster_persiste_veredicto_rechazado(entorno):
 
 
 def test_endurecer_verificacion_fuente_fuerte_por_defecto(monkeypatch):
-    """La verificación de la fuente corre FUERTE por defecto: Opus + esfuerzo high + timeout 600 s.
+    """La verificación de la fuente corre FUERTE por defecto: Sonnet + esfuerzo high + timeout 600 s.
 
-    Es la compuerta editorial y la fase más crítica (abre fuentes y corrobora con la web): el único
-    uso de Opus. Cada override es configurable por env y, vaciándolos todos, no se endurece nada (None).
+    Es la compuerta editorial (abre fuentes y corrobora con la web). Cada override es configurable
+    por env y, vaciándolos todos, no se endurece nada (None).
     """
     from keni_consola.pipeline_contenido import _verificar
 
     for var in ("KENI_VERIFICACION_FUENTE_MODELO", "KENI_VERIFICACION_FUENTE_ESFUERZO", "KENI_VERIFICACION_FUENTE_TIMEOUT"):
         monkeypatch.delenv(var, raising=False)
-    assert _verificar._endurecer_verificacion_fuente() == {"modelo": "opus", "esfuerzo": "high", "timeout": 600}
+    assert _verificar._endurecer_verificacion_fuente() == {"modelo": "sonnet", "esfuerzo": "high", "timeout": 600}
 
     # Overrides por env: abaratar a otro modelo / timeout más corto.
     monkeypatch.setenv("KENI_VERIFICACION_FUENTE_MODELO", "haiku")
@@ -158,4 +158,4 @@ def test_lanzar_verificacion_cluster_lanza_con_endurecer_fuerte(entorno, monkeyp
 
     assert gen is not None and gen["id"] == "gen-verificación-c1"
     assert capturado["tipo"] == "pipeline"  # trabajo de la máquina: un solo tipo en Actividad
-    assert capturado["endurecer"] == {"modelo": "opus", "esfuerzo": "high", "timeout": 600}
+    assert capturado["endurecer"] == {"modelo": "sonnet", "esfuerzo": "high", "timeout": 600}

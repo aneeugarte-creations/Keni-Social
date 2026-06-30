@@ -169,8 +169,8 @@ _PROMPT_RESOLVER_REBASE = (
 )
 
 
-def _resolver_rebase_con_agente(worktree: Path, modelo: str = "opus") -> bool:
-    """Lanza `claude -p` (Opus) para resolver un `git rebase origin/main` PAUSADO por conflictos.
+def _resolver_rebase_con_agente(worktree: Path, modelo: str = "sonnet") -> bool:
+    """Lanza `claude -p` (Sonnet) para resolver un `git rebase origin/main` PAUSADO por conflictos.
 
     El agente edita los ficheros en conflicto conservando ambas intenciones, hace `git add` y
     `git rebase --continue` hasta terminar (sin push ni abort). No streaming, acotado por el

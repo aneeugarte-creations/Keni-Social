@@ -624,7 +624,7 @@ def construir_dev_fase(
     """Spec del post-procesado de UNA fase del pipeline de desarrollo (analyze|plan|build|review).
 
     `sugerencia_id` es la fila a actualizar; `fase` la etapa que se ejecuta; `modelo` el modelo
-    de `claude` para ESE run (sonnet en analyze/plan/review, opus en build; lo decide
+    de `claude` para ESE run (opus en plan, sonnet en el resto; lo decide
     `dominio.desarrollo.modelo_de`). El worker lee `modelo` para pasar `--model`. El
     post-procesado parsea la salida (plan / resumen de diff) y actualiza la fila.
     """

@@ -1327,7 +1327,7 @@ services:
       KENI_DEV_REPO: /repo             # clon git donde crea el worktree del fix
       KENI_KEEPER_ROL: /keeper/ROL.md
       KENI_KEEPER_ESTADO: /estado
-      KENI_KEEPER_MODELO: ${KENI_KEEPER_MODELO:-opus}
+      KENI_KEEPER_MODELO: ${KENI_KEEPER_MODELO:-sonnet}
       KENI_KEEPER_INTERVALO: ${KENI_KEEPER_INTERVALO:-10}
       # Vigilancia de CI (réplica de ci-verde): 1 = arregla pipelines de `main` en rojo. DORMIDA
       # por defecto (0).
