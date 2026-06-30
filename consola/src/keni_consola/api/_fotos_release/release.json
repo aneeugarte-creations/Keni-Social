@@ -1,9 +1,9 @@
 {
-  "version": "0.8.0",
-  "notes": "Modo en vivo más rápido: cada vez que entran fotos, solo se procesan las nuevas (antes se reanalizaban todas en cada pasada).",
+  "version": "0.8.2",
+  "notes": "«Nuevo partido» pasa a ser una subpágina de Galería (ya no ocupa sitio en el menú) y el formulario queda centrado.",
   "pub_date": "2026-06-30T00:00:00Z",
   "darwin-aarch64": {
-    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcFFTNE1YY2JvZXRNTWlRMHRPSEZZVm9HZ1NLalUzem1zOVhuekN3RXFjZ3FSYmMybWJTRzlDZk5EOVVQZXQxTm1SajRaZm4zcW52M0JhblZJdERla2d3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyODQ1NDg3CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6Ck5WMnVEWFlmWXFmOWlLemVDeDNrN3NoNjB5RzNveDRpNUV6bFVTRGg0M1BSUzI5bnF6MWpuQXpFZEU4SFV5c0V5WnIzNnk0TllBZTd3MDNpem1kRUNnPT0K",
+    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcGJpeU4yV0xTbXo5dzMrNy9IRTdZSXVYdlFURHRScHZ0cG0zWlhPY2ZIWFFrT3B6aVJNMUh1ZVdmenA3Qm9ibHRpTHUrK1Z4ZmdMYWlUY1BqNFRHb3cwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyODU1NjIxCWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6CjdYbGx6QndJZXdIRHkzOVg3MVZBRWFhVG9XVk1sNFhnQUtKOWF4dmcvUm1hUkJCZTNCTWVQek8zWWhGWjdwV1pWRCtVTHNFc04zK1FWQlJmR044cEJBPT0K",
     "url": "https://social.kenitech.io/api/fotos/updater"
   }
 }
