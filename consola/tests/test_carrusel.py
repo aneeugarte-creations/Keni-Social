@@ -300,3 +300,125 @@ def test_lanzar_para_pieza_sin_copy_lanza_error(entorno):
     _pid, ids = _crear_contenido(["instagram"], "")
     with pytest.raises(dom_carrusel.CarruselError):
         dom_carrusel.lanzar_para_pieza(ids[0])
+
+
+# --------------------------------------------------------------------------- #
+# Reconciliación del `objeto` publicable con la receta del slide                 #
+# --------------------------------------------------------------------------- #
+
+
+def _parchear_horneado(monkeypatch, *, efectiva=None, plantilla_por_id=None):
+    """Parchea los seams de render para reconciliar sin renderer Node ni S3.
+
+    `componer_desde_plantilla_bytes` -> bytes deterministas por (documento, titular); guardar y
+    promover devuelven ids estables derivados de su entrada (content-addressed simulado).
+    """
+    from keni_consola import almacen_media, media
+    from keni_consola.dominio import estudio_imagen, render_pieza
+
+    monkeypatch.setattr(
+        render_pieza, "_plantilla_efectiva",
+        lambda pub: efectiva if efectiva is not None else {"documento": "{efectiva}"},
+    )
+    monkeypatch.setattr(
+        dom_carrusel.repos, "obtener_plantilla_diseno",
+        lambda pid: (plantilla_por_id or {}).get(pid),
+    )
+    monkeypatch.setattr(
+        estudio_imagen, "componer_desde_plantilla_bytes",
+        lambda doc, *, copy_in="", foto="", foco=None, zoom=0.0: f"{doc}|{copy_in}|{foto}".encode(),
+    )
+    monkeypatch.setattr(
+        media, "guardar_bytes_contenido",
+        lambda datos, *, ext, categoria: f"{categoria}/horneada-{datos.decode()}",
+    )
+    monkeypatch.setattr(
+        almacen_media, "promover_objeto", lambda clave, categoria: f"{categoria}/cruda-{clave}",
+    )
+
+
+def test_reconciliar_sin_placa_rehornea_la_foto_cruda(monkeypatch):
+    # «Sin placa» con foto: el objeto publicable es la foto cruda promovida, NO la placa cacheada.
+    _parchear_horneado(monkeypatch)
+    crudo = json.dumps([
+        {"tipo": "imagen", "objeto": "artes/placa-vieja", "foto": "fotos/x",
+         "titular": "Cayó 6-1", "sinPlaca": True},
+    ])
+    nuevo = dom_carrusel.reconciliar_objetos(_MARCA, crudo)
+    assert nuevo is not None
+    assert json.loads(nuevo)[0]["objeto"] == "artes/cruda-fotos/x"
+
+
+def test_reconciliar_con_plantilla_efectiva_rehornea_la_placa(monkeypatch):
+    _parchear_horneado(monkeypatch, efectiva={"documento": "{marca}"})
+    crudo = json.dumps([
+        {"tipo": "imagen", "objeto": "artes/stale", "foto": "fotos/y", "titular": "Renata"},
+    ])
+    nuevo = dom_carrusel.reconciliar_objetos(_MARCA, crudo)
+    assert json.loads(nuevo)[0]["objeto"] == "artes/horneada-{marca}|Renata|fotos/y"
+
+
+def test_reconciliar_idempotente_devuelve_none(monkeypatch):
+    # Un slide cuyo objeto ya coincide con su receta no cambia: reconciliar devuelve None (sin churn).
+    _parchear_horneado(monkeypatch)
+    crudo = json.dumps([
+        {"tipo": "imagen", "objeto": "artes/cruda-fotos/x", "foto": "fotos/x",
+         "titular": "t", "sinPlaca": True},
+    ])
+    assert dom_carrusel.reconciliar_objetos(_MARCA, crudo) is None
+
+
+def test_reconciliar_video_y_crudo_no_cambian(monkeypatch):
+    _parchear_horneado(monkeypatch)
+    crudo = json.dumps([
+        {"tipo": "video", "objeto": "videos/clip.mp4", "foto": "fotos/x", "titular": "t"},
+        {"tipo": "imagen", "objeto": "subido-a-mano.jpg"},  # crudo sin procedencia
+    ])
+    assert dom_carrusel.reconciliar_objetos(_MARCA, crudo) is None
+
+
+def test_reconciliar_plantilla_borrada_conserva_objeto(monkeypatch):
+    # Referencia explícita a una plantilla que ya no existe: no se recompone (como el editor).
+    _parchear_horneado(monkeypatch, plantilla_por_id={})
+    crudo = json.dumps([
+        {"tipo": "imagen", "objeto": "artes/vieja", "foto": "fotos/x",
+         "titular": "t", "plantillaId": "borrada"},
+    ])
+    assert dom_carrusel.reconciliar_objetos(_MARCA, crudo) is None
+
+
+def test_reconciliar_render_falla_es_best_effort(monkeypatch):
+    # Si el render lanza, ese slide conserva su objeto cacheado (no rompe el posteo).
+    _parchear_horneado(monkeypatch)
+    from keni_consola.dominio import estudio_imagen
+
+    def revienta(*a, **k):
+        raise RuntimeError("renderer caído")
+
+    monkeypatch.setattr(estudio_imagen, "componer_desde_plantilla_bytes", revienta)
+    crudo = json.dumps([
+        {"tipo": "imagen", "objeto": "artes/vieja", "foto": "fotos/x", "titular": "t"},
+    ])
+    assert dom_carrusel.reconciliar_objetos(_MARCA, crudo) is None
+
+
+def test_reconciliar_basura_y_vacio_devuelven_none(monkeypatch):
+    _parchear_horneado(monkeypatch)
+    assert dom_carrusel.reconciliar_objetos(_MARCA, "") is None
+    assert dom_carrusel.reconciliar_objetos(_MARCA, None) is None
+    assert dom_carrusel.reconciliar_objetos(_MARCA, "{roto") is None
+    assert dom_carrusel.reconciliar_objetos(_MARCA, '{"no":"lista"}') is None
+
+
+def test_reconciliar_mezcla_solo_reescribe_lo_que_difiere(monkeypatch):
+    # Un slide stale + uno ya consistente + un video: solo cambia el stale; el resto se preserva.
+    _parchear_horneado(monkeypatch)
+    crudo = json.dumps([
+        {"tipo": "imagen", "objeto": "artes/stale", "foto": "fotos/a",
+         "titular": "t", "sinPlaca": True},
+        {"tipo": "imagen", "objeto": "artes/cruda-fotos/b", "foto": "fotos/b",
+         "titular": "t", "sinPlaca": True},
+        {"tipo": "video", "objeto": "videos/clip.mp4"},
+    ])
+    objetos = [s["objeto"] for s in json.loads(dom_carrusel.reconciliar_objetos(_MARCA, crudo))]
+    assert objetos == ["artes/cruda-fotos/a", "artes/cruda-fotos/b", "videos/clip.mp4"]

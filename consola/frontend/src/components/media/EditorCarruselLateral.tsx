@@ -31,7 +31,46 @@ import { cn } from "@/lib/utils";
 
 const RETARDO_HORNEADO_MS = 1200;
 
-export function EditorCarruselLateral({
+/** Handle imperativo: el padre fuerza el VACIADO de la cola de horneados antes de persistir/avanzar. */
+export interface CarruselLateralHandle {
+  /** Hornea (await) los slides con horneado PENDIENTE y devuelve la lista final con sus `objeto`
+   *  ya frescos (la receta y el media publicable quedan sincronizados, sin esperar al debounce). */
+  flushHorneados: () => Promise<SlideCarrusel[]>;
+}
+
+export const EditorCarruselLateral = React.forwardRef<
+  CarruselLateralHandle,
+  {
+    marca: string;
+    piezaId: string;
+    plantillas: PlantillaDiseno[];
+    /** Copy del post: sugerencia del prompt al generar foto con IA. */
+    copy?: string;
+    /** Título del TEMA de la pieza: respaldo de la consulta inicial del buscador de fotos por slide. */
+    titulo?: string;
+    /** Keyword visual que propone Sugerir hashtags (`imagen_clave`): consulta por defecto del buscador
+     *  de stock por slide; cae al tema del título si no la hay. */
+    imagenClave?: string;
+    /** Imagen original (RSS) de respaldo del hueco 0 de la PORTADA. */
+    imagenFuente?: string;
+    // PORTADA (slide 0): estado del padre, persistido por su autoguardado.
+    portadaFotos: FotoCollage[];
+    onPortadaFotos: (f: FotoCollage[]) => void;
+    portadaCopyIn: string;
+    onPortadaCopyIn: (s: string) => void;
+    portadaPlantillaId: string;
+    onPortadaPlantillaId: (id: string) => void;
+    portadaPlacaOculta: boolean;
+    onPortadaPlacaOculta: (v: boolean) => void;
+    // SLIDES EXTRA (detrás de la portada).
+    slides: SlideCarrusel[];
+    onSlides: (s: SlideCarrusel[]) => void;
+    disabled?: boolean;
+    /** Fuerza el guardado de la pieza (la portada se sirve del estado GUARDADO): se llama antes de
+     *  descargar para que `/compuesta` no devuelva un render anterior a la última edición. */
+    onGuardarPortada?: () => Promise<void>;
+  }
+>(function EditorCarruselLateral({
   marca,
   piezaId,
   plantillas,
@@ -51,36 +90,7 @@ export function EditorCarruselLateral({
   onSlides,
   disabled = false,
   onGuardarPortada,
-}: {
-  marca: string;
-  piezaId: string;
-  plantillas: PlantillaDiseno[];
-  /** Copy del post: sugerencia del prompt al generar foto con IA. */
-  copy?: string;
-  /** Título del TEMA de la pieza: respaldo de la consulta inicial del buscador de fotos por slide. */
-  titulo?: string;
-  /** Keyword visual que propone Sugerir hashtags (`imagen_clave`): consulta por defecto del buscador
-   *  de stock por slide; cae al tema del título si no la hay. */
-  imagenClave?: string;
-  /** Imagen original (RSS) de respaldo del hueco 0 de la PORTADA. */
-  imagenFuente?: string;
-  // PORTADA (slide 0): estado del padre, persistido por su autoguardado.
-  portadaFotos: FotoCollage[];
-  onPortadaFotos: (f: FotoCollage[]) => void;
-  portadaCopyIn: string;
-  onPortadaCopyIn: (s: string) => void;
-  portadaPlantillaId: string;
-  onPortadaPlantillaId: (id: string) => void;
-  portadaPlacaOculta: boolean;
-  onPortadaPlacaOculta: (v: boolean) => void;
-  // SLIDES EXTRA (detrás de la portada).
-  slides: SlideCarrusel[];
-  onSlides: (s: SlideCarrusel[]) => void;
-  disabled?: boolean;
-  /** Fuerza el guardado de la pieza (la portada se sirve del estado GUARDADO): se llama antes de
-   *  descargar para que `/compuesta` no devuelva un render anterior a la última edición. */
-  onGuardarPortada?: () => Promise<void>;
-}) {
+}, ref) {
   const total = slides.length + 1;
   const [activo, setActivo] = React.useState(0);
   const [galeria, setGaleria] = React.useState(false);
@@ -97,12 +107,11 @@ export function EditorCarruselLateral({
   slidesRef.current = slides;
   const temporizadores = React.useRef<Map<number, number>>(new Map());
 
-  const hornear = React.useCallback(
-    async (i: number) => {
-      const s = slidesRef.current[i];
-      // Sin foto NI titular no hay placa que hornear (componer-slide daría 400): se deja como está.
-      if (!s || !slidePlacaEditable(s)) return;
-      setHorneando(i);
+  // Hornea la placa de UN slide (componer-slide) y devuelve su media id, o null si no aplica
+  // (slide sin foto ni titular: daría 400) o el render falla. NO toca el estado: el llamador decide.
+  const componerObjeto = React.useCallback(
+    async (s: SlideCarrusel): Promise<string | null> => {
+      if (!slidePlacaEditable(s)) return null;
       try {
         const resp = await api.componerSlide(piezaId, {
           foto: s.foto ?? "",
@@ -111,16 +120,51 @@ export function EditorCarruselLateral({
           foto_encuadre: s.fotoEncuadre ?? "",
           sin_plantilla: s.sinPlaca ?? false,
         });
-        // Fija el media horneado SIN tocar la receta (no reprograma otro horneado).
-        onSlides(slidesRef.current.map((x, k) => (k === i ? { ...x, objeto: resp.id } : x)));
+        return resp.id;
       } catch (e) {
         toast.error(mensajeError(e));
+        return null;
+      }
+    },
+    [piezaId],
+  );
+
+  const hornear = React.useCallback(
+    async (i: number) => {
+      const s = slidesRef.current[i];
+      if (!s) return;
+      setHorneando(i);
+      try {
+        const id = await componerObjeto(s);
+        // Fija el media horneado SIN tocar la receta (no reprograma otro horneado).
+        if (id) onSlides(slidesRef.current.map((x, k) => (k === i ? { ...x, objeto: id } : x)));
       } finally {
         setHorneando((h) => (h === i ? null : h));
       }
     },
-    [piezaId, onSlides],
+    [componerObjeto, onSlides],
   );
+
+  // Vacía la cola de horneados PENDIENTES (await) y devuelve la lista con los `objeto` ya frescos.
+  // En SERIE (no en paralelo) y acumulando sobre una copia local: cada horneado parte de la lista ya
+  // actualizada, así no se pisan entre sí (un `onSlides` por slide pendiente perdería los demás).
+  const flushHorneados = React.useCallback(async (): Promise<SlideCarrusel[]> => {
+    const pendientes = [...temporizadores.current.keys()];
+    for (const t of temporizadores.current.values()) window.clearTimeout(t);
+    temporizadores.current.clear();
+    if (!pendientes.length) return slidesRef.current;
+    let lista = slidesRef.current;
+    for (const i of pendientes) {
+      const s = lista[i];
+      if (!s) continue;
+      const id = await componerObjeto(s);
+      if (id) lista = lista.map((x, k) => (k === i ? { ...x, objeto: id } : x));
+    }
+    if (lista !== slidesRef.current) onSlides(lista);
+    return lista;
+  }, [componerObjeto, onSlides]);
+
+  React.useImperativeHandle(ref, () => ({ flushHorneados }), [flushHorneados]);
 
   const programarHornear = React.useCallback(
     (i: number) => {
@@ -135,19 +179,14 @@ export function EditorCarruselLateral({
     [hornear],
   );
 
-  // Al DESMONTAR (solo), dispara los horneados pendientes (best-effort) para no perder ediciones.
-  // Vía ref para no re-suscribir el efecto en cada render (si no, un `hornear` inestable flush-earía
-  // el debounce en cada render).
-  const hornearRef = React.useRef(hornear);
-  hornearRef.current = hornear;
+  // Al DESMONTAR (solo), vacía los horneados pendientes (best-effort) para no perder ediciones.
+  // Vía ref para no re-suscribir el efecto en cada render (si no, un `flushHorneados` inestable
+  // dispararía el flush en cada render).
+  const flushRef = React.useRef(flushHorneados);
+  flushRef.current = flushHorneados;
   React.useEffect(() => {
-    const timers = temporizadores.current;
     return () => {
-      for (const [i, t] of timers) {
-        window.clearTimeout(t);
-        void hornearRef.current(i);
-      }
-      timers.clear();
+      void flushRef.current();
     };
   }, []);
 
@@ -470,4 +509,4 @@ export function EditorCarruselLateral({
       )}
     </div>
   );
-}
+});

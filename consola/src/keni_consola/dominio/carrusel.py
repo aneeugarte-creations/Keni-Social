@@ -228,6 +228,89 @@ def hornear_slides(marca: str, titulares: list[str]) -> list[dict[str, str]]:
     return slides
 
 
+def objeto_publicable(marca: str, slide: dict[str, Any]) -> str:
+    """Media id que DEBE publicar un slide del carrusel según su RECETA (re-horneado desde cero).
+
+    Reproduce el horneado del editor (`POST componer-slide`) y del autogen a partir de la procedencia
+    del slide (`foto`/`titular`/`plantillaId`/`sinPlaca`/`fotoEncuadre`): plantilla efectiva de la
+    marca (o la indicada, o ninguna si «sin placa») compuesta con la foto + titular + reencuadre. Al
+    ir el PNG CONTENT-ADDRESSED, una receta ya consistente re-hornea al MISMO media (idempotente, sin
+    churn). Devuelve "" cuando el slide se publica tal cual:
+      - es VIDEO (no lleva placa) o crudo sin procedencia (no se puede recomponer),
+      - referencia una plantilla que ya no existe (como el editor: no se recompone),
+      - no compone (sin foto ni plantilla legible),
+      - o el render falla (best-effort: se conserva el objeto cacheado).
+    NUNCA lanza: la reconciliación es un extra del posteo, no debe romperlo.
+    """
+    if str(slide.get("tipo") or "imagen") == "video":
+        return ""
+    foto = str(slide.get("foto") or "").strip()
+    titular = str(slide.get("titular") or "").strip()
+    if not foto and not titular:
+        return ""
+
+    from .. import almacen_media, media
+    from . import estudio_imagen, render_pieza
+
+    plantilla: dict[str, Any] | None = None
+    if not bool(slide.get("sinPlaca")):
+        plantilla_id = str(slide.get("plantillaId") or "").strip()
+        if plantilla_id:
+            plantilla = repos.obtener_plantilla_diseno(plantilla_id)
+            if plantilla is None:
+                return ""  # plantilla borrada: igual que el editor, no se recompone
+        else:
+            try:
+                plantilla = render_pieza._plantilla_efectiva({"marca": marca})
+            except Exception:  # noqa: BLE001 -- sin plantilla legible: marca sin placa
+                plantilla = None
+
+    foco, zoom = estudio_imagen.parsear_encuadre(str(slide.get("fotoEncuadre") or ""))
+    try:
+        if plantilla is not None:
+            datos = estudio_imagen.componer_desde_plantilla_bytes(
+                plantilla.get("documento") or "{}",
+                copy_in=titular,
+                foto=foto,
+                foco=foco,
+                zoom=zoom,
+            )
+            return media.guardar_bytes_contenido(datos, ext="png", categoria="artes")
+        if foto:
+            return almacen_media.promover_objeto(foto, "artes")
+    except Exception:  # noqa: BLE001 -- render best-effort: se conserva el objeto cacheado
+        _log.warning("carrusel: no se pudo reconciliar el slide «%s»", titular[:60], exc_info=True)
+    return ""
+
+
+def reconciliar_objetos(marca: str, crudo: object) -> str | None:
+    """Reconcilia el `objeto` publicable de cada slide con su receta. JSON nuevo si CAMBIÓ algo, o None.
+
+    El `objeto` cacheado de un slide puede quedar DESINCRONIZADO de su receta —p. ej. se marcó «sin
+    placa» o se cambió la foto, pero el re-horneado del editor (debounced, flush best-effort al cerrar)
+    no llegó a persistir antes de publicar—, y el posteo lo manda en crudo. Aquí se recalcula desde la
+    receta justo antes del posteo, como la portada se materializa on-demand. Idempotente: un slide ya
+    consistente re-hornea al mismo media content-addressed, así que sólo se reescribe lo que difiere.
+    """
+    if not isinstance(crudo, str) or not crudo.strip():
+        return None
+    try:
+        datos = json.loads(crudo)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(datos, list):
+        return None
+    cambiado = False
+    for el in datos:
+        if not isinstance(el, dict):
+            continue
+        nuevo = objeto_publicable(marca, el)
+        if nuevo and nuevo != str(el.get("objeto") or "").strip():
+            el["objeto"] = nuevo
+            cambiado = True
+    return json.dumps(datos, ensure_ascii=False) if cambiado else None
+
+
 def aplicar_carrusel(publicacion_id: str, titulares: list[str]) -> list[dict[str, str]]:
     """Hornea los slides y escribe el MISMO `carrusel` JSON en cada pieza EDITABLE del contenido.
 

@@ -434,6 +434,25 @@ def _borrador_de_publicacion(pub: dict[str, Any]) -> object | None:
     # Metricool ya admite varias URLs en `media[]` (un solo post multi-media). Slides
     # ilegibles o sin URL pública se OMITEN con warning (no rompen el posteo del resto).
     if redes.normalizar_formato(pub.get("formato")) == redes.FORMATO_CARRUSEL:
+        # RECONCILIAR el `objeto` de cada slide con su receta antes de postear (igual que la portada
+        # se materializa on-demand): si el re-horneado del editor no llegó a persistir —p. ej. se
+        # marcó «sin placa» pero salió el horneado anterior—, aquí se recalcula y se CONGELA en la
+        # pieza. Best-effort: si algo falla, se publica el objeto cacheado (comportamiento previo).
+        from .dominio import carrusel as dom_carrusel
+
+        try:
+            carrusel_reconciliado = dom_carrusel.reconciliar_objetos(
+                pub.get("marca") or "", pub.get("carrusel")
+            )
+        except Exception:  # noqa: BLE001 -- reconciliar es best-effort; no aborta el posteo
+            _log.warning("Pieza %r (carrusel): falló la reconciliación de slides.", pub.get("id"))
+            carrusel_reconciliado = None
+        if carrusel_reconciliado:
+            pub["carrusel"] = carrusel_reconciliado
+            try:
+                repos.actualizar_pieza(pub["id"], {"carrusel": carrusel_reconciliado})
+            except Exception:  # noqa: BLE001 -- referenciar es best-effort; no aborta el posteo
+                _log.warning("Pieza %r: no se pudo fijar el carrusel reconciliado.", pub.get("id"))
         media.extend(_slides_carrusel(pub, MediaRef, TipoMedia))
 
     # Parsear la fecha programada como datetime (ya paso la validacion de vencimiento,

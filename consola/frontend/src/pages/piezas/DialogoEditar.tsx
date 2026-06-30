@@ -11,7 +11,10 @@ import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
 import { SugerenciaHashtags } from "@/components/hashtags/SugerenciaHashtags";
 import { agregarHashtags } from "./hashtags";
 import { EditorCarrusel } from "@/components/media/EditorCarrusel";
-import { EditorCarruselLateral } from "@/components/media/EditorCarruselLateral";
+import {
+  EditorCarruselLateral,
+  type CarruselLateralHandle,
+} from "@/components/media/EditorCarruselLateral";
 import { EditorImagen } from "@/components/media/EditorImagen";
 import { EditorPlacaInline } from "@/components/media/EditorPlacaInline";
 import { EditorVideo } from "@/components/media/EditorVideo";
@@ -109,6 +112,8 @@ function DialogoEditarInterno({
   const [videoUrl, setVideoUrl] = React.useState("");
   // CARRUSEL: slides EXTRA detrás de la portada (la portada es la placa de arriba).
   const [slides, setSlides] = React.useState<SlideCarrusel[]>([]);
+  // Handle del editor de carrusel: vacía su cola de horneados pendientes ANTES de persistir/avanzar.
+  const carruselRef = React.useRef<CarruselLateralHandle>(null);
   // --- Autoguardado --- //
   // La pieza se guarda SOLA al editar (debounced); no hay botón ni indicador de guardado.
   const cargandoRef = React.useRef(true); // true mientras se cargan los valores al abrir (no autoguarda)
@@ -504,7 +509,18 @@ function DialogoEditarInterno({
     // se genera el carrusel los OMITIMOS: el worker está rellenando ese campo y un PUT con la lista
     // local (aún vacía) pisaría sus slides.
     if (formato === "carrusel" && !generandoCarruselRef.current) {
-      cuerpo.carrusel = serializarCarrusel(slides);
+      // VACIAR (await) la cola de horneados pendientes de los slides ANTES de serializar: si un slide
+      // cambió de plantilla/«sin placa»/foto, su `objeto` publicable se hornea aquí, de modo que ni
+      // lo persistido ni el `enviar-a-revision` de abajo arrastren el horneado anterior (stale).
+      let slidesPersistir = slides;
+      if (carruselRef.current) {
+        try {
+          slidesPersistir = await carruselRef.current.flushHorneados();
+        } catch {
+          /* horneado best-effort: si falla, se persiste el estado actual (lo previo a este arreglo) */
+        }
+      }
+      cuerpo.carrusel = serializarCarrusel(slidesPersistir);
     }
     // El estado, la fecha y evergreen NO se tocan aquí: el flujo los gestiona solo (autogen → verificación →
     // me gusta → auto-programar). PATCH parcial: lo no enviado queda intacto.
@@ -781,6 +797,7 @@ function DialogoEditarInterno({
                   )}
                 </div>
                 <EditorCarruselLateral
+                  ref={carruselRef}
                   marca={pieza.marca}
                   piezaId={pieza.id}
                   plantillas={plantillas}

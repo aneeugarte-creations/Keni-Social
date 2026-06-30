@@ -18,6 +18,8 @@ mockan la carga de config de Metricool (no necesitan un TOML real).
 
 from __future__ import annotations
 
+import json
+
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import patch
@@ -264,6 +266,38 @@ def test_borrador_carrusel_portada_mas_slides(monkeypatch):
     assert [m.tipo for m in borrador.media] == [
         TipoMedia.imagen, TipoMedia.imagen, TipoMedia.video, TipoMedia.imagen,
     ]
+
+
+def test_borrador_carrusel_reconcilia_slide_stale(monkeypatch):
+    """Un slide «sin placa» con `objeto` stale se RECONCILIA a la foto cruda al construir el borrador,
+    y el carrusel reconciliado se CONGELA en la pieza (no se publica el horneado anterior)."""
+    monkeypatch.setenv("KENI_CONSOLA_URL_PUBLICA", "https://social.kenitech.io")
+    from keni_consola import almacen_media
+    from keni_consola.dominio import estudio_imagen, render_pieza
+
+    monkeypatch.setattr(render_pieza, "_plantilla_efectiva", lambda pub: {"documento": "{}"})
+    monkeypatch.setattr(estudio_imagen, "componer_desde_plantilla_bytes", lambda *a, **k: b"x")
+    monkeypatch.setattr(almacen_media, "promover_objeto", lambda clave, cat: f"{cat}/cruda-{clave}")
+    guardados: dict[str, Any] = {}
+    monkeypatch.setattr(repos, "actualizar_pieza", lambda pid, campos: guardados.update({pid: campos}))
+
+    pub = {
+        "id": "c9", "red": "instagram", "contenido": "nota", "marca": "claro-sports",
+        "formato": "carrusel", "imagen": "portada.png",
+        "carrusel": json.dumps([
+            {"tipo": "imagen", "objeto": "artes/placa-vieja", "foto": "fotos/r",
+             "titular": "Cayó 6-1", "sinPlaca": True},
+        ]),
+        "fecha_programada": "2026-06-10T18:00",
+    }
+    borrador = _borrador_de_publicacion(pub)
+    assert [m.url for m in borrador.media] == [
+        "https://social.kenitech.io/api/media/portada.png",
+        "https://social.kenitech.io/api/media/artes/cruda-fotos/r",
+    ]
+    # El carrusel reconciliado quedó CONGELADO en la pieza (objeto = foto cruda, no la placa vieja).
+    assert "artes/cruda-fotos/r" in guardados["c9"]["carrusel"]
+    assert "artes/placa-vieja" not in guardados["c9"]["carrusel"]
 
 
 def test_borrador_carrusel_sin_slides_va_solo_con_portada(monkeypatch):
