@@ -30,9 +30,28 @@ import {
   iconoRed,
   isoADatetimeLocal,
   nombreRed,
+  ORDEN_REDES,
 } from "./meta";
 
 type Vista = "mes" | "semana" | "dia";
+
+/** Estado VISIBLE de una pieza en el calendario (decide color y si es terminal). */
+type EstadoVisual = "publicado" | "vencida" | "programado";
+
+function estadoVisual(p: Pieza): EstadoVisual {
+  if (p.estado === "publicado") return "publicado";
+  if (estaVencida(p.estado, p.fecha_programada)) return "vencida";
+  return "programado";
+}
+
+/** Redes sin repetir, en el orden canónico de la plataforma (las desconocidas, al final). */
+function redesUnicas(redes: string[]): string[] {
+  const orden = (r: string) => {
+    const i = ORDEN_REDES.indexOf(r as (typeof ORDEN_REDES)[number]);
+    return i === -1 ? ORDEN_REDES.length : i;
+  };
+  return [...new Set(redes)].sort((a, b) => orden(a) - orden(b));
+}
 
 /**
  * Un HUECO LIBRE del plan, ya expandido POR RED: un slot del plan (día/hora/categoría) que el
@@ -134,10 +153,17 @@ function diasDeSemana(ancla: Date): Date[] {
  * clic-derecho el menú. La HORA es texto plano: reprogramar (cambiar día y/u hora) vive en el menú
  * contextual, no en el clic sobre la hora.
  *
- * La fila es un `<div>` arrastrable que envuelve el botón del título.
+ * AGRUPA LOS ESPEJOS: un mismo post (misma publicación) programado a la misma hora en varias redes
+ * sale como UNA sola píldora con todos sus logos. Las acciones (publicar ya / reprogramar /
+ * desprogramar / arrastrar) operan sobre TODAS las redes del grupo a la vez; «Editar» y el clic
+ * abren la representante (`piezas[0]`), ya que el contenido es el mismo en todas.
+ *
+ * La fila es un `<div>` arrastrable que envuelve los logos + la hora + el título.
  */
 function PildoraPub({
-  pieza,
+  piezas,
+  redes,
+  estado,
   onAbrir,
   onVerFeed,
   onDesprogramar,
@@ -145,25 +171,30 @@ function PildoraPub({
   onPublicarYa,
   ocupado,
 }: {
-  pieza: Pieza;
+  /** Las piezas espejo del grupo (1+); la primera es la representante. */
+  piezas: Pieza[];
+  /** Redes únicas del grupo, en orden canónico (para los logos). */
+  redes: string[];
+  estado: EstadoVisual;
   onAbrir: (p: Pieza) => void;
   /** Clic en la pieza: abre la caja del feed (vista previa de la red), no el editor. */
   onVerFeed: (p: Pieza) => void;
-  onDesprogramar: (p: Pieza) => void;
-  onReprogramar: (p: Pieza) => void;
-  onPublicarYa: (p: Pieza) => void;
+  onDesprogramar: (ps: Pieza[]) => void;
+  onReprogramar: (ps: Pieza[]) => void;
+  onPublicarYa: (ps: Pieza[]) => void;
   ocupado: boolean;
 }) {
-  const Icono = iconoRed(pieza.red);
+  const rep = piezas[0];
   // Ya publicado → verde; vencida (programada y pasada de hora sin salir) → rojo;
   // programado a futuro → ámbar.
-  const publicado = pieza.estado === "publicado";
-  const vencida = estaVencida(pieza.estado, pieza.fecha_programada);
+  const publicado = estado === "publicado";
+  const vencida = estado === "vencida";
+  const nombresRedes = redes.map(nombreRed).join(", ");
 
   return (
     <MenuContextual
       disparador="contextmenu"
-      etiqueta={`Acciones de "${pieza.titulo}"`}
+      etiqueta={`Acciones de "${rep.titulo}"`}
       items={[
         // Una pieza ya PUBLICADA es terminal: solo Editar/ver. No "Publicar ya" (doble post)
         // ni "Desprogramar" (el post ya salió; cambiar su fecha aquí solo mentiría).
@@ -171,10 +202,10 @@ function PildoraPub({
           ? [
               {
                 // BREAKING: publica YA (salta la parrilla). Real o dry-run según KENI_PUBLICAR_REAL.
-                etiqueta: "Publicar ya",
+                etiqueta: redes.length > 1 ? "Publicar ya (todas las redes)" : "Publicar ya",
                 icono: Zap,
                 deshabilitado: ocupado,
-                onClick: () => onPublicarYa(pieza),
+                onClick: () => onPublicarYa(piezas),
               },
             ]
           : []),
@@ -182,22 +213,23 @@ function PildoraPub({
         {
           etiqueta: "Editar",
           icono: Pencil,
-          onClick: () => onAbrir(pieza),
+          onClick: () => onAbrir(rep),
         },
         ...(!publicado
           ? [
               {
                 // Reprograma a un instante CUALQUIERA (fuera de los cajones fijos del plan).
-                etiqueta: "Reprogramar a otra hora",
+                etiqueta:
+                  redes.length > 1 ? "Reprogramar a otra hora (todas)" : "Reprogramar a otra hora",
                 icono: CalendarClock,
                 deshabilitado: ocupado,
-                onClick: () => onReprogramar(pieza),
+                onClick: () => onReprogramar(piezas),
               },
               {
-                etiqueta: "Desprogramar",
+                etiqueta: redes.length > 1 ? "Desprogramar (todas las redes)" : "Desprogramar",
                 icono: CalendarX,
                 deshabilitado: ocupado,
-                onClick: () => onDesprogramar(pieza),
+                onClick: () => onDesprogramar(piezas),
               },
             ]
           : []),
@@ -210,11 +242,11 @@ function PildoraPub({
         role="button"
         tabIndex={0}
         draggable={!publicado}
-        onClick={() => onVerFeed(pieza)}
+        onClick={() => onVerFeed(rep)}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            onVerFeed(pieza);
+            onVerFeed(rep);
           }
         }}
         onDragStart={(e) => {
@@ -222,15 +254,16 @@ function PildoraPub({
             e.preventDefault();
             return;
           }
-          e.dataTransfer.setData("text/plain", pieza.id);
+          // Arrastra TODO el grupo: la columna destino reprograma cada red a la vez.
+          e.dataTransfer.setData("text/plain", piezas.map((p) => p.id).join(","));
           e.dataTransfer.effectAllowed = "move";
         }}
         title={
           publicado
-            ? `${pieza.titulo} (${nombreRed(pieza.red)}) · ya publicada · clic para verla en el feed`
+            ? `${rep.titulo} (${nombresRedes}) · ya publicada · clic para verla en el feed`
             : vencida
-              ? `${pieza.titulo} (${nombreRed(pieza.red)}) · PASADA DE HORA, sin publicar · "Publicar ya" vive en el menú contextual (clic derecho)`
-              : `${pieza.titulo} (${nombreRed(pieza.red)}) · clic para verla en el feed · arrastra para mover · reprograma desde el menú (clic derecho)`
+              ? `${rep.titulo} (${nombresRedes}) · PASADA DE HORA, sin publicar · "Publicar ya" vive en el menú contextual (clic derecho)`
+              : `${rep.titulo} (${nombresRedes}) · clic para verla en el feed · arrastra para mover · reprograma desde el menú (clic derecho)`
         }
         className={cn(
           CLASES_ENTRADA_CALENDARIO,
@@ -243,16 +276,19 @@ function PildoraPub({
               : "bg-amber-500/15 text-amber-800 hover:bg-amber-500/25 dark:text-amber-200",
         )}
       >
-        {vencida ? (
+        {vencida && (
           <AlertTriangle className="h-3 w-3 shrink-0" aria-label="Pasada de hora, sin publicar" />
-        ) : (
-          <Icono className="h-3 w-3 shrink-0" />
         )}
+        {/* Un logo por red del grupo (post espejo): una sola fila con todas las redes. */}
+        {redes.map((red) => {
+          const Icono = iconoRed(red);
+          return <Icono key={red} className="h-3 w-3 shrink-0" aria-label={nombreRed(red)} />;
+        })}
         {/* La hora es texto plano (la reprogramación vive en el menú contextual). */}
         <span className="shrink-0 tabular-nums">
-          {formatearHoraOperativa(pieza.fecha_programada)}
+          {formatearHoraOperativa(rep.fecha_programada)}
         </span>
-        <span className="min-w-0 flex-1 truncate">{pieza.titulo}</span>
+        <span className="min-w-0 flex-1 truncate">{rep.titulo}</span>
       </div>
     </MenuContextual>
   );
@@ -313,63 +349,73 @@ export function VistaCalendario({
   const setAncla = onAncla ?? setAnclaLocal;
   const [diaSel, setDiaSel] = React.useState<string | null>(null);
   const [colActiva, setColActiva] = React.useState<string | null>(null);
-  // Pieza con el diálogo de "Reprogramar a otra hora" abierto (null = cerrado).
-  const [reprogramarPub, setReprogramarPub] = React.useState<Pieza | null>(null);
+  // Grupo de piezas espejo con el diálogo de "Reprogramar a otra hora" abierto (null = cerrado).
+  const [reprogramarGrupo, setReprogramarGrupo] = React.useState<Pieza[] | null>(null);
   const queryClient = useQueryClient();
 
   const invalidar = () => {
     void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS });
     void queryClient.invalidateQueries({ queryKey: ["contenido"] });
   };
+  // Las mutaciones operan sobre un GRUPO de espejos (1+ ids) en paralelo y rematan con un solo
+  // toast: reprogramar/desprogramar/publicar una píldora afecta a todas sus redes a la vez.
   const reprogramar = useMutation({
-    mutationFn: ({ id, iso }: { id: string; iso: string }) =>
-      api.actualizarPieza(id, { fecha_programada: iso }),
-    onSuccess: () => {
+    mutationFn: ({ ids, iso }: { ids: string[]; iso: string }) =>
+      Promise.all(ids.map((id) => api.actualizarPieza(id, { fecha_programada: iso }))),
+    onSuccess: (_res, { ids }) => {
       invalidar();
-      toast.success("Pieza reprogramada.");
-      setReprogramarPub(null);
+      toast.success(ids.length > 1 ? `${ids.length} piezas reprogramadas.` : "Pieza reprogramada.");
+      setReprogramarGrupo(null);
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
   const desprogramar = useMutation({
-    mutationFn: (id: string) =>
-      api.actualizarPieza(id, { estado: "borrador", fecha_programada: null }),
-    onSuccess: () => {
+    mutationFn: (ids: string[]) =>
+      Promise.all(
+        ids.map((id) => api.actualizarPieza(id, { estado: "borrador", fecha_programada: null })),
+      ),
+    onSuccess: (_res, ids) => {
       invalidar();
-      toast.success("Pieza desprogramada (vuelve a Borrador).");
+      toast.success(
+        ids.length > 1
+          ? `${ids.length} piezas desprogramadas (vuelven a Borrador).`
+          : "Pieza desprogramada (vuelve a Borrador).",
+      );
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
   // BREAKING: publica YA (salta la parrilla). Respeta `KENI_PUBLICAR_REAL`: ON publica de
   // verdad por Metricool; OFF deja una vista previa (dry-run) sin publicar.
   const publicarYa = useMutation({
-    mutationFn: (id: string) => api.programarEnMetricool(id),
-    onSuccess: (res) => {
+    mutationFn: (ids: string[]) => Promise.all(ids.map((id) => api.programarEnMetricool(id))),
+    onSuccess: (resultados) => {
       invalidar();
-      const r = res.resultado;
-      const redes = (r.redes ?? []).join(", ") || "—";
+      const redes =
+        [...new Set(resultados.flatMap((res) => res.resultado.redes ?? []))].join(", ") || "—";
+      const dry = resultados.every((res) => res.resultado.dry_run);
       toast.success(
-        r.dry_run
+        dry
           ? `Vista previa lista: se enviaría a Metricool (${redes}). No se publicó (dry-run).`
-          : `Publicado ya en Metricool (${redes})${r.id_post ? ` · id ${r.id_post}` : ""}`,
+          : `Publicado ya en Metricool (${redes}).`,
       );
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
   const ocupado = reprogramar.isPending || desprogramar.isPending || publicarYa.isPending;
-  const haciaDesprogramar = (p: Pieza) => desprogramar.mutate(p.id);
-  const haciaReprogramar = (p: Pieza) => setReprogramarPub(p);
+  const haciaDesprogramar = (ps: Pieza[]) => desprogramar.mutate(ps.map((p) => p.id));
+  const haciaReprogramar = (ps: Pieza[]) => setReprogramarGrupo(ps);
   // Clic en una pieza → caja del feed. Sin `onVerFeed` (uso suelto / tests) cae al editor.
   const haciaVerFeed = onVerFeed ?? onEditar;
-  const haciaPublicarYa = async (p: Pieza) => {
+  const haciaPublicarYa = async (ps: Pieza[]) => {
+    const redes = redesUnicas(ps.map((p) => p.red)).map(nombreRed).join(", ");
     if (
       await confirmar({
         titulo: "¿Publicar ya?",
-        mensaje: `Se publicará "${p.titulo}" en ${nombreRed(p.red)} de inmediato, saltando la parrilla.`,
+        mensaje: `Se publicará "${ps[0].titulo}" en ${redes} de inmediato, saltando la parrilla.`,
         textoConfirmar: "Publicar ya",
       })
     ) {
-      publicarYa.mutate(p.id);
+      publicarYa.mutate(ps.map((p) => p.id));
     }
   };
 
@@ -474,16 +520,18 @@ export function VistaCalendario({
 
   const hoy = hoyCDMX();
 
-  /** Mueve la pieza al día `diaClave` conservando su hora; no-op si ya está ese día. */
-  function moverADia(diaClave: string, idArrastrada: string) {
+  /** Mueve el grupo arrastrado (ids CSV) al día `diaClave` conservando su hora; no-op si ya está
+   *  ese día. Todas las redes del espejo se mueven juntas. */
+  function moverADia(diaClave: string, idsCsv: string) {
     setColActiva(null);
-    const pub = programadas.find((p) => p.id === idArrastrada);
+    const ids = idsCsv.split(",").filter(Boolean);
+    const pub = programadas.find((p) => p.id === ids[0]);
     if (!pub?.fecha_programada) return;
     if (diaCdmx(pub) === diaClave) return;
     // datetime-local (CDMX) destino = ese día a la MISMA hora; lo pasamos a instante UTC.
     const destino = datetimeLocalAIso(`${diaClave}T${hora24Cdmx(pub.fecha_programada)}`);
     if (!destino) return;
-    reprogramar.mutate({ id: idArrastrada, iso: destino });
+    reprogramar.mutate({ ids, iso: destino });
   }
 
   // OJO: SIN early-return cuando no hay programadas — el panel de programación lleva más
@@ -618,12 +666,13 @@ export function VistaCalendario({
         )}
       </div>
       <DialogoReprogramar
-        pieza={reprogramarPub}
+        pieza={reprogramarGrupo?.[0] ?? null}
         ocupado={reprogramar.isPending}
         onConfirmar={(iso) => {
-          if (reprogramarPub) reprogramar.mutate({ id: reprogramarPub.id, iso });
+          if (reprogramarGrupo)
+            reprogramar.mutate({ ids: reprogramarGrupo.map((p) => p.id), iso });
         }}
-        onCerrar={() => setReprogramarPub(null)}
+        onCerrar={() => setReprogramarGrupo(null)}
       />
     </>
   );
@@ -759,41 +808,102 @@ const LINEA_CORTA: Record<string, string> = {
   evergreen: "Ever.",
 };
 
-/** Chip fantasma de UN hueco libre del plan (hora CDMX + RED que falta + línea). */
-function ChipHueco({ hueco }: { hueco: Hueco }) {
-  const nombre = hueco.etiqueta || ETIQUETA_CATEGORIA[hueco.categoria] || hueco.categoria;
-  const col = colorCategoria(hueco.categoria);
-  const IconoRed = iconoRed(hueco.red);
+/** Chip fantasma de UN hueco libre del plan, ya AGRUPADO por slot (hora CDMX + línea): un solo
+ *  chip con los logos de TODAS las redes que faltan a esa hora para esa línea. */
+function ChipHueco({
+  hora,
+  categoria,
+  etiqueta,
+  redes,
+}: {
+  hora: string;
+  categoria: string;
+  etiqueta: string;
+  redes: string[];
+}) {
+  const nombre = etiqueta || ETIQUETA_CATEGORIA[categoria] || categoria;
+  const col = colorCategoria(categoria);
+  const nombresRedes = redes.map(nombreRed).join(", ");
   return (
     <div
       className={cn(
         CLASES_ENTRADA_CALENDARIO,
         "border-dashed border-border/70 text-muted-foreground",
       )}
-      title={`Hueco del plan: falta ${nombreRed(hueco.red)} · ${nombre} a las ${hueco.hora}`}
+      title={`Hueco del plan: falta ${nombresRedes} · ${nombre} a las ${hora}`}
     >
       <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", col.punto)} aria-hidden="true" />
-      <IconoRed className="h-3 w-3 shrink-0" aria-label={nombreRed(hueco.red)} />
-      <span className="tabular-nums">{hueco.hora}</span>
+      {redes.map((red) => {
+        const IconoRed = iconoRed(red);
+        return <IconoRed key={red} className="h-3 w-3 shrink-0" aria-label={nombreRed(red)} />;
+      })}
+      <span className="tabular-nums">{hora}</span>
       <span className="truncate">{nombre}</span>
     </div>
   );
 }
 
-/** Línea de tiempo del día: PIEZAS y HUECOS libres fusionados y ordenados por hora CDMX —
- *  cada pieza aparece EN su posición del plan, no apilada arriba. */
-function entradasDelDia(
-  items: Pieza[],
-  huecos: Hueco[],
-): ({ tipo: "pieza"; hora: string; p: Pieza } | {
-  tipo: "hueco"; hora: string; h: Hueco;
-})[] {
-  return [
-    ...items.map((p) => ({
-      tipo: "pieza" as const, hora: hora24Cdmx(p.fecha_programada), p,
-    })),
-    ...huecos.map((h) => ({ tipo: "hueco" as const, hora: h.hora, h })),
-  ].sort((a, b) => a.hora.localeCompare(b.hora));
+/** Entrada del día YA AGRUPADA: piezas espejo (mismo post, hora y estado) en un grupo; huecos del
+ *  mismo slot (hora + línea) en otro. Cada grupo lleva las redes que lo componen. */
+type EntradaPieza = {
+  tipo: "pieza";
+  clave: string;
+  hora: string;
+  estado: EstadoVisual;
+  piezas: Pieza[];
+  redes: string[];
+};
+type EntradaHueco = {
+  tipo: "hueco";
+  clave: string;
+  hora: string;
+  categoria: string;
+  etiqueta: string;
+  redes: string[];
+};
+
+/** Línea de tiempo del día: PIEZAS y HUECOS libres fusionados y ordenados por hora CDMX — cada
+ *  pieza aparece EN su posición del plan, no apilada arriba. Los ESPEJOS (mismo post a la misma
+ *  hora y estado en varias redes) y los huecos del mismo slot se colapsan en una sola entrada. */
+function entradasDelDia(items: Pieza[], huecos: Hueco[]): (EntradaPieza | EntradaHueco)[] {
+  // PIEZAS: agrupa por (hora · publicación · estado visible). Una pieza sin publicación,
+  // reprogramada a otra hora o ya publicada (estado distinto) cae sola: deja de ser espejo.
+  const grupos = new Map<string, EntradaPieza>();
+  for (const p of items) {
+    const hora = hora24Cdmx(p.fecha_programada);
+    const ev = estadoVisual(p);
+    const ident = p.publicacion_id ? `pub:${p.publicacion_id}` : `pieza:${p.id}`;
+    const clave = `${hora}|${ident}|${ev}`;
+    const g = grupos.get(clave);
+    if (g) g.piezas.push(p);
+    else grupos.set(clave, { tipo: "pieza", clave, hora, estado: ev, piezas: [p], redes: [] });
+  }
+  const gruposPieza = [...grupos.values()].map((g) => ({
+    ...g,
+    redes: redesUnicas(g.piezas.map((p) => p.red)),
+  }));
+
+  // HUECOS: agrupa por slot (hora · línea); cada red que falta aporta su logo.
+  const gruposHueco = new Map<string, EntradaHueco>();
+  for (const h of huecos) {
+    const clave = `${h.hora}|${h.categoria}|${h.etiqueta}`;
+    const g = gruposHueco.get(clave);
+    if (g) {
+      if (!g.redes.includes(h.red)) g.redes.push(h.red);
+    } else {
+      gruposHueco.set(clave, {
+        tipo: "hueco",
+        clave: `h-${clave}`,
+        hora: h.hora,
+        categoria: h.categoria,
+        etiqueta: h.etiqueta,
+        redes: [h.red],
+      });
+    }
+  }
+  for (const g of gruposHueco.values()) g.redes = redesUnicas(g.redes);
+
+  return [...gruposPieza, ...gruposHueco.values()].sort((a, b) => a.hora.localeCompare(b.hora));
 }
 
 /** Vista SEMANA: 7 columnas; piezas del día listadas; se arrastran entre días (reprograma). */
@@ -820,11 +930,11 @@ function VistaSemana({
   setColActiva: (v: string | null) => void;
   onAbrir: (p: Pieza) => void;
   onVerFeed: (p: Pieza) => void;
-  onDesprogramar: (p: Pieza) => void;
-  onReprogramar: (p: Pieza) => void;
-  onPublicarYa: (p: Pieza) => void;
+  onDesprogramar: (ps: Pieza[]) => void;
+  onReprogramar: (ps: Pieza[]) => void;
+  onPublicarYa: (ps: Pieza[]) => void;
   onAbrirDia: (d: Date) => void;
-  onSoltarEnDia: (diaClave: string, id: string) => void;
+  onSoltarEnDia: (diaClave: string, idsCsv: string) => void;
   ocupado: boolean;
   huecosDe: (dia: Date) => Hueco[];
 }) {
@@ -879,12 +989,14 @@ function VistaSemana({
               )}
             </button>
             <div className="flex-1 space-y-0.5 p-1">
-              {/* Piezas y huecos del plan FUSIONADOS por hora: cada pieza en su posición. */}
+              {/* Piezas y huecos del plan FUSIONADOS por hora; los espejos colapsados en una fila. */}
               {entradasDelDia(items, huecosDe(dia)).map((e) =>
                 e.tipo === "pieza" ? (
                   <PildoraPub
-                    key={e.p.id}
-                    pieza={e.p}
+                    key={e.clave}
+                    piezas={e.piezas}
+                    redes={e.redes}
+                    estado={e.estado}
                     onAbrir={onAbrir}
                     onVerFeed={onVerFeed}
                     onDesprogramar={onDesprogramar}
@@ -893,7 +1005,13 @@ function VistaSemana({
                     ocupado={ocupado}
                   />
                 ) : (
-                  <ChipHueco key={`h-${e.hora}-${e.h.categoria}-${e.h.red}`} hueco={e.h} />
+                  <ChipHueco
+                    key={e.clave}
+                    hora={e.hora}
+                    categoria={e.categoria}
+                    etiqueta={e.etiqueta}
+                    redes={e.redes}
+                  />
                 ),
               )}
             </div>
@@ -923,9 +1041,9 @@ function VistaDia({
   porDia: Map<string, Pieza[]>;
   onAbrir: (p: Pieza) => void;
   onVerFeed: (p: Pieza) => void;
-  onDesprogramar: (p: Pieza) => void;
-  onReprogramar: (p: Pieza) => void;
-  onPublicarYa: (p: Pieza) => void;
+  onDesprogramar: (ps: Pieza[]) => void;
+  onReprogramar: (ps: Pieza[]) => void;
+  onPublicarYa: (ps: Pieza[]) => void;
   onVolver: () => void;
   ocupado: boolean;
 }) {
@@ -957,12 +1075,14 @@ function VistaDia({
         <EstadoVacioTexto texto="Nada programado este día." className="py-8" />
       ) : (
         <div className="space-y-1">
-          {/* Piezas y huecos del plan FUSIONADOS por hora: cada pieza en su posición. */}
+          {/* Piezas y huecos del plan FUSIONADOS por hora; los espejos colapsados en una fila. */}
           {entradasDelDia(items, huecos).map((e) =>
             e.tipo === "pieza" ? (
               <PildoraPub
-                key={e.p.id}
-                pieza={e.p}
+                key={e.clave}
+                piezas={e.piezas}
+                redes={e.redes}
+                estado={e.estado}
                 onAbrir={onAbrir}
                 onVerFeed={onVerFeed}
                 onDesprogramar={onDesprogramar}
@@ -971,7 +1091,13 @@ function VistaDia({
                 ocupado={ocupado}
               />
             ) : (
-              <ChipHueco key={`h-${e.hora}-${e.h.categoria}-${e.h.red}`} hueco={e.h} />
+              <ChipHueco
+                key={e.clave}
+                hora={e.hora}
+                categoria={e.categoria}
+                etiqueta={e.etiqueta}
+                redes={e.redes}
+              />
             ),
           )}
         </div>

@@ -132,6 +132,56 @@ describe("VistaCalendario — aviso sin fecha y píldora terminal", () => {
   });
 });
 
+describe("VistaCalendario — agrupar espejos (mismo post, misma hora, varias redes)", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("colapsa el mismo post a la misma hora en una sola fila con un logo por red", () => {
+    renderCalendario(
+      [
+        pub({ id: "a", red: "x", publicacion_id: "c1" }),
+        pub({ id: "b", red: "instagram", publicacion_id: "c1" }),
+        pub({ id: "c", red: "facebook", publicacion_id: "c1" }),
+      ],
+      vi.fn(),
+      new Date(2026, 5, 15),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "semana" }));
+    // Un único título (no tres) para el post espejo, con su logo por cada red.
+    expect(screen.getAllByText("Gol")).toHaveLength(1);
+    expect(screen.getByLabelText("X")).toBeInTheDocument();
+    expect(screen.getByLabelText("Instagram")).toBeInTheDocument();
+    expect(screen.getByLabelText("Facebook")).toBeInTheDocument();
+  });
+
+  it("NO agrupa si una red se reprograma a otra hora (deja de ser espejo)", () => {
+    renderCalendario(
+      [
+        pub({ id: "a", red: "x", publicacion_id: "c1", fecha_programada: "2026-06-15T18:00" }),
+        pub({ id: "b", red: "instagram", publicacion_id: "c1", fecha_programada: "2026-06-15T20:00" }),
+      ],
+      vi.fn(),
+      new Date(2026, 5, 15),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "semana" }));
+    // Distinta hora → dos filas separadas.
+    expect(screen.getAllByText("Gol")).toHaveLength(2);
+  });
+
+  it("NO agrupa posts distintos (otra publicación) aunque coincidan en hora", () => {
+    renderCalendario(
+      [
+        pub({ id: "a", titulo: "Gol", red: "x", publicacion_id: "c1" }),
+        pub({ id: "b", titulo: "Penal", red: "x", publicacion_id: "c2" }),
+      ],
+      vi.fn(),
+      new Date(2026, 5, 15),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "semana" }));
+    expect(screen.getByText("Gol")).toBeInTheDocument();
+    expect(screen.getByText("Penal")).toBeInTheDocument();
+  });
+});
+
 describe("VistaCalendario — kill-switch de huecos del plan", () => {
   afterEach(() => vi.restoreAllMocks());
 
