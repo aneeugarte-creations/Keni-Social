@@ -66,6 +66,13 @@ vi.mock("@/lib/api", () => ({
   mensajeError: (e: unknown) => String(e),
 }));
 
+// Burn rate: el cálculo (time-dependiente) se prueba aparte en `lib/uso-burn.test.ts`; aquí solo
+// verificamos que la sección PINTA la predicción. Devuelve algo solo para la cuenta "a".
+const limiteMasUrgenteMock = vi.fn();
+vi.mock("@/lib/uso-burn", () => ({
+  limiteMasUrgente: (uso: { cuenta: string }) => limiteMasUrgenteMock(uso),
+}));
+
 const marcaActivaMock = vi.fn();
 const usoMock = vi.fn();
 vi.mock("@/hooks/marca-activa-contexto", () => ({
@@ -105,6 +112,7 @@ const CUENTAS_USO: UsoCuenta[] = [
 beforeEach(() => {
   marcaActivaMock.mockReturnValue({ marcaActiva: null });
   usoMock.mockReturnValue({ data: { cuentas: CUENTAS_USO } });
+  limiteMasUrgenteMock.mockReturnValue(null); // por defecto, sin predicción
 });
 
 afterEach(() => {
@@ -185,5 +193,14 @@ describe("SeccionCuentaClaude", () => {
     await waitFor(() =>
       expect(asignarCuentaMarca).toHaveBeenCalledWith({ marca: "claro-sports", cuenta: "b" }),
     );
+  });
+
+  it("pinta el burn rate (límite que ANTES llegará al 100%) en la tarjeta conectada", async () => {
+    limiteMasUrgenteMock.mockReturnValue({ limite: "sonnet", etiqueta: "Sonnet", pct: 58, horas: 6 });
+    renderSeccion();
+    // La cuenta A está conectada -> pinta la predicción; la B (sin cuenta) no.
+    expect(await screen.findByText(/Primero al 100/)).toBeInTheDocument();
+    expect(screen.getByText("Sonnet")).toBeInTheDocument();
+    expect(screen.getByText("~6 h")).toBeInTheDocument();
   });
 });

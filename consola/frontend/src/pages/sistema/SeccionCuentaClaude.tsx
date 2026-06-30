@@ -3,6 +3,7 @@ import {
   BadgeCheck,
   Copy,
   ExternalLink,
+  Gauge,
   KeyRound,
   LogOut,
   RefreshCw,
@@ -43,6 +44,7 @@ import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { CLAVE_USO_CUENTA, useUsoCuenta } from "@/hooks/use-uso-cuenta";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFechaHoraCorta, haceSegundos } from "@/lib/fecha";
+import { limiteMasUrgente, type PrediccionUso } from "@/lib/uso-burn";
 import { cn } from "@/lib/utils";
 import type {
   CuentaAuth,
@@ -385,6 +387,28 @@ function SelectorMarcas({
   );
 }
 
+/** Tiempo legible hasta el 100 %: «ya», «<1 h», «~N h» o «~N d». */
+function tiempoBurn(horas: number): string {
+  if (horas <= 0) return "ya";
+  if (horas < 1) return "<1 h";
+  if (horas < 48) return `~${Math.round(horas)} h`;
+  return `~${Math.round(horas / 24)} d`;
+}
+
+/** Predicción de burn rate: qué límite (5h / Semana / Sonnet) llegará ANTES al 100 %. `null` si no
+ *  hay datos suficientes para predecir. */
+function LineaBurnRate({ prediccion }: { prediccion: PrediccionUso | null }) {
+  if (!prediccion) return null;
+  return (
+    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <Gauge className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      Primero al 100 %:{" "}
+      <span className="font-medium text-foreground">{prediccion.etiqueta}</span>
+      <span className="tabular-nums">{tiempoBurn(prediccion.horas)}</span>
+    </p>
+  );
+}
+
 function TarjetaCuenta({
   cuenta,
   titulo,
@@ -392,6 +416,7 @@ function TarjetaCuenta({
   reparto,
   onMover,
   marcaPendiente,
+  prediccion,
 }: {
   cuenta: Cuenta;
   titulo: string;
@@ -399,6 +424,7 @@ function TarjetaCuenta({
   reparto: RespuestaCuentaMarcas | undefined;
   onMover: (marca: string, cuenta: Cuenta) => void;
   marcaPendiente: string | undefined;
+  prediccion: PrediccionUso | null;
 }) {
   const query = useQuery({
     queryKey: ["sistema", "cuenta", cuenta],
@@ -492,6 +518,7 @@ function TarjetaCuenta({
             </dl>
 
             <BloqueUso uso={data.uso} />
+            <LineaBurnRate prediccion={prediccion} />
 
             <div className="flex items-center gap-2 pt-1">
               <DialogoCambiarCuenta cuenta={cuenta} conectado onCambiada={refrescar} />
@@ -565,6 +592,12 @@ export function SeccionCuentaClaude() {
 
   const marcaPendiente = asignar.isPending ? asignar.variables?.marca : undefined;
 
+  // Burn rate por cuenta: reutiliza el snapshot de uso (`/sistema/uso`) que ya consume esta sección.
+  const prediccion = (cuenta: Cuenta): PrediccionUso | null => {
+    const uso = data?.cuentas.find((c) => c.cuenta === cuenta);
+    return uso ? limiteMasUrgente(uso) : null;
+  };
+
   return (
     <div className="space-y-4">
       {cuentas.map((cuenta) => (
@@ -575,6 +608,7 @@ export function SeccionCuentaClaude() {
           reparto={repartoQuery.data}
           onMover={(marca, c) => asignar.mutate({ marca, cuenta: c })}
           marcaPendiente={marcaPendiente}
+          prediccion={prediccion(cuenta)}
         />
       ))}
     </div>
