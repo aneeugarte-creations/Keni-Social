@@ -1,9 +1,9 @@
 {
-  "version": "0.3.0",
-  "notes": "Exportar fotos: saca los originales de la galería o de una búsqueda a una carpeta, y revélalos en Finder.",
-  "pub_date": "2026-06-29T00:00:00Z",
+  "version": "0.4.0",
+  "notes": "Conexión de la cámara: la app detecta si el servidor SFTP está activo y te muestra los datos (IP, puerto, usuario, carpeta) para configurar la transferencia desde la cámara en el modo en vivo.",
+  "pub_date": "2026-06-30T00:00:00Z",
   "darwin-aarch64": {
-    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcFl4T1NqTDlzSERSNU5sZnYxTFlFNnFBZFoyZW9yV3krV3cxb3lob1JOS0h6dk9qczZLZnRrcnZzaE5pd2p5Vk85eWpwVVJnUzlqaEs0d0syNUtCMUFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyODM1NDM2CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6CndGUVdESzRSUEFkN1NGSEt1SGxiRUtPanptanI2M1lXck51MjBZcTg1SXJ1dlhlbkNGaDQzaEtSMFBOUGNUclVWV25rSFQyeWVkaFVEUGM0bmt0ZEFnPT0K",
+    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcFp4blQzaU5Gd3Vwc3B4QlNOQzgvR0MxOEMzaXdqYXAyK3pZYTlBZzZQU0ZqUFVmd2lUN0xyc2pLVHNETTRWeUZmSWRXNlFaeHRud1pLQlNma0N4d0F3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyODM2MjQ3CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6Cm50WExFYW8xdklzMUdHMUg2ODl6czVrQ2I3bTQ0SmV2c0YzQzh0dDJpc3VJRC9UTFpFREdjaTlUZ3pnWGlzRU43cW5tbjJjajIweXVaUWtEeGNKSUJRPT0K",
     "url": "https://social.kenitech.io/api/fotos/updater"
   }
 }
