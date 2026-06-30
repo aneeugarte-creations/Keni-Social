@@ -85,6 +85,8 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_PROMOVER_MIN_SCORE,
         # Esfuerzo de razonamiento de la generación (palanca calidad/coste, se edita en Economía).
         config.ENV_ESFUERZO,
+        # Ritmo de producción global (%): dial gradual del gasto que escala los caps de auto-producción.
+        config.ENV_RITMO,
     }
     # Los toggles por marca (clave `ENV::marca`) se generan en caliente; el resto del catálogo
     # son exactamente las claves globales esperadas.
