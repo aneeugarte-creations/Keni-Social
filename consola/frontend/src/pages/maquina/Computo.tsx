@@ -21,7 +21,7 @@ import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { INTERVALO_VIVO_MS } from "@/lib/refresco";
-import { Kpi, TablaDesglose, TablaJobs } from "@/pages/maquina/cola-comun";
+import { Kpi, TablaBacklog, TablaDesglose, TablaJobs } from "@/pages/maquina/cola-comun";
 import { PROC_META } from "@/pages/monitor/comun";
 import type { ColaJob, Proceso } from "@/types";
 
@@ -83,6 +83,13 @@ export default function Computo() {
   const desglose = useQuery({
     queryKey: ["actividad", "cola", "desglose"],
     queryFn: ({ signal }) => api.colaDesglose(signal),
+    refetchInterval: INTERVALO_VIVO_MS,
+  });
+
+  // Embalse del tablero por marca×etapa (sin filtro): el backlog que precede a la cola de jobs.
+  const backlog = useQuery({
+    queryKey: ["produccion", "backlog"],
+    queryFn: ({ signal }) => api.produccionBacklog(signal),
     refetchInterval: INTERVALO_VIVO_MS,
   });
 
@@ -228,6 +235,11 @@ export default function Computo() {
           </Link>
         </p>
       )}
+
+      {/* Embalse del tablero: el backlog por marca×etapa que se acumula ANTES de la cola de jobs.
+          Va arriba para leer la cadena de arriba abajo (embalse A→E → cola de jobs → publicado).
+          Siempre visible, sin filtro de marca (es la foto completa, como el endpoint). */}
+      {backlog.data && <TablaBacklog backlog={backlog.data} />}
 
       {/* Jobs huérfanos: parte del conteo global sin generación detrás (no se procesan). El botón
           de limpiarlos es admin (el back responde 403 si no lo es). */}

@@ -3,6 +3,7 @@
 import { peticion, query } from "./_core";
 import type {
   ActividadAgregados,
+  Backlog,
   ColaDesglose,
   ColaMonitor,
   ColaPreview,
@@ -71,4 +72,8 @@ export const apiActividad = {
   // Producción del día (líneas del plan editorial) para el Monitor.
   produccionDia: (marca: string, signal?: AbortSignal) =>
     peticion<ProduccionDia>(`/produccion/dia${query({ marca })}`, { signal }),
+  // Backlog COMPLETO por marca×etapa (todas las marcas, sin filtro): el embalse del tablero que
+  // se acumula ANTES de la cola de jobs. La consume el embudo del Monitor.
+  produccionBacklog: (signal?: AbortSignal) =>
+    peticion<Backlog>("/produccion/backlog", { signal }),
 };

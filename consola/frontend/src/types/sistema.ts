@@ -413,6 +413,38 @@ export interface ProduccionDia {
   por_categoria: ProduccionLinea[];
 }
 
+/** Las 6 etapas del backlog en ORDEN DE CADENA (entrada → salida): el embalse que precede a la
+ *  cola de jobs. Siempre las 6 presentes. */
+export interface BacklogEtapas {
+  /** [A] Noticias recolectadas (RSS/radar) aún sin entrar al tablero. */
+  pool_sin_admitir: number;
+  /** [B] Temas admitidos esperando verificación o copy. */
+  pipeline_en_proceso: number;
+  /** [C] Temas del tablero SIN copy esperando a «Generar copy»: la cola oculta que entra de golpe. */
+  esperando_copy: number;
+  /** [D1] Copy encolado o en curso. */
+  generando_copy: number;
+  /** [D2] Con copy, esperando ilustración. */
+  generando_arte: number;
+  /** [E] Completas, ya en la parrilla/revisión. */
+  lista_para_revisar: number;
+}
+
+/** Backlog de UNA marca: las 6 etapas de la cadena + su total (suma de las 6). */
+export interface BacklogMarca {
+  marca: string;
+  /** Nombre legible de la marca. */
+  nombre: string;
+  etapas: BacklogEtapas;
+  total: number;
+}
+
+/** Foto completa del backlog por marca × etapa (`GET /api/produccion/backlog`, sin filtro).
+ *  `marcas` ordenado por id; el embalse que se acumula ANTES de la cola de jobs. */
+export interface Backlog {
+  marcas: BacklogMarca[];
+}
+
 // --- Pipelines (vista estilo GitLab del pipeline de contenido CI/CD) ---
 
 /** Una etapa de una run del pipeline (CI/CD/verificación/Aprobación). */

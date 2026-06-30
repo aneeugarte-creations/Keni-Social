@@ -35,6 +35,8 @@ import { cn } from "@/lib/utils";
 import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
 import { PROC_META } from "@/pages/monitor/comun";
 import type {
+  Backlog,
+  BacklogEtapas,
   ColaDesglose,
   ColaJob,
   ConteoCola,
@@ -290,6 +292,128 @@ export function TablaDesglose({
               <TableRow>
                 <TableCell colSpan={6} className="px-6 py-6 text-sm text-muted-foreground">
                   Cola vacía: nada encolado ni en curso.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Las 6 etapas del backlog EN ORDEN DE CADENA (entrada → salida), con su rótulo humano y el
+ *  significado para el tooltip. `acento` marca la etapa culpable de la avalancha (esperando_copy):
+ *  los temas SIN copy que entran de golpe al activar «Generar copy». */
+const ETAPAS_BACKLOG: {
+  clave: keyof BacklogEtapas;
+  etiqueta: string;
+  descripcion: string;
+  acento?: boolean;
+}[] = [
+  {
+    clave: "pool_sin_admitir",
+    etiqueta: "Pool",
+    descripcion: "Noticias recolectadas (RSS/radar) que aún no entran al tablero.",
+  },
+  {
+    clave: "pipeline_en_proceso",
+    etiqueta: "En proceso",
+    descripcion: "Temas admitidos esperando verificación o copy.",
+  },
+  {
+    clave: "esperando_copy",
+    etiqueta: "Esperando copy",
+    descripcion:
+      "Temas del tablero SIN copy esperando a que se active «Generar copy». Aquí se acumula la avalancha que entra de golpe al activar la marca.",
+    acento: true,
+  },
+  {
+    clave: "generando_copy",
+    etiqueta: "Generando copy",
+    descripcion: "Copy encolado o en curso.",
+  },
+  {
+    clave: "generando_arte",
+    etiqueta: "Generando arte",
+    descripcion: "Con copy, esperando ilustración.",
+  },
+  {
+    clave: "lista_para_revisar",
+    etiqueta: "Lista para revisar",
+    descripcion: "Completas, ya en la parrilla o revisión.",
+  },
+];
+
+/** Celda de una etapa del backlog: el número (0 atenuado). La etapa `esperando_copy` se realza en
+ *  ámbar por ser la cola oculta que provoca la avalancha. */
+function CeldaBacklog({ n, acento }: { n: number; acento?: boolean }) {
+  return (
+    <TableCell
+      className={cn(
+        "text-right tabular-nums",
+        acento && n > 0 && "bg-amber-50/60 font-semibold text-amber-700 dark:bg-amber-950/20 dark:text-amber-400",
+        !(acento && n > 0) && (n > 0 ? "text-foreground" : "text-muted-foreground/50"),
+      )}
+    >
+      {n}
+    </TableCell>
+  );
+}
+
+/** EMBUDO del backlog por marca×etapa (`GET /api/produccion/backlog`, foto completa sin filtro): el
+ *  EMBALSE que se acumula ANTES de la cola de jobs. Filas = marcas; columnas = las 6 etapas EN ORDEN
+ *  DE CADENA (entrada → salida) + el total. Resalta `esperando_copy`, la cola oculta de temas sin
+ *  copy que entra de golpe al activar «Generar copy». */
+export function TablaBacklog({ backlog }: { backlog: Backlog }) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Embalse del tablero (antes de la cola)</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          El contenido se acumula a lo largo de la cadena ANTES de la cola de jobs. La columna{" "}
+          <span className="font-medium text-amber-700 dark:text-amber-400">Esperando copy</span> es la
+          que entra de golpe al activar «Generar copy» de una marca.
+        </p>
+      </CardHeader>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="pl-6">Marca</TableHead>
+              {ETAPAS_BACKLOG.map((e) => (
+                <TableHead
+                  key={e.clave}
+                  className={cn("text-right", e.acento && "text-amber-700 dark:text-amber-400")}
+                  title={e.descripcion}
+                >
+                  {e.etiqueta}
+                </TableHead>
+              ))}
+              <TableHead className="pr-6 text-right">Total</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {backlog.marcas.map((m) => (
+              <TableRow key={m.marca}>
+                <TableCell className="pl-6 font-medium">{m.nombre || m.marca}</TableCell>
+                {ETAPAS_BACKLOG.map((e) => (
+                  <CeldaBacklog key={e.clave} n={m.etapas[e.clave]} acento={e.acento} />
+                ))}
+                <TableCell
+                  className={cn(
+                    "pr-6 text-right font-medium tabular-nums",
+                    m.total > 0 ? "text-foreground" : "text-muted-foreground/50",
+                  )}
+                >
+                  {m.total}
+                </TableCell>
+              </TableRow>
+            ))}
+            {backlog.marcas.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={ETAPAS_BACKLOG.length + 2} className="px-6 py-6 text-sm text-muted-foreground">
+                  Sin marcas configuradas.
                 </TableCell>
               </TableRow>
             )}
