@@ -356,11 +356,11 @@ def test_gate_diario_aceptar_requiere_admin(entorno):
     assert all(g["aceptados_hoy"] == 0 for g in cuentas.values())
 
 
-def test_lanzar_urgente_encola_con_prioridad_breaking(entorno, monkeypatch):
-    """`dominio.generar.lanzar(urgente=True)` en tipo de FONDO encola a PRIORIDAD_BREAKING.
+def test_lanzar_dos_niveles_manual_y_automatico(entorno, monkeypatch):
+    """Gestor de prioridad (`dominio.generar.lanzar`): SOLO dos niveles. Lo lanza la maquina
+    (tipo de fondo: autogen/pipeline) -> AUTOMATICO; lo lanza una persona (tipo que no es de
+    fondo como copy, o `manual=True`) -> MANUAL. Manual gana. Nada mas.
 
-    Es el carril de las historias CURADAS desde el panel (breaking empujada por un humano):
-    su copy adelanta al lote de fondo sin pisar los lanzamientos manuales (10 > 5 > 0).
     Se captura el SPEC en el seam de encolado (`encolar_job_claude`): en tests el worker
     in-proceso correría el job al instante y la fila no quedaría observable en la cola.
     """
@@ -378,25 +378,32 @@ def test_lanzar_urgente_encola_con_prioridad_breaking(entorno, monkeypatch):
         procesar=jobspec.reconstruir_procesar({"procesar": spec_proc}),
         procesar_spec=spec_proc,
     )
-    urgente = dom_generar.lanzar(tipo="autogen", urgente=True, clave_idem="k1", **comunes)
-    fondo = dom_generar.lanzar(tipo="autogen", clave_idem="k2", **comunes)
-    manual = dom_generar.lanzar(tipo="copy", clave_idem="k3", **comunes)
-    assert jobspec.prioridad(specs[urgente["id"]]) == jobspec.PRIORIDAD_BREAKING
-    assert jobspec.prioridad(specs[fondo["id"]]) == jobspec.PRIORIDAD_PIPELINE
-    assert jobspec.prioridad(specs[manual["id"]]) == jobspec.PRIORIDAD_MANUAL
+    automatico = dom_generar.lanzar(tipo="autogen", clave_idem="k1", **comunes)
+    a_mano = dom_generar.lanzar(tipo="autogen", manual=True, clave_idem="k2", **comunes)
+    copy = dom_generar.lanzar(tipo="copy", clave_idem="k3", **comunes)
+    assert jobspec.prioridad(specs[automatico["id"]]) == jobspec.PRIORIDAD_AUTOMATICO
+    assert jobspec.prioridad(specs[a_mano["id"]]) == jobspec.PRIORIDAD_MANUAL
+    assert jobspec.prioridad(specs[copy["id"]]) == jobspec.PRIORIDAD_MANUAL
 
 
 def test_priorizar_adelanta_job_pendiente_admin(entorno):
-    """Priorizar sube el job ESPERANDO a URGENTE: adelanta a TODO lo pendiente, también a
-    otros manuales (antes manual→manual empataba y decidía el id aleatorio: flake + botón
-    del Monitor sin efecto entre manuales)."""
-    primero = _encolar("Fondo viejo")
-    segundo = _encolar("Breaking esperando")
+    """Priorizar sube un job AUTOMATICO que espera al nivel MANUAL: el worker lo clava antes
+    que el resto de lo automatico pendiente. Solo dos niveles (gestor de prioridad), nada mas."""
+    def _encolar_auto(etiqueta: str) -> str:
+        gen = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": etiqueta})
+        cola.encolar(gen["id"], jobspec.construir(
+            prompt="p", procesar=jobspec.construir_prompt_lib(),
+            prioridad=jobspec.PRIORIDAD_AUTOMATICO,
+        ))
+        return gen["id"]
+
+    primero = _encolar_auto("Automatico viejo")
+    segundo = _encolar_auto("Automatico esperando")
     r = _cli_como("admin").post(
         "/api/actividad/cola/priorizar", json={"gen_id": segundo}, headers=_ORIGIN
     )
     assert r.status_code == 200 and r.json()["priorizado"] is True
-    # El priorizado adelanta: el siguiente claim se lleva al segundo, no al primero (FIFO roto).
+    # El priorizado sube a MANUAL: el siguiente claim se lo lleva, no al primero (FIFO roto).
     job = cola.reclamar("w")
     assert job is not None and job["gen_id"] == segundo
     assert cola.reclamar("w2")["gen_id"] == primero

@@ -77,8 +77,8 @@ def _encolar_perfil(marca: str, *, ttl_horas: int, ahora: datetime) -> None:
             # Haiku (config.insumos_modelo()): extraer temas/keywords es mecánico, mismo modelo que
             # usaba el refresco inline y que usan Traducir/insumos.
             endurecer={"modelo": config.insumos_modelo()},
-            # Fondo del pipeline: cede el paso a los lanzamientos manuales del equipo.
-            prioridad=jobspec.PRIORIDAD_PIPELINE,
+            # Lo lanza la maquina: AUTOMATICO, cede el paso a los lanzamientos manuales del equipo.
+            prioridad=jobspec.PRIORIDAD_AUTOMATICO,
         )
         cola.encolar(gen_id, spec, proceso=generaciones.PROCESO_INVESTIGACION, marca=marca)
     except generaciones.ColaLlenaError:

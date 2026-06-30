@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from . import copy as dom_copy
+from . import prioridad as _prioridad
 from . import verificar_fuente as dom_verificar
 
 # Versiona el spec por si su forma cambia (un worker viejo no debe malinterpretar uno nuevo).
@@ -30,19 +31,11 @@ VERSION = 1
 # columna `jobs.prioridad` y `reclamar_job` ordena por ella. Un lanzamiento MANUAL del equipo
 # (API/MCP) pasa primero; el lote de fondo del pipeline/autogen cede el paso.
 #
-# TRES niveles (CONTRATO con el pipeline de noticias): `PRIORIDAD_BREAKING` es para el fondo
-# URGENTE (una breaking corroborada no debe esperar detras del lote ordinario) — adelanta al
-# pipeline normal pero NUNCA a una persona, y a ojos de la economia de tokens SIGUE siendo
-# fondo (prioridad < MANUAL): el corte de presupuesto `solo_manual` tambien lo frena. Quien
-# decide QUE es breaking es el pipeline (dominio del feed); aqui solo se despacha.
-PRIORIDAD_PIPELINE = 0
-PRIORIDAD_BREAKING = 5
-PRIORIDAD_MANUAL = 10
-# "Este primero" del Monitor (decisión humana EXPLÍCITA sobre un job concreto): por encima
-# de TODO lo pendiente, también de otros manuales. Sin este nivel, priorizar un job manual
-# era un no-op (manual→manual empata y decide el id aleatorio del desempate: a veces
-# adelantaba, a veces no — el botón del Monitor mentía la mitad de las veces).
-PRIORIDAD_URGENTE = 20
+# DOS niveles, decididos por el gestor de prioridad (`dominio.prioridad`): MANUAL (lo lanza una
+# persona) gana SIEMPRE a AUTOMATICO (lo lanza la maquina: pipeline/autogen/daemons). Nada mas.
+# Se re-exportan aqui porque la columna `jobs.prioridad` viaja DENTRO del spec.
+PRIORIDAD_AUTOMATICO = _prioridad.AUTOMATICO
+PRIORIDAD_MANUAL = _prioridad.MANUAL
 
 # cwd NEUTRO para prompts AUTOCONTENIDOS (Texto y TODAS las generaciones de texto): un
 # dir writable sin skills (el corpus editorial va DENTRO del prompt, no se descubre por cwd).

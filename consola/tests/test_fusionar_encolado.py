@@ -72,7 +72,7 @@ def test_encola_por_marca_con_carril_de_cuenta_e_investigacion(monkeypatch):
     assert spec["procesar"]["marca"] == "unotv"
     assert {r["id"] for r in spec["procesar"]["recientes"]} == {"c1", "c2"}
     assert spec["endurecer"]["modelo"] == config.fusion_modelo()
-    assert jobspec.prioridad(spec) == jobspec.PRIORIDAD_PIPELINE
+    assert jobspec.prioridad(spec) == jobspec.PRIORIDAD_AUTOMATICO
     # El registro de actividad de Fusionar queda creado al encolar (lo completa el worker).
     assert capt["creados"][0]["etapa"] == "Fusionar"
 

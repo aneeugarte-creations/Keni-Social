@@ -135,8 +135,8 @@ def _encolar_traduccion(marca: str, clusters: list[dict[str, Any]]) -> bool:
             # `sin_tools`: es JSON-in/JSON-out, no usa herramienta alguna → `--tools ""` (ahorro
             # ~17k tokens/llamada; el traducir corre por marca a ráfagas con la caché fría).
             endurecer={"modelo": config.insumos_modelo(), "sin_tools": True},
-            # Fondo del pipeline: cede el paso a los lanzamientos manuales del equipo.
-            prioridad=jobspec.PRIORIDAD_PIPELINE,
+            # Lo lanza la maquina: AUTOMATICO, cede el paso a los lanzamientos manuales del equipo.
+            prioridad=jobspec.PRIORIDAD_AUTOMATICO,
         )
         cola.encolar(gen_id, spec, proceso=generaciones.PROCESO_INVESTIGACION, marca=marca)
         return True

@@ -31,7 +31,7 @@ def encolar(
     trabajo (manual o de fondo) simplemente SE ENCOLA y ESPERA; el unico limite real es la
     CONCURRENCIA (`max_jobs`: cuantos `claude -p` corren a la vez), que el worker/`runner.slot`
     aplican despues, en el flujo. Rechazar y reencolar por "cola llena" era trabajo inutil por un limite
-    inutil. La prioridad de despacho (manual > pipeline) decide QUE sale antes, no QUE entra: los
+    inutil. La prioridad de despacho (manual > automatico) decide QUE sale antes, no QUE entra: los
     manuales van PRIMERO (`jobs.prioridad`, `reclamar_job` ordena por ella).
 
     LO QUE SI LIMITA LA ADMISION (tope VOLUNTARIO, se conserva): el kill switch humano y el corte
@@ -48,9 +48,9 @@ def encolar(
     con el global. Asi una parada/tope de marca rechaza el encolado de SU trabajo (fondo y manual)
     sin tocar al resto. Sin marca, solo aplica el control global.
     """
-    # La PRIORIDAD de despacho viaja DENTRO del spec (`jobspec.prioridad`): manual > pipeline.
-    # Asi los seams inyectables de encolado no cambian de firma y `reclamar_job` puede ordenar
-    # por prioridad (un copy manual del equipo no espera detras del lote del pipeline/autogen).
+    # La PRIORIDAD de despacho viaja DENTRO del spec (`jobspec.prioridad`): manual > automatico
+    # (gestor `dominio.prioridad`). Asi los seams inyectables de encolado no cambian de firma y
+    # `reclamar_job` ordena por prioridad (un copy manual del equipo no espera detras del fondo).
     prio = jobspec.prioridad(spec)
     es_fondo = prio < jobspec.PRIORIDAD_MANUAL
 

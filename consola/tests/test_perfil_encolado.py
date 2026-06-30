@@ -52,7 +52,7 @@ def test_encola_por_marca_con_carril_de_cuenta_e_investigacion(monkeypatch):
     # Post-procesado de perfil + Haiku + fondo del pipeline.
     assert spec["procesar"] == jobspec.construir_perfil(marca="unotv")
     assert spec["endurecer"]["modelo"] == config.insumos_modelo()  # Haiku
-    assert jobspec.prioridad(spec) == jobspec.PRIORIDAD_PIPELINE
+    assert jobspec.prioridad(spec) == jobspec.PRIORIDAD_AUTOMATICO
     # El registro de actividad de Priorizar queda creado al encolar (lo completa el worker).
     assert capt["creados"][0]["etapa"] == "Priorizar"
 

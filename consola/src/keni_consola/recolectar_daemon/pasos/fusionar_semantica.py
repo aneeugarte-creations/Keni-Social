@@ -192,8 +192,8 @@ def _encolar_fusion(marca: str, clusters: list[dict[str, Any]], *, ahora: dateti
             # La fusión usa SU PROPIO modelo (`config.fusion_modelo()`, def sonnet): agrupar por evento
             # es más sutil que traducir, mismo modelo que usaba la fusión inline.
             endurecer={"modelo": config.fusion_modelo()},
-            # Fondo del pipeline: cede el paso a los lanzamientos manuales del equipo.
-            prioridad=jobspec.PRIORIDAD_PIPELINE,
+            # Lo lanza la maquina: AUTOMATICO, cede el paso a los lanzamientos manuales del equipo.
+            prioridad=jobspec.PRIORIDAD_AUTOMATICO,
         )
         cola.encolar(gen_id, spec, proceso=generaciones.PROCESO_INVESTIGACION, marca=marca)
         return True

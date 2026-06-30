@@ -29,7 +29,7 @@ from typing import Any
 
 from . import marcas, redes, repos
 from .dominio import generar as dom_generar
-from .estados import ORIGENES_AUTOGEN, ORIGEN_HISTORIA
+from .estados import ORIGENES_AUTOGEN
 
 _log = logging.getLogger("keni_consola.autogen_redactar")
 
@@ -130,11 +130,8 @@ def lanzar_para_topic(item: dict[str, Any], *, manual: bool = False) -> dict[str
         # `pipeline`: misma marca de trabajo que el copy de los temas ingeridos (la etapa CD
         # del pipeline es el UNICO motor de copy; "autogen" era el nombre del daemon legado).
         tipo="pipeline",
-        # URGENTE si el tema nació de USAR una historia del panel (curación humana explícita,
-        # típicamente una breaking): su copy adelanta al lote de fondo en la cola del worker
-        # (PRIORIDAD_BREAKING), sin pisar los lanzamientos manuales.
-        urgente=(item.get("origen") or "") == ORIGEN_HISTORIA,
         # Empuje a mano (endpoint del asistente): MANUAL real, intocable por el presupuesto de fondo.
+        # Sin él, el copy del pipeline es AUTOMATICO y cede el paso a lo manual (gestor `prioridad`).
         manual=manual,
         marca=marca,
         contexto=nota,

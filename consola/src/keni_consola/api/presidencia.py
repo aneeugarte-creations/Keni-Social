@@ -210,8 +210,6 @@ def _crear(
             texto_base=texto[: gen_dom.MAX_TEXTO],
             autor=autor,
             publicacion_id=item["id"],
-            # Lo de presidencia corre prisa: adelanta al lote de fondo de la cola.
-            urgente=True,
         )
     except generaciones.ColaLlenaError:
         # El tema y su pieza YA existen (con su media); solo faltó encolar el copy. Se

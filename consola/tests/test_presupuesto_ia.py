@@ -403,9 +403,9 @@ def test_encolar_parada_marca_corta_su_trabajo_no_otras(entorno):
     with pytest.raises(generaciones.GeneracionPausadaError):
         _encolar_marca("unotv", jobspec.PRIORIDAD_MANUAL)
     with pytest.raises(generaciones.GeneracionPausadaError):
-        _encolar_marca("unotv", jobspec.PRIORIDAD_PIPELINE)
+        _encolar_marca("unotv", jobspec.PRIORIDAD_AUTOMATICO)
     # Otra marca no se ve afectada por la parada de unotv.
-    assert _encolar_marca("claro-sports", jobspec.PRIORIDAD_PIPELINE)
+    assert _encolar_marca("claro-sports", jobspec.PRIORIDAD_AUTOMATICO)
 
 
 # --------------------------------------------------------------------------- #
@@ -452,7 +452,7 @@ def test_encolar_pausado_rechaza_todo(entorno, monkeypatch):
     with pytest.raises(generaciones.GeneracionPausadaError):
         _encolar(jobspec.PRIORIDAD_MANUAL)
     with pytest.raises(generaciones.GeneracionPausadaError):
-        _encolar(jobspec.PRIORIDAD_PIPELINE)
+        _encolar(jobspec.PRIORIDAD_AUTOMATICO)
 
 
 def test_encolar_solo_manual_corta_solo_fondo(entorno, monkeypatch):
@@ -460,7 +460,7 @@ def test_encolar_solo_manual_corta_solo_fondo(entorno, monkeypatch):
     repos.registrar_gasto_ia("g", dia=_hoy(), tokens_in=10, tokens_out=10, coste_usd=5.0)
     presupuesto_ia.invalidar_cache()
     with pytest.raises(generaciones.PresupuestoAgotadoError):
-        _encolar(jobspec.PRIORIDAD_PIPELINE)
+        _encolar(jobspec.PRIORIDAD_AUTOMATICO)
     assert _encolar(jobspec.PRIORIDAD_MANUAL)  # lo manual sigue
 
 
@@ -499,27 +499,25 @@ def test_excepciones_son_cola_llena(entorno):
 # --------------------------------------------------------------------------- #
 
 
-def test_prioridad_breaking_adelanta_al_fondo_pero_no_al_equipo(entorno, monkeypatch):
-    """CONTRATO de los 3 niveles: breaking adelanta al pipeline ordinario, nunca a una persona,
-    y para la economia de tokens SIGUE siendo fondo (el corte solo_manual tambien lo frena)."""
-    j_pipe = _encolar(jobspec.PRIORIDAD_PIPELINE)
-    j_break = _encolar(jobspec.PRIORIDAD_BREAKING)
+def test_manual_adelanta_al_automatico_que_es_fondo(entorno, monkeypatch):
+    """Gestor de prioridad (dos niveles): lo MANUAL se reclama antes que lo AUTOMATICO, y lo
+    automatico es fondo (el corte solo_manual tambien lo frena). Nada mas: sin niveles intermedios."""
+    j_auto = _encolar(jobspec.PRIORIDAD_AUTOMATICO)
     j_manual = _encolar(jobspec.PRIORIDAD_MANUAL)
     assert cola.reclamar("w")["id"] == j_manual  # la persona primero
-    assert cola.reclamar("w")["id"] == j_break   # breaking adelanta al lote ordinario
-    assert cola.reclamar("w")["id"] == j_pipe
-    # Con el presupuesto agotado (solo_manual), breaking NO se encola ni se reclama: es fondo.
+    assert cola.reclamar("w")["id"] == j_auto    # lo automatico despues
+    # Con el presupuesto agotado (solo_manual), lo automatico NO se encola ni se reclama: es fondo.
     monkeypatch.setenv("KENI_PRESUPUESTO_USD_DIA", "5")
     repos.registrar_gasto_ia("g", dia=_hoy(), tokens_in=10, tokens_out=10, coste_usd=5.0)
     presupuesto_ia.invalidar_cache()
     with pytest.raises(generaciones.PresupuestoAgotadoError):
-        _encolar(jobspec.PRIORIDAD_BREAKING)
+        _encolar(jobspec.PRIORIDAD_AUTOMATICO)
 
 
 def test_reclamar_prioridad_minima_corta_el_fondo_encolado(entorno):
     """La avalancha YA encolada deja de salir: con el corte, solo se reclama lo manual."""
-    _encolar(jobspec.PRIORIDAD_PIPELINE)
-    _encolar(jobspec.PRIORIDAD_PIPELINE)
+    _encolar(jobspec.PRIORIDAD_AUTOMATICO)
+    _encolar(jobspec.PRIORIDAD_AUTOMATICO)
     job_manual = _encolar(jobspec.PRIORIDAD_MANUAL)
 
     clavado = cola.reclamar("w1", prioridad_minima=jobspec.PRIORIDAD_MANUAL)
@@ -1083,8 +1081,8 @@ def test_gate_diario_pausa_solo_las_marcas_de_la_cuenta_gateada(entorno, monkeyp
     with pytest.raises(generaciones.GeneracionPausadaError):
         _encolar_marca("unotv", jobspec.PRIORIDAD_MANUAL)
     with pytest.raises(generaciones.GeneracionPausadaError):
-        _encolar_marca("unotv", jobspec.PRIORIDAD_PIPELINE)
-    assert _encolar_marca("claro-sports", jobspec.PRIORIDAD_PIPELINE)
+        _encolar_marca("unotv", jobspec.PRIORIDAD_AUTOMATICO)
+    assert _encolar_marca("claro-sports", jobspec.PRIORIDAD_AUTOMATICO)
 
 
 def test_gate_diario_sin_marca_no_corta_por_pct(entorno, monkeypatch):
@@ -1093,7 +1091,7 @@ def test_gate_diario_sin_marca_no_corta_por_pct(entorno, monkeypatch):
     _patch_consumo(monkeypatch, {_CUENTA_A: 50.0, _CUENTA_B: 50.0})  # ambas en umbral
     assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_NORMAL  # global sin marca: no corta por %
     assert presupuesto_ia.bloqueo_inline("", es_fondo=True) is None
-    assert _encolar(jobspec.PRIORIDAD_PIPELINE)  # encolado SIN marca: pasa
+    assert _encolar(jobspec.PRIORIDAD_AUTOMATICO)  # encolado SIN marca: pasa
 
 
 def test_gate_diario_fuente_none_no_afecta_a_nivel(entorno):

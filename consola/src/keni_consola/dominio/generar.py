@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import generaciones, libprompts, limites_plataforma, marcas, redes
-from . import jobspec
+from . import jobspec, prioridad
 from .placeholders import fecha_es
 
 _log = logging.getLogger("keni_consola.generar")
@@ -534,7 +534,6 @@ def lanzar(
     autor: dict[str, str] | None = None,
     endurecer: dict[str, Any] | None = None,
     clave_idem: str | None = None,
-    urgente: bool = False,
     manual: bool = False,
     publicacion_id: str = "",
     proceso: str = generaciones.PROCESO_PRODUCCION,
@@ -609,17 +608,11 @@ def lanzar(
         dir_temporal=str(dir_temporal) if dir_temporal is not None else None,
         prefetch_s3=prefetch_s3,
         endurecer=endurecer,
-        # PRIORIDAD de despacho: el lote de FONDO (pipeline/autogen/verificación de la fuente) cede el
-        # paso a los lanzamientos manuales del equipo (API/MCP) en la cola del worker.
-        # `manual`: un lanzamiento que dispara una PERSONA (p. ej. "Empujar al feed") es MANUAL aunque
-        # use un `tipo` de fondo —nunca lo corta el nivel SOLO_MANUAL del presupuesto ni cede el paso—.
-        # `urgente` (solo fondo): el tema viene de una curación humana urgente (p. ej. una breaking
-        # empujada desde el panel) y adelanta al lote de fondo SIN pisar lo manual.
-        prioridad=(
-            jobspec.PRIORIDAD_MANUAL
-            if manual or tipo not in _TIPOS_FONDO
-            else (jobspec.PRIORIDAD_BREAKING if urgente else jobspec.PRIORIDAD_PIPELINE)
-        ),
+        # PRIORIDAD de despacho (gestor `dominio.prioridad`): MANUAL si lo lanza una PERSONA
+        # —el flag `manual` (p. ej. "Empujar al feed") o un `tipo` que no es de fondo (copy,
+        # documento, prompt)—; AUTOMATICO si lo lanza la maquina (pipeline/autogen/daemons). El
+        # manual se despacha SIEMPRE antes que lo automatico pendiente; a igual nivel, FIFO.
+        prioridad=prioridad.nivel(manual=manual or tipo not in _TIPOS_FONDO),
         carril=carril,
         al_fallar=al_fallar,
     )
@@ -670,7 +663,6 @@ def lanzar_arte(
     prompt: str,
     pieza_id: str = "",
     autor: dict[str, str] | None = None,
-    urgente: bool = False,
     clave_idem: str | None = None,
 ) -> dict[str, Any]:
     """Crea el registro y ENCOLA la generación de ARTE como JOB de PROCESO (kind imagen).
@@ -710,15 +702,15 @@ def lanzar_arte(
         # Ya hay un arte EN CURSO con esta clave (otro barrido lo arrancó): NO encolamos otro.
         return gen
     # Spec PLANO del job de proceso (kind a nivel raíz, sin prompt/procesar de claude). La
-    # `prioridad` viaja DENTRO del spec (`jobspec.prioridad`): el arte es FONDO y cede el paso a
-    # lo manual; `urgente` (curación humana) adelanta al lote de fondo sin pisar lo manual.
+    # `prioridad` viaja DENTRO del spec (`jobspec.prioridad`): el arte lo lanza la maquina, asi que
+    # es AUTOMATICO y cede el paso a lo manual (gestor `dominio.prioridad`).
     spec = jobspec.construir_proceso(jobspec.PROC_IMAGEN, {
         "publicacion_id": publicacion_id or "",
         "pieza_id": pieza_id or "",
         "marca": marca,
         "titulo": titulo or "",
         "prompt": prompt,
-        "prioridad": jobspec.PRIORIDAD_BREAKING if urgente else jobspec.PRIORIDAD_PIPELINE,
+        "prioridad": prioridad.AUTOMATICO,
     })
     from .. import cola
 
@@ -859,7 +851,6 @@ def lanzar_copy(
     limpiar_pendiente: bool = False,
     etiqueta_exito: str = "",
     endurecer: dict[str, Any] | None = None,
-    urgente: bool = False,
     manual: bool = False,
 ) -> dict[str, Any]:
     """Lanza una generación de COPY (piezas por red -> borradores). Camino unificado.
@@ -948,7 +939,7 @@ def lanzar_copy(
         publicacion_id or "", titulo_dado or "", ",".join(redes_ids), contexto,
     )
     return lanzar(
-        tipo=tipo, titulo=titulo or "Copy", marca=marca, prompt=prompt, urgente=urgente,
+        tipo=tipo, titulo=titulo or "Copy", marca=marca, prompt=prompt,
         manual=manual,
         procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
         procesar_spec=procesar_spec, dir_temporal=dir_temporal, autor=autor,

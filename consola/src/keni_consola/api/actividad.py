@@ -506,7 +506,7 @@ async def cola_priorizar(request: Request) -> Response:
 def _cola_priorizar(gen_id: str) -> tuple[int, dict]:
     from ..dominio import jobspec
 
-    if not repos.priorizar_job(gen_id, jobspec.PRIORIDAD_URGENTE):
+    if not repos.priorizar_job(gen_id, jobspec.PRIORIDAD_MANUAL):
         return 404, {"error": "No hay un job esperando para esa generación."}
     return 200, {"priorizado": True, "gen_id": gen_id}
 

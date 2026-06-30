@@ -91,7 +91,7 @@ def test_gate_cola_fondo_siempre_encola_sin_tope(entorno, monkeypatch):
         gen = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": "X"})
         spec = jobspec.construir(
             prompt="p", procesar=jobspec.construir_prompt_lib(),
-            prioridad=jobspec.PRIORIDAD_PIPELINE,
+            prioridad=jobspec.PRIORIDAD_AUTOMATICO,
         )
         return cola.encolar(gen["id"], spec)  # no debe lanzar ColaLlenaError jamas
 
@@ -113,7 +113,7 @@ def test_gate_cola_manual_siempre_encola_y_va_primero(entorno, monkeypatch):
         gen = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": f"F{i}"})
         spec = jobspec.construir(
             prompt="p", procesar=jobspec.construir_prompt_lib(),
-            prioridad=jobspec.PRIORIDAD_PIPELINE,
+            prioridad=jobspec.PRIORIDAD_AUTOMATICO,
         )
         cola.encolar(gen["id"], spec)
 
@@ -139,7 +139,7 @@ def test_gate_cola_no_satura_tras_muchos_ciclos(entorno, monkeypatch):
         gen = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": f"X{i}"})
         spec = jobspec.construir(
             prompt="p", procesar=jobspec.construir_prompt_lib(),
-            prioridad=jobspec.PRIORIDAD_PIPELINE,
+            prioridad=jobspec.PRIORIDAD_AUTOMATICO,
         )
         job_id = cola.encolar(gen["id"], spec)  # no debe lanzar ColaLlenaError nunca
         clavado = cola.reclamar(f"w{i}")
@@ -151,13 +151,13 @@ def test_gate_cola_no_satura_tras_muchos_ciclos(entorno, monkeypatch):
 def test_reclamar_respeta_prioridad_manual_antes_que_pipeline(entorno):
     """La cola NO es FIFO pura: un lanzamiento MANUAL pasa antes que el lote del pipeline.
 
-    El job de FONDO (spec con `prioridad=PRIORIDAD_PIPELINE`) se encola PRIMERO; aun asi, el
+    El job de FONDO (spec con `prioridad=PRIORIDAD_AUTOMATICO`) se encola PRIMERO; aun asi, el
     worker clava antes el MANUAL (default `PRIORIDAD_MANUAL`). A igual prioridad, FIFO.
     """
     g_fondo = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": "Fondo"})
     spec_fondo = jobspec.construir(
         prompt="fondo", procesar=jobspec.construir_prompt_lib(),
-        prioridad=jobspec.PRIORIDAD_PIPELINE,
+        prioridad=jobspec.PRIORIDAD_AUTOMATICO,
     )
     cola.encolar(g_fondo["id"], spec_fondo)
     g_manual = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "Manual"})
@@ -175,10 +175,10 @@ def test_jobspec_prioridad_roundtrip_y_default_puro():
     # VIEJO (sin el campo) o de PROCESO (render/ASR, iniciado por una persona) cae a MANUAL.
     spec = jobspec.construir(
         prompt="p", procesar=jobspec.construir_prompt_lib(),
-        prioridad=jobspec.PRIORIDAD_PIPELINE,
+        prioridad=jobspec.PRIORIDAD_AUTOMATICO,
     )
     vuelto = jobspec.deserializar(jobspec.serializar(spec))
-    assert jobspec.prioridad(vuelto) == jobspec.PRIORIDAD_PIPELINE
+    assert jobspec.prioridad(vuelto) == jobspec.PRIORIDAD_AUTOMATICO
     assert jobspec.prioridad({}) == jobspec.PRIORIDAD_MANUAL  # spec viejo sin campo
     assert jobspec.prioridad({"prioridad": "no-numero"}) == jobspec.PRIORIDAD_MANUAL
     # El default de `construir` es MANUAL (los seams que no fijan prioridad no degradan a nadie).
