@@ -1,9 +1,9 @@
 {
-  "version": "0.1.14",
-  "notes": "Arreglada la pantalla en blanco al abrir una galería; ahora un fallo de datos muestra un aviso en vez de cerrarse.",
+  "version": "0.2.0",
+  "notes": "Modo en vivo (beta): vigila la carpeta del partido y procesa las ráfagas según van entrando las fotos.",
   "pub_date": "2026-06-29T00:00:00Z",
   "darwin-aarch64": {
-    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcFhkSEIwSWZkZmlUT0thVXhRV3NMTWFtUFZFUEFGN2t2RnJrRGFCOHNpYzFNenF6c1ZqeWMwR2Q1aU1oVnFxWVoyRFF2NUJkQ0ZtT0c5R3dDbFpWRWdBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzgyMzMyCWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6CnZVazFEZEZvL29uRmk0RHM2anNXUVphS2pXdkczWk44TS9aYXMyTWRyQUhnMnRuRWZDZndQc0xUZ29vSDFMNStzN1E3Um1QQkppOFE0d2ZtdkdCaEFBPT0K",
+    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcFkwUHBCNW9BZmhzTnVzTlRJQzFYT2FQUjlKSTZzYVYrN3VnREY5WGRINWpKMTI1UkJZOFBJZE45TVQ5Yjc4MVIyL1lFVC9VanEwSWQ3R3hMd1pTV0FrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzg2NjQ1CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6CngxTnpXamlGQ2J2OEd6S1hialhXYVpxTUVkaTFsb3pXcTl0TkJJaGZjejY1cUhWR3gvRUVLL0ZNZytZUSsvWWJzZllsRXpFMmhWdnJIcHdLanA1OUN3PT0K",
     "url": "https://social.kenitech.io/api/fotos/updater"
   }
 }
