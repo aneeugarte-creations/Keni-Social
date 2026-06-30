@@ -11,14 +11,21 @@
  *  - Zoom: los botones cambian el ancho del eje y los gestos siguen correctos al ancho escalado.
  *  - `disabled` apaga la edición; el seek sigue activo.
  *  - PiP y subtítulos: clic en la barra llama onSeek con el inicio de esa barra.
+ *  - baseUrl: se intenta extraer frames del clip fuente (createElement "video" llamado).
+ *  - Trim PiP: arrastrar el asa del carril PiP llama onTrimPip(in, out).
+ *  - Marcadores: «＋ Marcador» llama onAgregarMarcador con el ms del playhead.
+ *  - Fundidos: cambiar el input de fade in/out llama onFadeMusica con el valor.
  *
  * jsdom no tiene layout: posiciones por estilo (% sobre el eje) y gestos que mockean el
  * `getBoundingClientRect` del eje (su ancho en px = todo el tiempo de salida).
+ * La extracción de frames se mockea (jsdom no decodifica vídeo real): se espía
+ * document.createElement para verificar que el efecto lo intenta sin colgar el test.
  */
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  agregarMarcador,
   composicionVacia,
   dividirClipBase,
   setAudioBase,
@@ -293,5 +300,92 @@ describe("TimelineMultipista", () => {
     );
     fireEvent.click(screen.getByTitle("Hola mundo"));
     expect(onSeek).toHaveBeenCalledWith(5);
+  });
+
+  it("con baseUrl intenta extraer frames del clip fuente (createElement 'video')", () => {
+    const origCreate = document.createElement.bind(document);
+    let videoCreated = false;
+    vi.spyOn(document, "createElement").mockImplementation(
+      (tag: string, ...args: unknown[]) => {
+        if (tag === "video") videoCreated = true;
+        return origCreate(tag, ...(args as []));
+      },
+    );
+    render(
+      <TimelineMultipista
+        doc={doc30()}
+        tiempoSeg={0}
+        onSeek={() => {}}
+        baseUrl="https://cdn.example.com/clip.mp4"
+      />,
+    );
+    expect(videoCreated).toBe(true);
+    vi.restoreAllMocks();
+  });
+
+  it("arrastrar el asa del carril PiP llama onTrimPip con los nuevos recortes", () => {
+    const onTrimPip = vi.fn();
+    // PiP de 20 s; el eje base es 30 s → 100 px en el mock.
+    const doc = setClipPip(doc30(), "videos/pip.mp4", 20000);
+    render(
+      <TimelineMultipista
+        doc={doc}
+        tiempoSeg={0}
+        onSeek={() => {}}
+        onTrimPip={onTrimPip}
+      />,
+    );
+    mockearEje();
+    // Asa de fin del PiP: empuja desde el 100% hacia el 50% → recorte out = 0 + 15000.
+    const asa = screen.getByRole("button", { name: /recortar fin del pip/i });
+    fireEvent.mouseDown(asa, { clientX: 100 });
+    fireEvent.mouseMove(window, { clientX: 50 }); // 50% de 30 s = 15000 ms
+    fireEvent.mouseUp(window);
+    expect(onTrimPip).toHaveBeenCalled();
+    // recorte_in original 0, recorte_out nuevo = 0 + 15000 = 15000.
+    expect(onTrimPip).toHaveBeenCalledWith(0, 15000);
+  });
+
+  it("«＋ Marcador» llama onAgregarMarcador con el ms del playhead", () => {
+    const onAgregarMarcador = vi.fn();
+    // Playhead a 15 s = 15000 ms.
+    render(
+      <TimelineMultipista
+        doc={doc30()}
+        tiempoSeg={15}
+        onSeek={() => {}}
+        onAgregarMarcador={onAgregarMarcador}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /añadir marcador/i }));
+    expect(onAgregarMarcador).toHaveBeenCalledWith(15000);
+  });
+
+  it("el control de fundido entrada llama onFadeMusica con fade_in_ms", () => {
+    const onFadeMusica = vi.fn();
+    const doc = setMusica(doc30(), "videos/song.mp4", 30000);
+    render(
+      <TimelineMultipista
+        doc={doc}
+        tiempoSeg={0}
+        onSeek={() => {}}
+        onFadeMusica={onFadeMusica}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText(/fundido entrada/i), {
+      target: { value: "500" },
+    });
+    expect(onFadeMusica).toHaveBeenCalledWith({ fade_in_ms: 500 });
+  });
+
+  it("marcadores del doc se pintan en la regla y clic hace seek", () => {
+    const onSeek = vi.fn();
+    const doc = agregarMarcador(doc30(), 10000, "intro");
+    render(<TimelineMultipista doc={doc} tiempoSeg={0} onSeek={onSeek} />);
+    // El pin del marcador tiene aria-label con "intro".
+    const pin = screen.getByRole("button", { name: /marcador intro/i });
+    fireEvent.mouseDown(pin, { bubbles: true, cancelBubble: false });
+    fireEvent.click(pin);
+    expect(onSeek).toHaveBeenCalledWith(10); // 10000 ms / 1000 = 10 s
   });
 });

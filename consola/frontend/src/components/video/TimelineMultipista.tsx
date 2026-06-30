@@ -10,11 +10,18 @@
  *   2. VÍDEO — los segmentos de la pista base como tarjetas CONSECUTIVAS (ancho ∝ su duración
  *      de salida), con asas de trim en los bordes (commit al soltar → `onTrimSegmento`), una
  *      cuchilla que divide en el playhead (`onDividirSegmento`) y, por segmento, mover ◀/▶
- *      (`onMoverSegmento`) y eliminar (`onQuitarSegmento`, sólo si hay >1).
- *   3. AUDIO (base) — pista propia: una BARRA que abarca [0, total] reflejando volumen/silenciar
+ *      (`onMoverSegmento`) y eliminar (`onQuitarSegmento`, sólo si hay >1). Si llega `baseUrl`,
+ *      se extraen N frames del clip en el cliente (un `<video>` oculto + `<canvas>`) y se pintan
+ *      como fondo proporcional al recorte; se cachea por baseUrl y degrada si falla.
+ *   3. PiP — carril editable con asas de trim (onTrimPip) cuando hay clip PiP; si no hay
+ *      handler sigue mostrando la barra informativa fina clicable (seek al inicio).
+ *   4. AUDIO (base) — pista propia: una BARRA que abarca [0, total] reflejando volumen/silenciar
  *      (`onAudioBase`), con sus controles en la cabecera.
- *   4. MÚSICA — barra propia con su tramo, controles de volumen/silenciar/quitar, o «+ Música».
- *   5. PiP y SUBTÍTULOS — barras finas clicables (clic = seek al inicio de esa barra).
+ *   5. MÚSICA — barra propia con su tramo, controles de volumen/silenciar/quitar, controles de
+ *      fade in/out (ms) y visualización de rampa (triángulo SVG) en los extremos de la barra.
+ *   6. SUBTÍTULOS — barras finas clicables (clic = seek al inicio de esa barra).
+ *   7. MARCADORES — líneas finas con etiqueta sobre la regla; botón «＋ Marcador» añade uno en
+ *      el playhead; clic en el pin hace seek; botón de quitar → onQuitarMarcador(id).
  *
  * El eje es [0, duración total de la base]. Cada segmento ocupa [inicio acumulado, +duración de
  * salida]; el render server-side concatena los segmentos en ese orden. El zoom sólo escala el
@@ -34,6 +41,7 @@ import * as React from "react";
 import {
   ChevronLeft,
   ChevronRight,
+  MapPin,
   Maximize2,
   Music,
   Plus,
@@ -41,6 +49,7 @@ import {
   Trash2,
   Volume2,
   VolumeX,
+  X,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
@@ -48,6 +57,7 @@ import {
 import {
   duracionBaseMs,
   formatearDuracionMs,
+  marcadores as getMarcadores,
   MIN_RECORTE_MS,
   pistaAudio,
   pistaPip,
@@ -121,6 +131,9 @@ const ALTO_VIDEO = "h-16";
 const ALTO_PISTA = "h-9";
 const ALTO_BARRAS = "h-7";
 
+// Número de frames a extraer del clip base para thumbnails.
+const N_THUMBS = 8;
+
 export function TimelineMultipista({
   doc,
   tiempoSeg,
@@ -134,6 +147,11 @@ export function TimelineMultipista({
   onVolumenMusica,
   onQuitarMusica,
   segmentos,
+  baseUrl,
+  onTrimPip,
+  onFadeMusica,
+  onAgregarMarcador,
+  onQuitarMarcador,
   disabled = false,
 }: TimelineMultipistaProps) {
   const ejeRef = React.useRef<HTMLDivElement>(null);
@@ -152,10 +170,79 @@ export function TimelineMultipista({
   const [arrastre, setArrastre] = React.useState<{ idx: number; asa: "in" | "out"; ms: number } | null>(
     null,
   );
+  // Arrastre del asa de trim del carril PiP (mismo patrón).
+  const [arrastrePip, setArrastrePip] = React.useState<{ asa: "in" | "out"; ms: number } | null>(null);
   // Posición (ms) de la guía de snap durante el trim; null = sin guía activa.
   const [guiaSnap, setGuiaSnap] = React.useState<number | null>(null);
   // Zoom del eje (multiplicador del ancho). Sólo afecta a px; el modelo de tiempo no cambia.
   const [zoom, setZoom] = React.useState(1);
+
+  // Cache de frames extraídos por URL: evita re-extraer al re-render.
+  const thumbCacheRef = React.useRef<Map<string, { frames: string[]; sourceDurMs: number }>>(new Map());
+  const [thumbData, setThumbData] = React.useState<{ frames: string[]; sourceDurMs: number } | null>(null);
+
+  // Extracción de frames: un <video> oculto + <canvas> en el cliente. Solo cuando baseUrl cambia.
+  // En jsdom no hay decodificación real; el efecto termina sin frames (onloadedmetadata no llega).
+  React.useEffect(() => {
+    if (!baseUrl) {
+      setThumbData(null);
+      return;
+    }
+    const cached = thumbCacheRef.current.get(baseUrl);
+    if (cached) {
+      setThumbData(cached);
+      return;
+    }
+    const videoEl = document.createElement("video");
+    videoEl.src = baseUrl;
+    videoEl.crossOrigin = "anonymous";
+    videoEl.muted = true;
+    videoEl.preload = "metadata";
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    let cancelado = false;
+
+    const extraer = async () => {
+      try {
+        await new Promise<void>((res, rej) => {
+          videoEl.onloadedmetadata = () => res();
+          videoEl.onerror = () => rej(new Error("video error"));
+          videoEl.load();
+        });
+        if (cancelado) return;
+        const dur = videoEl.duration;
+        if (!dur || !isFinite(dur) || dur <= 0) return;
+        canvas.width = 120;
+        canvas.height = Math.max(1, Math.round(120 * (videoEl.videoHeight / (videoEl.videoWidth || 1))));
+        const frames: string[] = [];
+        for (let i = 0; i < N_THUMBS; i++) {
+          if (cancelado) break;
+          const t = N_THUMBS > 1 ? (i / (N_THUMBS - 1)) * dur : 0;
+          videoEl.currentTime = t;
+          await new Promise<void>((res) => {
+            videoEl.onseeked = () => res();
+          });
+          if (cancelado) break;
+          ctx?.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+          frames.push(canvas.toDataURL("image/jpeg", 0.6));
+        }
+        if (!cancelado && frames.length > 0) {
+          const data = { frames, sourceDurMs: dur * 1000 };
+          thumbCacheRef.current.set(baseUrl, data);
+          setThumbData(data);
+        }
+      } catch {
+        // Degrada silenciosamente: el trim no queda ciego, solo sin vista previa.
+      } finally {
+        videoEl.src = "";
+      }
+    };
+    void extraer();
+    return () => {
+      cancelado = true;
+      videoEl.src = "";
+    };
+  }, [baseUrl]);
 
   // Valores derivados del doc (no son hooks; pueden computarse antes del early return).
   const segs = segmentosBase(doc);
@@ -291,6 +378,52 @@ export function TimelineMultipista({
     [disabled, onTrimSegmento, msDesdePuntero, onSeek],
   );
 
+  /**
+   * Arrastre de un asa de trim del carril PiP. Mismo patrón que iniciarTrim pero sobre el clip
+   * PiP. El asa izquierda avanza recorte_in_ms; la derecha reduce recorte_out_ms. Mín 1 s.
+   * La posición de las asas en el eje de salida: inicio=0, fin=min(durPip, axisTotal).
+   */
+  const iniciarTrimPip = React.useCallback(
+    (asa: "in" | "out") => (e: React.MouseEvent) => {
+      const clip = pistaPip(doc)?.clips[0];
+      if (disabled || !onTrimPip || !clip) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const rIn = clip.recorte_in_ms ?? 0;
+      const rOut = clip.recorte_out_ms || clip.fin_ms || 0;
+      const durPip = Math.max(0, rOut - rIn);
+      const pipFin = Math.min(axisTotal, durPip > 0 ? durPip : axisTotal);
+      const minDur = Math.min(MIN_RECORTE_MS, pipFin);
+      const clampa = (ms: number) =>
+        asa === "in"
+          ? Math.min(Math.max(0, ms), pipFin - minDur)
+          : Math.min(Math.max(minDur, ms), pipFin);
+      let ultimo = asa === "in" ? 0 : pipFin;
+      setArrastrePip({ asa, ms: ultimo });
+      arrastrando.current = true;
+      const mover = (ev: MouseEvent) => {
+        ultimo = clampa(msDesdePuntero(ev.clientX));
+        setArrastrePip({ asa, ms: ultimo });
+      };
+      const soltar = () => {
+        arrastrando.current = false;
+        window.removeEventListener("mousemove", mover);
+        window.removeEventListener("mouseup", soltar);
+        setArrastrePip(null);
+        // asa "in": el borde izquierdo se movió a `ultimo` en salida → avanzamos rIn en esa cantidad.
+        // asa "out": el borde derecho queda en `ultimo` en salida → rOut = rIn + ultimo.
+        const nuevoIn = asa === "in" ? Math.round(rIn + ultimo) : rIn;
+        const nuevoOut = asa === "out" ? Math.round(rIn + ultimo) : rOut;
+        if (nuevoIn === rIn && nuevoOut === rOut) return;
+        onTrimPip(nuevoIn, nuevoOut);
+        onSeek(ultimo / 1000);
+      };
+      window.addEventListener("mousemove", mover);
+      window.addEventListener("mouseup", soltar);
+    },
+    [disabled, onTrimPip, msDesdePuntero, onSeek, doc, axisTotal],
+  );
+
   /** Teclado del playhead: flechas ±1 s, Shift ±5 s, Home/End a los extremos. */
   const onTeclaPlayhead = React.useCallback(
     (e: React.KeyboardEvent) => {
@@ -333,8 +466,11 @@ export function TimelineMultipista({
 
   // Marcas de la regla (0, paso, 2·paso, …, ≤ total).
   const paso = pasoRegla(axisTotal);
-  const marcas: number[] = [];
-  for (let ms = 0; ms <= axisTotal; ms += paso) marcas.push(ms);
+  const marcasRegla: number[] = [];
+  for (let ms = 0; ms <= axisTotal; ms += paso) marcasRegla.push(ms);
+
+  // Marcadores del documento.
+  const mrkdrs = getMarcadores(doc);
 
   // Segmento bajo el playhead y su tiempo de salida local (para la cuchilla).
   let segActivo = -1;
@@ -371,19 +507,45 @@ export function TimelineMultipista({
   }
   const mudoMus = musica?.silenciar ?? false;
   const volMus = musica?.volumen ?? VOLUMEN_DEFECTO;
+  const fadeIn = musica?.fade_in_ms ?? 0;
+  const fadeOut = musica?.fade_out_ms ?? 0;
+  const barDurMus = barMusica ? Math.max(0, barMusica.fin - barMusica.ini) : 0;
 
-  // Barra informativa del PiP: arranca en 0 (salida) y dura su recorte, capado al total.
+  // Altura del carril/cabecera de música: crece cuando hay controles de fundido.
+  const ALTO_MUSICA = onFadeMusica && musica ? "h-16" : ALTO_PISTA;
+
+  // PiP: carril editable si hay handler + clip; barra informativa fina en caso contrario.
   const clipPip = pistaPip(doc)?.clips[0];
+  const hayCarrilPip = !!clipPip?.media_id;
   let barPip: { ini: number; fin: number } | null = null;
-  if (clipPip?.media_id) {
+  let pipFin = 0;
+  let pipLeft = 0;
+  let pipWidth = 0;
+  if (hayCarrilPip && clipPip) {
     const durPip =
       Math.max(0, (clipPip.recorte_out_ms ?? 0) - (clipPip.recorte_in_ms ?? 0)) ||
       Math.max(0, (clipPip.fin_ms ?? 0) - (clipPip.inicio_ms ?? 0));
-    barPip = { ini: 0, fin: durPip > 0 ? Math.min(axisTotal, durPip) : axisTotal };
+    pipFin = durPip > 0 ? Math.min(axisTotal, durPip) : axisTotal;
+    barPip = { ini: 0, fin: pipFin };
+    // Posición visual del carril durante el arrastre del asa.
+    if (arrastrePip) {
+      if (arrastrePip.asa === "in") {
+        pipLeft = arrastrePip.ms;
+        pipWidth = pipFin - arrastrePip.ms;
+      } else {
+        pipLeft = 0;
+        pipWidth = arrastrePip.ms;
+      }
+    } else {
+      pipLeft = 0;
+      pipWidth = pipFin;
+    }
   }
+  // Mostrar barra informativa fina solo cuando no hay carril editable.
+  const barPipFina = !onTrimPip ? barPip : null;
 
   const segsSub = segmentos ?? [];
-  const hayBarras = !!barPip || segsSub.length > 0;
+  const hayBarras = !!barPipFina || segsSub.length > 0;
 
   const acercar = () => setZoom((z) => Math.min(ZOOM_MAX, z * ZOOM_PASO));
   const alejar = () => setZoom((z) => Math.max(ZOOM_MIN, z / ZOOM_PASO));
@@ -435,8 +597,19 @@ export function TimelineMultipista({
       <div className="flex overflow-hidden rounded-md border border-border bg-muted/40">
         {/* Columna de CABECERAS (fija): etiqueta + controles de cada pista. */}
         <div className="w-36 shrink-0 border-r border-border/60">
-          {/* Hueco bajo la regla. */}
-          <div className={`${ALTO_REGLA} border-b border-border/60`} />
+          {/* Regla: botón «＋ Marcador» en el playhead. */}
+          <div className={`${ALTO_REGLA} flex items-center border-b border-border/60 px-2`}>
+            {onAgregarMarcador && (
+              <button
+                type="button"
+                aria-label="Añadir marcador"
+                onClick={() => onAgregarMarcador(Math.round(tiempoMs))}
+                className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[9px] font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+              >
+                <MapPin className="h-2.5 w-2.5" />＋
+              </button>
+            )}
+          </div>
 
           {/* Vídeo: etiqueta + cuchilla. */}
           <div className={`${ALTO_VIDEO} flex flex-col justify-center gap-1 border-b border-border/40 px-2`}>
@@ -455,6 +628,15 @@ export function TimelineMultipista({
               </button>
             )}
           </div>
+
+          {/* PiP editable: etiqueta (solo cuando hay carril propio). */}
+          {hayCarrilPip && (
+            <div className={`${ALTO_PISTA} flex items-center border-b border-border/40 px-2`}>
+              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                PiP
+              </span>
+            </div>
+          )}
 
           {/* Audio (base): silenciar + volumen. */}
           {onAudioBase && (
@@ -485,47 +667,76 @@ export function TimelineMultipista({
             </div>
           )}
 
-          {/* Música: controles si hay, «+ Música» si no. */}
-          <div className={`${ALTO_PISTA} flex items-center gap-1 border-b border-border/40 px-2`}>
+          {/* Música: controles de volumen/quitar + controles de fundido si hay handler. */}
+          <div className={`${ALTO_MUSICA} flex flex-col justify-center gap-0.5 border-b border-border/40 px-2`}>
             {musica ? (
               <>
-                {onVolumenMusica && (
-                  <>
+                <div className="flex items-center gap-1">
+                  {onVolumenMusica && (
+                    <>
+                      <button
+                        type="button"
+                        aria-label="Silenciar música"
+                        aria-pressed={mudoMus}
+                        disabled={disabled}
+                        onClick={() => onVolumenMusica({ silenciar: !mudoMus })}
+                        className={`rounded p-1 disabled:opacity-40 ${
+                          mudoMus ? "text-destructive" : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {mudoMus ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                      </button>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        value={volMus}
+                        disabled={disabled || mudoMus}
+                        onChange={(e) => onVolumenMusica({ volumen: Number(e.target.value) })}
+                        className="min-w-0 flex-1 disabled:opacity-40"
+                        aria-label="Volumen de la música"
+                      />
+                    </>
+                  )}
+                  {onQuitarMusica && (
                     <button
                       type="button"
-                      aria-label="Silenciar música"
-                      aria-pressed={mudoMus}
+                      aria-label="Quitar música"
                       disabled={disabled}
-                      onClick={() => onVolumenMusica({ silenciar: !mudoMus })}
-                      className={`rounded p-1 disabled:opacity-40 ${
-                        mudoMus ? "text-destructive" : "text-muted-foreground hover:text-foreground"
-                      }`}
+                      onClick={() => onQuitarMusica()}
+                      className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
                     >
-                      {mudoMus ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
+                  )}
+                </div>
+                {/* Controles de fundido entrada/salida. */}
+                {onFadeMusica && (
+                  <div className="flex items-center gap-1">
+                    <span className="shrink-0 text-[9px] text-muted-foreground">FI</span>
                     <input
-                      type="range"
+                      type="number"
                       min={0}
-                      max={1}
-                      step={0.01}
-                      value={volMus}
-                      disabled={disabled || mudoMus}
-                      onChange={(e) => onVolumenMusica({ volumen: Number(e.target.value) })}
-                      className="min-w-0 flex-1 disabled:opacity-40"
-                      aria-label="Volumen de la música"
+                      step={100}
+                      value={fadeIn}
+                      disabled={disabled}
+                      onChange={(e) => onFadeMusica({ fade_in_ms: Math.max(0, Number(e.target.value)) })}
+                      className="w-10 rounded border border-border bg-background px-0.5 text-[9px] tabular-nums disabled:opacity-40"
+                      aria-label="Fundido entrada (ms)"
                     />
-                  </>
-                )}
-                {onQuitarMusica && (
-                  <button
-                    type="button"
-                    aria-label="Quitar música"
-                    disabled={disabled}
-                    onClick={() => onQuitarMusica()}
-                    className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                    <span className="shrink-0 text-[9px] text-muted-foreground">FS</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={100}
+                      value={fadeOut}
+                      disabled={disabled}
+                      onChange={(e) => onFadeMusica({ fade_out_ms: Math.max(0, Number(e.target.value)) })}
+                      className="w-10 rounded border border-border bg-background px-0.5 text-[9px] tabular-nums disabled:opacity-40"
+                      aria-label="Fundido salida (ms)"
+                    />
+                  </div>
                 )}
               </>
             ) : (
@@ -544,10 +755,12 @@ export function TimelineMultipista({
             )}
           </div>
 
-          {/* PiP / subtítulos: etiqueta de la pista informativa. */}
+          {/* Subtítulos: etiqueta (solo si hay barras de subs). */}
           {hayBarras && (
             <div className={`${ALTO_BARRAS} flex items-center px-2`}>
-              <span className="text-[9px] uppercase tracking-wide text-muted-foreground">PiP · Subs</span>
+              <span className="text-[9px] uppercase tracking-wide text-muted-foreground">
+                {barPipFina ? "PiP · Subs" : "Subs"}
+              </span>
             </div>
           )}
         </div>
@@ -560,13 +773,13 @@ export function TimelineMultipista({
             className="relative"
             style={{ width: `${zoom * 100}%`, minWidth: "100%" }}
           >
-            {/* Carril 1 · Regla con marcas de tiempo (scrub al pulsar). */}
+            {/* Carril 1 · Regla con marcas de tiempo (scrub al pulsar) + marcadores. */}
             <div
               onMouseDown={iniciarScrub}
               aria-label="Regla de tiempo"
               className={`relative ${ALTO_REGLA} cursor-pointer touch-none border-b border-border/60`}
             >
-              {marcas.map((ms) => (
+              {marcasRegla.map((ms) => (
                 <div
                   key={ms}
                   className="pointer-events-none absolute top-0 h-full border-l border-border/60"
@@ -577,9 +790,53 @@ export function TimelineMultipista({
                   </span>
                 </div>
               ))}
+              {/* Marcadores: línea fina + pin clicable + botón de quitar. */}
+              {mrkdrs.map((m) => (
+                <div
+                  key={m.id}
+                  className="absolute inset-y-0 z-20"
+                  style={{ left: pct(m.ms) }}
+                >
+                  <div className="pointer-events-none absolute inset-y-0 border-l border-amber-500/80" />
+                  <button
+                    type="button"
+                    aria-label={`Marcador ${m.etiqueta ?? formatearDuracionMs(m.ms)}: ir a este punto`}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSeek(m.ms / 1000);
+                    }}
+                    className="-translate-x-1/2 absolute top-0 flex items-center"
+                  >
+                    <MapPin className="h-3 w-3 fill-amber-500 text-amber-500" />
+                  </button>
+                  {m.etiqueta && (
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute left-2 top-0 select-none whitespace-nowrap text-[8px] leading-5 text-amber-600/90"
+                    >
+                      {m.etiqueta}
+                    </span>
+                  )}
+                  {onQuitarMarcador && (
+                    <button
+                      type="button"
+                      aria-label={`Quitar marcador ${m.etiqueta ?? formatearDuracionMs(m.ms)}`}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onQuitarMarcador(m.id);
+                      }}
+                      className="absolute right-0 top-0 translate-x-full rounded-sm bg-background/90 text-destructive/70 hover:text-destructive"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
 
-            {/* Carril 2 · Vídeo: segmentos consecutivos. */}
+            {/* Carril 2 · Vídeo: segmentos consecutivos con thumbnails de frames. */}
             <div className={`relative ${ALTO_VIDEO} border-b border-border/40`}>
               {segs.map((seg, i) => {
                 const rIn = seg.recorte_in_ms ?? 0;
@@ -596,6 +853,17 @@ export function TimelineMultipista({
                     width = arrastre.ms - ini;
                   }
                 }
+                // Frames visibles para este segmento (los que caen dentro de [rIn, rOut]).
+                const framesVisibles =
+                  thumbData && thumbData.frames.length > 0
+                    ? thumbData.frames.filter((_, fi) => {
+                        const frameMs =
+                          thumbData.frames.length > 1
+                            ? (fi / (thumbData.frames.length - 1)) * thumbData.sourceDurMs
+                            : 0;
+                        return frameMs >= rIn && frameMs <= rOut;
+                      })
+                    : [];
                 return (
                   <div
                     key={seg.id}
@@ -603,7 +871,24 @@ export function TimelineMultipista({
                     className="absolute inset-y-1 overflow-hidden rounded border border-primary/60 bg-primary/15"
                     style={{ left: pct(left), width: pct(width) }}
                   >
-                    <div className="flex h-full flex-col items-center justify-center gap-1 px-2 text-center">
+                    {/* Thumbnails de frames proporcionales al recorte. */}
+                    {framesVisibles.length > 0 && (
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-0 flex overflow-hidden opacity-50"
+                      >
+                        {framesVisibles.map((src, fi) => (
+                          <img
+                            key={fi}
+                            src={src}
+                            alt=""
+                            className="h-full shrink-0 object-cover"
+                            style={{ width: `${100 / framesVisibles.length}%` }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    <div className="relative flex h-full flex-col items-center justify-center gap-1 px-2 text-center">
                       <span className="pointer-events-none text-[10px] font-medium tabular-nums text-foreground/80">
                         {formatearDuracionMs(width)}
                       </span>
@@ -680,7 +965,48 @@ export function TimelineMultipista({
               )}
             </div>
 
-            {/* Carril 3 · Audio (base): pista propia (barra a lo largo de todo el eje). */}
+            {/* Carril 3 · PiP editable: asas de trim cuando hay handler; vacío si no hay clip. */}
+            {hayCarrilPip && clipPip && (
+              <div
+                className={`relative ${ALTO_PISTA} border-b border-border/40`}
+                data-testid="pip-carril"
+              >
+                <div
+                  className="absolute inset-y-1 overflow-hidden rounded border border-sky-500/60 bg-sky-400/25"
+                  style={{ left: pct(pipLeft), width: pct(Math.max(0, pipWidth)) }}
+                >
+                  <div className="relative flex h-full items-center justify-center px-2">
+                    <span className="pointer-events-none text-[10px] font-medium tabular-nums text-sky-900/80">
+                      {formatearDuracionMs(Math.max(0, pipWidth))}
+                    </span>
+                  </div>
+                  {onTrimPip && (
+                    <>
+                      <button
+                        type="button"
+                        aria-label="Recortar inicio del PiP"
+                        disabled={disabled}
+                        onMouseDown={iniciarTrimPip("in")}
+                        className="absolute inset-y-0 left-0 z-10 w-2 cursor-ew-resize bg-sky-500/80 hover:bg-sky-500 disabled:cursor-default disabled:opacity-30"
+                      >
+                        <span className="pointer-events-none mx-auto block h-4 w-0.5 rounded bg-white/80" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Recortar fin del PiP"
+                        disabled={disabled}
+                        onMouseDown={iniciarTrimPip("out")}
+                        className="absolute inset-y-0 right-0 z-10 w-2 cursor-ew-resize bg-sky-500/80 hover:bg-sky-500 disabled:cursor-default disabled:opacity-30"
+                      >
+                        <span className="pointer-events-none mx-auto block h-4 w-0.5 rounded bg-white/80" />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Carril 4 · Audio (base): pista propia (barra a lo largo de todo el eje). */}
             {onAudioBase && (
               <div className={`relative ${ALTO_PISTA} border-b border-border/40`}>
                 <div
@@ -699,8 +1025,8 @@ export function TimelineMultipista({
               </div>
             )}
 
-            {/* Carril 4 · Música: barra de su tramo (si hay). */}
-            <div className={`relative ${ALTO_PISTA} border-b border-border/40`}>
+            {/* Carril 5 · Música: barra de su tramo con rampas de fundido visualizadas. */}
+            <div className={`relative ${ALTO_MUSICA} border-b border-border/40`}>
               {barMusica && (
                 <div
                   aria-label="Pista de música"
@@ -709,29 +1035,53 @@ export function TimelineMultipista({
                   className={`absolute inset-y-1 flex items-center overflow-hidden rounded px-2 ${
                     mudoMus ? "bg-violet-400/15 ring-1 ring-inset ring-violet-400/30" : "bg-violet-400/50"
                   }`}
-                  style={{ left: pct(barMusica.ini), width: pct(Math.max(0, barMusica.fin - barMusica.ini)) }}
+                  style={{ left: pct(barMusica.ini), width: pct(Math.max(0, barDurMus)) }}
                 >
-                  <span className="truncate text-[10px] font-medium text-violet-950/80">
+                  {/* Rampa de fade in (triángulo ascendente desde la izquierda). */}
+                  {fadeIn > 0 && barDurMus > 0 && (
+                    <svg
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-y-0 left-0 h-full"
+                      style={{ width: `${Math.min((fadeIn / barDurMus) * 100, 100)}%` }}
+                      viewBox="0 0 1 1"
+                      preserveAspectRatio="none"
+                    >
+                      <polygon points="0,1 1,0 1,1" fill="rgba(109,40,217,0.3)" />
+                    </svg>
+                  )}
+                  {/* Rampa de fade out (triángulo descendente hacia la derecha). */}
+                  {fadeOut > 0 && barDurMus > 0 && (
+                    <svg
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-y-0 right-0 h-full"
+                      style={{ width: `${Math.min((fadeOut / barDurMus) * 100, 100)}%` }}
+                      viewBox="0 0 1 1"
+                      preserveAspectRatio="none"
+                    >
+                      <polygon points="0,0 1,1 0,1" fill="rgba(109,40,217,0.3)" />
+                    </svg>
+                  )}
+                  <span className="relative z-10 truncate text-[10px] font-medium text-violet-950/80">
                     {mudoMus ? "Música · silenciada" : `Música · ${Math.round(volMus * 100)}%`}
                   </span>
                 </div>
               )}
             </div>
 
-            {/* Carril 5 · PiP y subtítulos: barras finas clicables (clic = seek al inicio). */}
+            {/* Carril 6 · PiP (barra informativa fina) y subtítulos (cuando no hay carril editable). */}
             {hayBarras && (
               <div className={`flex ${ALTO_BARRAS} flex-col justify-center gap-1`}>
-                {barPip && (
+                {barPipFina && (
                   <div className="relative h-1.5">
                     <div
                       title="PiP — clic para buscar"
                       aria-label="Barra de PiP"
                       role="button"
                       tabIndex={0}
-                      onClick={() => onSeek(barPip.ini / 1000)}
-                      onKeyDown={(e) => e.key === "Enter" && onSeek(barPip.ini / 1000)}
+                      onClick={() => onSeek(barPipFina.ini / 1000)}
+                      onKeyDown={(e) => e.key === "Enter" && onSeek(barPipFina.ini / 1000)}
                       className="absolute inset-y-0 cursor-pointer rounded-full bg-sky-400/70 hover:bg-sky-400/90"
-                      style={{ left: pct(barPip.ini), width: pct(Math.max(0, barPip.fin - barPip.ini)) }}
+                      style={{ left: pct(barPipFina.ini), width: pct(Math.max(0, barPipFina.fin - barPipFina.ini)) }}
                     />
                   </div>
                 )}
