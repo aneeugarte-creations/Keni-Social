@@ -33,6 +33,7 @@ import {
   Eye,
   ImageOff,
   ImagePlay,
+  Keyboard,
   LayoutTemplate,
   Layers,
   Image as ImageIcon,
@@ -53,6 +54,7 @@ import { toast } from "sonner";
 import { AccionesPagina, AccionesPaginaFin } from "@/components/layout/encabezado";
 import { confirmar } from "@/components/comunes/confirmar";
 
+import { AtajosTeclado } from "./AtajosTeclado";
 import { BarraContextual } from "./BarraContextual";
 import { ExportarDialogo } from "./ExportarDialogo";
 import { BotonesMuestra } from "./BotonesMuestra";
@@ -77,7 +79,7 @@ import type { StoreEditor } from "./store";
 import { Telon, useCerrarConEscape } from "./Telon";
 import { useFuentesMarca } from "./useFuentesMarca";
 
-type Herramienta = "diseno" | "elementos" | "texto" | "marca" | "subidas" | "capas";
+type Herramienta = "diseno" | "elementos" | "galeria" | "marca" | "subidas" | "capas";
 
 // Preferencias de "Vista con muestra" (toggles de PRESENTACIÓN del editor) en localStorage. Foto y
 // copy son INDEPENDIENTES. Por defecto ENCENDIDOS: al abrir una plantilla se ve de inmediato cómo
@@ -119,9 +121,9 @@ const HERRAMIENTAS: { clave: Herramienta; etiqueta: string; Icono: typeof Shapes
   // `panelDiseno` u `onPlantillas` (se filtra en el componente).
   { clave: "diseno", etiqueta: "Diseño", Icono: LayoutTemplate },
   { clave: "elementos", etiqueta: "Elementos", Icono: Shapes },
-  // `clave: "texto"` es el id INTERNO del panel; la etiqueta visible es «Galería» (galería de
+  // `clave: "galeria"` es el id INTERNO del panel; la etiqueta visible es «Galería» (galería de
   // imágenes/activos de la marca), que es lo que de verdad es este panel.
-  { clave: "texto", etiqueta: "Galería", Icono: ImageIcon },
+  { clave: "galeria", etiqueta: "Galería", Icono: ImageIcon },
   // «Marca» (Brand Kit estilo Canva): kit de identidad de la marca del documento a un clic
   // (logos + colores + tipografías). Tras Galería (orden Canva: …Texto, Marca…), antes de Capas.
   { clave: "marca", etiqueta: "Marca", Icono: Palette },
@@ -177,6 +179,8 @@ export function EditorDocumento({
   const stageInfo = useRef<{ stage: Konva.Stage | null; escala: number }>({ stage: null, escala: 1 });
   // Menú «Más…» (acciones secundarias plegadas: legibilidad + extras) abierto.
   const [menuMas, setMenuMas] = useState(false);
+  // Chuleta «Atajos de teclado» (modal): se abre desde «Más» y desde el «?» del rail.
+  const [atajos, setAtajos] = useState(false);
   // «Adaptar a otro formato» (el «Redimensionar» de Canva): control propio y visible en la barra,
   // ya no escondido en «Más». Abre un desplegable con los presets de formato.
   const [menuFormato, setMenuFormato] = useState(false);
@@ -341,7 +345,7 @@ export function EditorDocumento({
     const sel = store.getState().seleccion;
     if (sel) {
       setReemplazarId(sel);
-      setTool("texto");
+      setTool("galeria");
       setFijado(true); // apertura programática: cuenta como fijada (no la cierra el mouse-leave)
     }
   };
@@ -395,7 +399,7 @@ export function EditorDocumento({
     switch (tool) {
       case "diseno": return panelDiseno ?? null;
       case "elementos": return <PanelElementos />;
-      case "texto": return <PanelGaleria marca={marca} reemplazarId={reemplazarId} onReemplazado={() => setReemplazarId(null)} />;
+      case "galeria": return <PanelGaleria marca={marca} reemplazarId={reemplazarId} onReemplazado={() => setReemplazarId(null)} />;
       case "marca": return <PanelMarca marca={marca} />;
       case "subidas": return <PanelSubidas marca={marca} />;
       case "capas": return <PanelCapas />;
@@ -556,6 +560,13 @@ export function EditorDocumento({
               >
                 <Eye className="h-4 w-4 text-muted-foreground" /> Revisar legibilidad
               </button>
+              {/* Chuleta de atajos de teclado. */}
+              <button
+                onClick={() => { setMenuMas(false); setAtajos(true); }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
+              >
+                <Keyboard className="h-4 w-4 text-muted-foreground" /> Atajos de teclado
+              </button>
             </div>
           </>
         )}
@@ -594,6 +605,7 @@ export function EditorDocumento({
             <RailBtn key={h.clave} etiqueta={h.etiqueta} Icono={h.Icono} costo={h.costo} activo={tool === h.clave} onClick={() => pulsarTool(h.clave)} onHover={() => hoverBoton(h.clave)} />
           ))}
           <div className="mt-auto w-full">
+            <RailBtn etiqueta="Atajos" Icono={Keyboard} activo={atajos} onClick={() => setAtajos(true)} />
             <RailBtn etiqueta="Ajustes" Icono={Settings2} activo={ajustes} onClick={() => setAjustes((v) => !v)} />
           </div>
         </nav>
@@ -716,6 +728,8 @@ export function EditorDocumento({
           ))}
           <RailBtnMovil etiqueta="Ajustes" Icono={Settings2} activo={ajustes} onClick={() => setAjustes((v) => !v)} />
         </nav>
+
+        <AtajosTeclado abierto={atajos} onCerrar={() => setAtajos(false)} />
       </div>
     </ProveedorEditor>
   );

@@ -46,7 +46,8 @@ describe("EditorDocumento — rail estilo Canva", () => {
     const botones = within(railEscritorio()).getAllByRole("button");
     expect(botones[0]).toHaveTextContent("Diseño");
     // Orden completo del rail (estilo Canva): Diseño · Elementos · Galería · Marca · Subidas ·
-    // Capas · Ajustes. «Subidas» (tus propias fotos) va tras Marca y antes de Capas.
+    // Capas · [Atajos · Ajustes]. «Subidas» (tus propias fotos) va tras Marca y antes de Capas;
+    // «Atajos» (chuleta de teclado) y «Ajustes» van al fondo del rail.
     expect(botones.map((b) => b.textContent)).toEqual([
       "Diseño",
       "Elementos",
@@ -54,6 +55,7 @@ describe("EditorDocumento — rail estilo Canva", () => {
       "Marca",
       "Subidas",
       "Capas",
+      "Atajos",
       "Ajustes",
     ]);
   });
@@ -113,6 +115,28 @@ describe("EditorDocumento — rail estilo Canva", () => {
     fireEvent.click(within(railEscritorio()).getByTitle("Ajustes"));
     const aside = document.querySelector("aside");
     expect(aside?.className).toContain("md:w-[350px]");
+  });
+
+  it("«Galería» abre el panel de galería (id interno renombrado a «galeria»)", () => {
+    montar();
+    fireEvent.click(within(railEscritorio()).getByTitle("Galería"));
+    expect(screen.getByText("panel-galeria")).toBeInTheDocument();
+    fireEvent.click(within(railEscritorio()).getByTitle("Galería"));
+    expect(screen.queryByText("panel-galeria")).not.toBeInTheDocument();
+  });
+
+  it("el «?» del rail abre la chuleta de atajos de teclado", () => {
+    montar();
+    expect(screen.queryByRole("dialog", { name: "Atajos de teclado" })).not.toBeInTheDocument();
+    fireEvent.click(within(railEscritorio()).getByTitle("Atajos"));
+    expect(screen.getByRole("dialog", { name: "Atajos de teclado" })).toBeInTheDocument();
+  });
+
+  it("«Atajos de teclado» del menú «Más» abre la misma chuleta", () => {
+    montar();
+    fireEvent.click(screen.getByTitle("Más acciones"));
+    fireEvent.click(screen.getByText("Atajos de teclado"));
+    expect(screen.getByRole("dialog", { name: "Atajos de teclado" })).toBeInTheDocument();
   });
 });
 
