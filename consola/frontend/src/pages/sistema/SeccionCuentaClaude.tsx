@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BadgeCheck,
+  CircleCheck,
   Copy,
   ExternalLink,
-  Gauge,
   KeyRound,
   LogOut,
   RefreshCw,
+  TriangleAlert,
   UserCog,
 } from "lucide-react";
 import * as React from "react";
@@ -41,10 +42,10 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
-import { CLAVE_USO_CUENTA, useUsoCuenta } from "@/hooks/use-uso-cuenta";
+import { CLAVE_USO_CUENTA, useUsoCuenta, type UsoCuenta as UsoCuentaBurn } from "@/hooks/use-uso-cuenta";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFechaHoraCorta, haceSegundos } from "@/lib/fecha";
-import { limiteMasUrgente, type PrediccionUso } from "@/lib/uso-burn";
+import { limiteMasUrgente } from "@/lib/uso-burn";
 import { cn } from "@/lib/utils";
 import type {
   CuentaAuth,
@@ -395,15 +396,25 @@ function tiempoBurn(horas: number): string {
   return `~${Math.round(horas / 24)} d`;
 }
 
-/** Predicción de burn rate: qué límite (5h / Semana / Sonnet) llegará ANTES al 100 %. `null` si no
- *  hay datos suficientes para predecir. */
-function LineaBurnRate({ prediccion }: { prediccion: PrediccionUso | null }) {
-  if (!prediccion) return null;
+/** Burn rate de la cuenta: verde "sano" si ningún límite (5h / Semana) va a tocar el 100 % antes
+ *  de resetear; naranja con la predicción si alguno sí. Sin pintar nada mientras el snapshot de
+ *  uso (`/sistema/uso`) todavía no ha llegado para esta cuenta. */
+function LineaBurnRate({ uso }: { uso: UsoCuentaBurn | undefined }) {
+  if (!uso) return null;
+  const prediccion = limiteMasUrgente(uso);
+  if (!prediccion) {
+    return (
+      <p className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-300">
+        <CircleCheck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        Ritmo de consumo sano
+      </p>
+    );
+  }
   return (
-    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      <Gauge className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+    <p className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-300">
+      <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
       Primero al 100 %:{" "}
-      <span className="font-medium text-foreground">{prediccion.etiqueta}</span>
+      <span className="font-medium">{prediccion.etiqueta}</span>
       <span className="tabular-nums">{tiempoBurn(prediccion.horas)}</span>
     </p>
   );
@@ -416,7 +427,7 @@ function TarjetaCuenta({
   reparto,
   onMover,
   marcaPendiente,
-  prediccion,
+  usoBurn,
 }: {
   cuenta: Cuenta;
   titulo: string;
@@ -424,7 +435,7 @@ function TarjetaCuenta({
   reparto: RespuestaCuentaMarcas | undefined;
   onMover: (marca: string, cuenta: Cuenta) => void;
   marcaPendiente: string | undefined;
-  prediccion: PrediccionUso | null;
+  usoBurn: UsoCuentaBurn | undefined;
 }) {
   const query = useQuery({
     queryKey: ["sistema", "cuenta", cuenta],
@@ -518,7 +529,7 @@ function TarjetaCuenta({
             </dl>
 
             <BloqueUso uso={data.uso} />
-            <LineaBurnRate prediccion={prediccion} />
+            <LineaBurnRate uso={usoBurn} />
 
             <div className="flex items-center gap-2 pt-1">
               <DialogoCambiarCuenta cuenta={cuenta} conectado onCambiada={refrescar} />
@@ -593,10 +604,8 @@ export function SeccionCuentaClaude() {
   const marcaPendiente = asignar.isPending ? asignar.variables?.marca : undefined;
 
   // Burn rate por cuenta: reutiliza el snapshot de uso (`/sistema/uso`) que ya consume esta sección.
-  const prediccion = (cuenta: Cuenta): PrediccionUso | null => {
-    const uso = data?.cuentas.find((c) => c.cuenta === cuenta);
-    return uso ? limiteMasUrgente(uso) : null;
-  };
+  const usoBurnDe = (cuenta: Cuenta): UsoCuentaBurn | undefined =>
+    data?.cuentas.find((c) => c.cuenta === cuenta);
 
   return (
     <div className="space-y-4">
@@ -608,7 +617,7 @@ export function SeccionCuentaClaude() {
           reparto={repartoQuery.data}
           onMover={(marca, c) => asignar.mutate({ marca, cuenta: c })}
           marcaPendiente={marcaPendiente}
-          prediccion={prediccion(cuenta)}
+          usoBurn={usoBurnDe(cuenta)}
         />
       ))}
     </div>

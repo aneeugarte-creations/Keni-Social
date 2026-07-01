@@ -5,10 +5,10 @@ corre `claude -p /usage` por cuenta y deja aquí su última lectura, para que el
 barra lateral y el gate diario lean de la BD sin ejecutar `claude`. `cuenta` es la clave lógica
 (índice único + target del UPSERT); `id` la espeja por compat de PK.
 
-Además del snapshot, se mantiene —POR CUENTA— el `semana_pct` Y el `sonnet_pct` AL INICIO DEL DÍA
-CDMX (`*_pct_inicio_dia`) para derivar el "consumo de HOY" de cada límite (= `*_pct` actual −
-`*_pct_inicio_dia`): los medidores son acumulativos y solo resetean su ventana semanal, así que
-dentro de un día crecen de forma monótona. Cada línea base se RUEDA en la primera escritura de cada
+Además del snapshot, se mantiene —POR CUENTA— el `semana_pct` AL INICIO DEL DÍA CDMX
+(`semana_pct_inicio_dia`) para derivar el "consumo de HOY" (= `semana_pct` actual −
+`semana_pct_inicio_dia`): el medidor es acumulativo y solo resetea su ventana semanal, así que
+dentro de un día crece de forma monótona. La línea base se RUEDA en la primera escritura de cada
 día CDMX (se hereda la última lectura del día anterior como valor de medianoche) y se reajusta a la
 baja si la ventana semanal resetea a mitad del día (el porcentaje cae), para que el consumo de hoy
 nunca sea negativo.
@@ -30,12 +30,10 @@ _COLS = (
     "conectada",
     "semana_pct",
     "sesion_5h_pct",
-    "sonnet_pct",
     "reset_semana_iso",
     "reset_semana_txt",
     "reset_sesion_iso",
     "semana_pct_inicio_dia",
-    "sonnet_pct_inicio_dia",
     "dia_utc",
     "actualizado_ts",
 )
@@ -120,7 +118,6 @@ def guardar_uso_cuenta(
     conectada: bool,
     semana_pct: int | None,
     sesion_5h_pct: int | None,
-    sonnet_pct: int | None,
     reset_semana_iso: str = "",
     reset_semana_txt: str = "",
     reset_sesion_iso: str = "",
@@ -140,19 +137,16 @@ def guardar_uso_cuenta(
         prev = con.execute(_SELECT, (c,)).fetchone()
         previa = _fila_a_uso(prev) if prev is not None else None
         base, dia = _baseline_dia(previa, dia, semana_pct)
-        base_sonnet = _baseline_col(previa, dia, sonnet_pct, "sonnet_pct", "sonnet_pct_inicio_dia")
         fila = {
             "id": c,
             "cuenta": c,
             "conectada": 1 if conectada else 0,
             "semana_pct": semana_pct,
             "sesion_5h_pct": sesion_5h_pct,
-            "sonnet_pct": sonnet_pct,
             "reset_semana_iso": reset_semana_iso or "",
             "reset_semana_txt": reset_semana_txt or "",
             "reset_sesion_iso": reset_sesion_iso or "",
             "semana_pct_inicio_dia": base,
-            "sonnet_pct_inicio_dia": base_sonnet,
             "dia_utc": dia,
             "actualizado_ts": actualizado_ts,
         }

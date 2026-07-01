@@ -21,7 +21,7 @@ CLAVE = "clave-de-prueba"
 
 # Campos del contrato de CADA cuenta del payload (lo que consume el indicador del sidebar).
 _CAMPOS_CUENTA = {
-    "cuenta", "etiqueta", "marcas", "conectada", "semana_pct", "sesion_5h_pct", "sonnet_pct",
+    "cuenta", "etiqueta", "marcas", "conectada", "semana_pct", "sesion_5h_pct",
     "reset_semana_iso", "reset_semana_txt", "reset_sesion_iso", "actualizado_ts", "al_100",
     "alerta_roja", "dia",
 }
@@ -64,7 +64,7 @@ def test_editor_sin_marcas_no_ve_cuentas(entorno):
 
 def test_editor_unotv_solo_ve_cuenta_b(entorno):
     repos.guardar_uso_cuenta(cuenta="b", conectada=True, semana_pct=80, sesion_5h_pct=5,
-                             sonnet_pct=2, dia_utc="2026-06-14")
+                             dia_utc="2026-06-14")
     cuentas = _cuentas(_cli_como("editor", marcas=["unotv"]).get("/api/sistema/uso").json())
     assert set(cuentas) == {"b"}
     b = cuentas["b"]
@@ -116,7 +116,7 @@ def test_cold_start_cuenta_desconectada_alerta_roja(entorno):
 
 def test_semana_al_100_alerta_roja(entorno):
     repos.guardar_uso_cuenta(
-        cuenta="a", conectada=True, semana_pct=100, sesion_5h_pct=40, sonnet_pct=12,
+        cuenta="a", conectada=True, semana_pct=100, sesion_5h_pct=40,
         reset_semana_iso="2026-07-01T07:00:00Z", reset_semana_txt="Jul 1, 7am (UTC)",
         actualizado_ts=1750000000.0, dia_utc="2026-06-14",
     )
@@ -128,7 +128,7 @@ def test_semana_al_100_alerta_roja(entorno):
 
 def test_operacion_normal_sin_alerta(entorno):
     repos.guardar_uso_cuenta(
-        cuenta="a", conectada=True, semana_pct=42, sesion_5h_pct=10, sonnet_pct=3,
+        cuenta="a", conectada=True, semana_pct=42, sesion_5h_pct=10,
         actualizado_ts=1750000000.0, dia_utc="2026-06-14",
     )
     a = _cuentas(_cli_como("editor", marcas=["claro-sports"]).get("/api/sistema/uso").json())["a"]

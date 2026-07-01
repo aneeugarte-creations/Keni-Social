@@ -30,17 +30,15 @@ _log = logging.getLogger("keni_consola.cuenta_uso_daemon")
 def _extraer_medidores(uso: dict) -> dict:
     """Mapea el dict de `cuenta_claude.uso()` a los campos del snapshot (PURA).
 
-    Reconoce los tres medidores por su etiqueta (la que da el CLI): "Current session" ->
+    Reconoce los dos medidores por su etiqueta (la que da el CLI): "Current session" ->
     `sesion_5h_pct` (+ su reset, para el burn rate); "Current week (all models)" -> `semana_pct`
-    (+ su reset); "Current week (Sonnet only)" -> `sonnet_pct`. Cada `*_pct` es None si su medidor
-    no aparece. `conectada`
-    refleja si la lectura trae medidor (incluido el cacheado); `actualizado_ts` es el epoch que
-    `uso()` adjunta (o el instante actual si no lo trae).
+    (+ su reset). Cada `*_pct` es None si su medidor no aparece. `conectada` refleja si la lectura
+    trae medidor (incluido el cacheado); `actualizado_ts` es el epoch que `uso()` adjunta (o el
+    instante actual si no lo trae).
     """
     conectada = bool(uso.get("disponible"))
     semana_pct: int | None = None
     sesion_5h_pct: int | None = None
-    sonnet_pct: int | None = None
     reset_semana_iso = ""
     reset_semana_txt = ""
     reset_sesion_iso = ""
@@ -50,8 +48,6 @@ def _extraer_medidores(uso: dict) -> dict:
         if "session" in etiqueta:
             sesion_5h_pct = pct
             reset_sesion_iso = medidor.get("reset_iso") or ""
-        elif "week" in etiqueta and "sonnet" in etiqueta:
-            sonnet_pct = pct
         elif "week" in etiqueta:
             semana_pct = pct
             reset_semana_iso = medidor.get("reset_iso") or ""
@@ -60,7 +56,6 @@ def _extraer_medidores(uso: dict) -> dict:
         "conectada": conectada,
         "semana_pct": semana_pct,
         "sesion_5h_pct": sesion_5h_pct,
-        "sonnet_pct": sonnet_pct,
         "reset_semana_iso": reset_semana_iso,
         "reset_semana_txt": reset_semana_txt,
         "reset_sesion_iso": reset_sesion_iso,

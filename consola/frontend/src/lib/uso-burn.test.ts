@@ -13,7 +13,6 @@ function uso(parcial: Partial<UsoCuenta>): UsoCuenta {
     conectada: true,
     semana_pct: null,
     sesion_5h_pct: null,
-    sonnet_pct: null,
     reset_semana_iso: null,
     reset_semana_txt: null,
     reset_sesion_iso: null,
@@ -43,14 +42,15 @@ describe("limiteMasUrgente", () => {
   });
 
   it("descarta la ventana que RESETEA antes de llenarse", () => {
-    // Sonnet bajo (10%) y lento: a su ritmo no llega al 100% antes del reset semanal -> no bloquea.
+    // sesión 5h muy lenta (5% en 1h): a su ritmo no llega al 100% antes de su propio reset -> no bloquea.
     const u = uso({
-      sonnet_pct: 10,
+      sesion_5h_pct: 5,
+      reset_sesion_iso: "2026-06-15T16:00:00Z",
       semana_pct: 50,
-      reset_semana_iso: "2026-06-20T12:00:00Z", // compartido; 5 días de ventana restante
+      reset_semana_iso: "2026-06-20T12:00:00Z",
     });
     const p = limiteMasUrgente(u, AHORA);
-    expect(p?.limite).toBe("semana"); // Sonnet se descarta; gana la semana
+    expect(p?.limite).toBe("semana"); // sesión se descarta; gana la semana
   });
 
   it("pct >= 100 bloquea ya (horas 0) y gana", () => {

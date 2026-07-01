@@ -52,7 +52,6 @@ export const USO_MUESTRA: UsoCuenta[] = [
     conectada: true,
     semana_pct: 100,
     sesion_5h_pct: 0,
-    sonnet_pct: null,
     reset_semana_iso: "2026-07-04T00:00:00Z",
     reset_semana_txt: "4 jul a las 00:00",
     reset_sesion_iso: null,

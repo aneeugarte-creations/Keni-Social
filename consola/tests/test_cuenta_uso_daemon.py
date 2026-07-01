@@ -21,8 +21,6 @@ _USO_COMPLETO = {
          "reset_iso": "2026-06-15T19:39:00Z"},
         {"etiqueta": "Current week (all models)", "pct": 67, "reset": "Jul 1, 7am (UTC)",
          "reset_iso": "2026-07-01T07:00:00Z"},
-        {"etiqueta": "Current week (Sonnet only)", "pct": 2, "reset": "Jul 1, 7am (UTC)",
-         "reset_iso": "2026-07-01T07:00:00Z"},
     ],
     "actualizado": 1750000000.0,
     "cacheado": False,
@@ -35,12 +33,11 @@ _USO_SIN_MEDIDOR = {"disponible": False, "mensaje": "", "medidores": [], "crudo"
 # --- PURO: mapeo de medidores --------------------------------------------- #
 
 
-def test_extraer_medidores_mapea_los_tres():
+def test_extraer_medidores_mapea_los_dos():
     campos = dae._extraer_medidores(_USO_COMPLETO)
     assert campos["conectada"] is True
     assert campos["sesion_5h_pct"] == 26
     assert campos["semana_pct"] == 67
-    assert campos["sonnet_pct"] == 2
     assert campos["reset_semana_iso"] == "2026-07-01T07:00:00Z"
     assert campos["reset_semana_txt"] == "Jul 1, 7am (UTC)"
     assert campos["reset_sesion_iso"] == "2026-06-15T19:39:00Z"  # reset de la 5h, para el burn rate
@@ -52,7 +49,6 @@ def test_extraer_medidores_sin_medidor_es_desconectada():
     assert campos["conectada"] is False
     assert campos["semana_pct"] is None
     assert campos["sesion_5h_pct"] is None
-    assert campos["sonnet_pct"] is None
     assert campos["reset_sesion_iso"] == ""
     # Sin `actualizado` en la lectura, se sella el instante actual (float epoch).
     assert isinstance(campos["actualizado_ts"], float)
@@ -93,18 +89,17 @@ def test_baseline_dia_reset_semanal_baja_la_base():
 def test_guardar_y_leer_singleton(entorno):
     assert repos.leer_uso_cuenta() is None  # cold start
     repos.guardar_uso_cuenta(
-        conectada=True, semana_pct=67, sesion_5h_pct=26, sonnet_pct=2,
+        conectada=True, semana_pct=67, sesion_5h_pct=26,
         reset_semana_iso="2026-07-01T07:00:00Z", reset_semana_txt="Jul 1, 7am (UTC)",
         actualizado_ts=1750000000.0, dia_utc="2026-06-14",
     )
     fila = repos.leer_uso_cuenta()
     assert fila is not None
-    assert fila["semana_pct"] == 67 and fila["sesion_5h_pct"] == 26 and fila["sonnet_pct"] == 2
+    assert fila["semana_pct"] == 67 and fila["sesion_5h_pct"] == 26
     assert fila["semana_pct_inicio_dia"] == 67  # cold start: base = lectura actual
-    assert fila["sonnet_pct_inicio_dia"] == 2  # idem para Sonnet
     # Singleton: una segunda escritura ACTUALIZA la misma fila (no inserta otra).
     repos.guardar_uso_cuenta(
-        conectada=True, semana_pct=70, sesion_5h_pct=30, sonnet_pct=4,
+        conectada=True, semana_pct=70, sesion_5h_pct=30,
         actualizado_ts=1750001000.0, dia_utc="2026-06-14",
     )
     fila = repos.leer_uso_cuenta()
@@ -113,26 +108,21 @@ def test_guardar_y_leer_singleton(entorno):
 
 
 def test_consumo_de_hoy_rueda_la_base_al_cambiar_de_dia(entorno):
-    repos.guardar_uso_cuenta(conectada=True, semana_pct=67, sesion_5h_pct=26, sonnet_pct=2,
-                             dia_utc="2026-06-14")
+    repos.guardar_uso_cuenta(conectada=True, semana_pct=67, sesion_5h_pct=26, dia_utc="2026-06-14")
     # Día nuevo: la base hereda el cierre de ayer (67); el consumo de hoy = 71 - 67 = 4.
-    repos.guardar_uso_cuenta(conectada=True, semana_pct=71, sesion_5h_pct=10, sonnet_pct=3,
-                             dia_utc="2026-06-15")
+    repos.guardar_uso_cuenta(conectada=True, semana_pct=71, sesion_5h_pct=10, dia_utc="2026-06-15")
     fila = repos.leer_uso_cuenta()
     assert fila["dia_utc"] == "2026-06-15"
     assert fila["semana_pct_inicio_dia"] == 67
     assert fila["semana_pct"] - fila["semana_pct_inicio_dia"] == 4
-    # Sonnet rueda su base igual que el semanal: base hereda el cierre de ayer (2); consumo = 3-2 = 1.
-    assert fila["sonnet_pct_inicio_dia"] == 2
-    assert fila["sonnet_pct"] - fila["sonnet_pct_inicio_dia"] == 1
 
 
 def test_guardar_y_leer_por_cuenta(entorno):
     # Una fila POR CUENTA: A y B no se pisan; `leer_uso_cuentas` las devuelve juntas.
     repos.guardar_uso_cuenta(cuenta="a", conectada=True, semana_pct=10, sesion_5h_pct=1,
-                             sonnet_pct=0, dia_utc="2026-06-14")
+                             dia_utc="2026-06-14")
     repos.guardar_uso_cuenta(cuenta="b", conectada=True, semana_pct=80, sesion_5h_pct=5,
-                             sonnet_pct=2, dia_utc="2026-06-14")
+                             dia_utc="2026-06-14")
     a = repos.leer_uso_cuenta("a")
     b = repos.leer_uso_cuenta("b")
     assert a["semana_pct"] == 10 and a["cuenta"] == "a"
@@ -157,7 +147,7 @@ def test_barrido_muestrea_ambas_cuentas(entorno, monkeypatch):
     assert filas["b"]["conectada"] == 0  # B sin medidor -> desconectada (best-effort)
     a = repos.leer_uso_cuenta("a")
     b = repos.leer_uso_cuenta("b")
-    assert a["semana_pct"] == 67 and a["sonnet_pct"] == 2
+    assert a["semana_pct"] == 67
     assert a["reset_semana_iso"] == "2026-07-01T07:00:00Z"
     assert b is not None and b["conectada"] == 0 and b["semana_pct"] is None
 

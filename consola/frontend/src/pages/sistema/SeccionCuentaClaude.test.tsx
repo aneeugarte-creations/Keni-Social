@@ -92,7 +92,6 @@ function cuentaUso(parcial: Partial<UsoCuenta>): UsoCuenta {
     conectada: true,
     semana_pct: null,
     sesion_5h_pct: null,
-    sonnet_pct: null,
     reset_semana_iso: null,
     reset_semana_txt: null,
     reset_sesion_iso: null,
@@ -196,11 +195,18 @@ describe("SeccionCuentaClaude", () => {
   });
 
   it("pinta el burn rate (límite que ANTES llegará al 100%) en la tarjeta conectada", async () => {
-    limiteMasUrgenteMock.mockReturnValue({ limite: "sonnet", etiqueta: "Sonnet", pct: 58, horas: 6 });
+    limiteMasUrgenteMock.mockReturnValue({ limite: "semana", etiqueta: "Semana", pct: 58, horas: 6 });
     renderSeccion();
     // La cuenta A está conectada -> pinta la predicción; la B (sin cuenta) no.
     expect(await screen.findByText(/Primero al 100/)).toBeInTheDocument();
-    expect(screen.getByText("Sonnet")).toBeInTheDocument();
+    expect(screen.getByText("Semana")).toBeInTheDocument();
     expect(screen.getByText("~6 h")).toBeInTheDocument();
+  });
+
+  it("sin predicción urgente pinta el ritmo como sano", async () => {
+    limiteMasUrgenteMock.mockReturnValue(null); // ningún límite va a tocar el 100% antes de resetear
+    renderSeccion();
+    expect(await screen.findByText("Ritmo de consumo sano")).toBeInTheDocument();
+    expect(screen.queryByText(/Primero al 100/)).not.toBeInTheDocument();
   });
 });

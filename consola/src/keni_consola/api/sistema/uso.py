@@ -7,9 +7,9 @@ lateral consulta un dato barato y persistido, sin ejecutar `claude` ni depender 
 
 Endpoint (bajo `/api/sistema`, CONTRATO con el frontend):
   - GET /api/sistema/uso -> {cuentas: [{cuenta, etiqueta, marcas, conectada, semana_pct,
-      sesion_5h_pct, sonnet_pct, reset_semana_iso, reset_semana_txt, reset_sesion_iso,
+      sesion_5h_pct, reset_semana_iso, reset_semana_txt, reset_sesion_iso,
       actualizado_ts, al_100, alerta_roja, dia: {consumo_pct, umbral_pct, limite, pausado}}, ...]}
-    `dia` es el cupo del dia (gate diario) del limite que primero se agota -> barra «24h».
+    `dia` es el cupo del dia (gate diario, limite semanal) -> barra «24h».
 
 Cualquier usuario AUTENTICADO lo consulta, pero solo recibe LAS CUENTAS DE SUS MARCAS (suelo de
 autorización): admin/superadmin reciben ambas; un editor la(s) cuenta(s) de sus marcas
@@ -19,8 +19,8 @@ frontend DECIDA cuál mostrar según el selector de marca activo (solo la cuenta
 ambas en "Todas").
 
 `alerta_roja` por cuenta (la señal que enciende el indicador en rojo) = cuenta DESCONECTADA o
-alguna ventana semanal (all-models o Sonnet) al 100%+. Sin snapshot todavía (cold start) se trata
-como desconectada: `alerta_roja=true`.
+ventana semanal al 100%+. Sin snapshot todavía (cold start) se trata como desconectada:
+`alerta_roja=true`.
 """
 
 from __future__ import annotations
@@ -33,11 +33,9 @@ from ... import gate_diario, permisos, repos, ruteo_cuentas
 
 
 def _forma_dia(cuenta: str) -> dict:
-    """Cupo del dia de la cuenta (gate diario) para la barra «24h» del indicador.
-
-    Refleja el limite que PRIMERO se agota (`limite`: "semanal" all-models o "sonnet"): su consumo
-    de hoy (`consumo_pct`, None mientras no haya dato => gate inerte) y su umbral del dia. El front
-    pinta la barra como `consumo_pct / umbral_pct`.
+    """Cupo del dia de la cuenta (gate diario, limite semanal all-models) para la barra «24h» del
+    indicador: su consumo de hoy (`consumo_pct`, None mientras no haya dato => gate inerte) y su
+    umbral del dia. El front pinta la barra como `consumo_pct / umbral_pct`.
     """
     g = gate_diario.estado(cuenta)
     return {
@@ -59,7 +57,6 @@ def _forma_respuesta(fila: dict | None) -> dict:
             "conectada": False,
             "semana_pct": None,
             "sesion_5h_pct": None,
-            "sonnet_pct": None,
             "reset_semana_iso": None,
             "reset_semana_txt": None,
             "reset_sesion_iso": None,
@@ -69,17 +66,12 @@ def _forma_respuesta(fila: dict | None) -> dict:
         }
     conectada = bool(fila.get("conectada"))
     semana_pct = fila.get("semana_pct")
-    sonnet_pct = fila.get("sonnet_pct")
-    # Al 100 % por CUALQUIER ventana semanal: all-models o Sonnet (el que primero se agota).
-    al_100 = (semana_pct is not None and semana_pct >= 100) or (
-        sonnet_pct is not None and sonnet_pct >= 100
-    )
+    al_100 = semana_pct is not None and semana_pct >= 100
     alerta_roja = (not conectada) or al_100
     return {
         "conectada": conectada,
         "semana_pct": semana_pct,
         "sesion_5h_pct": fila.get("sesion_5h_pct"),
-        "sonnet_pct": fila.get("sonnet_pct"),
         "reset_semana_iso": (fila.get("reset_semana_iso") or None),
         "reset_semana_txt": (fila.get("reset_semana_txt") or None),
         "reset_sesion_iso": (fila.get("reset_sesion_iso") or None),

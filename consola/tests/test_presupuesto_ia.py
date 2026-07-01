@@ -981,19 +981,19 @@ def test_gate_accesor_lee_delta_por_cuenta(entorno):
     independiente por cuenta."""
     # Cuenta A: primer muestreo ancla base=30 -> 0; mismo dia sube a 45 -> 15 pp.
     repos.guardar_uso_cuenta(cuenta=_CUENTA_A, conectada=True, semana_pct=30,
-                             sesion_5h_pct=5, sonnet_pct=20, dia_utc="2026-06-28")
+                             sesion_5h_pct=5, dia_utc="2026-06-28")
     repos.guardar_uso_cuenta(cuenta=_CUENTA_A, conectada=True, semana_pct=45,
-                             sesion_5h_pct=8, sonnet_pct=30, dia_utc="2026-06-28")
+                             sesion_5h_pct=8, dia_utc="2026-06-28")
     # Cuenta B: base=10 -> 12 -> 2 pp; independiente de A.
     repos.guardar_uso_cuenta(cuenta=_CUENTA_B, conectada=True, semana_pct=10,
-                             sesion_5h_pct=2, sonnet_pct=5, dia_utc="2026-06-28")
+                             sesion_5h_pct=2, dia_utc="2026-06-28")
     repos.guardar_uso_cuenta(cuenta=_CUENTA_B, conectada=True, semana_pct=12,
-                             sesion_5h_pct=3, sonnet_pct=6, dia_utc="2026-06-28")
+                             sesion_5h_pct=3, dia_utc="2026-06-28")
     assert gate_diario.consumo_semanal_hoy_pct(_CUENTA_A) == pytest.approx(15.0)
     assert gate_diario.consumo_semanal_hoy_pct(_CUENTA_B) == pytest.approx(2.0)
     # Cuenta B desconectada -> None (no corta sus marcas).
     repos.guardar_uso_cuenta(cuenta=_CUENTA_B, conectada=False, semana_pct=None,
-                             sesion_5h_pct=None, sonnet_pct=None, dia_utc="2026-06-28")
+                             sesion_5h_pct=None, dia_utc="2026-06-28")
     assert gate_diario.consumo_semanal_hoy_pct(_CUENTA_B) is None
 
 
@@ -1056,22 +1056,7 @@ def test_gate_estado_forma(entorno, monkeypatch):
     assert est["consumo_hoy_pct"] == pytest.approx(9.5)
     assert est["umbral_pct"] == pytest.approx(round(_BASE, 1))
     assert est["paso_pct"] == 10.0
-    assert est["limite"] == "semanal"  # sin fila de Sonnet, el unico con dato es el semanal
-
-
-def test_gate_corta_por_sonnet_cuando_es_el_que_primero_se_agota(entorno):
-    """Con Sonnet mas atado que el semanal, el corte (y el limite que reporta `estado`) es Sonnet."""
-    # Base del dia 10/10 (semana/sonnet); luego semana sube a 20 (consume 10 pp) y Sonnet a 40
-    # (consume 30 pp). Sin reset explicito el cupo de cada uno es ~12,9 pp/dia: Sonnet lo cruza.
-    repos.guardar_uso_cuenta(cuenta=_CUENTA_A, conectada=True, semana_pct=10, sesion_5h_pct=0,
-                             sonnet_pct=10, dia_utc="2026-06-28")
-    repos.guardar_uso_cuenta(cuenta=_CUENTA_A, conectada=True, semana_pct=20, sesion_5h_pct=0,
-                             sonnet_pct=40, dia_utc="2026-06-28")
-    assert gate_diario.consumo_semanal_hoy_pct(_CUENTA_A) == pytest.approx(10.0)  # semanal no corta
-    assert gate_diario.pausado_por_pct(_CUENTA_A) is True  # Sonnet si
-    est = gate_diario.estado(_CUENTA_A)
-    assert est["limite"] == "sonnet"
-    assert est["consumo_hoy_pct"] == pytest.approx(30.0)
+    assert est["limite"] == "semanal"
 
 
 def test_gate_estado_todas_trae_las_dos_cuentas(entorno, monkeypatch):

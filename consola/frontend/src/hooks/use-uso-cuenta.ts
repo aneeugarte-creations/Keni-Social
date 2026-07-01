@@ -5,7 +5,7 @@
  * aquí: cliente tipado + hook de react-query + la ruta como constante.
  *
  * Forma de respuesta ACORDADA con el backend (`GET /api/sistema/uso`, cualquier autenticado):
- *   { cuentas: [{ cuenta, etiqueta, marcas, conectada, semana_pct, sesion_5h_pct, sonnet_pct,
+ *   { cuentas: [{ cuenta, etiqueta, marcas, conectada, semana_pct, sesion_5h_pct,
  *       reset_semana_iso, reset_semana_txt, reset_sesion_iso, actualizado_ts, al_100, alerta_roja,
  *       dia }, ...] }
  * El back devuelve SOLO las cuentas que el usuario puede ver (suelo de autorización por marcas);
@@ -43,8 +43,6 @@ export interface UsoCuenta {
   semana_pct: number | null;
   /** % usado de la ventana de SESIÓN de 5 h. `null` si no hay dato. */
   sesion_5h_pct: number | null;
-  /** % usado de la cuota específica de Sonnet, si el plan la reporta. `null` si no. */
-  sonnet_pct: number | null;
   /** Instante UTC ISO del reset de la ventana semanal. `null` si no se conoce. */
   reset_semana_iso: string | null;
   /** Texto crudo del reset semanal tal cual lo da el CLI. `null` si no hay. */

@@ -28,7 +28,6 @@ function cuenta(parcial: Partial<UsoCuenta>): UsoCuenta {
     conectada: true,
     semana_pct: 42,
     sesion_5h_pct: 18,
-    sonnet_pct: null,
     reset_semana_iso: "2026-07-01T00:00:00Z",
     reset_semana_txt: "Jul 1 at 12:00am (UTC)",
     reset_sesion_iso: null,
@@ -67,10 +66,9 @@ describe("IndicadorUso", () => {
     expect(screen.queryByText(/Sin cuenta|100%/)).not.toBeInTheDocument();
   });
 
-  it("sin burn rate activo (reset semanal ya pasado en el fixture): cae al binding semanal, con Sonnet por encima", () => {
-    renderIndicador({ data: { cuentas: [cuenta({ semana_pct: 40, sonnet_pct: 78 })] } }, "claro-sports");
-    expect(screen.getByText("78%")).toBeInTheDocument(); // toma el mayor (Sonnet), no all-models
-    expect(screen.queryByText("40%")).not.toBeInTheDocument();
+  it("sin burn rate activo (reset semanal ya pasado en el fixture): cae al % semanal", () => {
+    renderIndicador({ data: { cuentas: [cuenta({ semana_pct: 40 })] } }, "claro-sports");
+    expect(screen.getByText("40%")).toBeInTheDocument();
   });
 
   it("burn rate activo: si el 5h va a bloquear antes que la semana, «Uso» muestra el 5h (no el semanal)", () => {
@@ -101,16 +99,16 @@ describe("IndicadorUso", () => {
     }
   });
 
-  it("barra «24h»: el cupo del día (consumo/umbral del límite que primero se agota) va en el tooltip", () => {
+  it("barra «24h»: el cupo del día (consumo/umbral del límite semanal) va en el tooltip", () => {
     renderIndicador(
       {
         data: {
-          cuentas: [cuenta({ dia: { consumo_pct: 10, umbral_pct: 14.3, limite: "sonnet", pausado: false } })],
+          cuentas: [cuenta({ dia: { consumo_pct: 10, umbral_pct: 14.3, limite: "semanal", pausado: false } })],
         },
       },
       "claro-sports",
     );
-    expect(screen.getByLabelText(/24h 70% \(Sonnet\)/)).toBeInTheDocument(); // 10 / 14.3 ≈ 70 %
+    expect(screen.getByLabelText(/24h 70%/)).toBeInTheDocument(); // 10 / 14.3 ≈ 70 %
   });
 
   it("una cuenta (marca concreta): SIN cabecera (es su cuenta siempre); un solo número (Semana), el resto al tooltip", () => {
@@ -176,7 +174,7 @@ describe("IndicadorUso", () => {
 
   it("colapsado: anillo (svg) con el % del que antes bloqueará (sin resets útiles, cae al semanal)", () => {
     // Sin reset de sesión y con el semanal que resetea antes de llenarse, el burn rate no predice y
-    // el anillo cae al binding semanal (42).
+    // el anillo cae al % semanal (42).
     const { container } = renderIndicador({ data: { cuentas: [cuenta({ semana_pct: 42 })] } }, "claro-sports", true);
     expect(container.querySelector("svg")).toBeInTheDocument();
     expect(screen.getByText("42")).toBeInTheDocument();
