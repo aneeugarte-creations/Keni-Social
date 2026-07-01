@@ -881,8 +881,8 @@ def test_asignar_empate_exacto_gana_el_primero():
     """A clave IDÉNTICA entre varios clusters gana el primer candidato (determinista: decide el
     orden de entrada, no el azar del dict)."""
     clave = agrupar.clave_cluster({"url": "", "titulo": "El presidente anuncia nueva reforma"})
-    c_a = {"id": "primero", "clave": clave, "titulo": "El presidente anuncia nueva reforma"}
-    c_b = {"id": "segundo", "clave": clave, "titulo": "El presidente anuncia nueva reforma"}
+    c_a = {"id": "primero", "clave": clave, "titulo": "El presidente anuncia nueva reforma", "marca": "unotv"}
+    c_b = {"id": "segundo", "clave": clave, "titulo": "El presidente anuncia nueva reforma", "marca": "unotv"}
     item = _item(url="", titulo="El presidente anuncia nueva reforma")
     assert agrupar.asignar(item, [c_a, c_b]) == "primero"
     # Invertir el orden invierte el ganador.
@@ -892,9 +892,9 @@ def test_asignar_empate_exacto_gana_el_primero():
 def test_asignador_replica_las_decisiones_de_asignar():
     titulo_largo = "El presidente anuncia una nueva reforma para los estados"
     clusters = [
-        {"id": "u1", "clave": "url:example.com/nota-1", "titulo": "Titular original"},
+        {"id": "u1", "clave": "url:example.com/nota-1", "titulo": "Titular original", "marca": "unotv"},
         {"id": "f1", "clave": agrupar.clave_cluster({"url": "", "titulo": titulo_largo}),
-         "titulo": titulo_largo},
+         "titulo": titulo_largo, "marca": "unotv"},
     ]
     asignador = agrupar.Asignador(clusters)
     # (a) cruce exacto por url canónica (la query se ignora).
@@ -913,7 +913,7 @@ def test_asignador_agregar_une_items_del_mismo_barrido():
     asignador = agrupar.Asignador([])
     titulo = "Gran final del torneo de verano"
     asignador.agregar(
-        {"id": "n1", "clave": agrupar.clave_cluster({"url": "", "titulo": titulo}), "titulo": titulo}
+        {"id": "n1", "clave": agrupar.clave_cluster({"url": "", "titulo": titulo}), "titulo": titulo, "marca": "unotv"}
     )
     assert asignador.asignar(_item(url="", titulo=titulo)) == "n1"
 

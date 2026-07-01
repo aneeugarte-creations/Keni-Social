@@ -432,7 +432,7 @@ def test_paso_traducir_encola_un_job_por_marca_ruteado_a_su_cuenta(monkeypatch):
     encoladas, marcadas, _limp = _parchear_encolado(monkeypatch)
 
     resumen = recolectar_daemon.paso_traducir()
-    assert resumen == {"encolados": 3, "marcas": 2, "candidatos": 3}
+    assert resumen == {"encolados": 3, "marcas": 2, "candidatos": 3, "reutilizados": 0}
 
     # UN job por marca (no uno global pool-wide).
     por_marca = {e["marca"]: e for e in encoladas}
@@ -463,7 +463,7 @@ def test_paso_traducir_no_reencola_lo_ya_en_curso(monkeypatch):
     encoladas, _marcadas, _limp = _parchear_encolado(monkeypatch, marcados=lambda _ids: 0)
 
     resumen = recolectar_daemon.paso_traducir()
-    assert resumen == {"encolados": 0, "marcas": 0, "candidatos": 1}
+    assert resumen == {"encolados": 0, "marcas": 0, "candidatos": 1, "reutilizados": 0}
     assert encoladas == []  # no se encoló ningún job: el lote ya estaba en curso
 
 
@@ -480,7 +480,7 @@ def test_paso_traducir_reabre_lote_si_la_admision_rechaza(monkeypatch):
     encoladas, _marcadas, limpiadas = _parchear_encolado(monkeypatch, encolar=_rechaza)
 
     resumen = recolectar_daemon.paso_traducir()
-    assert resumen == {"encolados": 0, "marcas": 0, "candidatos": 1}
+    assert resumen == {"encolados": 0, "marcas": 0, "candidatos": 1, "reutilizados": 0}
     assert limpiadas == [["c1"]]  # re-abierto para reintento
 
 
