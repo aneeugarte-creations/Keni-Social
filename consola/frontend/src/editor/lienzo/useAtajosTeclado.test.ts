@@ -6,7 +6,7 @@ import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { CapaMarco, CapaTexto } from "../documento";
-import { documentoVacio, nuevaCapaTexto } from "../documento";
+import { documentoVacio, nuevaCapaMarco, nuevaCapaTexto } from "../documento";
 import { crearStoreEditor } from "../store";
 import { type LienzoApi, type ZoomApi, useAtajosTeclado } from "./useAtajosTeclado";
 
@@ -232,6 +232,59 @@ describe("useAtajosTeclado — «Ordenar» (tidy up, ⌥⇧T)", () => {
     const capas = store.getState().documento.capas;
     expect(capas.find((c) => c.id === "b")!.x).toBe(130);
     expect(store.getState().puedeDeshacer()).toBe(true); // solo los `agregar`; el tidy no registró nada
+    hook.unmount();
+  });
+});
+
+describe("useAtajosTeclado — orden Z por teclado (⌘] / ⌘[ un paso; ⌘⇧] / ⌘⇧[ absoluto)", () => {
+  // Tres capas apiladas con z 1/2/3 (a al fondo, c al frente); la del MEDIO seleccionada.
+  const montarPila = () => {
+    const store = crearStoreEditor(documentoVacio({ w: 1080, h: 1080, safe_top: 0, safe_bottom: 0 }, "test"));
+    const st = store.getState();
+    st.agregar(nuevaCapaMarco({ id: "a", x: 0, y: 0, w: 50, h: 50, z: 1, relleno: "#111111" }));
+    st.agregar(nuevaCapaMarco({ id: "b", x: 0, y: 0, w: 50, h: 50, z: 2, relleno: "#222222" }));
+    st.agregar(nuevaCapaMarco({ id: "c", x: 0, y: 0, w: 50, h: 50, z: 3, relleno: "#333333" }));
+    st.seleccionar("b");
+    const hook = renderHook(() =>
+      useAtajosTeclado({
+        store,
+        zoom: { current: { acercar: vi.fn(), alejar: vi.fn(), ajustar: vi.fn(), real: vi.fn() } as ZoomApi },
+        reencuadreId: null,
+        recorteId: null,
+      }),
+    );
+    const z = (id: string) => store.getState().documento.capas.find((c) => c.id === id)!.z;
+    return { store, hook, z };
+  };
+
+  it("⌘] sube UN paso (z += 1), no salta al frente absoluto", () => {
+    const { hook, z } = montarPila();
+    teclaCon({ key: "]", metaKey: true });
+    expect(z("b")).toBe(3); // 2 -> 3
+    expect(z("c")).toBe(3); // c intacta (empatan; el orden final lo desempata el render)
+    hook.unmount();
+  });
+
+  it("⌘[ baja UN paso (z -= 1)", () => {
+    const { hook, z } = montarPila();
+    teclaCon({ key: "[", metaKey: true });
+    expect(z("b")).toBe(1); // 2 -> 1
+    hook.unmount();
+  });
+
+  it("⌘⇧] trae al FRENTE absoluto (por encima de TODO)", () => {
+    const { store, hook, z } = montarPila();
+    teclaCon({ key: "]", metaKey: true, shiftKey: true });
+    const maxOtras = Math.max(...store.getState().documento.capas.filter((c) => c.id !== "b").map((c) => c.z));
+    expect(z("b")).toBeGreaterThan(maxOtras);
+    hook.unmount();
+  });
+
+  it("⌘⇧[ envía al FONDO absoluto (por debajo de TODO)", () => {
+    const { store, hook, z } = montarPila();
+    teclaCon({ key: "[", metaKey: true, shiftKey: true });
+    const minOtras = Math.min(...store.getState().documento.capas.filter((c) => c.id !== "b").map((c) => c.z));
+    expect(z("b")).toBeLessThan(minOtras);
     hook.unmount();
   });
 });

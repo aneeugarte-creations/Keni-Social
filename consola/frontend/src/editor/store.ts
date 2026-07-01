@@ -109,6 +109,32 @@ function clonar<T>(v: T): T {
   return structuredClone(v);
 }
 
+// Decide la SELECCIÓN de una capa al PRESIONARLA (mousedown/tap), separando lo que debe aplicarse
+// YA —para poder arrastrar en el mismo gesto— de lo que hay que DIFERIR a un clic seco (mouseup sin
+// arrastre), porque aplicarlo en mousedown rompería un arrastre en curso. Estilo Canva/Figma:
+//   · Shift/⌘-clic sobre una capa que YA está en la selección: NO la quita ahora (arrancar un
+//     shift-arrastre del grupo la sacaría antes de moverse); un clic seco sí la quita.
+//   · Clic seco sobre una capa que forma parte de una multi-selección: NO colapsa el grupo a ella
+//     ahora (para poder arrastrar todo el grupo); un clic seco sí colapsa.
+//   · Añadir una capa nueva al grupo (Shift) o seleccionar una fuera de la selección se hace YA.
+// Pura: no toca el store, solo describe la intención (el llamador ejecuta y agenda el diferido).
+export interface DecisionSeleccion {
+  inmediato: "alternar" | "seleccionar" | null;
+  diferido: { tipo: "quitar" | "colapsar"; id: string } | null;
+}
+
+export function decidirSeleccionClic(seleccionMulti: string[], id: string, add: boolean): DecisionSeleccion {
+  const yaSel = seleccionMulti.includes(id);
+  if (add) {
+    return yaSel
+      ? { inmediato: null, diferido: { tipo: "quitar", id } }
+      : { inmediato: "alternar", diferido: null };
+  }
+  if (yaSel && seleccionMulti.length > 1) return { inmediato: null, diferido: { tipo: "colapsar", id } };
+  if (!yaSel) return { inmediato: "seleccionar", diferido: null };
+  return { inmediato: null, diferido: null };
+}
+
 export type StoreEditor = ReturnType<typeof crearStoreEditor>;
 
 export function crearStoreEditor(inicial: Documento) {
@@ -271,7 +297,9 @@ export function crearStoreEditor(inicial: Documento) {
           z: Math.max(0, ...get().documento.capas.map((c) => c.z)) + 1,
         } as Capa;
         aplicar((doc) => conCapas(doc, [...doc.capas, copia]));
-        set({ seleccion: copia.id });
+        // El Transformer se adjunta a `seleccionMulti`: la copia se pone en AMBOS campos para que su
+        // marco de selección aparezca sin un clic extra (como en `duplicarMulti`).
+        set({ seleccion: copia.id, seleccionMulti: [copia.id] });
       },
 
       reordenar: (id, delta) =>

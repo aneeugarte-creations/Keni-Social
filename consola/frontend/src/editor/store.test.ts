@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { bandaOverlay, cajaVisual, documentoVacio, nuevoId, nuevaCapaMarco, nuevaCapaOverlay, nuevaCapaTexto } from "./documento";
-import { crearStoreEditor } from "./store";
+import { crearStoreEditor, decidirSeleccionClic } from "./store";
 
 describe("Store del editor (Zustand)", () => {
   describe("Ids únicos", () => {
@@ -376,5 +376,51 @@ describe("Store del editor (Zustand)", () => {
       const hijas = (copia as { capas: { x: number; y: number }[] }).capas;
       expect(hijas[0]).toMatchObject({ x: 24, y: 24 });
     });
+  });
+
+  describe("duplicar sincroniza seleccionMulti (el Transformer se adjunta a seleccionMulti)", () => {
+    it("duplicar deja la copia como ÚNICA capa en seleccion Y seleccionMulti", () => {
+      const store = crearStoreEditor(documentoVacio({ w: 1080, h: 1080, safe_top: 0, safe_bottom: 0 }, "test"));
+      const estado = store.getState();
+      estado.agregar(nuevaCapaTexto({ id: "t", nombre: "T", z: 1 }));
+      estado.seleccionar("t");
+      estado.duplicar("t");
+      const copiaId = store.getState().seleccion!;
+      expect(copiaId).not.toBe("t");
+      // Ambos campos apuntan SOLO a la copia: sin esto el marco del Transformer quedaba en la
+      // capa vieja (seleccionMulti no se actualizaba).
+      expect(store.getState().seleccionMulti).toEqual([copiaId]);
+    });
+  });
+});
+
+describe("decidirSeleccionClic (clic-vs-arrastre al presionar una capa)", () => {
+  it("clic normal sobre una capa NO seleccionada: la selecciona YA (nada diferido)", () => {
+    expect(decidirSeleccionClic([], "a", false)).toEqual({ inmediato: "seleccionar", diferido: null });
+    expect(decidirSeleccionClic(["b"], "a", false)).toEqual({ inmediato: "seleccionar", diferido: null });
+  });
+
+  it("Shift-clic sobre una capa NO seleccionada: la AÑADE YA al grupo (nada diferido)", () => {
+    expect(decidirSeleccionClic(["b"], "a", true)).toEqual({ inmediato: "alternar", diferido: null });
+  });
+
+  it("Shift-clic sobre una capa YA seleccionada: NADA inmediato; quitar se DIFIERE al clic seco", () => {
+    // El bug original: aquí se quitaba en mousedown, rompiendo el shift-arrastre del grupo.
+    expect(decidirSeleccionClic(["a", "b"], "a", true)).toEqual({
+      inmediato: null,
+      diferido: { tipo: "quitar", id: "a" },
+    });
+  });
+
+  it("clic normal sobre un MIEMBRO de una multi-selección: NADA inmediato; colapsar se DIFIERE", () => {
+    // Así se puede arrastrar TODO el grupo; un clic seco colapsa a la capa clicada.
+    expect(decidirSeleccionClic(["a", "b", "c"], "b", false)).toEqual({
+      inmediato: null,
+      diferido: { tipo: "colapsar", id: "b" },
+    });
+  });
+
+  it("clic normal sobre la ÚNICA capa ya seleccionada: no-op (ni inmediato ni diferido)", () => {
+    expect(decidirSeleccionClic(["a"], "a", false)).toEqual({ inmediato: null, diferido: null });
   });
 });

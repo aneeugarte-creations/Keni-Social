@@ -203,8 +203,16 @@ export function useAtajosTeclado({
         return;
       }
       if (meta && (e.key === "d" || e.key === "D")) { e.preventDefault(); return st.duplicarMulti(); }
-      if (meta && e.key === "]") { e.preventDefault(); return st.traerAlFrente(sel); }
-      if (meta && e.key === "[") { e.preventDefault(); return st.enviarAlFondo(sel); }
+      // Orden Z estilo Canva/Figma: ⌘] / ⌘[ mueven UN paso (adelante/atrás); con ⇧ saltan al
+      // frente/fondo absolutos.
+      if (meta && e.key === "]") {
+        e.preventDefault();
+        return e.shiftKey ? st.traerAlFrente(sel) : st.reordenar(sel, 1);
+      }
+      if (meta && e.key === "[") {
+        e.preventDefault();
+        return e.shiftKey ? st.enviarAlFondo(sel) : st.reordenar(sel, -1);
+      }
       if (capa && e.key.startsWith("Arrow")) {
         e.preventDefault();
         const ahora = Date.now();

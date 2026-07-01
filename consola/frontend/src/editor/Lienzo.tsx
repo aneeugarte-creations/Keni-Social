@@ -16,6 +16,7 @@ import { toast } from "sonner";
 
 import { CapaNodo } from "./capas/CapaNodo";
 import type { Capa, CapaImagen } from "./documento";
+import { decidirSeleccionClic } from "./store";
 import { useEditor, useStoreEditor } from "./usarEditor";
 
 import { useAccionesLienzo } from "./lienzo/accionesLienzo";
@@ -37,6 +38,7 @@ import { useEncuadre } from "./lienzo/useEncuadre";
 import { useEtiquetaGesto } from "./lienzo/useEtiquetaGesto";
 import { useGestoLateral } from "./lienzo/useGestoLateral";
 import { useHover } from "./lienzo/useHover";
+import { useModificadoresTransform } from "./lienzo/useModificadoresTransform";
 import { useInsercionImagen } from "./lienzo/useInsercionImagen";
 import { useMarquee } from "./lienzo/useMarquee";
 import { useRecorte } from "./lienzo/useRecorte";
@@ -107,6 +109,12 @@ export function Lienzo({
   const trRef = useRef<Konva.Transformer | null>(null);
   const stageRef = useRef<Konva.Stage | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // Selección DIFERIDA a clic-vs-arrastre: la selección de una capa se resuelve en `mousedown`, pero
+  // los cambios que ROMPERÍAN un arrastre inmediato (quitar del grupo una capa ya seleccionada con
+  // Shift, o colapsar una multi-selección a la capa clicada) se aplazan a `mouseup` SIN arrastre.
+  // `null` = nada pendiente; `arrastroRef` marca que el gesto derivó en arrastre (cancela el clic).
+  const clicSelRef = useRef<{ id: string; tipo: "quitar" | "colapsar" } | null>(null);
+  const arrastroRef = useRef(false);
   // Etiquetas de DISTANCIA del imán/espaciado igual (px del documento) junto a las guías: overlay
   // HTML que el hook de arrastre muta directamente por frame (sin setState), como la etiqueta viva.
   const etiquetasImanRef = useRef<HTMLDivElement | null>(null);
@@ -287,6 +295,14 @@ export function Lienzo({
     tr.getLayer()?.batchDraw();
   }, [seleccionMulti, documento, zoom, modoImagen]);
 
+  // Shift = bloquear/liberar proporción; Alt = escalar desde el centro (mientras el Transformer
+  // está activo). Vuelca los flags al nodo Konva por eventos de teclado (efímero, no toca el store).
+  useModificadoresTransform({
+    trRef,
+    ratioBase: ratioFijo,
+    activo: !modoImagen && seleccionMulti.length > 0,
+  });
+
   // DOBLE CLIC sobre una capa (estilo Canva): en TEXTO abre la edición en línea; en IMAGEN entra en
   // MODO RECORTE. Sube hasta el hijo directo de la Layer (las capas de primer nivel llevan ahí su
   // id; el target del doble clic puede ser un nodo interior, p. ej. el Rect de hit de la imagen).
@@ -326,6 +342,40 @@ export function Lienzo({
     if (typeof out.x === "number") out.x = clampMarco(out.x, cw, w);
     if (typeof out.y === "number") out.y = clampMarco(out.y, ch, h);
     return out;
+  };
+
+  // SELECCIÓN al presionar una capa (`mousedown`/`tap`). Resuelve YA la selección necesaria para
+  // arrastrar de inmediato, pero DIFIERE a un clic seco (mouseup sin arrastre) los cambios que
+  // romperían un arrastre en grupo:
+  //   · Shift/⌘-clic sobre una capa YA en la multi-selección: no la quita ahora (arrancar un
+  //     shift-arrastre del grupo la sacaba antes de moverse); un clic seco sí la quita.
+  //   · Clic seco sobre una capa que ya forma parte de una multi-selección: no colapsa el grupo a
+  //     ella ahora (para poder arrastrar todo el grupo); un clic seco sí colapsa.
+  const onSeleccionarCapa = (id: string, e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+    const add = "shiftKey" in e.evt && (e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey);
+    const st = store.getState();
+    arrastroRef.current = false;
+    const { inmediato, diferido } = decidirSeleccionClic(st.seleccionMulti, id, add);
+    if (inmediato === "alternar") st.alternar(id);
+    else if (inmediato === "seleccionar") st.seleccionar(id);
+    clicSelRef.current = diferido;
+  };
+
+  // Aplica la selección diferida en un clic seco (mouseup/touchend sin que el gesto derivara en
+  // arrastre). Tras un arrastre, `arrastroRef` está en true y aquí no se toca la selección.
+  const resolverClicSeleccion = () => {
+    const pend = clicSelRef.current;
+    clicSelRef.current = null;
+    if (!pend || arrastroRef.current) return;
+    const st = store.getState();
+    if (pend.tipo === "quitar") st.alternar(pend.id);
+    else st.seleccionar(pend.id);
+  };
+
+  // Marca el gesto como ARRASTRE (cancela la selección diferida) y delega en el hook de arrastre.
+  const onInicioArrastre = (e: Konva.KonvaEventObject<DragEvent>) => {
+    arrastroRef.current = true;
+    onDragStart(e);
   };
 
   const acciones = useAccionesLienzo({ store, seleccion, seleccionMulti });
@@ -390,12 +440,14 @@ export function Lienzo({
           // vez de mover capas. Sin espacio, interacción normal de capas.
           listening={!espacio}
           onMouseDown={onMouseDownStage}
+          onMouseUp={resolverClicSeleccion}
+          onTouchEnd={resolverClicSeleccion}
           onMouseOver={onMouseOverStage}
           onMouseLeave={() => setHoverId(null)}
           onWheel={onWheel}
           onDblClick={onDobleClic}
           onDblTap={onDobleClic}
-          onDragStart={onDragStart}
+          onDragStart={onInicioArrastre}
           onDragMove={onDragMove}
           onDragEnd={onDragEnd}
         >
@@ -409,12 +461,7 @@ export function Lienzo({
                 muestraFoto={muestraFoto}
                 muestraCopy={muestraCopy}
                 oculta={editando?.id === capa.id}
-                onSelect={(e) => {
-                  const add = e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey;
-                  const st = store.getState();
-                  if (add) st.alternar(capa.id);
-                  else if (!st.seleccionMulti.includes(capa.id)) st.seleccionar(capa.id);
-                }}
+                onSelect={(e) => onSeleccionarCapa(capa.id, e)}
                 onChange={(cambios) => store.getState().actualizar(capa.id, acotarCambios(capa, cambios))}
                 onGesto={() => store.getState().comenzarGesto()}
               />
@@ -442,7 +489,8 @@ export function Lienzo({
               ref={trRef}
               rotateEnabled={!hayGrupo}
               resizeEnabled={!hayGrupo}
-              keepRatio={ratioFijo}
+              // `keepRatio`/`centeredScaling` y los snaps de rotación los gobierna
+              // `useModificadoresTransform` en vivo (Shift/Alt); aquí solo va el resto de la config.
               // Imágenes y logos: esquinas con proporción fija. Una imagen sola (no bloqueada)
               // gana además los LATERALES, que recortan en vez de estirar (gesto lateral arriba).
               enabledAnchors={
@@ -456,7 +504,8 @@ export function Lienzo({
               }
               anchorStyleFunc={estiloAncla}
               ignoreStroke
-              // Snap SUAVE de la rotación a 0/45/90… (estilo Canva); fuera del umbral gira libre.
+              // Base sin Shift: snap SUAVE de la rotación a 0/45/90… (fuera del umbral gira libre).
+              // Con Shift, `useModificadoresTransform` la restringe a incrementos de 15°.
               rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
               rotationSnapTolerance={5}
               // Etiqueta viva junto al cursor: "W × H px" al redimensionar, grados al rotar. El
