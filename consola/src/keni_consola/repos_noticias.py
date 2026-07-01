@@ -384,6 +384,10 @@ def marcar_cluster_traducido(
     )
 
 
+def traduccion_por_clave(clave: str) -> dict[str, Any] | None:
+    return db.traduccion_por_clave(clave)
+
+
 def asignar_cluster_item(item_id: str, cluster_id: str) -> None:
     return db.asignar_cluster_item(item_id, cluster_id)
 

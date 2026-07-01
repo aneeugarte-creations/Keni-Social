@@ -557,6 +557,35 @@ def reparar_traduccion_encolada_atascada(umbral_iso: str) -> int:
         con.close()
 
 
+def traduccion_por_clave(clave: str) -> dict[str, Any] | None:
+    """Traducción ES ya calculada de un cluster HERMANO (misma `clave`, `traducido=1`); None si no.
+
+    Reutiliza la traducción entre marcas: una fuente multimarca crea un cluster por marca con la
+    MISMA `clave`; en cuanto una marca traduce, las hermanas copian su ES sin volver a llamar al
+    modelo. Devuelve `{titulo_es, resumen_es, titulo_original}` de la hermana más reciente con
+    traducción no vacía.
+    """
+    if not clave:
+        return None
+    con = _conectar()
+    try:
+        fila = con.execute(
+            "SELECT titulo_es, resumen_es, titulo_original FROM noticias_clusters "
+            "WHERE clave = ? AND traducido = 1 AND titulo_es <> '' "
+            "ORDER BY actualizado DESC LIMIT 1",
+            (clave,),
+        ).fetchone()
+    finally:
+        con.close()
+    if fila is None:
+        return None
+    return {
+        "titulo_es": fila["titulo_es"] or "",
+        "resumen_es": fila["resumen_es"] or "",
+        "titulo_original": fila["titulo_original"] or "",
+    }
+
+
 def marcar_cluster_traducido(
     cluster_id: str,
     *,

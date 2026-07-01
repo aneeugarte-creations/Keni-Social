@@ -353,6 +353,31 @@ def test_traduccion_encolada_excluye_y_se_re_abre_al_expirar(cliente):  # noqa: 
     assert "ena" not in _ids()
 
 
+def test_traduccion_por_clave_reutiliza_hermana(cliente):  # noqa: ARG001
+    """Caché por clave: una marca hermana (misma `clave`, `traducido=1`) sirve su ES a las demás."""
+    from keni_consola import repos
+
+    # Hermana YA traducida (marca unotv) y hermana pendiente (unotv-us), MISMA clave.
+    repos.upsert_noticia_cluster({
+        "id": "h_es", "titulo": "World news", "clave": "url:ej.com/n1", "marca": "unotv",
+        "idioma": "en", "idiomas": ["en"], "traducido": 1, "titulo_es": "Noticia mundial",
+        "resumen_es": "Resumen ES", "titulo_original": "World news",
+        "ultimo_visto": "2026-06-05T12:00:00+00:00", "estado": "nuevo",
+    })
+    repos.upsert_noticia_cluster({
+        "id": "h_en", "titulo": "World news", "clave": "url:ej.com/n1", "marca": "unotv-us",
+        "idioma": "en", "idiomas": ["en"], "traducido": 0,
+        "ultimo_visto": "2026-06-05T12:00:00+00:00", "estado": "nuevo",
+    })
+    trad = repos.traduccion_por_clave("url:ej.com/n1")
+    assert trad is not None
+    assert trad["titulo_es"] == "Noticia mundial"
+    assert trad["resumen_es"] == "Resumen ES"
+    assert trad["titulo_original"] == "World news"
+    # Sin hermana traducida no hay caché.
+    assert repos.traduccion_por_clave("url:ej.com/inexistente") is None
+
+
 
 # --------------------------------------------------------------------------- #
 # Métricas del ejecutor síncrono (acumulador por hilo, para la actividad IA)    #

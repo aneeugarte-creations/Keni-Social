@@ -40,7 +40,9 @@ def paso_traducir() -> dict[str, Any]:
     Idempotente y best-effort: un fallo de encolado de una marca limpia su marca de encolado (para
     reintentar) y no aborta las demás. El gate de parada/presupuesto lo aplica `cola.encolar`
     (además del gate de `ia_fondo_bloqueada` que el barrido comprueba antes de llamar aquí).
-    Devuelve `{encolados, marcas, candidatos}`.
+    Antes de encolar, REUTILIZA la traducción de una marca hermana (mismo `clave`, ya `traducido=1`)
+    copiándola sin llamar al modelo; solo el residual se agrupa y encola. Devuelve
+    `{encolados, marcas, candidatos, reutilizados}`.
     """
     umbral = iso_utc(datetime.now(UTC) - timedelta(minutes=_ENCOLADA_TTL_MIN))
     try:
@@ -61,8 +63,40 @@ def paso_traducir() -> dict[str, Any]:
 
     from ...pipeline_contenido import _intentos  # perezoso: evita ciclo daemon<->pipeline en carga
 
-    por_marca: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    # CACHÉ POR CLAVE: si una marca HERMANA ya tradujo este artículo (misma clave), copia su ES sin
+    # volver a llamar al modelo. Una fuente multimarca crea un cluster por marca con la misma clave;
+    # en cuanto una lo traduce, las demás lo reutilizan. Solo el residual (claves aún sin traducir en
+    # ninguna marca) se agrupa y encola.
+    residual: list[dict[str, Any]] = []
+    reutilizados = 0
     for c in candidatos:
+        clave = str(c.get("clave") or "")
+        trad = repos.traduccion_por_clave(clave) if clave else None
+        if trad and trad.get("titulo_es"):
+            try:
+                repos.marcar_cluster_traducido(
+                    str(c["id"]),
+                    titulo_es=trad["titulo_es"],
+                    resumen_es=trad.get("resumen_es") or "",
+                    titulo_original=trad.get("titulo_original") or "",
+                )
+                reutilizados += 1
+                continue
+            except Exception:  # noqa: BLE001 -- si la copia falla, cae al encolado normal
+                _log.exception(
+                    "recolectar_daemon: fallo al copiar la traducción hermana de %s.", c.get("id")
+                )
+        residual.append(c)
+    if reutilizados:
+        _log.info(
+            "recolectar_daemon: %d traducción(es) reutilizada(s) de una marca hermana (sin modelo).",
+            reutilizados,
+        )
+    if not residual:
+        return {"encolados": 0, "marcas": 0, "candidatos": len(candidatos), "reutilizados": reutilizados}
+
+    por_marca: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for c in residual:
         por_marca[str(c.get("marca") or "")].append(c)
 
     encolados = 0
@@ -104,7 +138,12 @@ def paso_traducir() -> dict[str, Any]:
             except Exception:  # noqa: BLE001 -- el limpiador de atascados lo cubre si esto falla
                 _log.exception("recolectar_daemon: fallo al re-abrir el lote de traducción de %r.", marca)
 
-    return {"encolados": encolados, "marcas": marcas_encoladas, "candidatos": len(candidatos)}
+    return {
+        "encolados": encolados,
+        "marcas": marcas_encoladas,
+        "candidatos": len(candidatos),
+        "reutilizados": reutilizados,
+    }
 
 
 def _encolar_traduccion(marca: str, clusters: list[dict[str, Any]]) -> bool:
