@@ -4,6 +4,8 @@
  *    PRESERVA el alfa del valor actual (el alfa lo gobierna el deslizador de opacidad).
  *  - Paleta de SÓLIDOS PREDETERMINADOS: un clic aplica la muestra tal cual.
  *  - OPACIDAD: el deslizador produce `#RRGGBBAA` y «Transparente» pone alfa 0.
+ *  - SWATCHES GUARDADAS: «Guardar color» persiste el color actual (localStorage por marca), la
+ *    muestra guardada se aplica con un clic y se puede quitar.
  *  - El espectro y la tira de tono están presentes (la geometría del arrastre no se ejercita en
  *    jsdom: no hay layout real).
  *  El control vive dentro del editor (lee el documento para «En el diseño») y consulta la marca
@@ -11,12 +13,13 @@
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ColorControl } from "./ColorControl";
 import { ProveedorEditor } from "./contexto";
 import { documentoVacio } from "./documento";
 import { crearStoreEditor } from "./store";
+import { cargarSwatches } from "./swatches-guardados";
 
 const FORMATO = { w: 1080, h: 1350, safe_top: 60, safe_bottom: 96 };
 
@@ -109,5 +112,44 @@ describe("ColorControl — espectro completo", () => {
     abrir("Color del texto");
     expect(screen.getByLabelText("Espectro de color (saturación y brillo)")).toBeInTheDocument();
     expect(screen.getByLabelText("Tono")).toBeInTheDocument();
+  });
+});
+
+describe("ColorControl — swatches guardadas", () => {
+  // Sin provider de marca la paleta se guarda bajo la marca vacía.
+  beforeEach(() => localStorage.clear());
+
+  it("«Guardar color» persiste el color actual y lo muestra como muestra reutilizable", () => {
+    montar("#123456", vi.fn());
+    abrir();
+    fireEvent.click(screen.getByRole("button", { name: /Guardar color/ }));
+    expect(cargarSwatches("")).toEqual(["#123456"]);
+    // La muestra guardada queda disponible (un swatch con su hex como título).
+    expect(screen.getByTitle("#123456")).toBeInTheDocument();
+  });
+
+  it("una swatch guardada se aplica con un clic", () => {
+    const onChange = vi.fn();
+    localStorage.setItem("keni:swatches:_", JSON.stringify(["#123456"]));
+    montar("#FF0000", onChange);
+    abrir();
+    fireEvent.click(screen.getByTitle("#123456"));
+    expect(onChange).toHaveBeenCalledWith("#123456");
+  });
+
+  it("una swatch guardada se puede quitar", () => {
+    localStorage.setItem("keni:swatches:_", JSON.stringify(["#123456"]));
+    montar("#FF0000", vi.fn());
+    abrir();
+    fireEvent.click(screen.getByRole("button", { name: "Quitar #123456" }));
+    expect(cargarSwatches("")).toEqual([]);
+  });
+
+  it("no permite guardar dos veces el mismo color (botón deshabilitado)", () => {
+    montar("#00B0F0", vi.fn());
+    abrir();
+    fireEvent.click(screen.getByRole("button", { name: /Guardar color/ }));
+    expect(screen.getByRole("button", { name: /Guardar color/ })).toBeDisabled();
+    expect(cargarSwatches("")).toEqual(["#00B0F0"]);
   });
 });

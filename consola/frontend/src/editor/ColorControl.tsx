@@ -2,7 +2,8 @@
 // selector COMPLETO de espectro (cuadro de saturación/brillo + tira de tono: cualquier color
 // posible, no solo muestras), entrada hexadecimal, cuentagotas (si el navegador trae la API
 // EyeDropper) y MUESTRAS de un clic: colores de la marca activa, los ya usados en el diseño
-// («paleta del documento»), los recientes y la rejilla de sólidos predeterminados de Canva.
+// («paleta del documento»), los GUARDADOS por la persona (paleta propia, persistida por marca en
+// localStorage), los recientes y la rejilla de sólidos predeterminados de Canva.
 //
 // Soporta TRANSPARENCIA: el color se guarda como `#RRGGBB` (opaco) o `#RRGGBBAA` (con alfa). Un
 // deslizador de opacidad + botón «Transparente» permiten, p. ej., un degradado de negro a
@@ -13,7 +14,7 @@
 // `overflow` del panel inspector.
 
 import { useQuery } from "@tanstack/react-query";
-import { Pipette } from "lucide-react";
+import { Pipette, Plus, X } from "lucide-react";
 import { type CSSProperties, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -22,6 +23,7 @@ import { api } from "@/lib/api";
 
 import { COLORES_PREDETERMINADOS, hexARgb, hsvARgb, normalizaHex, rgbAHex, rgbAHsv, type Hsv } from "./color";
 import type { CapaMarco, CapaOverlay, CapaTexto } from "./documento";
+import { cargarSwatches, guardarSwatch, quitarSwatch } from "./swatches-guardados";
 import { useEditor } from "./usarEditor";
 
 // Fondo de tablero de ajedrez (GIMP/Adobe) para visualizar transparencia detrás de una muestra.
@@ -203,20 +205,37 @@ function SelectorEspectro({ rgb, onChange, onFin }: {
   );
 }
 
-function Muestras({ colores, valor, onPick }: { colores: string[]; valor: string; onPick: (c: string) => void }) {
+function Muestras({ colores, valor, onPick, onQuitar }: {
+  colores: string[];
+  valor: string;
+  onPick: (c: string) => void;
+  // Si se pasa, cada muestra ofrece una × al pasar el ratón para eliminarla (swatches guardadas).
+  onQuitar?: (c: string) => void;
+}) {
   if (colores.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-1">
       {colores.map((c) => (
-        <button
-          key={c}
-          onClick={() => onPick(c)}
-          title={c}
-          style={TABLERO}
-          className={`h-5 w-5 overflow-hidden rounded border ${c.toUpperCase() === valor.toUpperCase() ? "border-primary ring-1 ring-primary" : "border-border"}`}
-        >
-          <span className="block h-full w-full" style={{ background: c }} />
-        </button>
+        <span key={c} className="group/muestra relative">
+          <button
+            onClick={() => onPick(c)}
+            title={c}
+            style={TABLERO}
+            className={`block h-5 w-5 overflow-hidden rounded border ${c.toUpperCase() === valor.toUpperCase() ? "border-primary ring-1 ring-primary" : "border-border"}`}
+          >
+            <span className="block h-full w-full" style={{ background: c }} />
+          </button>
+          {onQuitar && (
+            <button
+              onClick={() => onQuitar(c)}
+              title="Quitar color guardado"
+              aria-label={`Quitar ${c}`}
+              className="absolute -right-1 -top-1 hidden h-3 w-3 items-center justify-center rounded-full border border-border bg-popover text-muted-foreground hover:text-destructive group-hover/muestra:flex"
+            >
+              <X className="h-2 w-2" />
+            </button>
+          )}
+        </span>
       ))}
     </div>
   );
@@ -238,6 +257,11 @@ export function ColorControl({ valor, onChange, titulo = "Color" }: {
   const fondo = useEditor((s) => s.documento.fondo);
   const delDoc = coloresDelDocumento(capas, fondo);
   const deMarca = useColoresMarca();
+  // Paleta propia persistida por marca. El contexto de marca es OPCIONAL (igual que `useColoresMarca`):
+  // fuera del provider (tests) se guarda bajo la marca vacía.
+  const marcaCtx = useContext(MarcaActivaContexto);
+  const marcaId = marcaCtx?.marcaActiva ?? "";
+  const [guardadas, setGuardadas] = useState<string[]>(() => cargarSwatches(marcaId));
   const { rgb, alfa } = partes(valor);
   // Último valor aplicado, para registrar «recientes» UNA vez al soltar el arrastre del espectro
   // (registrar en cada tick del arrastre inundaría la lista con intermedios casi iguales).
@@ -287,12 +311,18 @@ export function ColorControl({ valor, onChange, titulo = "Color" }: {
       setPos({ top, left });
     }
     setHexEdicion(null);
+    // Relee la paleta guardada al abrir: pudo cambiar por otra instancia del picker o de marca.
+    setGuardadas(cargarSwatches(marcaId));
     setAbierto((v) => !v);
   };
 
   const elegir = (c: string) => { recordar(c); onChange(c); };
   const setRgb = (nuevoRgb: string) => elegir(combina(nuevoRgb, alfa));
   const setAlfa = (nuevoAlfa: number) => elegir(combina(rgb, nuevoAlfa));
+  // Guarda el color ACTUAL (canónico, con su alfa) en la paleta propia de la marca.
+  const guardarActual = () => setGuardadas(guardarSwatch(marcaId, combina(rgb, alfa)));
+  const quitarGuardada = (c: string) => setGuardadas(quitarSwatch(marcaId, c));
+  const yaGuardada = guardadas.some((c) => c.toUpperCase() === combina(rgb, alfa).toUpperCase());
 
   const commitHex = () => {
     if (hexEdicion !== null) {
@@ -406,6 +436,23 @@ export function ColorControl({ valor, onChange, titulo = "Color" }: {
                 <div className="mb-1 mt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">En el diseño</div>
                 <Muestras colores={delDoc} valor={valor} onPick={elegir} />
               </>
+            )}
+            {/* Paleta propia: muestras guardadas a mano + botón para guardar el color actual. */}
+            <div className="mb-1 mt-2 flex items-center justify-between">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Guardadas</span>
+              <button
+                onClick={guardarActual}
+                disabled={yaGuardada}
+                title={yaGuardada ? "Este color ya está guardado" : "Guardar el color actual en tu paleta"}
+                className="flex items-center gap-0.5 rounded border border-input px-1 py-0.5 text-[10px] text-muted-foreground hover:border-primary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Plus className="h-3 w-3" /> Guardar color
+              </button>
+            </div>
+            {guardadas.length > 0 ? (
+              <Muestras colores={guardadas} valor={valor} onPick={elegir} onQuitar={quitarGuardada} />
+            ) : (
+              <p className="text-[10px] text-muted-foreground/70">Guarda tus colores para reutilizarlos.</p>
             )}
             {recientes.length > 0 && (
               <>
