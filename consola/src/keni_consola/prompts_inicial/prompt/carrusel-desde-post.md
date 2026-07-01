@@ -29,10 +29,4 @@ Tú NO generas la portada. Generas las tarjetas que van DESPUÉS de ella; no rep
 2. Cada tarjeta lleva UN `titular`: una frase CORTA de texto-en-imagen (como la portada), sin emojis, sin hashtags, en la voz de {{MARCA}}. Que se lea de un vistazo en una placa: directa, una idea por tarjeta.
 3. No repitas la misma idea en dos tarjetas. Cada una aporta algo nuevo del copy.
 
-## Salida
-
-Devuelve SOLO un objeto JSON, sin prosa ni explicación, con esta forma exacta:
-
-{"slides": [{"titular": "Primera idea clave"}, {"titular": "Segunda idea clave"}]}
-
-Entre {{MIN_SLIDES}} y {{MAX_SLIDES}} elementos. Cada `titular` no vacío. Nada más que el JSON.
+{{CONTRATO_SALIDA}}

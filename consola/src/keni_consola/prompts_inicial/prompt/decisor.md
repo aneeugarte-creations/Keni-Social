@@ -28,11 +28,4 @@ Señales de la historia:
 - Titulares:
 {{TITULARES}}
 
-Responde EXCLUSIVAMENTE con un único bloque de código cercado ```json con esta forma exacta, sin
-texto antes ni después:
-
-```json
-{"camino": "foto"}
-```
-
-donde `camino` es `"foto"` o `"carrusel"`.
+{{CONTRATO_SALIDA}}

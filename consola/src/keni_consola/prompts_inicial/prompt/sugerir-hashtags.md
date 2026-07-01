@@ -34,10 +34,4 @@ Da además una **imagen clave**: de 2 a 4 palabras que describan LITERALMENTE qu
 - Bien: "niño usando tablet", "bandera de Irán", "estadio de fútbol", "termómetro calor".
 - Mal: copiar el titular ("Acercarlos a la tecnología no es dejarlos solos…"), frases largas, o nombres propios poco fotografiables. Prefiere el concepto visible (lugar, objeto, símbolo, escena) sobre la idea abstracta.
 
-## Salida
-
-Devuelve SOLO un objeto JSON, sin prosa ni explicación, con esta forma exacta:
-
-{"hashtags": ["#ejemplo", "#otro"], "imagen_clave": "sujeto visual a buscar"}
-
-Cada hashtag CON su '#' delante. Como mucho {{CANTIDAD}} hashtags, solo de la lista de arriba. `imagen_clave` es una cadena corta (2-4 palabras); si de verdad no se te ocurre un sujeto fotografiable, déjala como "".
+{{CONTRATO_SALIDA}}
