@@ -157,6 +157,10 @@ def items_de_feed(
     feed_nombre = str(feed.get("nombre") or "")
     categoria = str(feed.get("categoria") or "")
     marca = str(feed.get("marca") or "")
+    # Marcas SERVIDAS por la fuente (multimarca): se emite una fila por marca (mismo contenido,
+    # distinta `marca`) para que cada mercado tenga su historia. Sin lista → [marca] (que puede ser
+    # '' en una fuente compartida: una sola fila sin marca, como siempre).
+    marcas_feed = [str(m) for m in (feed.get("marcas") or []) if m] or [marca]
     geo = str(feed.get("geo") or "")
     idioma_feed = str(feed.get("idioma") or "").strip().lower()
     # Peso editorial de la fuente, DENORMALIZADO en cada item (el clustering es una capa
@@ -175,6 +179,7 @@ def items_de_feed(
         return [], {"conteo": 0, "error": str(e) or "Error al leer el feed."}
 
     items: list[dict[str, Any]] = []
+    n_articulos = 0
     for crudo in crudos:
         url = (crudo.get("enlace") or "").strip()
         titulo = (crudo.get("titulo") or "").strip()
@@ -184,30 +189,32 @@ def items_de_feed(
             continue  # sin identidad estable: no se archiva
         resumen = (crudo.get("resumen") or "").strip()
         idioma = idioma_feed or detectar_idioma(f"{titulo} {resumen}")
-        items.append(
-            {
-                "fuente_id": feed_id,
-                "fuente_nombre": feed_nombre,
-                "categoria": categoria,
-                "marca": marca,
-                "geo": geo,
-                "titulo": titulo,
-                "resumen": resumen,
-                # Cuerpo COMPLETO de la nota si el feed lo trae (content:encoded). Da al copy el
-                # texto real, no solo el snippet; "" para feeds que no lo mandan (Google News, wires).
-                "cuerpo": (crudo.get("cuerpo") or "").strip(),
-                "url": url,
-                "url_canonica": url_can,
-                "imagen": (crudo.get("imagen") or "").strip(),
-                "autor": (crudo.get("autor") or "").strip(),
-                "idioma": idioma,
-                "publicado_en": _publicado_en(crudo.get("fecha") or ""),
-                "clave": clave,
-                "fuente_peso": fuente_peso,
-                "estado": "nuevo",
-            }
-        )
-    return items, {"conteo": len(items), "error": ""}
+        n_articulos += 1
+        base = {
+            "fuente_id": feed_id,
+            "fuente_nombre": feed_nombre,
+            "categoria": categoria,
+            "geo": geo,
+            "titulo": titulo,
+            "resumen": resumen,
+            # Cuerpo COMPLETO de la nota si el feed lo trae (content:encoded). Da al copy el
+            # texto real, no solo el snippet; "" para feeds que no lo mandan (Google News, wires).
+            "cuerpo": (crudo.get("cuerpo") or "").strip(),
+            "url": url,
+            "url_canonica": url_can,
+            "imagen": (crudo.get("imagen") or "").strip(),
+            "autor": (crudo.get("autor") or "").strip(),
+            "idioma": idioma,
+            "publicado_en": _publicado_en(crudo.get("fecha") or ""),
+            "clave": clave,
+            "fuente_peso": fuente_peso,
+            "estado": "nuevo",
+        }
+        # Fan-out por marca: la red se descargó UNA vez; aquí se emite una fila por marca servida.
+        items.extend({**base, "marca": m} for m in marcas_feed)
+    # `conteo` = ARTÍCULOS distintos del sondeo (no filas): la salud del feed no debe inflarse
+    # por el fan-out multimarca.
+    return items, {"conteo": n_articulos, "error": ""}
 
 
 # --------------------------------------------------------------------------- #

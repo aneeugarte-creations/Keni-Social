@@ -97,6 +97,22 @@ def test_items_de_feed_mapea_campos_de_la_fuente():
     assert it["titulo"].startswith("El presidente")
 
 
+def test_items_de_feed_fanout_multimarca():
+    # Una fuente multimarca emite una fila POR MARCA (mismo contenido), descargando la red una vez.
+    items, salud = ingesta.items_de_feed(
+        _feed(marcas=["unotv", "unotv-us"]), fetcher=lambda _u: _FEED_ES
+    )
+    # 2 artículos × 2 marcas = 4 filas; el conteo de salud son ARTÍCULOS distintos, no filas.
+    assert len(items) == 4
+    assert salud == {"conteo": 2, "error": ""}
+    assert {it["marca"] for it in items} == {"unotv", "unotv-us"}
+    # La misma clave aparece una vez por marca (dedup aguas abajo será (fuente_id, marca, clave)).
+    claves_unotv = sorted(it["clave"] for it in items if it["marca"] == "unotv")
+    claves_us = sorted(it["clave"] for it in items if it["marca"] == "unotv-us")
+    assert claves_unotv == claves_us
+    assert len(claves_unotv) == 2
+
+
 def test_idioma_del_feed_gana_a_la_heuristica():
     # El feed declara idioma 'fr'; aunque el texto sea español, se respeta el del feed.
     items, _ = ingesta.items_de_feed(_feed(idioma="fr"), fetcher=lambda _u: _FEED_ES)

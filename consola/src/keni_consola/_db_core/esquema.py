@@ -1474,7 +1474,12 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # la cola del paso de etiquetas. Las ya etiquetadas se marcan revisadas de una vez (backfill).
     "ALTER TABLE noticias_items ADD COLUMN IF NOT EXISTS etiquetas_revisadas INTEGER NOT NULL DEFAULT 0",
     "UPDATE noticias_items SET etiquetas_revisadas = 1 WHERE tags <> '[]' AND etiquetas_revisadas = 0",
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_noticias_items_dedup ON noticias_items (fuente_id, clave)",
+    # Dedup POR (fuente, marca, clave): una fuente multimarca archiva el MISMO artículo una vez
+    # POR MARCA (fan-out de la ingesta), no una sola vez global. El índice viejo (fuente_id, clave)
+    # se retira; el DROP es idempotente (no-op tras el primer arranque).
+    "DROP INDEX IF EXISTS idx_noticias_items_dedup",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_noticias_items_dedup_marca "
+    "ON noticias_items (fuente_id, marca, clave)",
     "CREATE INDEX IF NOT EXISTS idx_noticias_items_capturado ON noticias_items (capturado_en)",
     "CREATE INDEX IF NOT EXISTS idx_noticias_items_marca_capturado ON noticias_items (marca, capturado_en)",
     "CREATE INDEX IF NOT EXISTS idx_noticias_items_categoria ON noticias_items (categoria)",

@@ -77,7 +77,7 @@ def _fila_a_noticia_item(fila: Any) -> dict[str, Any]:
 
 
 def crear_noticias_items(items: list[dict[str, Any]]) -> int:
-    """Inserta en bloque items de archivo; ignora duplicados ((fuente_id, clave)).
+    """Inserta en bloque items de archivo; ignora duplicados ((fuente_id, marca, clave)).
 
     Cada dict debe traer al menos `clave` (sin ella no hay identidad estable: se omite). Los
     campos ausentes caen a su default. Devuelve cuántas filas se INSERTARON realmente
@@ -124,7 +124,7 @@ def crear_noticias_items(items: list[dict[str, Any]]) -> int:
             cur = con.execute(
                 f"INSERT INTO noticias_items ({', '.join(cols_insert)}) "
                 f"VALUES ({marcadores}) "
-                "ON CONFLICT (fuente_id, clave) DO NOTHING",
+                "ON CONFLICT (fuente_id, marca, clave) DO NOTHING",
                 tuple(fila[col] for col in cols_insert),
             )
             if cur.rowcount and cur.rowcount > 0:
