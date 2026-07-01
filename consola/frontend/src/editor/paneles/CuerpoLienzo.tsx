@@ -1,5 +1,6 @@
 // Inspector sin capa seleccionada: edita el LIENZO (tamaño/aspect ratio) y el FONDO del documento.
 
+import { adaptarDocumento } from "../adaptar";
 import { ColorControl } from "../ColorControl";
 import { PRESETS_FORMATO, mismoFormato } from "../formatos";
 import { Seccion } from "../Seccion";
@@ -14,7 +15,14 @@ export function CuerpoLienzo() {
   const formato = useEditor((s) => s.documento.formato);
 
   const setFondo = (f: typeof fondo) => store.getState().setFondo(f);
+  // Ajuste MANUAL del lienzo (campos de tamaño/márgenes): cambia el formato tal cual, sin recolocar
+  // capas (retoque fino en vivo mientras se teclea).
   const setFmt = (f: typeof formato) => store.getState().setFormato(f);
+  // Elegir un PRESET REENCUADRA el contenido a las proporciones del destino (reescala y recoloca las
+  // capas), igual que «Adaptar a…» de la barra: aplicar el preset crudo dejaba las capas descolocadas
+  // o estiradas al cambiar w/h. Un clic discreto, así que reencuadrar de golpe es lo esperado.
+  const aplicarPreset = (f: typeof formato) =>
+    store.getState().cargar(adaptarDocumento(store.getState().documento, f));
   const PRESETS = PRESETS_FORMATO;
   const activo = (f: typeof formato) => mismoFormato(f, formato);
   const esTransparente = fondo.tipo === "color" && alfaHex(fondo.color) === 0;
@@ -65,7 +73,7 @@ export function CuerpoLienzo() {
           {PRESETS.map((p) => (
             <button
               key={p.etiqueta}
-              onClick={() => setFmt(p.f)}
+              onClick={() => aplicarPreset(p.f)}
               className={`rounded border px-2 py-1 text-xs ${activo(p.f) ? "border-primary bg-accent" : "border-input hover:bg-accent/50"}`}
             >
               {p.etiqueta}
