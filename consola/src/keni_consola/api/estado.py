@@ -143,8 +143,8 @@ def _chequeos_presupuesto() -> list[dict]:
         salida.append(_chequeo(
             "maquina:presupuesto", "Presupuesto de IA", "ok", detalle, admin=False,
         ))
-    # Gate diario por % POR CUENTA: cualquier cuenta que haya alcanzado su umbral del día pausa SUS
-    # marcas. Reportamos las cuentas gateadas (puede haber una o las dos).
+    # Gate diario por % POR CUENTA: cualquier cuenta que haya alcanzado su umbral del día frena el
+    # FONDO de SUS marcas (lo manual sigue). Reportamos las cuentas gateadas (una o las dos).
     cuentas = est.get("gate_diario_cuentas") or {}
     gateadas = [g for g in cuentas.values() if g.get("pausado_por_pct")]
     if bool(est.get("pausada")):
@@ -162,10 +162,10 @@ def _chequeos_presupuesto() -> list[dict]:
         )
         salida.append(_chequeo(
             "maquina:pausa", "Generación con IA", "aviso",
-            f"Generación PAUSADA por consumo del día en {len(gateadas)} cuenta(s): {detalle_cuentas}. "
-            "Las marcas de esa(s) cuenta(s) no encolan ni ejecutan nada nuevo.",
+            f"Fondo en pausa por consumo del día en {len(gateadas)} cuenta(s): {detalle_cuentas}. "
+            "El fondo de esa(s) cuenta(s) no encola nada nuevo; los lanzamientos manuales siguen.",
             admin=False,
-            siguiente_paso="Un administrador puede aceptar +10% en el Monitor (Economía) para reanudar la cuenta afectada.",
+            siguiente_paso="Un administrador puede aceptar +10% en el Monitor (Economía) para reanudar el fondo de la cuenta afectada.",
         ))
     else:
         salida.append(_chequeo(

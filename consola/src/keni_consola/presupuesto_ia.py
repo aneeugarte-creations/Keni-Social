@@ -280,20 +280,24 @@ def _nivel_global(marca: str = "") -> str:
     """
     if config.generacion_pausada() or (marca and config.generacion_pausada_marca(marca)):
         return NIVEL_PAUSADO
-    # Gate DIARIO por % del limite SEMANAL POR CUENTA: corte TOTAL (auto y manual) del trabajo de
-    # una cuenta cuando el consumo del dia de ESA cuenta alcanza su umbral. Resuelve la cuenta de
+    margen = 1 + config.presupuesto_margen_manual_pct() / 100.0
+    nivel_vigente = NIVEL_NORMAL
+    # Gate DIARIO por % del limite SEMANAL POR CUENTA: frena el FONDO (autogen/pipeline) del trabajo
+    # de una cuenta cuando el consumo del dia de ESA cuenta alcanza su umbral, dejando pasar lo
+    # MANUAL de las personas (SOLO_MANUAL) para reservarles margen del cupo. Resuelve la cuenta de
     # CUALQUIER job via `ruteo_cuentas`: con `marca`, la cuenta de esa marca; sin marca (jobs
     # cross-marca), la cuenta POR DEFECTO ("a"). Asi el freno aplica al trabajo de una cuenta
     # completo —sus marcas Y su fondo sin marca— y cae tanto en la ADMISION como en el reclamo del
-    # worker. Inerte mientras la fuente del % de la cuenta no exista (devuelve False).
+    # worker. Se combina con el cap de USD por MAS restrictivo (si el cap ya esta AGOTADO, manda ese
+    # corte total). Inerte mientras la fuente del % de la cuenta no exista (devuelve False).
     if gate_diario.pausado_por_pct(ruteo_cuentas.cuenta_de_marca(marca)):
-        return NIVEL_PAUSADO
-    margen = 1 + config.presupuesto_margen_manual_pct() / 100.0
-    nivel_vigente = NIVEL_NORMAL
+        nivel_vigente = NIVEL_SOLO_MANUAL
     presupuesto_usd = config.presupuesto_usd_dia()
     if presupuesto_usd > 0:
         gasto = _gasto_hoy()
-        nivel_vigente = _escalon(float(gasto.get("coste_usd", 0.0)), presupuesto_usd, margen)
+        nivel_vigente = _mas_severo(
+            nivel_vigente, _escalon(float(gasto.get("coste_usd", 0.0)), presupuesto_usd, margen)
+        )
     if marca:
         presupuesto_marca = config.presupuesto_usd_dia_marca(marca)
         if presupuesto_marca > 0:

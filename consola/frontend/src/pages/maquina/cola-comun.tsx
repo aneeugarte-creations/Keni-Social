@@ -723,9 +723,10 @@ function PanelMotor({
 }
 
 /** Aviso del gate diario por % de UNA cuenta de Claude. Cuando el consumo del día de la cuenta
- *  alcanza su umbral, la generación de SUS marcas (auto y manual) se pausa y aparece la pantalla
- *  «Aceptar continuar (+10%)» (solo admin: sube el umbral del día de ESA cuenta y reanuda). A un
- *  no-admin solo le aparece que está pausada por el consumo del día. `lineaSiNoPausada` controla si,
+ *  alcanza su umbral, el FONDO de SUS marcas se pausa (lo manual de las personas sigue) y aparece
+ *  la pantalla «Aceptar continuar (+10%)» (solo admin: sube el umbral del día de ESA cuenta y
+ *  reanuda el fondo). A un no-admin solo le aparece que el fondo está en pausa por el consumo del
+ *  día. `lineaSiNoPausada` controla si,
  *  sin pausa, se pinta una línea discreta de consumo (modo de una marca) o nada (modo "Todas", donde
  *  solo interesan las cuentas gateadas). Sin datos del % (rollout) no pinta nada. */
 function AvisoGateCuenta({
@@ -775,8 +776,8 @@ function AvisoGateCuenta({
           </p>
           <p className="text-xs text-amber-800 dark:text-amber-300/90 tabular-nums">
             Hoy se ha consumido {consumo.toFixed(1)}% del límite semanal de la {etiquetaCuenta}{" "}
-            (umbral del día {gate.umbral_pct.toFixed(1)}%). No se encola ni se ejecuta nada nuevo de
-            sus marcas —ni automático ni manual— hasta reanudar.
+            (umbral del día {gate.umbral_pct.toFixed(1)}%). El fondo de sus marcas deja de encolar y
+            ejecutar; los lanzamientos manuales del equipo siguen.
           </p>
         </div>
       </div>
@@ -791,7 +792,7 @@ function AvisoGateCuenta({
         </Button>
       ) : (
         <p className="text-xs text-amber-800 dark:text-amber-300/90">
-          Un administrador puede aceptar +10% para reanudar la generación de hoy de esta cuenta.
+          Un administrador puede aceptar +10% para reanudar el fondo de hoy de esta cuenta.
         </p>
       )}
     </div>

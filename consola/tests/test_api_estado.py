@@ -242,11 +242,11 @@ def test_chequeo_pausa_por_kill_switch(entorno, sondas_sanas, monkeypatch):
 
 
 def test_chequeo_pausa_por_gate_diario(entorno, sondas_sanas, monkeypatch):
-    """Pausa por % del consumo del día de UNA cuenta (no kill switch): el chequeo `maquina:pausa` lo
-    distingue y nombra la cuenta afectada."""
+    """Freno del FONDO por % del consumo del día de UNA cuenta (no kill switch): el chequeo
+    `maquina:pausa` lo distingue y nombra la cuenta afectada."""
     est = {
         **_presupuesto_sano(),
-        "nivel": presupuesto_ia.NIVEL_PAUSADO,
+        "nivel": presupuesto_ia.NIVEL_SOLO_MANUAL,
         "pausada": False,
         "gate_diario_cuentas": {
             "a": {"cuenta": "a", "consumo_hoy_pct": 5.0, "umbral_pct": 14.3, "pausado_por_pct": False},

@@ -1083,60 +1083,64 @@ def test_gate_estado_todas_trae_las_dos_cuentas(entorno, monkeypatch):
     assert todas[_CUENTA_B]["cuenta"] == _CUENTA_B
 
 
-def test_nivel_pausado_por_gate_de_la_cuenta_de_la_marca(entorno, monkeypatch):
-    """Con la cuenta de la marca en umbral, `nivel(marca)` es PAUSADO; `estado(marca)` lo distingue
-    del kill switch. Aceptar +10% en ESA cuenta reanuda."""
+def test_nivel_solo_manual_por_gate_de_la_cuenta_de_la_marca(entorno, monkeypatch):
+    """Con la cuenta de la marca en umbral, `nivel(marca)` es SOLO_MANUAL (el fondo cede, lo manual
+    pasa); `estado(marca)` lo distingue del kill switch. Aceptar +10% en ESA cuenta reanuda."""
     cuenta_unotv = ruteo_cuentas.cuenta_de_marca("unotv")
     _patch_consumo(monkeypatch, {cuenta_unotv: 20.0})  # > base ~14,3
-    assert presupuesto_ia.nivel("unotv") == presupuesto_ia.NIVEL_PAUSADO
+    assert presupuesto_ia.nivel("unotv") == presupuesto_ia.NIVEL_SOLO_MANUAL
+    # El fondo se frena; lo manual de las personas pasa.
+    assert presupuesto_ia.bloqueo_inline("", "unotv", es_fondo=True) == presupuesto_ia.NIVEL_SOLO_MANUAL
+    assert presupuesto_ia.bloqueo_inline("", "unotv", es_fondo=False) is None
     est = presupuesto_ia.estado("unotv")
     assert est["pausada"] is False  # NO es el kill switch manual
     assert est["gate_diario"]["pausado_por_pct"] is True
     assert est["gate_diario"]["cuenta"] == cuenta_unotv
-    # Aceptar +10% en la cuenta de unotv (umbral ~24,3) reanuda: 20% ya no pausa.
+    # Aceptar +10% en la cuenta de unotv (umbral ~24,3) reanuda: 20% ya no gatea.
     gate_diario.aceptar_mas(cuenta_unotv)
     assert presupuesto_ia.nivel("unotv") == presupuesto_ia.NIVEL_NORMAL
 
 
-def test_gate_diario_pausa_solo_las_marcas_de_la_cuenta_gateada(entorno, monkeypatch):
-    """CUENTA B en umbral pausa SOLO las marcas de B: un job de unotv (B) se bloquea; uno de
-    claro-sports (A) NO. El gate por cuenta corta en la ADMISION (donde se conoce la marca)."""
+def test_gate_diario_frena_el_fondo_solo_de_las_marcas_de_la_cuenta_gateada(entorno, monkeypatch):
+    """CUENTA B en umbral frena el FONDO SOLO de las marcas de B: el fondo de unotv (B) se bloquea
+    pero su MANUAL pasa; claro-sports (A) no se ve afectada. El gate por cuenta actua en la
+    ADMISION (donde se conoce la marca)."""
     # Solo la cuenta B alcanza su umbral; la A sigue muy por debajo.
     _patch_consumo(monkeypatch, {_CUENTA_A: 0.0, _CUENTA_B: 50.0})
     assert ruteo_cuentas.cuenta_de_marca("unotv") == _CUENTA_B
     assert ruteo_cuentas.cuenta_de_marca("claro-sports") == _CUENTA_A
 
-    # nivel/bloqueo por marca: unotv (B) PAUSADO; claro-sports (A) NORMAL.
-    assert presupuesto_ia.nivel("unotv") == presupuesto_ia.NIVEL_PAUSADO
+    # nivel/bloqueo por marca: unotv (B) SOLO_MANUAL; claro-sports (A) NORMAL.
+    assert presupuesto_ia.nivel("unotv") == presupuesto_ia.NIVEL_SOLO_MANUAL
     assert presupuesto_ia.nivel("claro-sports") == presupuesto_ia.NIVEL_NORMAL
-    assert presupuesto_ia.bloqueo_inline("", "unotv", es_fondo=True) == presupuesto_ia.NIVEL_PAUSADO
-    assert presupuesto_ia.bloqueo_inline("", "unotv", es_fondo=False) == presupuesto_ia.NIVEL_PAUSADO
+    assert presupuesto_ia.bloqueo_inline("", "unotv", es_fondo=True) == presupuesto_ia.NIVEL_SOLO_MANUAL
+    assert presupuesto_ia.bloqueo_inline("", "unotv", es_fondo=False) is None  # manual pasa
     assert presupuesto_ia.bloqueo_inline("", "claro-sports", es_fondo=True) is None
 
-    # ADMISION (cola.encolar con marca): rechaza unotv (fondo y manual); deja pasar claro-sports.
-    with pytest.raises(generaciones.GeneracionPausadaError):
-        _encolar_marca("unotv", jobspec.PRIORIDAD_MANUAL)
-    with pytest.raises(generaciones.GeneracionPausadaError):
+    # ADMISION (cola.encolar con marca): rechaza el FONDO de unotv, deja pasar su MANUAL y el
+    # fondo de claro-sports.
+    with pytest.raises(generaciones.PresupuestoAgotadoError):
         _encolar_marca("unotv", jobspec.PRIORIDAD_AUTOMATICO)
+    assert _encolar_marca("unotv", jobspec.PRIORIDAD_MANUAL)
     assert _encolar_marca("claro-sports", jobspec.PRIORIDAD_AUTOMATICO)
 
 
 def test_gate_diario_sin_marca_usa_la_cuenta_por_defecto(entorno, monkeypatch):
-    """Sin marca (cross-marca), el job rutea a la cuenta POR DEFECTO: su gate lo frena igual que a
-    las marcas de esa cuenta. Con la por defecto en umbral, el global sin marca es PAUSADO y el
-    encolado sin marca (fondo Y manual) se rechaza; la OTRA cuenta gateada no afecta al sin-marca."""
+    """Sin marca (cross-marca), el job rutea a la cuenta POR DEFECTO: su gate frena el FONDO igual
+    que a las marcas de esa cuenta, dejando pasar lo manual. Con la por defecto en umbral, el global
+    sin marca es SOLO_MANUAL y el encolado de fondo sin marca se rechaza mientras el manual pasa; la
+    OTRA cuenta gateada no afecta al sin-marca."""
     defecto = ruteo_cuentas.cuenta_por_defecto()
     otra = _CUENTA_B if defecto == _CUENTA_A else _CUENTA_A
     # Solo la cuenta por defecto alcanza su umbral; la otra sigue muy por debajo.
     _patch_consumo(monkeypatch, {defecto: 50.0, otra: 0.0})
-    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_PAUSADO  # sin marca: gate de la por defecto
-    assert presupuesto_ia.bloqueo_inline("", es_fondo=True) == presupuesto_ia.NIVEL_PAUSADO
-    assert presupuesto_ia.bloqueo_inline("", es_fondo=False) == presupuesto_ia.NIVEL_PAUSADO  # manual
-    # ADMISION sin marca: rechaza el fondo Y el manual (mismo freno duro que las marcas).
-    with pytest.raises(generaciones.GeneracionPausadaError):
+    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_SOLO_MANUAL  # sin marca: gate de la por defecto
+    assert presupuesto_ia.bloqueo_inline("", es_fondo=True) == presupuesto_ia.NIVEL_SOLO_MANUAL
+    assert presupuesto_ia.bloqueo_inline("", es_fondo=False) is None  # manual pasa
+    # ADMISION sin marca: rechaza el FONDO, deja pasar el MANUAL.
+    with pytest.raises(generaciones.PresupuestoAgotadoError):
         _encolar(jobspec.PRIORIDAD_AUTOMATICO)
-    with pytest.raises(generaciones.GeneracionPausadaError):
-        _encolar(jobspec.PRIORIDAD_MANUAL)
+    assert _encolar(jobspec.PRIORIDAD_MANUAL)
 
 
 def test_gate_diario_sin_marca_pasa_con_la_por_defecto_bajo_umbral(entorno, monkeypatch):
