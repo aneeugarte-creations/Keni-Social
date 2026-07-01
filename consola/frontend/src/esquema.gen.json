@@ -479,6 +479,25 @@
         "comparativa"
       ]
     },
+    "ComparativaPorRed": {
+      "type": "object",
+      "title": "ComparativaPorRed",
+      "properties": {
+        "red": {
+          "type": "string"
+        },
+        "comparativa": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ComparativaMetrica"
+          }
+        }
+      },
+      "required": [
+        "red",
+        "comparativa"
+      ]
+    },
     "TotalComparativa": {
       "type": "object",
       "title": "TotalComparativa",
@@ -525,6 +544,12 @@
             "$ref": "#/$defs/ComparativaPorMarca"
           }
         },
+        "por_red": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ComparativaPorRed"
+          }
+        },
         "generado_en": {
           "type": "string"
         }
@@ -539,6 +564,7 @@
         "fuente",
         "total",
         "por_marca",
+        "por_red",
         "generado_en"
       ]
     },
@@ -2519,6 +2545,9 @@
     },
     {
       "$ref": "#/$defs/ComparativaPorMarca"
+    },
+    {
+      "$ref": "#/$defs/ComparativaPorRed"
     },
     {
       "$ref": "#/$defs/TotalComparativa"

@@ -60,6 +60,7 @@ const COMPARAR: CompararMetricas = {
     ],
   },
   por_marca: [],
+  por_red: [],
 };
 
 function renderConProviders(ui: React.ReactElement) {

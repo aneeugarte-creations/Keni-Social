@@ -36,9 +36,14 @@ import {
 } from "@/components/ui/table";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api } from "@/lib/api";
-import { nombreMarca, numeroCompleto } from "@/lib/formato";
+import { nombreMarca, nombreRed, numeroCompleto } from "@/lib/formato";
 import { cn } from "@/lib/utils";
-import type { ComparativaMetrica, ComparativaPorMarca, OpcionesMetricas } from "@/types";
+import type {
+  ComparativaMetrica,
+  ComparativaPorMarca,
+  ComparativaPorRed,
+  OpcionesMetricas,
+} from "@/types";
 
 import type { ColumnaMeta } from "./columnasMeta";
 import { MARCA_TODAS, SelectorTiempo } from "./Controles";
@@ -141,6 +146,23 @@ function etiquetaMarca(
 ): string {
   const porCatalogo = nombreMarca(pm.marca_id, marcas);
   return porCatalogo !== pm.marca_id ? porCatalogo : pm.marca || pm.marca_id;
+}
+
+/**
+ * Cabecera de un grupo del desglose (una marca o una red) dentro de la tabla
+ * comparativa: una fila que abarca todas las columnas con el nombre del grupo.
+ */
+function FilaGrupo({ colSpan, etiqueta }: { colSpan: number; etiqueta: string }) {
+  return (
+    <TableRow className="bg-muted/30">
+      <TableCell
+        colSpan={colSpan}
+        className="pl-6 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+      >
+        {etiqueta}
+      </TableCell>
+    </TableRow>
+  );
 }
 
 /** Formatea un valor según el tipo de métrica (porcentaje vs número). */
@@ -327,15 +349,20 @@ export function CompararPeriodos({
                 {/* Desglose por marca: cada marca como un grupo de filas precedido por su nombre. */}
                 {data.por_marca.map((pm) => (
                   <React.Fragment key={pm.marca_id}>
-                    <TableRow className="bg-muted/30">
-                      <TableCell
-                        colSpan={columnas.length}
-                        className="pl-6 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                      >
-                        {etiquetaMarca(pm, opciones.marcas)}
-                      </TableCell>
-                    </TableRow>
+                    <FilaGrupo colSpan={columnas.length} etiqueta={etiquetaMarca(pm, opciones.marcas)} />
                     {pm.comparativa.map((comp) => (
+                      <TableRow key={comp.metrica}>
+                        {columnas.map((id) => celdaComp(comp, id))}
+                      </TableRow>
+                    ))}
+                  </React.Fragment>
+                ))}
+                {/* Desglose por red: mismo patrón que por marca, para verlas lado a lado sin
+                    tener que cambiar el filtro global de red una por una. */}
+                {data.por_red.map((pr: ComparativaPorRed) => (
+                  <React.Fragment key={pr.red}>
+                    <FilaGrupo colSpan={columnas.length} etiqueta={nombreRed(pr.red)} />
+                    {pr.comparativa.map((comp) => (
                       <TableRow key={comp.metrica}>
                         {columnas.map((id) => celdaComp(comp, id))}
                       </TableRow>

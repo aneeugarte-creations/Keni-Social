@@ -258,6 +258,37 @@ def _agregar_por_red(rep: dict) -> list[dict]:
     return por_red
 
 
+def _comparar_por_red(rep_a: dict, rep_b: dict) -> list[dict]:
+    """Comparativa metrica-a-metrica por red (union de las redes de A y B).
+
+    Espejo de `_comparar_por_marca`: agrega cada periodo por red con `_agregar_por_red`
+    (suma entre TODAS las marcas del reporte) y compara visualizaciones/interacciones
+    (con su engagement recalculado) red a red, para que la comparativa de periodos se
+    pueda leer desglosada por red además de por marca.
+    """
+    red_a = {r["red"]: r for r in _agregar_por_red(rep_a)}
+    red_b = {r["red"]: r for r in _agregar_por_red(rep_b)}
+    redes: list[str] = list(red_a.keys())
+    for red in red_b:
+        if red not in red_a:
+            redes.append(red)
+
+    filas = []
+    for red in redes:
+        ra = red_a.get(red, {})
+        rb = red_b.get(red, {})
+        filas.append(
+            {
+                "red": red,
+                "comparativa": _comparar_totales(
+                    {k: ra.get(k, 0) for k in ("visualizaciones", "interacciones")},
+                    {k: rb.get(k, 0) for k in ("visualizaciones", "interacciones")},
+                )["metricas"],
+            }
+        )
+    return filas
+
+
 # Universo de redes sociales que Metricool mide a nivel de analítica (ids de
 # plataforma del contrato). "web" NO es una red de analítica de Metricool, así que se
 # excluye de la auditoría de cobertura. El orden es el de presentación en la UI.
@@ -690,5 +721,6 @@ async def comparar(request: Request) -> Response:
                 _total_comparable(rep_b, des_b, seg_b, lis_b),
             ),
             "por_marca": _comparar_por_marca(rep_a, rep_b),
+            "por_red": _comparar_por_red(rep_a, rep_b),
         }
     )

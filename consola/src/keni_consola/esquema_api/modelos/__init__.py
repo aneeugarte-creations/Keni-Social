@@ -48,6 +48,7 @@ from .metricas import (
     CompararMetricas,
     ComparativaMetrica,
     ComparativaPorMarca,
+    ComparativaPorRed,
     CorrelacionSeguidores,
     Crosstab,
     CuentaMetrica,
@@ -117,6 +118,7 @@ __all__ = [
     "ReporteMetricas",
     "ComparativaMetrica",
     "ComparativaPorMarca",
+    "ComparativaPorRed",
     "TotalComparativa",
     "CompararMetricas",
     "PiezaAnalisis",
@@ -185,6 +187,7 @@ MODELOS = [
     ReporteMetricas,
     ComparativaMetrica,
     ComparativaPorMarca,
+    ComparativaPorRed,
     TotalComparativa,
     CompararMetricas,
     # Análisis diario con narrativa.

@@ -23,6 +23,7 @@ __all__ = [
     "ReporteMetricas",
     "ComparativaMetrica",
     "ComparativaPorMarca",
+    "ComparativaPorRed",
     "TotalComparativa",
     "CompararMetricas",
     "PiezaAnalisis",
@@ -187,6 +188,11 @@ class ComparativaPorMarca(TypedDict):
     comparativa: list[ComparativaMetrica]
 
 
+class ComparativaPorRed(TypedDict):
+    red: str
+    comparativa: list[ComparativaMetrica]
+
+
 class TotalComparativa(TypedDict):
     metricas: list[ComparativaMetrica]
 
@@ -204,6 +210,9 @@ class CompararMetricas(TypedDict):
     fuente: str
     total: TotalComparativa
     por_marca: list[ComparativaPorMarca]
+    # Desglose por red (suma entre TODAS las marcas del reporte por plataforma),
+    # espejo de `por_marca` — ver `_comparar_por_red`.
+    por_red: list[ComparativaPorRed]
     # La más antigua de las dos lecturas comparadas (ISO): la comparativa es tan
     # fresca como su dato más viejo.
     generado_en: str

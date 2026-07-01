@@ -38,6 +38,7 @@ export type {
   ReporteMetricas,
   ComparativaMetrica,
   ComparativaPorMarca,
+  ComparativaPorRed,
   TotalComparativa,
   CompararMetricas,
   PiezaAnalisis,

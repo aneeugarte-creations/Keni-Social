@@ -55,6 +55,14 @@ const RESP: CompararMetricas = {
       ],
     },
   ],
+  por_red: [
+    {
+      red: "instagram",
+      comparativa: [
+        { metrica: "visualizaciones", a: 700, b: 1000, diferencia: 300, variacion_pct: 42.9 },
+      ],
+    },
+  ],
 };
 
 beforeEach(() => {
@@ -209,5 +217,13 @@ describe("CompararPeriodos", () => {
 
     expect(await screen.findByText("Claro Sports")).toBeInTheDocument();
     expect(screen.queryByText("claro_sports")).not.toBeInTheDocument();
+  });
+
+  it("muestra el desglose por red con el nombre legible (no el id crudo)", async () => {
+    vi.spyOn(api, "metricasComparar").mockResolvedValue(RESP);
+    renderConProviders(<CompararPeriodos opciones={OPCIONES} rangoActual="mes" />);
+
+    expect(await screen.findByText("Instagram")).toBeInTheDocument();
+    expect(screen.queryByText("instagram")).not.toBeInTheDocument();
   });
 });

@@ -143,6 +143,10 @@ export interface ComparativaPorMarca {
   marca: string;
   comparativa: ComparativaMetrica[];
 }
+export interface ComparativaPorRed {
+  red: string;
+  comparativa: ComparativaMetrica[];
+}
 export interface TotalComparativa {
   metricas: ComparativaMetrica[];
 }
@@ -158,6 +162,7 @@ export interface CompararMetricas {
   fuente: string;
   total: TotalComparativa;
   por_marca: ComparativaPorMarca[];
+  por_red: ComparativaPorRed[];
   generado_en: string;
 }
 /**

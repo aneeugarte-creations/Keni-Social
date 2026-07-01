@@ -409,6 +409,21 @@ def test_comparar_total_y_por_marca(cliente):
     data = r.json()
     assert "total" in data
     assert "por_marca" in data
+    assert "por_red" in data
+
+
+def test_comparar_por_red_trae_comparativa_de_cada_red(cliente):
+    # Desglose por red (espejo de por_marca): cada fila trae su id de red + la
+    # comparativa métrica-a-métrica (visualizaciones/interacciones/engagement),
+    # para ver las redes lado a lado sin cambiar el filtro global una por una.
+    r = cliente.get("/api/metricas/comparar?rango_a=semana&rango_b=mes")
+    assert r.status_code == 200
+    por_red = r.json()["por_red"]
+    assert por_red  # el reporte de muestra trae varias redes
+    fila = por_red[0]
+    assert "red" in fila
+    claves = {m["metrica"] for m in fila["comparativa"]}
+    assert {"visualizaciones", "interacciones", "engagement_pct"} <= claves
 
 
 def test_comparar_totales_mide_b_respecto_a_a_y_recalcula_engagement():
