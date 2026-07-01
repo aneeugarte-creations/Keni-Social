@@ -155,6 +155,20 @@ def _runs_con_critica_ia(gens: list[dict]) -> set[str]:
     }
 
 
+def _runs_con_decisor(gens: list[dict]) -> set[str]:
+    """Ids de contenido con EVIDENCIA de que el Decisor de formato corrió (job `tipo='decisor'`).
+
+    El Decisor se lanza POR TEMA, justo antes de Redactar, y sella el `publicacion_id` del tema
+    (= id de la run). Su presencia es la evidencia de que la etapa corrió, igual que el arte IA
+    lo es para Ilustrar.
+    """
+    return {
+        cid
+        for g in gens
+        if (g.get("tipo") or "") == "decisor" and (cid := g.get("publicacion_id") or "")
+    }
+
+
 def _marcas_con_pool(gens: list[dict], prefijo: str) -> set[str]:
     """Marcas con alguna generación de POOL (tipo `pipeline`, etiqueta con `prefijo`).
 

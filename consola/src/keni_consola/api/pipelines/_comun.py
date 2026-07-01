@@ -25,13 +25,17 @@ from ...pipeline_contenido import (
 # generaciones del pipeline correlacionadas): el alta manual sin trabajo IA no es una run.
 _ORIGENES_RUN = frozenset({ORIGEN_PIPELINE, *ORIGENES_AUTOGEN})
 # Tipos de generación que son TRABAJO del pipeline (viven DENTRO de la run de su tema, no como
-# entradas sueltas): el copy/marcadores (`pipeline`/`pipeline_etapa`/`autogen`) y la sugerencia
-# de hashtags (`sugerir-hashtags`), etapa entre Redactar e Ilustrar. Sin `sugerir-hashtags` aquí,
-# su generación —que SÍ sella `publicacion_id`— aparecería como tarjeta suelta cuando su tema
-# sale de la ventana de runs (ya publicado/antiguo) en vez de plegarse en su run.
+# entradas sueltas): el copy/marcadores (`pipeline`/`pipeline_etapa`/`autogen`), la sugerencia
+# de hashtags (`sugerir-hashtags`, etapa entre Redactar e Ilustrar) y el Decisor de formato
+# (`decisor`, etapa PREVIA a Redactar). Sin ellos aquí, su generación —que SÍ sella
+# `publicacion_id`— aparecería como tarjeta SUELTA en vez de plegarse en la run de su tema: el
+# Decisor corre ANTES que Redactar, así que sin esta entrada un tema del tablero cuya ÚNICA
+# evidencia de trabajo fuera el Decisor no contaría como "trabajado" (`_temas_trabajados`) y su
+# generación saldría como actividad independiente, huérfana de la historia a la que pertenece.
 _TIPO_SUGERIR_HASHTAGS = "sugerir-hashtags"
+_TIPO_DECISOR = "decisor"
 _TIPOS_TRABAJO_PIPELINE = frozenset(
-    {"pipeline", TIPO_ACTIVIDAD, "autogen", _TIPO_SUGERIR_HASHTAGS}
+    {"pipeline", TIPO_ACTIVIDAD, "autogen", _TIPO_SUGERIR_HASHTAGS, _TIPO_DECISOR}
 )
 # Tipos de generación que son una ACCIÓN MANUAL del equipo sobre un post YA hecho (no trabajo
 # del pipeline): convertir un post del feed en carrusel. SIEMPRE se listan como actividad suelta
@@ -50,13 +54,16 @@ _LIMITE_MAX = 200
 
 # Catálogo de etapas del pipeline (clave → nombre) en orden de flujo. Fusionar y Priorizar son el
 # trabajo del POOL (dedup + encaje/score), DERIVADO de la historia (cluster), no de un toggle.
-# Admitir/Verificar/Redactar son TOGGLABLES por marca (activa = estado real; desactivada = "saltada").
-# Aprobar es el gate humano. `estado_global` toma la primera no-{ok,saltada}.
+# Admitir/Verificar/Decisor/Redactar son TOGGLABLES por marca (activa = estado real; desactivada
+# = "saltada"). Decisor va ENTRE Verificar y Redactar (elige el formato foto/carrusel antes de
+# redactar; ver `dominio.decisor`). Aprobar es el gate humano. `estado_global` toma la primera
+# no-{ok,saltada}.
 _ETAPAS = (
     ("fusionar", "Fusionar"),
     ("priorizar", "Priorizar"),
     ("admitir", "Admitir"),
     ("verificar", "Verificar"),
+    ("decisor", "Decisor"),
     ("redactar", "Redactar"),
     ("sugerir_hashtags", "Keywords"),
     ("ilustrar", "Ilustrar"),
@@ -69,7 +76,10 @@ _ETAPA_CLAVES = frozenset(clave for clave, _ in _ETAPAS)
 # Etapas que SON una llamada a un LLM (la UI las marca "IA" y enseña prompt+proceso+resultado).
 # Admitir (crea el tema en BD) y Aprobar (humana) NO lo son: la UI las pinta como FRONTERAS.
 _ETAPAS_IA = frozenset(
-    {"fusionar", "priorizar", "verificar", "redactar", "sugerir_hashtags", "ilustrar", "critica"}
+    {
+        "fusionar", "priorizar", "verificar", "decisor", "redactar",
+        "sugerir_hashtags", "ilustrar", "critica",
+    }
 )
 # Prompt de la Prompts de Texto que usa cada etapa IA (código de etapa → id editable). Permite
 # enseñar el PROMPT de entrada SIEMPRE, aunque la etapa aún no haya corrido (plantilla).
@@ -77,6 +87,7 @@ _PROMPT_POR_ETAPA = {
     "FUSIONAR": "prompt/fusionar",
     "PRIORIZAR": "prompt/priorizar",
     "VERIFICAR": "prompt/verificar",
+    "DECISOR": "prompt/decisor",
     "REDACTAR": "prompt/redactar",
     "SUGERIR_HASHTAGS": "prompt/sugerir-hashtags",
     "ILUSTRAR": "prompt/ilustrar",

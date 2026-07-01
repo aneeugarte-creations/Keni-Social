@@ -31,19 +31,21 @@ const VERIFICACION_TEXTO: Record<string, string> = {
 // consola (`components/comunes/ChipEstado`): misma etiqueta y color que Actividad/Monitor.
 export { ChipEstado };
 
-// Etapa (clave) -> código de etapa de los eventos de actividad (la traza Fusionar/Priorizar/Verificar/Redactar/Sugerir hashtags/Ilustrar).
+// Etapa (clave) -> código de etapa de los eventos de actividad (la traza Fusionar/Priorizar/Verificar/Decisor/Redactar/Sugerir hashtags/Ilustrar).
 export const ETAPA_A_EVENTO: Record<string, string> = {
-  fusionar: "FUSIONAR", priorizar: "PRIORIZAR", admitir: "ADMITIR", verificar: "VERIFICAR", redactar: "REDACTAR", sugerir_hashtags: "SUGERIR_HASHTAGS", ilustrar: "ILUSTRAR", critica: "CRITICA",
+  fusionar: "FUSIONAR", priorizar: "PRIORIZAR", admitir: "ADMITIR", verificar: "VERIFICAR", decisor: "DECISOR", redactar: "REDACTAR", sugerir_hashtags: "SUGERIR_HASHTAGS", ilustrar: "ILUSTRAR", critica: "CRITICA",
 };
 
 // Catálogo de etapas para el filtro `?etapa=` (espeja `_ETAPAS` del back, en orden de flujo).
 // «Sugerir hashtags» NO entra: el filtro lista runs PARADAS en una etapa, y esa etapa nunca
 // bloquea (solo "ok"/"saltada", es una sugerencia opcional), así que filtrar por ella no daría nada.
+// Decisor SÍ entra: bloquea de verdad el arranque de Redactar mientras está pendiente.
 export const ETAPAS_FILTRO: { clave: string; nombre: string }[] = [
   { clave: "fusionar", nombre: "Fusionar" },
   { clave: "priorizar", nombre: "Priorizar" },
   { clave: "admitir", nombre: "Admitir" },
   { clave: "verificar", nombre: "Verificar" },
+  { clave: "decisor", nombre: "Decisor" },
   { clave: "redactar", nombre: "Redactar" },
   { clave: "ilustrar", nombre: "Ilustrar" },
   { clave: "aprobar", nombre: "Aprobar" },
@@ -480,10 +482,11 @@ function PublicacionEtapa({
       </div>
     );
   }
-  if (clave === "trabajo" || clave === "critica" || clave === "sugerir_hashtags") {
+  if (clave === "trabajo" || clave === "critica" || clave === "sugerir_hashtags" || clave === "decisor") {
     // Trabajo SUELTO (item `clase="actividad"`), Crítica IA (revisión con visión en la cadena
-    // de aprobación) o Sugerir hashtags (propuesta tras Redactar): el contenido es el bloque
-    // entrada/salida (prompt + razonamiento + resultado).
+    // de aprobación), Sugerir hashtags (propuesta tras Redactar) o Decisor (formato foto/carrusel,
+    // justo antes de Redactar): el contenido es el bloque entrada/salida (prompt + razonamiento +
+    // resultado).
     return <BloqueIA gen={generacion} plantilla={plantilla} />;
   }
   // aprobar — gate HUMANO (no IA).

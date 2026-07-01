@@ -26,6 +26,7 @@ from ._metricas import (
     _pool_por_marca,
     _runs_con_arte_ia,
     _runs_con_critica_ia,
+    _runs_con_decisor,
     _runs_con_hashtags,
 )
 from ._runs import _run_de
@@ -314,6 +315,14 @@ def _detalle(pipeline_id: str) -> tuple[int, dict]:
         gen_hashtags = _generacion_publica(hashtags[0].get("id", "") or "")
         if gen_hashtags is not None:
             generaciones_por_etapa.setdefault("SUGERIR_HASHTAGS", gen_hashtags)
+    # Decisor: su job (`tipo='decisor'`) corre por tema y sella el `publicacion_id` del tema
+    # (= esta run). Enlazamos el más reciente para enseñar su prompt+salida REALES en la etapa.
+    decisor_gens = [g for g in gens if (g.get("tipo") or "") == "decisor" and (g.get("publicacion_id") or "") == pipeline_id]
+    if decisor_gens:
+        decisor_gens.sort(key=lambda g: g.get("fecha_fin") or g.get("fecha_inicio") or "", reverse=True)
+        gen_decisor = _generacion_publica(decisor_gens[0].get("id", "") or "")
+        if gen_decisor is not None:
+            generaciones_por_etapa.setdefault("DECISOR", gen_decisor)
     # Métricas de la run + evidencia del pool y del arte IA: las MISMAS derivaciones que la
     # lista, para que detalle y tarjeta no se contradigan (p. ej. "Saltada" aquí y "ok" allá).
     # La suma incluye las etapas de POOL enlazadas (Fusionar/Encaje): la cabecera cuadra con el
@@ -333,6 +342,7 @@ def _detalle(pipeline_id: str) -> tuple[int, dict]:
             hashtags_ia=pipeline_id in _runs_con_hashtags(gens),
             arte_ia=pipeline_id in _runs_con_arte_ia(gens),
             critica_ia=pipeline_id in _runs_con_critica_ia(gens),
+            decisor_ia=pipeline_id in _runs_con_decisor(gens),
         ),
         "actividad": eventos,
         # Línea de tiempo unificada del POST: TODA la actividad real del mismo tema (incluido el

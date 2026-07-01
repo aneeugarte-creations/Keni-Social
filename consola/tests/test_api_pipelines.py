@@ -59,15 +59,15 @@ def test_run_verificacion_no_verificado_con_copy(cliente):
     run = _run_por_titulo(cliente, "Tema apto")
     assert run is not None
     assert [e["clave"] for e in run["etapas"]] == [
-        "fusionar", "priorizar", "admitir", "verificar", "redactar", "sugerir_hashtags",
-        "ilustrar", "aprobar", "critica",
+        "fusionar", "priorizar", "admitir", "verificar", "decisor", "redactar",
+        "sugerir_hashtags", "ilustrar", "aprobar", "critica",
     ]
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
-    # Sin cluster -> Fusionar/Priorizar saltadas; sin sugerencia ni arte -> Sugerir hashtags/Ilustrar
-    # saltadas. Ninguna bloquea.
+    # Sin cluster -> Fusionar/Priorizar saltadas; Decisor OFF por defecto -> saltada; sin
+    # sugerencia ni arte -> Sugerir hashtags/Ilustrar saltadas. Ninguna bloquea.
     assert etapas == {
         "fusionar": "saltada", "priorizar": "saltada", "admitir": "ok", "verificar": "ok",
-        "redactar": "ok", "sugerir_hashtags": "saltada", "ilustrar": "saltada",
+        "decisor": "saltada", "redactar": "ok", "sugerir_hashtags": "saltada", "ilustrar": "saltada",
         "aprobar": "pendiente", "critica": "saltada",
     }
     assert run["estado_global"] == "pendiente"
@@ -344,8 +344,8 @@ def test_detalle_run(cliente):
     body = d.json()
     assert body["pipeline"]["id"] == tema["id"]
     assert [e["clave"] for e in body["pipeline"]["etapas"]] == [
-        "fusionar", "priorizar", "admitir", "verificar", "redactar", "sugerir_hashtags",
-        "ilustrar", "aprobar", "critica",
+        "fusionar", "priorizar", "admitir", "verificar", "decisor", "redactar",
+        "sugerir_hashtags", "ilustrar", "aprobar", "critica",
     ]
     assert "actividad" in body
     assert "verificacion" in body["pipeline"]
@@ -491,6 +491,7 @@ def test_etapas_marcan_ia_y_detalle_trae_prompts(cliente):
     assert ia["fusionar"] is True and ia["priorizar"] is True
     assert ia["verificar"] is True and ia["redactar"] is True and ia["ilustrar"] is True
     assert ia["sugerir_hashtags"] is True
+    assert ia["decisor"] is True
     assert ia["critica"] is True
     assert ia["admitir"] is False and ia["aprobar"] is False
     body = cliente.get(f"/api/pipelines/{tema['id']}").json()
@@ -876,6 +877,36 @@ def test_autogen_legacy_correlacionado_se_pliega_en_su_run(cliente):
     assert all(x["titulo"] != "Auto-copy · UnoTV" for x in items)
 
 
+def test_decisor_correlacionado_convierte_tema_en_run_no_actividad_suelta(cliente):
+    """El Decisor corre ANTES que Redactar: un tema del tablero cuya ÚNICA evidencia de trabajo
+    sea el Decisor debe salir como RUN de su historia (etapa "decisor" ok), NO como una tarjeta
+    "Decisor · ..." suelta en Actividad — el Decisor no es un proceso independiente, es una etapa
+    más del pipeline de la historia."""
+    tema = repos.crear_publicacion(
+        clase="contenido", titulo="Historia con solo decisor", marca="unotv", origen="historia",
+    )
+    generaciones.crear({
+        "tipo": "decisor", "marca": "unotv", "publicacion_id": tema["id"],
+        "etiqueta": f"Decisor · {tema['titulo']}", "estado": generaciones.ESTADO_COMPLETADO,
+        "metricas": {"tokens_in": 100, "tokens_out": 50, "total_cost_usd": 0.01, "duration_ms": 1500},
+    })
+    items = cliente.get("/api/pipelines").json()["pipelines"]
+    run = next(x for x in items if x["titulo"] == "Historia con solo decisor")
+    assert run["clase"] == "run"
+    etapas = {e["clave"]: e for e in run["etapas"]}
+    assert etapas["decisor"]["estado"] == "ok"
+    assert etapas["redactar"]["estado"] == "pendiente"  # aún sin copy: Redactar corre DESPUÉS
+    assert run["metricas"]["tokens"] == 150
+    # El Decisor NO sale duplicado como su propia tarjeta suelta en Actividad.
+    assert all(
+        x["clase"] == "run" or not x["titulo"].startswith("Decisor ·") for x in items
+    )
+    det = cliente.get(f"/api/pipelines/{tema['id']}")
+    assert det.status_code == 200
+    det_etapas = {e["clave"]: e for e in det.json()["pipeline"]["etapas"]}
+    assert det_etapas["decisor"]["estado"] == "ok"  # coherente con la lista
+
+
 def test_metricas_de_run_via_marcador_sin_contenido_id(cliente):
     """Una generación SIN `publicacion_id` en el registro (los previos a sellarlo en `lanzar`)
     se atribuye a su run por el MARCADOR de etapa (`gen_id` -> `publicacion_id`): la tarjeta
@@ -1009,10 +1040,10 @@ def test_tema_futuro_sin_trabajo_sale_en_gris(cliente):
     assert fut["clase"] == "run"
     assert fut["futuro"] is True
     assert fut["estado_global"] == "pendiente"  # sin trabajo: parada al inicio
-    # Las 9 etapas se derivan del estado (mismas que cualquier run del tablero).
+    # Las etapas de `_ETAPAS` se derivan del estado (mismas que cualquier run del tablero).
     assert [e["clave"] for e in fut["etapas"]] == [
-        "fusionar", "priorizar", "admitir", "verificar", "redactar", "sugerir_hashtags",
-        "ilustrar", "aprobar", "critica",
+        "fusionar", "priorizar", "admitir", "verificar", "decisor", "redactar",
+        "sugerir_hashtags", "ilustrar", "aprobar", "critica",
     ]
     assert por_titulo["Run trabajada"]["futuro"] is False
     # Los contadores reportan el backlog.

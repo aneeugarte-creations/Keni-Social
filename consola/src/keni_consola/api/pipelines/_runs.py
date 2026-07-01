@@ -81,6 +81,11 @@ def _hashtags_off(marca: str) -> bool:
     return _etapa_off(config.ENV_PIPELINE_SUGERIR_HASHTAGS, marca)
 
 
+def _decisor_off(marca: str) -> bool:
+    """Etapa Decisor (formato foto/carrusel) desactivada para `marca` (OFF por defecto)."""
+    return _etapa_off(config.ENV_PIPELINE_DECISOR, marca)
+
+
 def _critica_off(marca: str) -> bool:
     """Nivel Crítica IA desactivado para `marca`."""
     return _etapa_off(config.ENV_CRITICA_IA, marca)
@@ -172,17 +177,21 @@ def _etapas_de_run(
     hashtags_ia: bool = False,
     arte_ia: bool = False,
     critica_ia: bool = False,
+    decisor_ia: bool = False,
 ) -> list[dict]:
-    """Deriva las etapas de una run: Fusionar + Priorizar (pool) + Admitir/Verificar/Redactar/
-    Sugerir hashtags/Ilustrar (toggles) + Aprobar (humana).
+    """Deriva las etapas de una run: Fusionar + Priorizar (pool) + Admitir/Verificar/Decisor/
+    Redactar/Sugerir hashtags/Ilustrar (toggles) + Aprobar (humana).
 
     Fusionar y Priorizar se derivan de la HISTORIA enlazada (cluster): el dedup y el encaje/score del pool,
     previos al tema; sin historia, `pool_fusion`/`pool_editorial` (hay generación de pool de la
     marca) las pintan como corridas sin grupo/score, no "saltada". Las togglables
-    (Admitir/Verificar/Redactar/Ilustrar) están activas o "saltada"
+    (Admitir/Verificar/Decisor/Redactar/Ilustrar) están activas o "saltada"
     según su toggle por-marca; si activas, su estado se deriva del estado real (no de logs): el
     `verificacion_fuente` del tema y las piezas por plataforma (auto-curativo). La etapa Verificar
-    (verificación pre-copy) va ANTES del copy; un `problema` NO genera copy. Ilustrar exige `arte_ia`
+    (verificación pre-copy) va ANTES del copy; un `problema` NO genera copy. Decisor (elige el
+    formato foto/carrusel) va JUSTO ANTES de Redactar y bloquea su arranque mientras está
+    pendiente (`pipeline_contenido._barrido.ejecutar_redactar`): exige `decisor_ia` (evidencia de
+    una generación `decisor` correlacionada al tema), igual patrón que Ilustrar exige `arte_ia`
     (evidencia de arte GENERADO: marcador/generación de arte de la run): una imagen de fuente
     propia en la pieza no enciende la etapa. Aprobar es el
     gate humano (nunca saltada). Cada etapa es `{clave, nombre, estado, detalle, ts}`.
@@ -234,6 +243,24 @@ def _etapas_de_run(
     else:
         verificacion_estado, verificacion_detalle = "pendiente", ""
     verificación = {"clave": "verificar", "nombre": "Verificar", "estado": verificacion_estado, "detalle": verificacion_detalle, "ts": ""}
+
+    # --- Decisor: elige el formato (foto/carrusel) JUSTO ANTES de Redactar. SOLO evidencia
+    # (una generación `decisor` correlacionada al tema): sin ella, "pendiente" si el toggle está
+    # activo (bloquea a Redactar de verdad, ver `_barrido.ejecutar_redactar`) o "saltada" si no.
+    if decisor_ia:
+        decisor_estado, decisor_detalle = "ok", ""
+    elif es_bloqueado:
+        decisor_estado, decisor_detalle = "pendiente", "Omitido"
+    elif verificacion_fuente == VERIFICACION_CADUCADA:
+        decisor_estado, decisor_detalle = _ESTADO_SALTADA, "Caducada"
+    elif _decisor_off(marca):
+        decisor_estado, decisor_detalle = _ESTADO_SALTADA, ""
+    else:
+        decisor_estado, decisor_detalle = "pendiente", ""
+    decisor = {
+        "clave": "decisor", "nombre": "Decisor",
+        "estado": decisor_estado, "detalle": decisor_detalle, "ts": "",
+    }
 
     # --- Redactar: PRIMERO el copy persistido (≥1 pieza con copy = corrió, diga lo que diga el
     # toggle de hoy); 'requiere_humano'/'rechazado'/'caducada' lo omiten; el toggle solo pinta el futuro.
@@ -312,7 +339,7 @@ def _etapas_de_run(
         cr_estado, cr_detalle = "pendiente", ""
     critica = {"clave": "critica", "nombre": "Crítica", "estado": cr_estado, "detalle": cr_detalle, "ts": ""}
 
-    etapas = [fusion, editorial, ci, verificación, cd, hashtags, arte, aprobacion, critica]
+    etapas = [fusion, editorial, ci, verificación, decisor, cd, hashtags, arte, aprobacion, critica]
     for e in etapas:
         e["es_ia"] = e["clave"] in _ETAPAS_IA
     return etapas
@@ -357,6 +384,7 @@ def _run_de(
     hashtags_ia: bool = False,
     arte_ia: bool = False,
     critica_ia: bool = False,
+    decisor_ia: bool = False,
 ) -> dict:
     """Construye el objeto `run` de un contenido del pipeline y sus piezas por plataforma.
 
@@ -368,13 +396,14 @@ def _run_de(
     `metricas`: suma de las generaciones correlacionadas a la run (items/tokens/coste/duración);
     None cae a ceros (forma estable). `pool_fusion`/`pool_editorial`: evidencia de que la IA del
     pool corrió para la marca (pinta Fusionar/Priorizar sin historia como corridas, no saltadas).
+    `decisor_ia`: evidencia de que el Decisor de formato corrió para este tema (ver `_ETAPAS`).
     """
     base = [_pieza_de(p) for p in piezas_plat]
     etapas = _etapas_de_run(
         item, base, cluster,
         pool_fusion=pool_fusion, pool_editorial=pool_editorial,
         hashtags_ia=hashtags_ia, arte_ia=arte_ia,
-        critica_ia=critica_ia,
+        critica_ia=critica_ia, decisor_ia=decisor_ia,
     )
     marca = item.get("marca", "") or ""
     # `origen` real de la pieza padre (la fuente RSS que la recolectó): contexto de la etapa Admitir.

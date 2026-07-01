@@ -46,6 +46,7 @@ from ._metricas import (
     _pool_por_marca,
     _runs_con_arte_ia,
     _runs_con_critica_ia,
+    _runs_con_decisor,
     _runs_con_hashtags,
 )
 from ._runs import _run_de
@@ -127,11 +128,14 @@ def _actividad_suelta(gens: list[dict], ids_runs: set[str], marca: str | None) -
 
 
 def _temas_trabajados(gens: list[dict]) -> set[str]:
-    """Ids de contenido con TRABAJO del pipeline correlacionado (copy/arte/verificación/marcadores).
+    """Ids de contenido con TRABAJO del pipeline correlacionado (copy/arte/verificación/decisor/marcadores).
 
     Es la evidencia que convierte un tema del TABLERO en run del feed: la etapa Redactar del
     pipeline también redacta los temas de `ORIGENES_AUTOGEN` (rss/equipo/historia/…); ese
-    trabajo debe verse DENTRO de la run de su tema, no como entradas sueltas.
+    trabajo debe verse DENTRO de la run de su tema, no como entradas sueltas. El Decisor corre
+    ANTES que Redactar (`_TIPOS_TRABAJO_PIPELINE` incluye `decisor`): sin esta evidencia, un tema
+    cuyo ÚNICO trabajo hasta ahora fuera el Decisor no contaría como "trabajado" todavía y su
+    generación saldría suelta en vez de dentro de la run de su historia.
     """
     return {
         g.get("publicacion_id") or ""
@@ -267,6 +271,7 @@ def _feed(
     arte_ia_runs = _runs_con_arte_ia(gens)
     critica_ia_runs = _runs_con_critica_ia(gens)
     hashtags_runs = _runs_con_hashtags(gens)
+    decisor_runs = _runs_con_decisor(gens)
     # Una sola lectura de las plataformas (acotada a la marca enfocada), agrupada por contenido
     # (evita N consultas). Solo se consultan piezas de las runs listadas, todas de esta marca.
     por_contenido: dict[str, list[dict]] = {}
@@ -295,6 +300,7 @@ def _feed(
             hashtags_ia=(it.get("id", "") or "") in hashtags_runs,
             arte_ia=(it.get("id", "") or "") in arte_ia_runs,
             critica_ia=(it.get("id", "") or "") in critica_ia_runs,
+            decisor_ia=(it.get("id", "") or "") in decisor_runs,
         )
         for it in runs_items
     ]
@@ -306,7 +312,7 @@ def _feed(
         r["futuro"] = False
 
     # Temas FUTUROS: backlog del tablero AÚN sin trabajar (sin generaciones de trabajo). Se
-    # materializan como runs "en gris" (mismas 9 etapas, todas pendientes/saltadas al derivarse de
+    # materializan como runs "en gris" (mismas etapas de `_ETAPAS`, todas pendientes/saltadas al derivarse de
     # un tema sin trabajo) con `futuro=True`. CAP anti-inundación: solo los `_futuros_max()` más
     # recientes (el backlog puede tener cientos); `futuros_total`/`futuros_mostrados` reportan el
     # recorte para que el front muestre "+N más".
