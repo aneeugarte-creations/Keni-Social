@@ -63,6 +63,10 @@ export function AppShell() {
   // Con el menú de cuenta (avatar) abierto, el dock NO debe colapsar al salir el ratón: el menú es
   // inline en la barra y se cierra solo (click fuera / Escape / selección), reanudando el colapso.
   const [cuentaAbierta, setCuentaAbierta] = React.useState(false);
+  // Mismo motivo: el panel de desglose de uso (Semana/24h/5h) se abre por portal FUERA del <aside>
+  // (a <body>), así que moverse hacia él ya no cuenta como "seguir dentro" y colapsaría la barra con
+  // el panel todavía abierto (quedaría flotando sin su ancla visible).
+  const [usoAbierto, setUsoAbierto] = React.useState(false);
 
   // Huecos de la barra superior que las páginas rellenan por portal (vía contexto): inicio
   // (título de página plana, junto a las pestañas en `EncabezadoSeccion`) y acciones (el menú
@@ -134,11 +138,16 @@ export function AppShell() {
             "absolute inset-y-0 left-0 transition-[width] duration-200 ease-out",
             // Expandido: ancho ajustado a la etiqueta más larga del sidenav ("Investigación"),
             // sin hueco sobrante. Colapsado: rail de iconos. Se mantiene expandido mientras el menú
-            // de cuenta esté abierto, aunque el ratón salga (si no, el menú quedaría suelto).
-            expandido || cuentaAbierta ? "w-48 shadow-xl" : "w-16",
+            // de cuenta o el panel de desglose de uso estén abiertos, aunque el ratón salga (si no,
+            // quedarían sueltos).
+            expandido || cuentaAbierta || usoAbierto ? "w-48 shadow-xl" : "w-16",
           )}
         >
-          <Sidebar colapsado={!(expandido || cuentaAbierta)} onCuentaAbierta={setCuentaAbierta} />
+          <Sidebar
+            colapsado={!(expandido || cuentaAbierta || usoAbierto)}
+            onCuentaAbierta={setCuentaAbierta}
+            onUsoAbierto={setUsoAbierto}
+          />
         </div>
       </aside>
 

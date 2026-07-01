@@ -67,11 +67,14 @@ export function Sidebar({
   onNavegar,
   colapsado = false,
   onCuentaAbierta,
+  onUsoAbierto,
 }: {
   onNavegar?: () => void;
   colapsado?: boolean;
   /** Avisa cuando el menú de cuenta abre/cierra: el dock no colapsa con el menú abierto. */
   onCuentaAbierta?: (abierto: boolean) => void;
+  /** Avisa cuando el panel de desglose de uso abre/cierra: mismo motivo que `onCuentaAbierta`. */
+  onUsoAbierto?: (abierto: boolean) => void;
 }) {
   const { pathname } = useLocation();
   // Sidebar DATA-DRIVEN (ADR 0005): se hidrata de `/api/catalogo`. El backend ya
@@ -191,7 +194,7 @@ export function Sidebar({
       {/* Pie: indicador sutil de uso de la cuenta (la barra ya no se colapsa a mano: se expande al
           acercar el ratón, ver AppShell). */}
       <div className="space-y-1 border-t border-border px-3 py-2">
-        <IndicadorUso />
+        <IndicadorUso onAbiertoChange={onUsoAbierto} />
       </div>
     </nav>
   );

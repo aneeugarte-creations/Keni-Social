@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { IndicadorUso } from "@/components/layout/IndicadorUso";
@@ -171,5 +171,47 @@ describe("IndicadorUso", () => {
       true,
     );
     expect(screen.getByLabelText(/Sin cuenta/)).toBeInTheDocument();
+  });
+
+  it("click en «Uso» despliega el desglose (Semana/24h/5h); un segundo click lo cierra", () => {
+    renderIndicador({ data: { cuentas: [cuenta({ semana_pct: 42, sesion_5h_pct: 18 })] } }, "claro-sports");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    const boton = screen.getByRole("button", { name: /Semana 42%/ });
+    fireEvent.click(boton);
+    const panel = screen.getByRole("dialog", { name: "Desglose de uso" });
+    expect(within(panel).getByText("Semana")).toBeInTheDocument();
+    expect(within(panel).getByText("24h")).toBeInTheDocument();
+    expect(within(panel).getByText("5h")).toBeInTheDocument();
+    expect(boton).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(boton);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(boton).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("Escape cierra el desglose abierto", () => {
+    renderIndicador({ data: { cuentas: [cuenta({})] } }, "claro-sports");
+    fireEvent.click(screen.getByRole("button", { name: /Semana/ }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("click fuera cierra el desglose abierto", () => {
+    renderIndicador({ data: { cuentas: [cuenta({})] } }, "claro-sports");
+    fireEvent.click(screen.getByRole("button", { name: /Semana/ }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("dos cuentas: solo un panel abierto a la vez (abrir el de B cierra el de A)", () => {
+    renderIndicador({ data: { cuentas: [cuenta({}), CUENTA_B] } }, null);
+    const [botonA, botonB] = screen.getAllByRole("button");
+    fireEvent.click(botonA);
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    fireEvent.click(botonB);
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
   });
 });

@@ -1,3 +1,6 @@
+import * as React from "react";
+import { createPortal } from "react-dom";
+
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useUsoCuenta, type UsoCuenta } from "@/hooks/use-uso-cuenta";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -8,14 +11,15 @@ import { cn } from "@/lib/utils";
  * Indicador SUTIL del uso de las cuentas de Claude del servidor, alojado en el pie del sidebar.
  * Expandido pinta, por cuenta, UNA sola línea («Uso» + %) con una barra de progreso fina debajo; la
  * cabecera «Cuenta A/B» solo aparece en la vista "Todas" (varias cuentas), porque con una sola es su
- * cuenta siempre. Colapsado, un anillo fino con el % del límite que ANTES bloqueará (burn rate). En
- * ambos casos el desglose completo (Semana/24h/5h) vive en el tooltip, no a la vista: así el pie
- * ocupa una línea en vez de tres.
+ * cuenta siempre. Colapsado, un anillo fino con el % del límite que ANTES bloqueará (burn rate). Esa
+ * línea es un BOTÓN: un click despliega un panel flotante con el desglose completo (Semana/24h/5h,
+ * cada uno con su barra), igual que antes se veían siempre — así el pie ocupa una línea en reposo
+ * pero el detalle sigue a un solo click, no solo al tooltip.
  *
  * EL NÚMERO QUE SE VE: la ventana SEMANAL que primero se agota (el mayor de all-models vs cuota
  * Sonnet) — es el límite de mayor alcance y el que de verdad frena el trabajo de la semana. «24h» y
- * «5h» siguen calculándose (van en el tooltip) pero no compiten por espacio visual con el número
- * principal. El anillo colapsado usa en cambio el burn rate (`limiteMasUrgente`, el que antes
+ * «5h» siguen calculándose (van en el desglose del panel) pero no compiten por espacio visual con el
+ * número principal. El anillo colapsado usa en cambio el burn rate (`limiteMasUrgente`, el que antes
  * tocará el 100 % por ventanas duras 5h/semana/Sonnet), porque ahí sí importa la predicción, no solo
  * el nivel actual.
  *
@@ -105,6 +109,104 @@ function tooltipCompleto(uso: UsoCuenta): string {
   return partes.join(" · ");
 }
 
+/** Medidor compacto (una CELDA del desglose): etiqueta encima del %, y debajo una barra de
+ *  progreso fina. Apilado (no en fila): con 3 celdas a 1/3 del ancho cada una, «Semana» + «100%»
+ *  en la MISMA línea no cabían (el "100%" invadía la celda vecina) — apilados, cada línea solo
+ *  compite por ancho consigo misma. Pensado para ir en fila con sus hermanos (`flex-1`). */
+function MiniMedidor({
+  etiqueta,
+  pct,
+  rojo,
+}: {
+  etiqueta: string;
+  pct: number | null;
+  rojo: boolean;
+}) {
+  const valor = pctEntero(pct);
+  const tiene = valor != null;
+  return (
+    <div className="min-w-0 flex-1 space-y-1">
+      <span className="block truncate text-[10px] uppercase leading-none tracking-wide text-muted-foreground/70">
+        {etiqueta}
+      </span>
+      <span
+        className={cn(
+          "block text-xs font-medium leading-none tabular-nums",
+          rojo ? "text-destructive" : "text-foreground",
+        )}
+      >
+        {tiene ? `${valor}%` : "—"}
+      </span>
+      <div
+        className="h-0.5 w-full overflow-hidden rounded-full bg-border"
+        role="progressbar"
+        aria-label={`Uso ${etiqueta}`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={valor ?? 0}
+      >
+        <div
+          className={cn(
+            "h-full rounded-full transition-[width] duration-500",
+            rojo ? "bg-destructive" : "bg-foreground",
+          )}
+          style={{ width: `${tiene ? valor : 0}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Panel flotante con el desglose completo (Semana/24h/5h) de una cuenta: se porta a `<body>` y se
+ *  ancla ENCIMA de la línea «Uso» (vive en el pie, no hay sitio debajo), igual que
+ *  `PopoverCubridores` en tareas/tarjetas.tsx. Incluye el reset semanal, que antes solo vivía en el
+ *  tooltip. */
+function PopoverDesgloseUso({
+  uso,
+  anclaRef,
+  contenedorRef,
+}: {
+  uso: UsoCuenta;
+  anclaRef: React.RefObject<HTMLButtonElement>;
+  contenedorRef: React.RefObject<HTMLDivElement>;
+}) {
+  const [pos, setPos] = React.useState<{ x: number; y: number } | null>(null);
+  const rojo = uso.alerta_roja;
+  const reset = etiquetaReset(uso);
+
+  React.useLayoutEffect(() => {
+    const ancla = anclaRef.current;
+    const panel = contenedorRef.current;
+    if (!ancla || !panel) return;
+    const a = ancla.getBoundingClientRect();
+    const p = panel.getBoundingClientRect();
+    const m = 8;
+    let x = a.left;
+    if (x + p.width > window.innerWidth - m) x = Math.max(m, window.innerWidth - p.width - m);
+    let y = a.top - p.height - 6;
+    if (y < m) y = a.bottom + 6;
+    setPos({ x, y });
+  }, [anclaRef, contenedorRef]);
+
+  return createPortal(
+    <div
+      ref={contenedorRef}
+      role="dialog"
+      aria-label="Desglose de uso"
+      style={pos ? { left: pos.x, top: pos.y } : { left: 0, top: 0, visibility: "hidden" }}
+      className="pointer-events-auto fixed z-50 w-52 rounded-lg border border-border bg-popover p-2.5 text-popover-foreground shadow-md"
+    >
+      <div className="flex items-end gap-2.5">
+        <MiniMedidor etiqueta="Semana" pct={semanaBinding(uso).pct} rojo={rojo} />
+        <MiniMedidor etiqueta="24h" pct={dia24hPct(uso)} rojo={rojo} />
+        <MiniMedidor etiqueta="5h" pct={uso.sesion_5h_pct} rojo={rojo} />
+      </div>
+      {reset ? <p className="mt-2 text-[10px] text-muted-foreground">{reset}</p> : null}
+    </div>,
+    document.body,
+  );
+}
+
 /** Círculo del rail colapsado: un anillo fino con el % del límite que ANTES bloqueará (burn rate);
  *  el desglose va al tooltip. */
 function CirculoUso({ pct, rojo }: { pct: number | null; rojo: boolean }) {
@@ -146,24 +248,71 @@ function CirculoUso({ pct, rojo }: { pct: number | null; rojo: boolean }) {
 }
 
 /** Bloque expandido de UNA cuenta: UNA línea («Uso» + %) + su barra, más el aviso rojo. El número es
- *  el binding semanal (el límite de mayor alcance); el desglose completo va al tooltip. La cabecera
- *  "Cuenta A/B" solo cuando hay VARIAS cuentas (vista "Todas"): con una sola es su cuenta siempre. */
-function BloqueCuenta({ uso, etiquetada }: { uso: UsoCuenta; etiquetada: boolean }) {
+ *  el binding semanal (el límite de mayor alcance); un click en la línea despliega el desglose
+ *  completo (Semana/24h/5h) en un panel flotante. La cabecera "Cuenta A/B" solo cuando hay VARIAS
+ *  cuentas (vista "Todas"): con una sola es su cuenta siempre. */
+function BloqueCuenta({
+  uso,
+  etiquetada,
+  abierto,
+  onToggle,
+}: {
+  uso: UsoCuenta;
+  etiquetada: boolean;
+  abierto: boolean;
+  onToggle: () => void;
+}) {
   const rojo = uso.alerta_roja;
   const alerta = mensajeRojo(uso);
   const pct = pctEntero(semanaBinding(uso).pct);
   const tiene = pct != null;
   const tooltip = tooltipCompleto(uso);
+  const anclaRef = React.useRef<HTMLButtonElement>(null);
+  const panelRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!abierto) return;
+    function fuera(e: MouseEvent) {
+      const t = e.target as Node;
+      if (anclaRef.current?.contains(t) || panelRef.current?.contains(t)) return;
+      onToggle();
+    }
+    function tecla(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        onToggle();
+        anclaRef.current?.focus();
+      }
+    }
+    document.addEventListener("mousedown", fuera);
+    document.addEventListener("keydown", tecla);
+    return () => {
+      document.removeEventListener("mousedown", fuera);
+      document.removeEventListener("keydown", tecla);
+    };
+  }, [abierto, onToggle]);
+
   return (
-    <Tooltip label={tooltip} side="top" className="w-full">
-      <div className="w-full space-y-1" aria-label={tooltip}>
-        {etiquetada ? (
-          <p className="truncate px-0.5 text-[10px] font-medium text-muted-foreground/80">
-            {etiquetaCuenta(uso)}
-          </p>
-        ) : null}
-        {alerta ? <p className="px-0.5 text-[10px] font-medium text-destructive">{alerta}</p> : null}
-        <div className="flex items-baseline justify-between gap-1 px-0.5">
+    <div className="w-full space-y-1">
+      {etiquetada ? (
+        <p className="truncate px-0.5 text-[10px] font-medium text-muted-foreground/80">
+          {etiquetaCuenta(uso)}
+        </p>
+      ) : null}
+      {alerta ? <p className="px-0.5 text-[10px] font-medium text-destructive">{alerta}</p> : null}
+      <button
+        ref={anclaRef}
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
+        aria-expanded={abierto}
+        aria-haspopup="dialog"
+        title={tooltip}
+        aria-label={tooltip}
+        className="-mx-0.5 w-[calc(100%+4px)] space-y-1 rounded-sm px-0.5 transition-colors hover:bg-accent focus:outline-none focus-visible:bg-accent"
+      >
+        <div className="flex items-baseline justify-between gap-1">
           <span className="text-[11px] text-muted-foreground">Uso</span>
           <span
             className={cn(
@@ -190,8 +339,9 @@ function BloqueCuenta({ uso, etiquetada }: { uso: UsoCuenta; etiquetada: boolean
             style={{ width: `${tiene ? pct : 0}%` }}
           />
         </div>
-      </div>
-    </Tooltip>
+      </button>
+      {abierto ? <PopoverDesgloseUso uso={uso} anclaRef={anclaRef} contenedorRef={panelRef} /> : null}
+    </div>
   );
 }
 
@@ -214,10 +364,26 @@ function cuentasAMostrar(cuentas: UsoCuenta[], marcaActiva: string | null): UsoC
   return cuentas.filter((c) => c.marcas.includes(marcaActiva));
 }
 
-function IndicadorUsoContenido({ colapsado }: { colapsado: boolean }) {
+function IndicadorUsoContenido({
+  colapsado,
+  onAbiertoChange,
+}: {
+  colapsado: boolean;
+  onAbiertoChange?: (abierto: boolean) => void;
+}) {
   const { data } = useUsoCuenta(true);
   const { marcaActiva } = useMarcaActiva();
   const cuentasRecibidas = data?.cuentas;
+
+  // Un solo panel abierto a la vez (entre las hasta 2 cuentas). Colapsar la barra cierra cualquiera
+  // que quedara abierto: si no, el panel quedaría flotando sin su ancla visible.
+  const [cuentaAbiertaId, setCuentaAbiertaId] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    onAbiertoChange?.(cuentaAbiertaId !== null);
+  }, [cuentaAbiertaId, onAbiertoChange]);
+  React.useEffect(() => {
+    if (colapsado) setCuentaAbiertaId(null);
+  }, [colapsado]);
 
   // Sin dato todavía (cargando / sin respuesta): estado NEUTRO, nunca rojo (placeholder de una cuenta).
   if (!cuentasRecibidas) {
@@ -267,12 +433,26 @@ function IndicadorUsoContenido({ colapsado }: { colapsado: boolean }) {
   return (
     <div className="w-full space-y-2">
       {cuentas.map((c) => (
-        <BloqueCuenta key={c.cuenta} uso={c} etiquetada={etiquetada} />
+        <BloqueCuenta
+          key={c.cuenta}
+          uso={c}
+          etiquetada={etiquetada}
+          abierto={cuentaAbiertaId === c.cuenta}
+          onToggle={() => setCuentaAbiertaId((v) => (v === c.cuenta ? null : c.cuenta))}
+        />
       ))}
     </div>
   );
 }
 
-export function IndicadorUso({ colapsado = false }: { colapsado?: boolean }) {
-  return <IndicadorUsoContenido colapsado={colapsado} />;
+export function IndicadorUso({
+  colapsado = false,
+  onAbiertoChange,
+}: {
+  colapsado?: boolean;
+  /** Avisa cuando el panel de desglose abre/cierra: el dock no debe colapsar con el panel abierto
+   *  (mismo mecanismo que `onCuentaAbierta` del avatar). */
+  onAbiertoChange?: (abierto: boolean) => void;
+}) {
+  return <IndicadorUsoContenido colapsado={colapsado} onAbiertoChange={onAbiertoChange} />;
 }
