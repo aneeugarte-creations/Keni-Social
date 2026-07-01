@@ -246,6 +246,12 @@ services:
     environment:
       XDG_CONFIG_HOME: /data
       KENI_DATA_DIR: /data
+      # Histórico de lecturas de metricas (keni-metricas): sin esto cae en
+      # ~/.local/share/keni-metricas/historico.db, DENTRO del contenedor (se borra en
+      # cada redeploy de `back`). Lo apuntamos al volumen COMPARTIDO /data para que
+      # sobreviva a los despliegues: sin dos lecturas separadas por un periodo real,
+      # "Análisis del periodo" no puede calcular ninguna variación y sale vacío siempre.
+      KENI_METRICAS_DB: /data/keni-metricas/historico.db
       # URL base PUBLICA de la consola: con ella el programador incluye las media URLs
       # (`/api/media/<objeto>`) en los posts que entrega a Metricool (sin ella, el post va
       # SOLO TEXTO y las redes que exigen media —Instagram/TikTok— ni se construyen). El GET
@@ -476,6 +482,12 @@ services:
     environment:
       XDG_CONFIG_HOME: /data
       KENI_DATA_DIR: /data
+      # Histórico de lecturas de metricas (keni-metricas), MISMO fichero que `back` (ambos
+      # comparten el volumen /data): sin esto cae en ~/.local/share/keni-metricas/historico.db,
+      # DENTRO del contenedor (se borra en cada redeploy de `daemons`, que es quien corre el
+      # refresco periódico de fondo). Sin dos lecturas separadas por un periodo real,
+      # "Análisis del periodo" no puede calcular ninguna variación y sale vacío siempre.
+      KENI_METRICAS_DB: /data/keni-metricas/historico.db
       # URL base PUBLICA de la consola: con ella el programador incluye las media URLs
       # (`/api/media/<objeto>`) en los posts que entrega a Metricool (sin ella, el post va
       # SOLO TEXTO y las redes que exigen media —Instagram/TikTok— ni se construyen). El GET
