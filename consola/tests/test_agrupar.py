@@ -65,10 +65,18 @@ def test_clave_vacia_sin_url_ni_titulo():
 def test_asignar_une_por_misma_url():
     # (a) Misma url canónica (host+path), distinta query/título → mismo cluster.
     item = _item(url="https://example.com/nota-1?utm_source=tw", titulo="Algo distinto")
-    cluster = {"id": "c1", "clave": "url:example.com/nota-1", "titulo": "Titular original"}
+    cluster = {"id": "c1", "clave": "url:example.com/nota-1", "titulo": "Titular original", "marca": "unotv"}
     assert agrupar.asignar(item, [cluster]) == "c1"
     # El Asignador (índice) toma la misma decisión.
     assert agrupar.Asignador([cluster]).asignar(item) == "c1"
+
+
+def test_asignar_misma_url_distinta_marca_no_une():
+    # El clustering es POR MARCA: el mismo recurso en otra marca forma su propio cluster.
+    item = _item(url="https://example.com/nota-1", titulo="X", marca="unotv-us")
+    cluster = {"id": "c1", "clave": "url:example.com/nota-1", "titulo": "T", "marca": "unotv"}
+    assert agrupar.asignar(item, [cluster]) is None
+    assert agrupar.Asignador([cluster]).asignar(item) is None
 
 
 def test_asignar_une_por_titulo_identico_sin_url():
@@ -76,7 +84,7 @@ def test_asignar_une_por_titulo_identico_sin_url():
     titulo = "¡Selección Mexicana golea!"
     clave = agrupar.clave_cluster(_item(url="", titulo=titulo))
     assert clave.startswith("t:")
-    cluster = {"id": "c2", "clave": clave, "titulo": titulo}
+    cluster = {"id": "c2", "clave": clave, "titulo": titulo, "marca": "unotv"}
     # Variante equivalente (sin signos / mayúsculas) colisiona por su hash.
     item = _item(url="", titulo="seleccion mexicana golea")
     assert agrupar.asignar(item, [cluster]) == "c2"

@@ -1,11 +1,14 @@
 """Clave de cluster y ASIGNACIÓN incremental item→cluster (capa pura).
 
-Reglas de agrupación (`asignar`) — DEDUP EXACTO, sin léxico:
-  - (a) MISMA `url_canonica_clustering` (host+path, SIN query): es literalmente el mismo
-    recurso → mismo cluster, sin ambigüedad.
-  - (b) si no hay url, título normalizado IDÉNTICO (`t:<hash>` de `dedup`): dos titulares
-    equivalentes sin url colisionan por su hash.
-  - si nada casa EXACTO → cluster nuevo.
+Reglas de agrupación (`asignar`) — DEDUP EXACTO POR MARCA, sin léxico:
+  - (a) MISMA `url_canonica_clustering` (host+path, SIN query) Y MISMA marca: es literalmente el
+    mismo recurso para ese mercado → mismo cluster, sin ambigüedad.
+  - (b) si no hay url, título normalizado IDÉNTICO (`t:<hash>` de `dedup`) Y misma marca: dos
+    titulares equivalentes sin url colisionan por su hash dentro de la marca.
+  - si nada casa EXACTO en la misma marca → cluster nuevo.
+
+El clustering es POR MARCA: una fuente multimarca archiva el mismo artículo una vez por marca
+(fan-out de la ingesta) y cada mercado forma su propia historia (score/estado/promoción propios).
 
 La agrupación de historias del MISMO evento contadas con titulares DISTINTOS ya no la hace el
 léxico (fuzzy): la resuelve la fusión semántica con Haiku (`paso_fusionar_semantica`, ON por
@@ -68,8 +71,11 @@ def asignar(
     clave = clave_cluster(item)
     if not clave:
         return None
+    # POR MARCA: un item solo se une a un cluster de SU marca. Una fuente multimarca archiva el
+    # mismo artículo una vez por marca (fan-out); cada mercado forma su propia historia.
+    marca = str(item.get("marca") or "")
     for c in clusters_recientes:
-        if str(c.get("clave") or "") == clave:
+        if str(c.get("clave") or "") == clave and str(c.get("marca") or "") == marca:
             return str(c["id"])
     return None
 
@@ -83,22 +89,27 @@ class Asignador:
     """
 
     def __init__(self, clusters_recientes: list[dict[str, Any]]) -> None:
-        self._por_clave: dict[str, str] = {}  # clave (url: o t:) -> id (primer cluster con esa clave)
+        # (marca, clave) -> id: el clustering es POR MARCA (un item solo se une a un cluster de su
+        # marca). A clave repetida dentro de una marca gana el primer cluster agregado.
+        self._por_clave: dict[tuple[str, str], str] = {}
         for c in clusters_recientes:
             self.agregar(c)
 
     def agregar(self, cluster: dict[str, Any]) -> None:
-        """Añade un cluster al índice (no-op si ya está indexado por su clave o no tiene id/clave)."""
+        """Añade un cluster al índice (no-op si ya está indexado por su (marca, clave) o sin id/clave)."""
         cid = str(cluster.get("id") or "")
         if not cid:
             return
         clave = str(cluster.get("clave") or "")
-        if clave and clave not in self._por_clave:
-            self._por_clave[clave] = cid
+        if not clave:
+            return
+        k = (str(cluster.get("marca") or ""), clave)
+        if k not in self._por_clave:
+            self._por_clave[k] = cid
 
     def asignar(self, item: dict[str, Any]) -> str | None:
         """Cluster destino para `item` (misma decisión EXACTA que `asignar`), o None si ninguno casa."""
         clave = clave_cluster(item)
         if not clave:
             return None
-        return self._por_clave.get(clave)
+        return self._por_clave.get((str(item.get("marca") or ""), clave))

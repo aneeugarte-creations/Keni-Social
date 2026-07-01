@@ -177,7 +177,11 @@ def paso_agrupar() -> dict[str, Any]:
                 )
                 if url_rec:
                     try:
-                        candidato = repos.cluster_por_url_canonica(url_rec, desde)
+                        # Scoped a la marca del item: el cruce por url solo une historias del
+                        # MISMO mercado (el clustering es por marca).
+                        candidato = repos.cluster_por_url_canonica(
+                            url_rec, desde, marca=str(item.get("marca") or "")
+                        )
                     except Exception:  # noqa: BLE001 -- el cruce por url es aditivo
                         candidato = ""
                     if candidato and (candidato in indice or repos.obtener_noticia_cluster(candidato)):
@@ -190,6 +194,9 @@ def paso_agrupar() -> dict[str, Any]:
                     "id": destino,
                     "titulo": item.get("titulo") or "",
                     "clave": agrupar.clave_cluster(item),
+                    # La marca del item FUNDA el cluster: el clustering es por marca (el fan-out
+                    # multimarca crea una historia por mercado). `recalcular` la reconfirma/afina.
+                    "marca": item.get("marca") or "",
                     "estado": "nuevo",
                     "publicacion_id": "",
                     "creado": "",

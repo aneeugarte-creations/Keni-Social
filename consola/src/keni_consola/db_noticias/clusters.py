@@ -802,25 +802,31 @@ def cuerpos_de_cluster(cluster_id: str, *, limite: int = 200) -> dict[str, str]:
     return {(f["url"] or ""): (f["cuerpo"] or "") for f in filas if f["url"] and f["cuerpo"]}
 
 
-def cluster_por_url_canonica(url_recortada: str, desde: str) -> str:
+def cluster_por_url_canonica(url_recortada: str, desde: str, marca: str | None = None) -> str:
     """Cluster reciente que YA contiene un item con esta URL canónica (sin query); '' si no.
 
     Cruce exacto del clustering a nivel de ITEM: la `clave` del cluster solo guarda la url de
     su representativo, así que dos fuentes que enlazan el MISMO recurso podían no casar si el
     representativo era otro. `url_recortada` = `clustering.url_canonica_clustering` (host+path
     SIN query); los items guardan la canónica de dedup (CON query útil), por eso se cruza por
-    igualdad o por prefijo `?`. Acotado a la ventana (`capturado_en >= desde`).
+    igualdad o por prefijo `?`. Acotado a la ventana (`capturado_en >= desde`). Si se pasa
+    `marca`, scoped a items de ESA marca (el clustering es por marca).
     """
     if not url_recortada:
         return ""
+    filtro_marca = " AND marca = ?" if marca is not None else ""
+    params: list[Any] = [desde, url_recortada, url_recortada + "?%"]
+    if marca is not None:
+        params.append(marca)
     con = _conectar()
     try:
         fila = con.execute(
             "SELECT cluster_id FROM noticias_items "
             "WHERE cluster_id <> '' AND capturado_en >= ? "
-            "AND (url_canonica = ? OR url_canonica LIKE ?) "
+            "AND (url_canonica = ? OR url_canonica LIKE ?)"
+            f"{filtro_marca} "
             "ORDER BY capturado_en DESC LIMIT 1",
-            (desde, url_recortada, url_recortada + "?%"),
+            tuple(params),
         ).fetchone()
     finally:
         con.close()
