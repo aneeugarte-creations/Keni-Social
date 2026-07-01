@@ -25,8 +25,10 @@ import { api, mensajeError, urlMedia } from "@/lib/api";
 import { cabecerasAuth } from "@/lib/api/_core";
 import type { OpcionesExport } from "@/lib/api/imagen";
 
+import { adaptarDocumento } from "./adaptar";
 import { dataUrlABlob } from "./dataUrl";
 import { type CapaTexto, conFotoEnHuecosVacios, conTextosHorneados, type Documento, tieneHuecoFotoVacio } from "./documento";
+import { PRESETS_FORMATO } from "./formatos";
 import { copyMuestra, getFotoMuestraSrc, getObjetoMuestraExport, setObjetoMuestraExport } from "./muestra";
 import type { StoreEditor } from "./store";
 
@@ -142,33 +144,87 @@ export function ExportarDialogo({
   const [escala, setEscala] = useState(1);
   const [calidad, setCalidad] = useState(90);
   const [exportando, setExportando] = useState(false);
+  // Fase visible mientras se exporta (null = inactivo). En el lote incluye el nº de formato en curso.
+  const [fase, setFase] = useState<string | null>(null);
   const [ultimaUrl, setUltimaUrl] = useState<string | null>(null);
+
+  // HORNEA lo que se ve en `doc` (foto de muestra en el hueco vacío + texto de titulares/plecas), lo
+  // renderiza server-side y descarga el archivo `nombreArchivo`. Devuelve la URL del render (por si la
+  // descarga automática la bloquea el navegador). `avisarFase` narra el progreso al usuario.
+  const hornearYDescargar = async (
+    doc: Documento,
+    opciones: OpcionesExport,
+    nombreArchivo: string,
+    avisarFase: (f: string) => void,
+  ): Promise<string> => {
+    // WYSIWYG: si la "Vista con muestra (foto)" está activa y el hueco de foto sigue vacío, hornea la
+    // foto de muestra en el hueco para que la descarga la incluya (en vez del gris del export).
+    let horneado = doc;
+    if (muestraFoto && tieneHuecoFotoVacio(horneado)) {
+      const objeto = await objetoFotoMuestra();
+      if (objeto) horneado = conFotoEnHuecosVacios(horneado, objeto);
+    }
+    // WYSIWYG (texto): hornea en cada titular/pleca el texto que se ve en el lienzo (escrito por el
+    // equipo, o el copy de muestra si ese modo está activo) para que la descarga no salga sin texto.
+    horneado = conTextosHorneados(horneado, (c) => textoHornear(c, muestraCopy, bindings));
+    avisarFase("Renderizando…");
+    const res = await api.imagenRender(horneado, bindings, opciones);
+    const url = urlMedia(res.url || res.id);
+    avisarFase("Descargando…");
+    await descargarArchivo(url, nombreArchivo);
+    return url;
+  };
+
+  const opcionesActuales = (): OpcionesExport => {
+    const o: OpcionesExport = { formato, escala };
+    if (formato === "jpg") o.calidad = calidad;
+    return o;
+  };
 
   const onDescargar = async () => {
     setExportando(true);
+    setFase("Renderizando…");
     try {
-      const opciones: OpcionesExport = { formato, escala };
-      if (formato === "jpg") opciones.calidad = calidad;
-      // WYSIWYG: si la "Vista con muestra (foto)" está activa y el hueco de foto sigue vacío, hornea
-      // la foto de muestra en el hueco para que la descarga la incluya (en vez del gris del export).
-      let doc: Documento = store.getState().documento;
-      if (muestraFoto && tieneHuecoFotoVacio(doc)) {
-        const objeto = await objetoFotoMuestra();
-        if (objeto) doc = conFotoEnHuecosVacios(doc, objeto);
-      }
-      // WYSIWYG (texto): hornea en cada titular/pleca el texto que se ve en el lienzo (escrito por el
-      // equipo, o el copy de muestra si ese modo está activo) para que la descarga no salga sin texto.
-      doc = conTextosHorneados(doc, (c) => textoHornear(c, muestraCopy, bindings));
-      const res = await api.imagenRender(doc, bindings, opciones);
-      const url = urlMedia(res.url || res.id);
+      const doc = store.getState().documento;
       const archivo = `${repararNombre(nombre || doc.marca)}.${formato}`;
-      await descargarArchivo(url, archivo);
+      const url = await hornearYDescargar(doc, opcionesActuales(), archivo, setFase);
       setUltimaUrl(url);
       toast.success("Imagen descargada.");
     } catch (e) {
       toast.error(mensajeError(e));
     } finally {
       setExportando(false);
+      setFase(null);
+    }
+  };
+
+  // LOTE multi-formato: para cada preset (9:16, 4:5, 1:1, 16:9) reencuadra el documento con
+  // `adaptarDocumento` (mismas proporciones que «Adaptar a…») y baja un archivo, secuencial (como el
+  // carrusel). El sufijo del nombre (`-9x16`…) distingue los archivos en la carpeta de descargas.
+  const onDescargarTodos = async () => {
+    setExportando(true);
+    try {
+      const doc = store.getState().documento;
+      const base = repararNombre(nombre || doc.marca);
+      let ultima: string | null = null;
+      for (let i = 0; i < PRESETS_FORMATO.length; i++) {
+        const preset = PRESETS_FORMATO[i];
+        const prefijoFase = `Formato ${i + 1}/${PRESETS_FORMATO.length} (${preset.etiqueta}) · `;
+        setFase(`${prefijoFase}Renderizando…`);
+        const adaptado = adaptarDocumento(doc, preset.f);
+        const sufijo = preset.etiqueta.replace(":", "x");
+        const archivo = `${base}-${sufijo}.${formato}`;
+        ultima = await hornearYDescargar(adaptado, opcionesActuales(), archivo, (f) =>
+          setFase(`${prefijoFase}${f}`),
+        );
+      }
+      setUltimaUrl(ultima);
+      toast.success(`${PRESETS_FORMATO.length} formatos descargados.`);
+    } catch (e) {
+      toast.error(mensajeError(e));
+    } finally {
+      setExportando(false);
+      setFase(null);
     }
   };
 
@@ -253,6 +309,15 @@ export function ExportarDialogo({
             </div>
           )}
 
+          {/* FASE en curso: narra Renderizando…/Descargando… (y el nº de formato en el lote). El
+              render puede tardar; el mensaje evita la sensación de cuelgue. */}
+          {fase && (
+            <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground" role="status">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              {fase} Si tarda, la conexión puede estar lenta; espera o reinténtalo.
+            </p>
+          )}
+
           {ultimaUrl && (
             <p className="text-[11px] text-muted-foreground">
               Si la descarga no empezó,{" "}
@@ -264,7 +329,17 @@ export function ExportarDialogo({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+          <Button
+            variant="outline"
+            onClick={onDescargarTodos}
+            disabled={exportando}
+            className="w-full sm:w-auto"
+            title="Reencuadra el diseño a 9:16, 4:5, 1:1 y 16:9 y descarga cada uno"
+          >
+            <Download className="mr-1 h-4 w-4" />
+            Descargar todos los formatos
+          </Button>
           <Button onClick={onDescargar} disabled={exportando} className="w-full sm:w-auto">
             {exportando ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Download className="mr-1 h-4 w-4" />}
             Descargar

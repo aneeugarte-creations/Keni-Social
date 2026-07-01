@@ -15,6 +15,7 @@ import * as apiMod from "@/lib/api";
 import type { Capa } from "./documento";
 import { documentoVacio, nuevaCapaTexto } from "./documento";
 import { ExportarDialogo } from "./ExportarDialogo";
+import { PRESETS_FORMATO } from "./formatos";
 import { setFotoMuestra, setTitularMuestra, TITULAR_MUESTRA_DEFECTO } from "./muestra";
 import { crearStoreEditor } from "./store";
 
@@ -48,8 +49,13 @@ function montar(opts: {
 
 async function descargar() {
   fireEvent.click(screen.getByRole("button", { name: "Exportar" }));
-  fireEvent.click(await screen.findByRole("button", { name: /Descargar/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /^Descargar$/ }));
   await waitFor(() => expect(apiMod.api.imagenRender).toHaveBeenCalled());
+}
+
+async function descargarTodos() {
+  fireEvent.click(screen.getByRole("button", { name: "Exportar" }));
+  fireEvent.click(await screen.findByRole("button", { name: /Descargar todos los formatos/ }));
 }
 
 function docEnviado(): DocLite {
@@ -141,5 +147,25 @@ describe("ExportarDialogo — horneado del texto al descargar", () => {
     const t = docEnviado().capas[0];
     expect(t.binding).toBe("copy_in"); // no se congela: el render usará el binding real
     expect(t.texto).toBe("borrador viejo");
+  });
+});
+
+describe("ExportarDialogo — descargar todos los formatos (lote multi-formato)", () => {
+  it("renderiza y descarga UN archivo por preset, cada uno con el lienzo adaptado", async () => {
+    montar();
+    await descargarTodos();
+    await waitFor(() =>
+      expect(apiMod.api.imagenRender).toHaveBeenCalledTimes(PRESETS_FORMATO.length),
+    );
+    // Cada llamada lleva el documento reencuadrado al w/h del preset correspondiente (mismo orden).
+    const dims = vi
+      .mocked(apiMod.api.imagenRender)
+      .mock.calls.map((c) => (c[0] as { formato: { w: number; h: number } }).formato);
+    for (let i = 0; i < PRESETS_FORMATO.length; i++) {
+      expect(dims[i].w).toBe(PRESETS_FORMATO[i].f.w);
+      expect(dims[i].h).toBe(PRESETS_FORMATO[i].f.h);
+    }
+    // Una descarga por formato (fetch del render -> blob -> <a download>).
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(PRESETS_FORMATO.length);
   });
 });
