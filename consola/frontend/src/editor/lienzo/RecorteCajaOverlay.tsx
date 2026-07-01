@@ -4,11 +4,13 @@
 // que el recorte de foto). Todo el gesto cuenta como UN paso de deshacer. Confirmar/cancelar viven
 // fuera (banner Hecho/Cancelar + Enter/Esc en el Lienzo), igual que el recorte de imagen.
 
-import { type PointerEvent as PointerEventReact, useRef } from "react";
+import { type PointerEvent as PointerEventReact, useEffect, useRef, useState } from "react";
 
 import type { Capa } from "../documento";
 import { type AsaRecorte, type CajaRecorte, recortarCajaRotada } from "../recorte";
 import type { StoreEditor } from "../store";
+import { aspectoRecorteStore } from "./aspectoRecorte";
+import { RejillaTercios } from "./RejillaTercios";
 import { asasMarco, claseTirador, etiquetaAsa } from "./tiradoresRecorte";
 
 export function RecorteCajaOverlay({
@@ -22,6 +24,14 @@ export function RecorteCajaOverlay({
 }) {
   const drag = useRef<{ asa: AsaRecorte; caja: CajaRecorte; px: number; py: number } | null>(null);
   const gestoActivo = useRef(false);
+  // Registra en el estado compartido que el objeto en recorte es una FORMA (encoge el recuadro): el
+  // banner muestra su ayuda y los chips de aspecto acotan el recuadro a la proporción.
+  useEffect(() => {
+    aspectoRecorteStore.getState().iniciar(false);
+    return () => aspectoRecorteStore.getState().limpiar();
+  }, []);
+  // Rejilla de tercios activa solo DURANTE el gesto (redibuja al empezar/soltar).
+  const [gesticulando, setGesticulando] = useState(false);
 
   const comenzar = () => {
     if (!gestoActivo.current) {
@@ -42,6 +52,7 @@ export function RecorteCajaOverlay({
     const c = actual();
     if (!c) return;
     drag.current = { asa, caja: { x: c.x, y: c.y, w: c.w, h: c.h }, px: e.clientX, py: e.clientY };
+    setGesticulando(true);
   };
   const onMove = (e: PointerEventReact) => {
     const d = drag.current;
@@ -49,12 +60,15 @@ export function RecorteCajaOverlay({
     const dx = (e.clientX - d.px) / escala;
     const dy = (e.clientY - d.py) / escala;
     // Recorta a lo largo de los ejes LOCALES del objeto (soporta rotación, p. ej. línea vertical).
-    const caja = recortarCajaRotada(d.caja, capa.rotacion || 0, d.asa, dx, dy);
+    // La relación de aspecto activa (banner) acota el recuadro a esa proporción.
+    const aspecto = aspectoRecorteStore.getState().ratio;
+    const caja = recortarCajaRotada(d.caja, capa.rotacion || 0, d.asa, dx, dy, undefined, aspecto);
     store.getState().actualizar(capa.id, caja as Partial<Capa>, false);
   };
   const onUp = () => {
     drag.current = null;
     gestoActivo.current = false;
+    setGesticulando(false);
   };
 
   const W = capa.w * escala;
@@ -82,6 +96,8 @@ export function RecorteCajaOverlay({
         className="absolute inset-0 ring-2 ring-primary"
         style={{ boxShadow: "0 0 0 9999px rgba(0,0,0,0.45)" }}
       />
+      {/* Rejilla de tercios durante el gesto (guía de composición). */}
+      <RejillaTercios visible={gesticulando} />
       {asasMarco(W, H).map((a) => (
         <div
           key={a.asa}

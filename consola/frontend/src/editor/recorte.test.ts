@@ -5,6 +5,7 @@ import {
   MIN_CAJA_PX,
   MIN_CROP,
   MIN_LADO_PX,
+  cajaConAspecto,
   clampCrop,
   docALocal,
   escalarCrop,
@@ -344,12 +345,89 @@ describe("recortarCaja (recorte de RECUADRO para objetos sin píxeles)", () => {
   });
 });
 
+describe("recortarCaja con RELACIÓN DE ASPECTO fija", () => {
+  const caja = { x: 100, y: 100, w: 200, h: 100 };
+
+  it("un tirador lateral (der) impone su eje y deriva el alto a la proporción 1:1", () => {
+    // 'e' con dx=-100 => w=100; aspecto 1 => h=100. El borde izquierdo/superior (fijos) no se mueven.
+    const r = recortarCaja(caja, "e", -100, 0, undefined, 1);
+    expect(r.w).toBeCloseTo(100);
+    expect(r.h).toBeCloseTo(100);
+    expect(r.x).toBe(100);
+    expect(r.y).toBe(100);
+  });
+
+  it("una esquina mantiene el aspecto y re-ancla la esquina OPUESTA (nw ancla en se)", () => {
+    // nw con dx=+60, dy=+10, aspecto 2 (w/h): el ancho manda (más restrictivo) y el alto = w/2.
+    const r = recortarCaja(caja, "nw", 60, 10, undefined, 2);
+    expect(r.w / r.h).toBeCloseTo(2);
+    // La esquina inferior-derecha (300,200) queda fija.
+    expect(r.x + r.w).toBeCloseTo(300);
+    expect(r.y + r.h).toBeCloseTo(200);
+  });
+
+  it("aspecto vertical 9:16 desde el borde inferior fija el ancho por el alto", () => {
+    // 's' con dy=+40 => h=140; aspecto 9/16 => w = 140*9/16 ≈ 78.75.
+    const r = recortarCaja(caja, "s", 0, 40, undefined, 9 / 16);
+    expect(r.h).toBeCloseTo(140);
+    expect(r.w).toBeCloseTo((140 * 9) / 16);
+  });
+
+  it("aspecto null es idéntico al recorte libre", () => {
+    expect(recortarCaja(caja, "e", -50, 30, undefined, null)).toEqual(recortarCaja(caja, "e", -50, 30));
+  });
+
+  it("respeta el mínimo sin romper la proporción", () => {
+    const r = recortarCaja(caja, "e", -1000, 0, MIN_CAJA_PX, 1);
+    expect(r.w).toBeGreaterThanOrEqual(MIN_CAJA_PX);
+    expect(r.h).toBeGreaterThanOrEqual(MIN_CAJA_PX);
+    expect(r.w / r.h).toBeCloseTo(1);
+  });
+});
+
+describe("cajaConAspecto (marco de foto inscrito a una proporción, centrado)", () => {
+  it("cuadra un rect ancho a 1:1 centrado", () => {
+    const r = cajaConAspecto(200, 100, 1);
+    expect(r.w).toBeCloseTo(100);
+    expect(r.h).toBeCloseTo(100);
+    // Centrado sobre la caja original: el ancho sobrante se reparte a los lados.
+    expect(r.x).toBeCloseTo(50);
+    expect(r.y).toBeCloseTo(0);
+  });
+
+  it("inscribe 16:9 en una caja alta encogiendo el alto", () => {
+    const r = cajaConAspecto(160, 200, 16 / 9);
+    expect(r.w).toBeCloseTo(160);
+    expect(r.h).toBeCloseTo(90);
+    expect(r.y).toBeCloseTo((200 - 90) / 2);
+    expect(r.x).toBeCloseTo(0);
+  });
+
+  it("si el aspecto ya coincide no cambia nada", () => {
+    const r = cajaConAspecto(160, 90, 16 / 9);
+    expect(r.w).toBeCloseTo(160);
+    expect(r.h).toBeCloseTo(90);
+    expect(r.x).toBeCloseTo(0);
+    expect(r.y).toBeCloseTo(0);
+  });
+
+  it("un aspecto inválido devuelve la caja intacta", () => {
+    expect(cajaConAspecto(120, 80, 0)).toEqual({ x: 0, y: 0, w: 120, h: 80 });
+  });
+});
+
 describe("recortarCajaRotada (recorte a lo largo de los ejes locales del objeto)", () => {
   const caja = { x: 100, y: 100, w: 200, h: 20 }; // p. ej. una línea (rotada se ve vertical)
 
   it("sin rotación es idéntico a recortarCaja", () => {
     expect(recortarCajaRotada(caja, 0, "e", -50, 0)).toEqual(recortarCaja(caja, "e", -50, 0));
     expect(recortarCajaRotada(caja, 0, "w", 30, 0)).toEqual(recortarCaja(caja, "w", 30, 0));
+  });
+
+  it("reenvía la relación de aspecto (sin rotación == recortarCaja con aspecto)", () => {
+    expect(recortarCajaRotada(caja, 0, "e", -80, 0, undefined, 1)).toEqual(
+      recortarCaja(caja, "e", -80, 0, undefined, 1),
+    );
   });
 
   it("rotado 90°: arrastrar el borde local 'e' a lo largo del eje local acorta el largo", () => {

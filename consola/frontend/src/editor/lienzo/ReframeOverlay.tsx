@@ -7,10 +7,12 @@ import {
   type PointerEvent as PointerEventReact,
   type WheelEvent as WheelEventReact,
   useRef,
+  useState,
 } from "react";
 
 import type { Capa, CapaImagen } from "../documento";
 import type { StoreEditor } from "../store";
+import { RejillaTercios } from "./RejillaTercios";
 
 export function ReframeOverlay({
   capa,
@@ -24,6 +26,8 @@ export function ReframeOverlay({
   const drag = useRef<{ fx: number; fy: number; px: number; py: number } | null>(null);
   const gestoActivo = useRef(false);
   const finZoom = useRef<number | undefined>(undefined);
+  // Rejilla de tercios activa solo mientras se arrastra el reencuadre.
+  const [gesticulando, setGesticulando] = useState(false);
 
   const comenzar = () => {
     if (!gestoActivo.current) {
@@ -39,6 +43,7 @@ export function ReframeOverlay({
     const c = actual();
     if (!c) return;
     drag.current = { fx: c.foco[0] ?? 0.5, fy: c.foco[1] ?? 0.5, px: e.clientX, py: e.clientY };
+    setGesticulando(true);
   };
   const onPointerMove = (e: PointerEventReact) => {
     if (!drag.current) return;
@@ -51,6 +56,7 @@ export function ReframeOverlay({
   const onPointerUp = () => {
     drag.current = null;
     gestoActivo.current = false;
+    setGesticulando(false);
   };
   const onWheel = (e: WheelEventReact) => {
     e.preventDefault();
@@ -72,6 +78,9 @@ export function ReframeOverlay({
       onWheel={onWheel}
       className="absolute cursor-move touch-none ring-2 ring-primary"
       style={{ left: capa.x * escala, top: capa.y * escala, width: capa.w * escala, height: capa.h * escala }}
-    />
+    >
+      {/* Rejilla de tercios durante el arrastre (guía de composición). */}
+      <RejillaTercios visible={gesticulando} />
+    </div>
   );
 }

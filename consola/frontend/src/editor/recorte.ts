@@ -279,7 +279,47 @@ export interface CajaRecorte {
 
 export const MIN_CAJA_PX = 8;
 
-export function recortarCaja(c: CajaRecorte, asa: AsaRecorte, dx: number, dy: number, min = MIN_CAJA_PX): CajaRecorte {
+// Relación de aspecto FIJA de un recorte: ancho/alto a mantener. `null` = libre (sin acotar).
+export type Aspecto = number | null;
+
+// Ajusta el par (w,h) a la relación `aspecto` = w/h manteniendo el LADO MÁS RESTRICTIVO (el que
+// obliga a encoger el otro), para que el rect quepa dentro del deseado. `eje` fuerza qué lado manda
+// cuando el gesto lo determina (un tirador lateral fija su propio eje; una esquina deja decidir al
+// más restrictivo). Devuelve w,h > 0 acotados al mínimo.
+function ajustarAspecto(w: number, h: number, aspecto: number, min: number, eje: "w" | "h" | "auto"): { w: number; h: number } {
+  const wPorH = h * aspecto; // ancho que impondría el alto actual
+  const hPorW = w / aspecto; // alto que impondría el ancho actual
+  let nw = w;
+  let nh = h;
+  if (eje === "w" || (eje === "auto" && wPorH <= w)) {
+    nw = w;
+    nh = hPorW;
+  } else {
+    nh = h;
+    nw = wPorH;
+  }
+  if (nw < min) {
+    nw = min;
+    nh = min / aspecto;
+  }
+  if (nh < min) {
+    nh = min;
+    nw = min * aspecto;
+  }
+  return { w: nw, h: nh };
+}
+
+// Encoge el RECUADRO de un objeto sin píxeles desde un borde/esquina (el opuesto queda fijo). Con
+// `aspecto` (w/h) NO fijado (null) recorta libre; fijado, mantiene la proporción anclando la esquina
+// opuesta al tirador (los lados fijan su propio eje; las esquinas dejan mandar al lado más restrictivo).
+export function recortarCaja(
+  c: CajaRecorte,
+  asa: AsaRecorte,
+  dx: number,
+  dy: number,
+  min = MIN_CAJA_PX,
+  aspecto: Aspecto = null,
+): CajaRecorte {
   if (asa === "mover") return { x: c.x + dx, y: c.y + dy, w: c.w, h: c.h };
   const der = c.x + c.w; // borde derecho/inferior: fijo salvo que se arrastre ese lado
   const aba = c.y + c.h;
@@ -302,7 +342,34 @@ export function recortarCaja(c: CajaRecorte, asa: AsaRecorte, dx: number, dy: nu
   if (sur) {
     h = Math.max(min, c.h + dy);
   }
+  if (aspecto && aspecto > 0) {
+    const lado = (este || oeste) && (norte || sur);
+    const soloH = (este || oeste) && !(norte || sur); // tirador lateral izq/der => manda el ancho
+    const aj = ajustarAspecto(w, h, aspecto, min, lado ? "auto" : soloH ? "w" : "h");
+    w = aj.w;
+    h = aj.h;
+    // Re-ancla el borde/esquina OPUESTO al tirador (el fijo): izquierda/arriba se recalculan.
+    if (oeste) x = der - w;
+    if (norte) y = aba - h;
+  }
   return { x, y, w, h };
+}
+
+// Nueva CAJA con la relación `aspecto` (w/h) INSCRITA en la actual (`w×h`) y CENTRADA sobre ella
+// (mismo centro): el lado que sobra se encoge. Para el marco de una FOTO en recorte, fijar un aspecto
+// = re-encuadrar el marco a esa proporción sin salirse del sitio que ocupaba. Devuelve x,y RELATIVOS
+// al origen de la caja original (0,0 si el aspecto ya coincide).
+export function cajaConAspecto(w: number, h: number, aspecto: number, min = MIN_CAJA_PX): CajaRecorte {
+  if (!(aspecto > 0) || !(w > 0) || !(h > 0)) return { x: 0, y: 0, w, h };
+  let nw = Math.min(w, h * aspecto);
+  let nh = nw / aspecto;
+  if (nh > h) {
+    nh = h;
+    nw = nh * aspecto;
+  }
+  nw = Math.max(min, nw);
+  nh = Math.max(min, nh);
+  return { x: (w - nw) / 2, y: (h - nh) / 2, w: nw, h: nh };
 }
 
 // Igual que `recortarCaja` pero para un objeto ROTADO `rot`° (su recuadro se recorta a lo largo de
@@ -317,10 +384,11 @@ export function recortarCajaRotada(
   dx: number,
   dy: number,
   min = MIN_CAJA_PX,
+  aspecto: Aspecto = null,
 ): CajaRecorte {
-  if (!rot) return recortarCaja(c, asa, dx, dy, min);
+  if (!rot) return recortarCaja(c, asa, dx, dy, min, aspecto);
   const dLocal = docALocal(0, 0, rot, dx, dy); // delta del puntero en los ejes locales del objeto
-  const local = recortarCaja({ x: 0, y: 0, w: c.w, h: c.h }, asa, dLocal.x, dLocal.y, min);
+  const local = recortarCaja({ x: 0, y: 0, w: c.w, h: c.h }, asa, dLocal.x, dLocal.y, min, aspecto);
   const origen = localADoc(c.x, c.y, rot, local.x, local.y); // nuevo origen local -> documento
   return { x: origen.x, y: origen.y, w: local.w, h: local.h };
 }

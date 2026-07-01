@@ -3,13 +3,16 @@
 // (probado aparte); aquí se verifica el render y que el overlay adopta la rotación de la capa.
 
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import type { AsaRecorte } from "../recorte";
 import { documentoVacio, nuevaCapaMarco } from "../documento";
 import { crearStoreEditor } from "../store";
+import { aspectoRecorteStore } from "./aspectoRecorte";
 import { RecorteCajaOverlay } from "./RecorteCajaOverlay";
 import { etiquetaAsa } from "./tiradoresRecorte";
+
+afterEach(() => aspectoRecorteStore.getState().limpiar());
 
 function montar(rotacion = 0) {
   const store = crearStoreEditor(documentoVacio({ w: 1080, h: 1080, safe_top: 0, safe_bottom: 0 }, "t"));
@@ -37,5 +40,10 @@ describe("RecorteCajaOverlay", () => {
   it("sin rotación no aplica transform", () => {
     montar(0);
     expect(screen.getByRole("group", { name: "Recortar objeto" }).style.transform).toBe("");
+  });
+
+  it("registra en el estado compartido que el recorte es de una FORMA (no imagen)", () => {
+    montar();
+    expect(aspectoRecorteStore.getState().esImagen).toBe(false);
   });
 });

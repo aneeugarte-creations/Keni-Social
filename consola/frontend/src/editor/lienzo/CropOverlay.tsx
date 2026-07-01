@@ -9,15 +9,19 @@
 import {
   type PointerEvent as PointerEventReact,
   type WheelEvent as WheelEventReact,
+  useEffect,
   useReducer,
   useRef,
+  useState,
 } from "react";
 
 import type { Capa, CapaImagen, Crop } from "../documento";
 import { fotoMuestra } from "../muestra";
-import { type AsaRecorte, type VistaRecorte, escalarCrop, moverAsa, vistaRecorte, zoomMarcoFoto } from "../recorte";
+import { type AsaRecorte, type VistaRecorte, cajaConAspecto, escalarCrop, moverAsa, vistaRecorte, zoomMarcoFoto } from "../recorte";
 import type { StoreEditor } from "../store";
 import { useImagen } from "../useImagen";
+import { aspectoRecorteStore } from "./aspectoRecorte";
+import { RejillaTercios } from "./RejillaTercios";
 import { asasMarco, claseTirador, etiquetaAsa } from "./tiradoresRecorte";
 
 const SIN_CROP: Crop = { cx: 0, cy: 0, cw: 1, ch: 1 };
@@ -50,6 +54,40 @@ export function CropOverlay({
     | { modo: "marco"; asa: AsaRecorte; crop: Crop; vv: VistaRecorte; w: number; h: number; px: number; py: number }
     | null
   >(null);
+  // Rejilla de tercios activa solo DURANTE el gesto (arrastre de marco o de imagen).
+  const [gesticulando, setGesticulando] = useState(false);
+
+  // Registra que el objeto en recorte es una FOTO (reencuadra el crop). Al elegir un aspecto en el
+  // banner, RE-ENCUADRA el MARCO a esa proporción (inscrito y centrado sobre la caja actual) para
+  // que la relación fija se vea; el resto de gestos parte de ahí. "Original" = proporción de la
+  // fuente. Suscripción al store de módulo (un solo recorte activo a la vez).
+  useEffect(() => {
+    const st = aspectoRecorteStore.getState();
+    st.iniciar(true);
+    const aplicar = (ratio: number | null, original: boolean) => {
+      const c = store.getState().documento.capas.find((x) => x.id === capa.id) as CapaImagen | undefined;
+      if (!c) return;
+      let r = ratio;
+      if (original && img && img.width > 0 && img.height > 0) r = img.width / img.height;
+      if (!r || !(r > 0)) return;
+      const nueva = cajaConAspecto(c.w, c.h, r);
+      if (Math.abs(nueva.w - c.w) < 0.5 && Math.abs(nueva.h - c.h) < 0.5) return;
+      store.getState().actualizar(
+        capa.id,
+        { x: c.x + nueva.x, y: c.y + nueva.y, w: nueva.w, h: nueva.h } as Partial<Capa>,
+      );
+    };
+    const desuscribir = aspectoRecorteStore.subscribe((s, prev) => {
+      if (s.clave !== prev.clave && (s.ratio !== null || s.clave === "original")) {
+        aplicar(s.ratio, s.clave === "original");
+      }
+    });
+    return () => {
+      desuscribir();
+      st.limpiar();
+    };
+    // El re-encuadre lee la capa fresca del store; solo re-suscribimos si cambia la identidad/fuente.
+  }, [capa.id, img, store]);
 
   const W = capa.w * escala;
   const H = capa.h * escala;
@@ -80,6 +118,7 @@ export function CropOverlay({
     const c = actual();
     if (!c || !v || fW <= 0 || fH <= 0) return;
     drag.current = { modo: "pan", crop: c.crop ?? SIN_CROP, px: e.clientX, py: e.clientY, fw: fW, fh: fH };
+    setGesticulando(true);
   };
 
   // Arrastrar un tirador del MARCO: ACERCA/ALEJA la foto dentro del marco FIJO (anclado al borde
@@ -97,6 +136,7 @@ export function CropOverlay({
     const vv = vistaRecorte(img.width, img.height, c.w, c.h, c.ajuste, c.foco, c.zoom, c.crop);
     if (!(vv.fw > 0) || !(vv.fh > 0)) return;
     drag.current = { modo: "marco", asa, crop: c.crop ?? SIN_CROP, vv, w: c.w, h: c.h, px: e.clientX, py: e.clientY };
+    setGesticulando(true);
   };
 
   const onMove = (e: PointerEventReact) => {
@@ -116,6 +156,7 @@ export function CropOverlay({
   const onUp = () => {
     drag.current = null;
     gestoActivo.current = false;
+    setGesticulando(false);
   };
 
   // Rueda = escalar la imagen dentro del marco, anclada al CENTRO del marco (lo que hay bajo el
@@ -149,25 +190,21 @@ export function CropOverlay({
     >
       {img && v && (
         <>
-          {/* Imagen ORIGINAL completa ATENUADA: se ve también FUERA del marco (estilo Canva). */}
+          {/* Imagen ORIGINAL completa: se ve también FUERA del marco (estilo Canva) a opacidad plena;
+              el VELO oscuro de abajo la atenúa fuera del marco (mismo lenguaje que el recorte de forma). */}
           <img
             src={img.src}
             alt=""
             draggable={false}
-            className="pointer-events-none absolute max-w-none select-none opacity-40"
+            className="pointer-events-none absolute max-w-none select-none"
             style={{ left: fL, top: fT, width: fW, height: fH }}
           />
-          {/* Copia NÍTIDA recortada al marco: dentro del marco la foto se ve a opacidad plena
-              (encima de la atenuada), exactamente donde el render la pinta. */}
-          <div className="pointer-events-none absolute inset-0 overflow-hidden">
-            <img
-              src={img.src}
-              alt=""
-              draggable={false}
-              className="absolute max-w-none select-none"
-              style={{ left: fL, top: fT, width: fW, height: fH }}
-            />
-          </div>
+          {/* VELO de "fuera de recorte": oscurece TODO menos el marco (agujero vía sombra gigante),
+              igual que el recorte de forma. Unifica el lenguaje: dentro nítido, fuera atenuado. */}
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{ boxShadow: "0 0 0 9999px rgba(0,0,0,0.45)" }}
+          />
           {/* Contorno de la imagen completa (referencia de hasta dónde llega la foto). */}
           <div
             className="pointer-events-none absolute border border-primary/50"
@@ -182,6 +219,8 @@ export function CropOverlay({
             className="absolute cursor-move"
             style={{ left: fL, top: fT, width: fW, height: fH }}
           />
+          {/* Rejilla de tercios durante el gesto (guía de composición), ceñida al marco. */}
+          <RejillaTercios visible={gesticulando} />
           {/* Tiradores del MARCO (estilo Canva): redimensionan el recorte desde ese borde. Encima de
               la superficie de pan para que agarrar un borde no inicie un arrastre de imagen. */}
           {asasMarco(W, H).map((a) => (

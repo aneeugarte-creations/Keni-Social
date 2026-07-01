@@ -6,10 +6,11 @@
  * La imagen se simula mockeando `useImagen` (en jsdom no hay carga real de imágenes).
  */
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { type CapaImagen, documentoVacio, nuevaCapaImagen } from "../documento";
 import { crearStoreEditor } from "../store";
+import { aspectoRecorteStore } from "./aspectoRecorte";
 import { CropOverlay } from "./CropOverlay";
 
 // Imagen "ya cargada": el hook real espera el onload del navegador, que en jsdom nunca llega.
@@ -25,10 +26,17 @@ function montar() {
   render(<CropOverlay capa={capa as CapaImagen} escala={0.5} store={store} />);
 }
 
+afterEach(() => aspectoRecorteStore.getState().limpiar());
+
 describe("CropOverlay — accesibilidad", () => {
   it("expone el overlay como grupo con nombre", () => {
     montar();
     expect(screen.getByRole("group", { name: "Recorte de imagen" })).toBeInTheDocument();
+  });
+
+  it("registra en el estado compartido que el recorte es de una FOTO", () => {
+    montar();
+    expect(aspectoRecorteStore.getState().esImagen).toBe(true);
   });
 
   it("la superficie de arrastre (pan) y los 8 tiradores del marco tienen nombre accesible", () => {
