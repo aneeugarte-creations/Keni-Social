@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
+import type { Capa, CapaGrupo } from "./documento";
 import { altoVisual, bandaOverlay, cajaVisual, conFotoEnHuecosVacios, conTextosHorneados, documentoVacio, nuevaCapaImagen, nuevaCapaMarco, nuevaCapaOverlay, nuevaCapaTexto, tieneHuecoFotoVacio } from "./documento";
+
+// Envuelve capas en un GRUPO (para probar el horneado recursivo dentro de grupos).
+function grupo(capas: Capa[]): CapaGrupo {
+  return { ...nuevaCapaImagen("", { es_foto: false }), tipo: "grupo", capas } as unknown as CapaGrupo;
+}
 
 describe("documentoVacio", () => {
   it("nace transparente y con el hueco de foto OCULTO (marcado y bloqueado)", () => {
@@ -112,6 +118,25 @@ describe("tieneHuecoFotoVacio / conFotoEnHuecosVacios (hornear foto de muestra e
     expect(objetos).toContain("logo-deco"); // la imagen no-hueco intacta
     expect(objetos.filter((o) => o === "muestra-1")).toHaveLength(1); // solo un hueco rellenado
   });
+
+  it("detecta y hornea un hueco de foto vacío ANIDADO en un grupo (WYSIWYG del export)", () => {
+    const base = documentoVacio(fmt, "uno-tv");
+    // El hueco de nivel superior ya tiene foto real; el único hueco VACÍO vive dentro de un grupo.
+    const doc = {
+      ...base,
+      capas: [
+        { ...(base.capas[0] as Capa), objeto: "foto-real" } as Capa,
+        grupo([nuevaCapaImagen("", { es_foto: true }), nuevaCapaTexto({ texto: "pie" })]),
+      ],
+    };
+    expect(tieneHuecoFotoVacio(doc)).toBe(true);
+    const out = conFotoEnHuecosVacios(doc, "muestra-grupo");
+    const g = out.capas.find((c) => c.tipo === "grupo") as CapaGrupo;
+    const hueco = g.capas.find((c) => c.tipo === "imagen" && c.es_foto);
+    expect(hueco && hueco.tipo === "imagen" && hueco.objeto).toBe("muestra-grupo");
+    // El hueco de nivel superior con foto real no se toca, y ya no queda ninguno vacío.
+    expect(tieneHuecoFotoVacio(out)).toBe(false);
+  });
 });
 
 describe("conTextosHorneados (congelar el texto visible en la descarga)", () => {
@@ -142,5 +167,17 @@ describe("conTextosHorneados (congelar el texto visible en la descarga)", () => 
     const doc = { ...documentoVacio(fmt, "claro-sports"), capas: [img] };
     const out = conTextosHorneados(doc, () => "lo que sea");
     expect(out.capas[0]).toBe(img);
+  });
+
+  it("hornea un titular con binding ANIDADO en un grupo y le quita el binding (WYSIWYG)", () => {
+    const anidado = nuevaCapaTexto({ binding: "copy_in", texto: "TITULAR ANIDADO" });
+    const doc = { ...documentoVacio(fmt, "uno-tv"), capas: [grupo([anidado])] };
+    const out = conTextosHorneados(doc, (c) => (c.binding === "copy_in" ? c.texto : null));
+    const g = out.capas[0] as CapaGrupo;
+    const t = g.capas[0];
+    expect(t.tipo === "texto" && t.texto).toBe("TITULAR ANIDADO");
+    expect(t.tipo === "texto" && t.binding).toBeNull();
+    // No muta el original.
+    expect(anidado.binding).toBe("copy_in");
   });
 });

@@ -379,46 +379,48 @@ export function zTope(doc: Documento): number {
   return doc.capas.reduce((m, c) => Math.max(m, c.z ?? 0), 0) + 1;
 }
 
-// ¿Tiene el documento algún HUECO DE FOTO (`es_foto`) sin `objeto` asignado? Los huecos viven al
-// NIVEL SUPERIOR de `capas` (mismo contrato que `capas_foto` del back y que la "Vista con muestra":
-// `CapaNodo` solo rellena con la muestra los `es_foto` de nivel superior, no los anidados en grupos).
+// ¿Es la capa un HUECO DE FOTO (`es_foto`) sin `objeto` asignado?
+function esHuecoFotoVacio(c: Capa): c is CapaImagen {
+  return c.tipo === "imagen" && c.es_foto === true && !(c.objeto || "").trim();
+}
+
+// ¿Tiene el documento algún HUECO DE FOTO (`es_foto`) sin `objeto` asignado? Recorre también los
+// grupos: un hueco anidado se ve en el lienzo pero saldría gris en la descarga si no se hornea.
 export function tieneHuecoFotoVacio(doc: Documento): boolean {
-  return doc.capas.some(
-    (c) => c.tipo === "imagen" && c.es_foto === true && !(c.objeto || "").trim(),
-  );
+  const buscar = (capas: Capa[]): boolean =>
+    capas.some((c) => (c.tipo === "grupo" ? buscar(c.capas) : esHuecoFotoVacio(c)));
+  return buscar(doc.capas);
 }
 
-// Copia del documento con `objeto` puesto en cada HUECO DE FOTO vacío de nivel superior. Sirve para
-// HORNEAR la foto de muestra SOLO en la descarga (export WYSIWYG): no muta el documento editable ni
-// lo que se guarda como plantilla/pieza, donde el hueco debe seguir vacío para recibir la foto real.
+// Copia del documento con `objeto` puesto en cada HUECO DE FOTO vacío, RECURSIVAMENTE (también dentro
+// de grupos). Sirve para HORNEAR la foto de muestra SOLO en la descarga (export WYSIWYG): no muta el
+// documento editable ni lo que se guarda como plantilla/pieza, donde el hueco debe seguir vacío para
+// recibir la foto real.
 export function conFotoEnHuecosVacios(doc: Documento, objeto: string): Documento {
-  return {
-    ...doc,
-    capas: doc.capas.map((c) =>
-      c.tipo === "imagen" && c.es_foto === true && !(c.objeto || "").trim()
-        ? { ...c, objeto }
-        : c,
-    ),
+  const hornear = (c: Capa): Capa => {
+    if (c.tipo === "grupo") return { ...c, capas: c.capas.map(hornear) };
+    return esHuecoFotoVacio(c) ? { ...c, objeto } : c;
   };
+  return { ...doc, capas: doc.capas.map(hornear) };
 }
 
-// Copia del documento con el TEXTO de cada capa de texto de nivel superior CONGELADO según `resolver`
-// (devuelve el texto a hornear, o `null` para dejar la capa como está). A la capa horneada se le
-// quita el `binding`: así el render del servidor pinta ese `texto` literal en vez del valor del
+// Copia del documento con el TEXTO de cada capa de texto CONGELADO según `resolver` (devuelve el
+// texto a hornear, o `null` para dejar la capa como está), RECURSIVAMENTE (también dentro de grupos:
+// un titular anidado con binding saldría vacío en la descarga si no se congela). A la capa horneada
+// se le quita el `binding`: así el render del servidor pinta ese `texto` literal en vez del valor del
 // binding (que sin pieza llega vacío). Sirve para que la descarga sea WYSIWYG con el titular/pleca
 // que se ve en el lienzo, sin tocar el documento editable ni lo que se guarda como plantilla/pieza.
 export function conTextosHorneados(
   doc: Documento,
   resolver: (c: CapaTexto) => string | null,
 ): Documento {
-  return {
-    ...doc,
-    capas: doc.capas.map((c) => {
-      if (c.tipo !== "texto") return c;
-      const v = resolver(c);
-      return v == null ? c : { ...c, texto: v, binding: null };
-    }),
+  const hornear = (c: Capa): Capa => {
+    if (c.tipo === "grupo") return { ...c, capas: c.capas.map(hornear) };
+    if (c.tipo !== "texto") return c;
+    const v = resolver(c);
+    return v == null ? c : { ...c, texto: v, binding: null };
   };
+  return { ...doc, capas: doc.capas.map(hornear) };
 }
 
 // Alto VISUAL de una capa para centrar/repartir: los textos sin caja (h<=0) ocupan una línea
