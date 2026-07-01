@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react";
 import * as React from "react";
 import { createPortal } from "react-dom";
 
@@ -314,7 +315,16 @@ function BloqueCuenta({
         className="-mx-0.5 w-[calc(100%+4px)] space-y-1 rounded-sm px-0.5 transition-colors hover:bg-accent focus:outline-none focus-visible:bg-accent"
       >
         <div className="flex items-baseline justify-between gap-1">
-          <span className="text-[11px] text-muted-foreground">Uso</span>
+          <span className="flex items-center gap-0.5 text-[11px] text-muted-foreground">
+            Uso
+            <ChevronDown
+              className={cn(
+                "h-2.5 w-2.5 shrink-0 text-muted-foreground/50 transition-transform",
+                abierto && "rotate-180",
+              )}
+              aria-hidden="true"
+            />
+          </span>
           <span
             className={cn(
               "text-xs font-medium tabular-nums",
