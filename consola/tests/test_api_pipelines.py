@@ -153,7 +153,7 @@ def test_run_verificacion_saltada_genera_copy(cliente, monkeypatch):
     assert etapas == {
         "fusionar": "saltada", "priorizar": "saltada", "admitir": "ok", "verificar": "saltada",
         "decisor": "saltada", "redactar": "ok", "sugerir_hashtags": "saltada", "ilustrar": "saltada",
-        "aprobar": "pendiente", "critica": "saltada",
+        "carrusel": "saltada", "aprobar": "pendiente", "critica": "saltada",
     }
     assert run["estado_global"] == "pendiente"
 
