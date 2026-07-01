@@ -92,7 +92,14 @@ def _critica_off(marca: str) -> bool:
 
 
 def _pieza_de(plat: dict) -> dict:
-    """Forma reducida de una fila por plataforma (lista + derivación de etapas)."""
+    """Forma reducida de una fila por plataforma (lista + derivación de etapas).
+
+    `es_carrusel`: la pieza tiene slides propios (`carrusel` JSON no vacío) o ES la variante
+    carrusel (`variante='carrusel'`) — la MISMA señal que marca `formato='carrusel'` en el tema,
+    la escriban Redactar (Decisor eligió ese camino, o el propio modelo lo sugirió con panel
+    horneable) o la conversión MANUAL del equipo (`dominio.carrusel`, ya con copy existente):
+    ambos caminos convergen en este campo de la pieza, así que una sola evidencia cubre los dos.
+    """
     return {
         "red": plat.get("red", ""),
         "red_nombre": _red_nombre(plat.get("red", "")),
@@ -100,6 +107,8 @@ def _pieza_de(plat: dict) -> dict:
         "revision": plat.get("revision", "") or "",
         "falta_copy": bool(plat.get("falta_copy", True)),
         "falta_imagen": bool(plat.get("falta_imagen", True)),
+        "es_carrusel": bool((plat.get("carrusel") or "").strip())
+        or (plat.get("variante") or "foto") == "carrusel",
     }
 
 
@@ -178,10 +187,9 @@ def _etapas_de_run(
     arte_ia: bool = False,
     critica_ia: bool = False,
     decisor_ia: bool = False,
-    carrusel_ia: bool = False,
 ) -> list[dict]:
     """Deriva las etapas de una run: Fusionar + Priorizar (pool) + Admitir/Verificar/Decisor/
-    Redactar/Sugerir hashtags/Ilustrar/Carrusel (toggles) + Aprobar (humana).
+    Redactar/Carrusel/Sugerir hashtags/Ilustrar (toggles) + Aprobar (humana).
 
     Fusionar y Priorizar se derivan de la HISTORIA enlazada (cluster): el dedup y el encaje/score del pool,
     previos al tema; sin historia, `pool_fusion`/`pool_editorial` (hay generación de pool de la
@@ -194,14 +202,16 @@ def _etapas_de_run(
     pendiente (`pipeline_contenido._barrido.ejecutar_redactar`): exige `decisor_ia` (evidencia de
     una generación `decisor` correlacionada al tema), igual patrón que Ilustrar exige `arte_ia`
     (evidencia de arte GENERADO: marcador/generación de arte de la run): una imagen de fuente
-    propia en la pieza no enciende la etapa. Carrusel va JUSTO DESPUÉS de Ilustrar: convierte el
-    copy YA redactado en slides que van DESPUÉS de la portada (acción del equipo sobre el mismo
-    post, no un proceso aparte); exige `carrusel_ia` (evidencia de una generación `carrusel`
-    correlacionada al tema) y, sin toggle propio, nunca bloquea (mismo patrón que Sugerir
-    hashtags). Todo lo que corre DESPUÉS de Redactar (Sugerir hashtags/Ilustrar/Aprobar/Crítica)
-    aplica igual, se haya elegido carrusel o no: Carrusel es ADITIVO, no sustituye el resto del
-    flujo. Aprobar es el gate humano (nunca saltada). Cada etapa es
-    `{clave, nombre, estado, detalle, ts}`.
+    propia en la pieza no enciende la etapa. Carrusel va JUSTO DESPUÉS de Redactar, EN PARALELO
+    (no es un paso posterior en el flujo, es un formato ALTERNO al post de foto): exige evidencia
+    en la PIEZA (`es_carrusel`, ver `_pieza_de`), que cubre los DOS caminos que llevan a ella —
+    (a) el Decisor eligió `camino='carrusel'` (o el propio modelo lo sugirió con panel horneable)
+    y Redactar la produce DIRECTO, sin generación aparte, o (b) el equipo la fuerza a mano sobre
+    un post YA en el feed (`dominio.carrusel`, con su propia generación). Sin toggle propio,
+    nunca bloquea (mismo patrón que Sugerir hashtags). Todo lo que corre DESPUÉS de Redactar
+    (Sugerir hashtags/Ilustrar/Aprobar/Crítica) aplica igual, se haya elegido carrusel o no:
+    Carrusel es ADITIVO, no sustituye el resto del flujo. Aprobar es el gate humano (nunca
+    saltada). Cada etapa es `{clave, nombre, estado, detalle, ts}`.
 
     Un tema del TABLERO (origen != 'pipeline': rss/equipo/historia/importación, redactado
     por la etapa Redactar) no pasa por el pool ni por la verificación: Fusionar/Priorizar/Verificar
@@ -284,6 +294,20 @@ def _etapas_de_run(
         cd_estado, cd_detalle = "pendiente", ""
     cd = {"clave": "redactar", "nombre": "Redactar", "estado": cd_estado, "detalle": cd_detalle, "ts": ""}
 
+    # --- Carrusel: formato ALTERNO al post de foto, en PARALELO a Redactar (no un paso
+    # posterior). SOLO evidencia en la PIEZA (`es_carrusel`): cubre los dos caminos que llevan a
+    # ella (Decisor/modelo la produce DIRECTO en Redactar, o el equipo la fuerza a mano después).
+    # Sin toggle propio, nunca bloquea (como Sugerir hashtags) — sin evidencia, "saltada".
+    con_carrusel = sum(1 for p in piezas if p.get("es_carrusel"))
+    if con_carrusel:
+        car_estado, car_detalle = "ok", f"{con_carrusel}/{total}"
+    else:
+        car_estado, car_detalle = _ESTADO_SALTADA, ""
+    carrusel = {
+        "clave": "carrusel", "nombre": "Carrusel",
+        "estado": car_estado, "detalle": car_detalle, "ts": "",
+    }
+
     # --- Sugerir hashtags: tras Redactar, antes de Ilustrar. SOLO evidencia (una generación
     # `sugerir-hashtags` correlacionada). Es una etapa CONDICIONAL (solo corre cuando al copy le
     # faltan hashtags), así que sin evidencia NUNCA queda "pendiente" —bloquearía el estado global
@@ -313,19 +337,6 @@ def _etapas_de_run(
     else:
         arte_estado, arte_detalle = "pendiente", ""
     arte = {"clave": "ilustrar", "nombre": "Ilustrar", "estado": arte_estado, "detalle": arte_detalle, "ts": ""}
-
-    # --- Carrusel: acción del equipo que convierte el copy YA redactado en slides que van
-    # DESPUÉS de la portada que produjo Ilustrar. SOLO evidencia (una generación `carrusel`
-    # correlacionada al tema): sin toggle propio, nunca bloquea (como Sugerir hashtags) — sin
-    # evidencia se pinta "saltada", nunca "pendiente".
-    if carrusel_ia:
-        car_estado, car_detalle = "ok", ""
-    else:
-        car_estado, car_detalle = _ESTADO_SALTADA, ""
-    carrusel = {
-        "clave": "carrusel", "nombre": "Carrusel",
-        "estado": car_estado, "detalle": car_detalle, "ts": "",
-    }
 
     # --- Aprobar: del estado de las piezas (revisión humana en la parrilla). ---------
     aprobadas = sum(1 for p in piezas if p["estado"] in _ESTADOS_APROBADOS)
@@ -360,8 +371,8 @@ def _etapas_de_run(
     critica = {"clave": "critica", "nombre": "Crítica", "estado": cr_estado, "detalle": cr_detalle, "ts": ""}
 
     etapas = [
-        fusion, editorial, ci, verificación, decisor, cd,
-        hashtags, arte, carrusel, aprobacion, critica,
+        fusion, editorial, ci, verificación, decisor, cd, carrusel,
+        hashtags, arte, aprobacion, critica,
     ]
     for e in etapas:
         e["es_ia"] = e["clave"] in _ETAPAS_IA
@@ -408,7 +419,6 @@ def _run_de(
     arte_ia: bool = False,
     critica_ia: bool = False,
     decisor_ia: bool = False,
-    carrusel_ia: bool = False,
 ) -> dict:
     """Construye el objeto `run` de un contenido del pipeline y sus piezas por plataforma.
 
@@ -421,14 +431,15 @@ def _run_de(
     None cae a ceros (forma estable). `pool_fusion`/`pool_editorial`: evidencia de que la IA del
     pool corrió para la marca (pinta Fusionar/Priorizar sin historia como corridas, no saltadas).
     `decisor_ia`: evidencia de que el Decisor de formato corrió para este tema (ver `_ETAPAS`).
-    `carrusel_ia`: evidencia de que el equipo convirtió el copy de este tema en un carrusel.
+    La etapa Carrusel NO lleva un flag de evidencia aparte: se deriva de la PIEZA
+    (`_pieza_de.es_carrusel`), ya incluida en `piezas_plat`.
     """
     base = [_pieza_de(p) for p in piezas_plat]
     etapas = _etapas_de_run(
         item, base, cluster,
         pool_fusion=pool_fusion, pool_editorial=pool_editorial,
         hashtags_ia=hashtags_ia, arte_ia=arte_ia,
-        critica_ia=critica_ia, decisor_ia=decisor_ia, carrusel_ia=carrusel_ia,
+        critica_ia=critica_ia, decisor_ia=decisor_ia,
     )
     marca = item.get("marca", "") or ""
     # `origen` real de la pieza padre (la fuente RSS que la recolectó): contexto de la etapa Admitir.

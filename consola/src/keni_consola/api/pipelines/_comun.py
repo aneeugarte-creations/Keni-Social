@@ -53,10 +53,11 @@ _LIMITE_MAX = 200
 # trabajo del POOL (dedup + encaje/score), DERIVADO de la historia (cluster), no de un toggle.
 # Admitir/Verificar/Decisor/Redactar son TOGGLABLES por marca (activa = estado real; desactivada
 # = "saltada"). Decisor va ENTRE Verificar y Redactar (elige el formato foto/carrusel antes de
-# redactar; ver `dominio.decisor`). Carrusel va JUSTO DESPUÉS de Ilustrar: convierte el copy YA
-# redactado en slides que van DESPUÉS de la portada que produjo Ilustrar (acción del equipo, sin
-# toggle propio — nunca bloquea, como Sugerir hashtags). Aprobar es el gate humano. `estado_global`
-# toma la primera no-{ok,saltada}. Mismo orden que `detalle._ORDEN_LINEA_TIEMPO`.
+# redactar; ver `dominio.decisor`). Carrusel va JUSTO DESPUÉS de Redactar, EN PARALELO (no un
+# paso posterior): es el formato ALTERNO al post de foto, lo produzca Redactar directo (Decisor
+# eligió ese camino) o lo fuerce el equipo a mano sobre un post ya en el feed — sin toggle
+# propio, nunca bloquea (como Sugerir hashtags). Aprobar es el gate humano. `estado_global` toma
+# la primera no-{ok,saltada}.
 _ETAPAS = (
     ("fusionar", "Fusionar"),
     ("priorizar", "Priorizar"),
@@ -64,9 +65,9 @@ _ETAPAS = (
     ("verificar", "Verificar"),
     ("decisor", "Decisor"),
     ("redactar", "Redactar"),
+    ("carrusel", "Carrusel"),
     ("sugerir_hashtags", "Keywords"),
     ("ilustrar", "Ilustrar"),
-    ("carrusel", "Carrusel"),
     ("aprobar", "Aprobar"),
     ("critica", "Crítica"),
 )

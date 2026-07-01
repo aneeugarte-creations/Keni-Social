@@ -25,7 +25,6 @@ from ._metricas import (
     _metricas_por_run,
     _pool_por_marca,
     _runs_con_arte_ia,
-    _runs_con_carrusel,
     _runs_con_critica_ia,
     _runs_con_decisor,
     _runs_con_hashtags,
@@ -45,9 +44,9 @@ _ORDEN_LINEA_TIEMPO = (
     "Verificar",
     "Revisión editorial",
     "Redactar",
+    "Carrusel",
     "Keywords",
     "Ilustrar",
-    "Carrusel",
     "Aprobar",
     "Crítica",
 )
@@ -352,7 +351,6 @@ def _detalle(pipeline_id: str) -> tuple[int, dict]:
             arte_ia=pipeline_id in _runs_con_arte_ia(gens),
             critica_ia=pipeline_id in _runs_con_critica_ia(gens),
             decisor_ia=pipeline_id in _runs_con_decisor(gens),
-            carrusel_ia=pipeline_id in _runs_con_carrusel(gens),
         ),
         "actividad": eventos,
         # Línea de tiempo unificada del POST: TODA la actividad real del mismo tema (incluido el

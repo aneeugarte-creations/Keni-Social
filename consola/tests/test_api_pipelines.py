@@ -59,8 +59,8 @@ def test_run_verificacion_no_verificado_con_copy(cliente):
     run = _run_por_titulo(cliente, "Tema apto")
     assert run is not None
     assert [e["clave"] for e in run["etapas"]] == [
-        "fusionar", "priorizar", "admitir", "verificar", "decisor", "redactar",
-        "sugerir_hashtags", "ilustrar", "carrusel", "aprobar", "critica",
+        "fusionar", "priorizar", "admitir", "verificar", "decisor", "redactar", "carrusel",
+        "sugerir_hashtags", "ilustrar", "aprobar", "critica",
     ]
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
     # Sin cluster -> Fusionar/Priorizar saltadas; Decisor OFF por defecto -> saltada; sin
@@ -344,8 +344,8 @@ def test_detalle_run(cliente):
     body = d.json()
     assert body["pipeline"]["id"] == tema["id"]
     assert [e["clave"] for e in body["pipeline"]["etapas"]] == [
-        "fusionar", "priorizar", "admitir", "verificar", "decisor", "redactar",
-        "sugerir_hashtags", "ilustrar", "carrusel", "aprobar", "critica",
+        "fusionar", "priorizar", "admitir", "verificar", "decisor", "redactar", "carrusel",
+        "sugerir_hashtags", "ilustrar", "aprobar", "critica",
     ]
     assert "actividad" in body
     assert "verificacion" in body["pipeline"]
@@ -686,12 +686,20 @@ def test_run_suma_metricas_de_sus_generaciones(cliente):
     assert det["metricas"] == run["metricas"]
 
 
-def test_carrusel_se_pliega_en_su_run_como_etapa(cliente):
+def test_carrusel_manual_se_pliega_en_su_run_como_etapa(cliente):
     """Convertir un post (que ES una run) en carrusel es trabajo de PRODUCCIÓN sobre la MISMA
-    historia (una alternativa de formato a Redactar, no un proceso aparte): vive DENTRO de la
-    run de su tema como etapa "ok" tras Ilustrar, NO sale como su propia fila suelta. Su coste
-    SUMA al de la run (ya no se duplica en una fila aparte)."""
+    historia —un formato ALTERNO al post de foto, en PARALELO a Redactar, no un proceso aparte
+    ni un paso posterior—: vive DENTRO de la run de su tema como etapa "ok", NO sale como su
+    propia fila suelta. Su coste SUMA al de la run (ya no se duplica en una fila aparte). La
+    evidencia es la PIEZA (`carrusel` con slides), no el tipo de generación: cubre el camino
+    MANUAL (con su propia generación `tipo='carrusel'`, este test) y el camino directo del
+    Decisor (sin generación aparte, ver `test_carrusel_directo_de_redactar_sin_generacion_aparte`)."""
     tema = _tema_pipeline("Post que se vuelve carrusel")
+    repos.crear_pieza_fila(
+        publicacion_id=tema["id"], red="instagram", estado="borrador",
+        copy="Copy ya redactado.", revision="no_verificado",
+        carrusel='[{"tipo": "imagen", "objeto": "slide1"}]',
+    )
     _gen_suelta(
         "Carrusel largo · Post que se vuelve carrusel",
         tipo="carrusel",
@@ -708,14 +716,35 @@ def test_carrusel_se_pliega_en_su_run_como_etapa(cliente):
     etapas = {e["clave"]: e for e in run["etapas"]}
     assert etapas["carrusel"]["estado"] == "ok"
     assert etapas["carrusel"]["es_ia"] is True
-    # ...y su coste SÍ suma al de la run (ya no vive duplicado en una fila aparte).
+    assert etapas["redactar"]["estado"] == "ok"  # el copy sigue el proceso normal de Redactar
+    # ...y el coste de la conversión SÍ suma al de la run (ya no vive duplicado en una fila aparte).
     assert run["metricas"]["tokens"] == 999
     assert run["metricas"]["items"] == 1
     assert body["totales"]["tokens"] == 999
     assert body["totales"]["items"] == 1
-    # El detalle enlaza el stream de la generación a la etapa (código CARRUSEL).
+    # El detalle enlaza el stream de la conversión MANUAL a la etapa (código CARRUSEL).
     det = cliente.get(f"/api/pipelines/{tema['id']}").json()
     assert "CARRUSEL" in det["generaciones_por_etapa"]
+
+
+def test_carrusel_directo_de_redactar_sin_generacion_aparte(cliente):
+    """El OTRO camino a Carrusel: el Decisor eligió `camino='carrusel'` (o el propio modelo lo
+    sugirió con panel horneable) y Redactar la produce DIRECTO —la pieza nace YA con sus slides,
+    sin una generación `tipo='carrusel'` aparte—. La etapa Carrusel igualmente sale "ok"
+    (evidencia en la PIEZA), aunque el detalle no tenga un stream propio que enlazarle (la
+    generación real es la de Redactar, ya visible en su propia etapa)."""
+    tema = _tema_pipeline("Post nacido carrusel")
+    repos.crear_pieza_fila(
+        publicacion_id=tema["id"], red="instagram", estado="borrador",
+        copy="Copy panel multi-historia.", revision="no_verificado",
+        carrusel='[{"tipo": "imagen", "objeto": "slide1"}, {"tipo": "imagen", "objeto": "slide2"}]',
+    )
+    run = _run_por_titulo(cliente, "Post nacido carrusel")
+    etapas = {e["clave"]: e for e in run["etapas"]}
+    assert etapas["carrusel"]["estado"] == "ok"
+    assert etapas["redactar"]["estado"] == "ok"
+    det = cliente.get(f"/api/pipelines/{tema['id']}").json()
+    assert "CARRUSEL" not in det["generaciones_por_etapa"]
 
 
 def test_sugerir_hashtags_se_pliega_en_su_run_como_etapa(cliente):
@@ -1043,8 +1072,8 @@ def test_tema_futuro_sin_trabajo_sale_en_gris(cliente):
     assert fut["estado_global"] == "pendiente"  # sin trabajo: parada al inicio
     # Las etapas de `_ETAPAS` se derivan del estado (mismas que cualquier run del tablero).
     assert [e["clave"] for e in fut["etapas"]] == [
-        "fusionar", "priorizar", "admitir", "verificar", "decisor", "redactar",
-        "sugerir_hashtags", "ilustrar", "carrusel", "aprobar", "critica",
+        "fusionar", "priorizar", "admitir", "verificar", "decisor", "redactar", "carrusel",
+        "sugerir_hashtags", "ilustrar", "aprobar", "critica",
     ]
     assert por_titulo["Run trabajada"]["futuro"] is False
     # Los contadores reportan el backlog.

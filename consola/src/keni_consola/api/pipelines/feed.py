@@ -44,7 +44,6 @@ from ._metricas import (
     _metricas_por_run,
     _pool_por_marca,
     _runs_con_arte_ia,
-    _runs_con_carrusel,
     _runs_con_critica_ia,
     _runs_con_decisor,
     _runs_con_hashtags,
@@ -270,7 +269,6 @@ def _feed(
     critica_ia_runs = _runs_con_critica_ia(gens)
     hashtags_runs = _runs_con_hashtags(gens)
     decisor_runs = _runs_con_decisor(gens)
-    carrusel_runs = _runs_con_carrusel(gens)
     # Una sola lectura de las plataformas (acotada a la marca enfocada), agrupada por contenido
     # (evita N consultas). Solo se consultan piezas de las runs listadas, todas de esta marca.
     por_contenido: dict[str, list[dict]] = {}
@@ -300,7 +298,6 @@ def _feed(
             arte_ia=(it.get("id", "") or "") in arte_ia_runs,
             critica_ia=(it.get("id", "") or "") in critica_ia_runs,
             decisor_ia=(it.get("id", "") or "") in decisor_runs,
-            carrusel_ia=(it.get("id", "") or "") in carrusel_runs,
         )
         for it in runs_items
     ]
