@@ -17,11 +17,13 @@ llamadas paralelas que leían los mismos titulares:
   - `familias`: historias DISTINTAS de un mismo GRAN evento (cumbre, torneo, desastre…) → el daemon
     las ETIQUETA con `tema_macro` (no las funde); producción arma un carrusel del evento.
 
-Los grupos pasan además por una VERIFICACIÓN por grupo (prompt `fusionar-verificar`, «Cotejar»):
-re-pregunta con SOLO esas historias y el grupo sale confirmado, PARTIDO en subgrupos o descartado
-(fusionar por error es caro: infla la corroboración y auto-produce piezas con fuentes que no hablan
-de lo mismo — pasó con «Shakira en la inauguración» fundida con «alerta de la embajada» por el
-«Mundial»). Las familias NO se verifican (no se funden). El modelo es `config.fusion_modelo()`.
+Los grupos pueden pasar por una VERIFICACIÓN por grupo (prompt `fusionar-verificar`, «Cotejar»),
+GATEADA por `KENI_FUSION_COTEJAR` (def OFF): re-pregunta con SOLO esas historias y el grupo sale
+confirmado, PARTIDO en subgrupos o descartado (fusionar por error es caro: infla la corroboración y
+auto-produce piezas con fuentes que no hablan de lo mismo — pasó con «Shakira en la inauguración»
+fundida con «alerta de la embajada» por el «Mundial»). Con Cotejar OFF los grupos de la pasada
+principal se aceptan tal cual. Las familias NO se verifican (no se funden). La pasada principal y
+Cotejar usan `config.fusion_modelo()` (sonnet); Subtema usa `config.subtema_modelo()` (haiku).
 """
 
 from __future__ import annotations
@@ -173,9 +175,15 @@ def procesar_fusiones(
         if len(ids) >= 2:
             familias.append({"tema": f["tema"], "ids": ids})
 
-    # VERIFICACIÓN («Cotejar»): cada grupo propuesto se re-pregunta con un prompt enfocado (solo esas
-    # historias). El verificador confirma, PARTE en subgrupos o descarta; un grupo que no la supera NO
+    # VERIFICACIÓN («Cotejar»), GATEADA por `KENI_FUSION_COTEJAR` (def OFF): con OFF los grupos de la
+    # pasada principal se aceptan tal cual (ya salen disjuntos, ≥2 e ids del input: salida válida sin
+    # sub-llamadas de cotejo). Con ON cada grupo se re-pregunta con un prompt enfocado (solo esas
+    # historias) y el verificador confirma, PARTE en subgrupos o descarta; un grupo que no la supera NO
     # se funde (conservador). Las familias no se verifican. El parseo y los ejecutores de test no cambian.
+    from .. import config
+
+    if not config.fusion_cotejar_activo():
+        return Fusiones(salida_grupos, familias)
     payload_por_id = {q["id"]: q for q in payload}
     confirmados: list[list[str]] = []
     for grupo in salida_grupos:
@@ -341,7 +349,9 @@ def proponer_subtemas(
         }
         for c in validos
     ]
-    correr = ejecutor or _ejecutar_haiku
+    # Subtema corre con SU PROPIO modelo (`config.subtema_modelo()`, def haiku): repartir ids por
+    # faceta es una clasificación acotada, aparte de la pasada PRINCIPAL de Fusionar (sonnet).
+    correr = ejecutor or _ejecutar_subtema
     prompt = _construir_prompt(
         json.dumps(payload, ensure_ascii=False), prompt_id=_PROMPT_SUBTEMA_ID
     )
@@ -381,6 +391,22 @@ def _ejecutar_haiku(prompt: str, dir_permitido: str) -> str:
 
     return _ejecutar_claude_json(
         prompt, dir_permitido, modelo=config.fusion_modelo(),
+        max_turns=1, sin_tools=True,
+    )
+
+
+def _ejecutar_subtema(prompt: str, dir_permitido: str) -> str:
+    """Ejecutor de Subtema: el runner síncrono con el modelo de Subtema (`config.subtema_modelo()`).
+
+    Separado de `_ejecutar_haiku` (que usa `fusion_modelo`, sonnet): facetear un macro-evento en
+    subtemas es una clasificación acotada y va con haiku por defecto, sin tocar el modelo de la
+    fusión PRINCIPAL. No agéntica: `max_turns=1` y `sin_tools=True` (un turno, sin bucle de tools).
+    """
+    from .. import config
+    from .traducir import _ejecutar_claude_json
+
+    return _ejecutar_claude_json(
+        prompt, dir_permitido, modelo=config.subtema_modelo(),
         max_turns=1, sin_tools=True,
     )
 
@@ -773,10 +799,11 @@ def construir_procesar_fusionar(marca: str, recientes: list[dict[str, Any]]):  #
 
     El worker corre `claude -p` (modelo `config.fusion_modelo()`) con el prompt de
     `construir_prompt_fusion`; aquí tomamos esa `salida` como la pasada PRINCIPAL y orquestamos la
-    fusión de la marca (`fusionar_marca`: ancla de agenda + grupos verificados + familias + subtemas),
-    persistiendo en repos. La verificación y los subtemas corren con `_ejecutar_haiku` (el worker
-    tiene claude); sus callbacks sellan el gasto de cada sub-llamada bajo su etapa («Cotejar» /
-    «Subtema») para que ese coste no quede invisible frente a la pasada principal («Fusionar»). Al
+    fusión de la marca (`fusionar_marca`: ancla de agenda + grupos + familias + subtemas),
+    persistiendo en repos. La verificación («Cotejar», solo si `KENI_FUSION_COTEJAR`) corre con
+    `_ejecutar_haiku` (sonnet) y los subtemas con `_ejecutar_subtema` (haiku); sus callbacks sellan el
+    gasto de cada sub-llamada bajo su etapa («Cotejar» / «Subtema») para que ese coste no quede
+    invisible frente a la pasada principal («Fusionar»). Al
     terminar limpia el marcador de fusión en curso de la marca. Devuelve `{grupos, fusionadas,
     familias, anclas}`.
     """

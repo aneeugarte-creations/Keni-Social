@@ -59,13 +59,14 @@ def test_proponer_fusiones_fallo_haiku_no_funde():
     assert res.grupos == [] and res.familias == []
 
 
-def test_verificacion_descarta_grupo_no_confirmado():
-    """SEGUNDA PASADA: un grupo propuesto que el verificador rechaza NO se funde.
+def test_verificacion_descarta_grupo_no_confirmado(monkeypatch):
+    """SEGUNDA PASADA (Cotejar ON): un grupo propuesto que el verificador rechaza NO se funde.
 
     Regresión del cluster "Shakira + alerta de la embajada" (10-jun): la primera pasada
     agrupó por TEMA (todo «Mundial»), infló la corroboración y el pool enseñó una historia
     «Corroborada · 2 fuentes» con fuentes que no hablaban de lo mismo. El verificador
     re-pregunta con SOLO esas historias y, si no son el mismo hecho, fuera."""
+    monkeypatch.setenv("KENI_FUSION_COTEJAR", "1")
     llamadas = {"n": 0}
 
     def ej(_p, _c):
@@ -82,8 +83,9 @@ def test_verificacion_descarta_grupo_no_confirmado():
     assert llamadas["n"] == 2  # propuesta + verificación
 
 
-def test_verificacion_puede_partir_un_grupo():
-    """El verificador puede devolver un SUBGRUPO: se funde solo lo confirmado."""
+def test_verificacion_puede_partir_un_grupo(monkeypatch):
+    """El verificador (Cotejar ON) puede devolver un SUBGRUPO: se funde solo lo confirmado."""
+    monkeypatch.setenv("KENI_FUSION_COTEJAR", "1")
     llamadas = {"n": 0}
 
     def ej(_p, _c):
@@ -100,8 +102,9 @@ def test_verificacion_puede_partir_un_grupo():
     assert fusionar_semantica.proponer_fusiones(clusters, ejecutor=ej).grupos == [["a", "b"]]
 
 
-def test_verificacion_fallida_descarta_el_grupo():
-    """Si la LLAMADA de verificación revienta, el grupo se descarta (conservador)."""
+def test_verificacion_fallida_descarta_el_grupo(monkeypatch):
+    """Con Cotejar ON, si la LLAMADA de verificación revienta el grupo se descarta (conservador)."""
+    monkeypatch.setenv("KENI_FUSION_COTEJAR", "1")
     llamadas = {"n": 0}
 
     def ej(_p, _c):
@@ -112,6 +115,22 @@ def test_verificacion_fallida_descarta_el_grupo():
 
     clusters = [{"id": "a", "titulo": "X largo para fuzzy"}, {"id": "b", "titulo": "Y largo tambien"}]
     assert fusionar_semantica.proponer_fusiones(clusters, ejecutor=ej).grupos == []
+
+
+def test_cotejar_off_acepta_grupos_directo():
+    """Con `KENI_FUSION_COTEJAR` OFF (def) los grupos de la pasada principal se aceptan tal cual:
+    NO hay 2ª llamada de cotejo y el resultado sigue válido (disjunto, ≥2, ids del input)."""
+    llamadas = {"n": 0}
+
+    def ej(_p, _c):
+        llamadas["n"] += 1
+        return json.dumps({"grupos": [["a", "b"]]})
+
+    clusters = [{"id": "a", "titulo": "Sismo de 6.1 sacude CDMX"},
+                {"id": "b", "titulo": "Tiembla en la Ciudad de México: 6.1"}]
+    res = fusionar_semantica.proponer_fusiones(clusters, ejecutor=ej)
+    assert res.grupos == [["a", "b"]]
+    assert llamadas["n"] == 1  # solo la pasada principal; sin sub-llamada de cotejo
 
 
 def test_extraer_grupos_tolera_fences():
@@ -225,6 +244,24 @@ def test_proponer_subtemas_menos_de_dos_o_json_invalido():
     assert fusionar_semantica.proponer_subtemas(dos, ejecutor=_ej_subtemas("no soy json")) == []
 
 
+def test_subtema_usa_haiku_y_fusion_usa_sonnet(monkeypatch):
+    """La ruta de Subtema corre con `config.subtema_modelo()` (haiku) y la pasada principal/Cotejar
+    con `config.fusion_modelo()` (sonnet): separar el modelo baja el gasto de Subtema sin cambiar el
+    modelo de la fusión PRINCIPAL."""
+    from keni_consola.dominio import traducir
+
+    monkeypatch.delenv("KENI_FUSION_MODELO", raising=False)
+    monkeypatch.delenv("KENI_SUBTEMA_MODELO", raising=False)
+    modelos: list[str] = []
+    monkeypatch.setattr(
+        traducir, "_ejecutar_claude_json",
+        lambda prompt, dir_permitido, **kw: modelos.append(kw.get("modelo")) or "{}",
+    )
+    fusionar_semantica._ejecutar_haiku("p", "/tmp")     # pasada principal / Cotejar
+    fusionar_semantica._ejecutar_subtema("p", "/tmp")   # Subtema
+    assert modelos == ["sonnet", "haiku"]
+
+
 # --------------------------------------------------------------------------- #
 # fusionar_marca (executor del JOB, end-to-end, Postgres)                         #
 # --------------------------------------------------------------------------- #
@@ -256,7 +293,7 @@ def _recientes(marca="unotv"):
 
 def test_fusionar_marca_funde_grupo_del_mismo_evento(entorno):
     """El executor del job (`fusionar_marca`) FUNDE el grupo del mismo hecho a partir de la salida de
-    la pasada principal (la verificación se confirma con el ejecutor inyectado). Postgres (CI)."""
+    la pasada principal (Cotejar OFF por defecto: el grupo propuesto se acepta tal cual). Postgres (CI)."""
     # c1 (2 fuentes) es la canónica; c2 (1 fuente) se absorbe. Fuentes distintas -> n_fuentes 2.
     _inicializar("c1", n_fuentes=2, score=0.6, fuente_id="medioA", url="https://a.com/1")
     _inicializar("c2", n_fuentes=1, score=0.2, fuente_id="medioB", url="https://b.com/1")
@@ -360,9 +397,11 @@ def test_construir_procesar_fusionar_limpia_el_marcador(entorno, monkeypatch):
     assert repos.obtener_noticia_cluster("c2") is None
 
 
-def test_fusionar_marca_invoca_callbacks_por_subllamada(entorno):
-    """`fusionar_marca` invoca `al_ejecutar` por cada grupo COTEJADO y `al_ejecutar_subtema` por cada
-    familia faceteada: así el job sella el gasto de esas sub-llamadas bajo «Cotejar» / «Subtema»."""
+def test_fusionar_marca_invoca_callbacks_por_subllamada(entorno, monkeypatch):
+    """Con Cotejar ON, `fusionar_marca` invoca `al_ejecutar` por cada grupo COTEJADO y
+    `al_ejecutar_subtema` por cada familia faceteada: así el job sella el gasto de esas sub-llamadas
+    bajo «Cotejar» / «Subtema»."""
+    monkeypatch.setenv("KENI_FUSION_COTEJAR", "1")
     _inicializar("c1", n_fuentes=2, score=0.6, fuente_id="medioA", url="https://a.com/1")
     _inicializar("c2", n_fuentes=1, score=0.2, fuente_id="medioB", url="https://b.com/1")
     _inicializar("c3", fuente_id="medioC", url="https://c.com/1")

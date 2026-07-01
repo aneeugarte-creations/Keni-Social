@@ -7,6 +7,7 @@ from ._config_comun import (
     ENV_FUSION_MODELO,
     ENV_HASHTAGS_MODELO,
     ENV_INSUMOS_MODELO,
+    ENV_SUBTEMA_MODELO,
     os,
 )
 
@@ -44,6 +45,20 @@ def fusion_modelo() -> str:
     raw = os.environ.get(ENV_FUSION_MODELO)
     if raw is None:
         return "sonnet"
+    return raw.strip()
+
+
+def subtema_modelo() -> str:
+    """Modelo de claude para Subtema (facetear un macro-evento) (`KENI_SUBTEMA_MODELO`, def "haiku").
+
+    Repartir los ids de una familia por faceta («Partidos», «Espectáculo»…) es una tarea acotada de
+    clasificación, no el juicio fino de la fusión PRINCIPAL (que sigue en `fusion_modelo`, sonnet):
+    por eso Subtema va con haiku por defecto. Mismas semánticas que `insumos_modelo`: "" explícito =
+    sin `--model`.
+    """
+    raw = os.environ.get(ENV_SUBTEMA_MODELO)
+    if raw is None:
+        return "haiku"
     return raw.strip()
 
 

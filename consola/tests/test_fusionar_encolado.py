@@ -40,6 +40,14 @@ def _reset_throttle_fusionar():
     _comun._ultima_huella_fusionar = None
 
 
+@pytest.fixture(autouse=True)
+def _sin_filtro_score_fusion(monkeypatch):
+    """El filtro de relevancia (`KENI_FUSION_MIN_SCORE`, def 0.3) se apaga por defecto en estos tests
+    de ENCOLADO: prueban el ruteo/idempotencia, no el filtro (que tiene su propio test más abajo, que
+    lo re-activa con `monkeypatch.setenv`)."""
+    monkeypatch.setenv("KENI_FUSION_MIN_SCORE", "0")
+
+
 def _capturar_encolado(monkeypatch):
     """Instala stubs de `generaciones.crear`/`borrar_registro` y `cola.encolar`. Devuelve la captura."""
     from keni_consola import cola
@@ -161,6 +169,34 @@ def test_paso_encola_por_marca(monkeypatch):
     monkeypatch.setattr(paso, "_encolar_fusion",
                         lambda m, c, **k: encolados.append((m, len(c))) or True)
 
+    res = recolectar_daemon.paso_fusionar_semantica(forzar=True)
+    assert encolados == [("unotv", 2)]
+    assert res == {"encolados": 2, "marcas": 1, "candidatos": 2}
+
+
+def test_paso_filtra_clusters_bajo_min_score(monkeypatch):
+    """El candidato a Fusionar excluye los clusters con `score` por debajo de `KENI_FUSION_MIN_SCORE`.
+    SALVAGUARDA: si tras el filtro la marca queda con <2, no se encola ese ciclo; con un umbral más
+    bajo ambos pasan y la marca se encola."""
+    monkeypatch.setattr(recolectar_daemon.config, "fusionar_semantica_activo", lambda: True)
+    recientes = [dict(c, estado="nuevo") for c in _CLUSTERS]  # c1 score 0.6, c2 score 0.2
+    monkeypatch.setattr(recolectar_daemon.repos, "clusters_recientes",
+                        lambda ventana_h, *a, **k: [dict(c) for c in recientes])
+    monkeypatch.setattr(fs, "fusion_en_curso", lambda *a, **k: False)
+    encolados: list[tuple[str, int]] = []
+    monkeypatch.setattr(paso, "_encolar_fusion",
+                        lambda m, c, **k: encolados.append((m, len(c))) or True)
+
+    # Umbral 0.3: c2 (0.2) cae -> unotv queda con 1 -> no encola.
+    monkeypatch.setenv("KENI_FUSION_MIN_SCORE", "0.3")
+    res = recolectar_daemon.paso_fusionar_semantica(forzar=True)
+    assert encolados == []
+    assert res["marcas"] == 0
+
+    # Umbral 0.1: c2 (0.2 >= 0.1) pasa -> unotv encola con 2.
+    monkeypatch.setenv("KENI_FUSION_MIN_SCORE", "0.1")
+    _comun._ultimo_fusionar = 0.0
+    _comun._ultima_huella_fusionar = None
     res = recolectar_daemon.paso_fusionar_semantica(forzar=True)
     assert encolados == [("unotv", 2)]
     assert res == {"encolados": 2, "marcas": 1, "candidatos": 2}

@@ -39,6 +39,14 @@ def _reset_throttle_fusionar():
 
 
 @pytest.fixture(autouse=True)
+def _sin_filtro_score_fusion(monkeypatch):
+    """El filtro de relevancia de Fusionar (`KENI_FUSION_MIN_SCORE`, def 0.3) se apaga por defecto en
+    estos tests: seedean historias sin `score` y prueban el ruteo/throttle, no el filtro (que tiene
+    su propio test). Un test que lo ejercite lo sube con `monkeypatch.setenv`."""
+    monkeypatch.setenv("KENI_FUSION_MIN_SCORE", "0")
+
+
+@pytest.fixture(autouse=True)
 def _etapa_recolectar_on(monkeypatch):
     """Recolectar es POR MARCA (`etapa_activa(ENV_PIPELINE_RECOLECTAR, marca)`): el barrido sondea
     el feed de una marca solo si la etapa está encendida para ella; sin override por marca cae al
@@ -885,6 +893,23 @@ def test_paso_fusionar_semantica_va_throttled(monkeypatch):
         "encolados": 0, "marcas": 0, "candidatos": 0,
     }
     assert len(lecturas) == 1  # la 2ª no llegó a leer la ventana
+
+
+def test_paso_fusionar_semantica_throttle_usa_config_intervalo(monkeypatch):
+    """El throttle sale de `config.fusion_intervalo_seg` (def 300): con el default la 2ª pasada sin
+    `forzar` sale throttled (no re-lee la ventana); bajando el intervalo a 0 el throttle no aplica y
+    la siguiente pasada vuelve a leer."""
+    monkeypatch.setattr(recolectar_daemon.config, "fusionar_semantica_activo", lambda: True)
+    lecturas: list[int] = []
+    monkeypatch.setattr(recolectar_daemon.repos, "clusters_recientes",
+                        lambda ventana_h, *a, **k: lecturas.append(1) or [])
+    recolectar_daemon.paso_fusionar_semantica(forzar=True)  # corre, lee y sella el throttle
+    recolectar_daemon.paso_fusionar_semantica()             # def 300s: throttled, no lee
+    assert len(lecturas) == 1
+    # Intervalo 0: el throttle no frena -> la siguiente pasada vuelve a leer la ventana.
+    monkeypatch.setattr(recolectar_daemon.config, "fusion_intervalo_seg", lambda: 0.0)
+    recolectar_daemon.paso_fusionar_semantica()
+    assert len(lecturas) == 2
 
 
 def test_paso_fusionar_semantica_salta_si_el_lote_no_cambio(monkeypatch):

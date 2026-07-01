@@ -607,11 +607,52 @@ def test_fusion_semantica_max_default_holgado(limpio, store_aislado):
 
 
 def test_fusion_ventana_h_default_mas_corta_que_agrupacion(limpio, store_aislado):
-    """El lote de fusión/macro solo mira lo VIVO (48h), ventana más corta que la de agrupación
+    """El lote de fusión/macro solo mira lo VIVO (24h), ventana más corta que la de agrupación
     (72h): un cluster ya digerido y sin items nuevos no se reprocesa con el LLM en cada barrido."""
     store_aislado.delenv(config.ENV_FUSION_VENTANA_H, raising=False)
-    assert config.fusion_ventana_h() == 48
+    assert config.fusion_ventana_h() == 24
     assert config.fusion_ventana_h() < config.cluster_ventana_h()
+
+
+def test_fusion_intervalo_seg_default_y_minimo(limpio, store_aislado):
+    """El throttle de Fusionar sale de `KENI_FUSION_INTERVALO_SEG` (def 300); se acota a un mínimo
+    de 60s (por debajo el throttle deja de tener efecto útil); valor inválido → def."""
+    store_aislado.delenv(config.ENV_FUSION_INTERVALO_SEG, raising=False)
+    assert config.fusion_intervalo_seg() == 300.0
+    store_aislado.setenv(config.ENV_FUSION_INTERVALO_SEG, "120")
+    assert config.fusion_intervalo_seg() == 120.0
+    store_aislado.setenv(config.ENV_FUSION_INTERVALO_SEG, "5")   # por debajo del mínimo
+    assert config.fusion_intervalo_seg() == 60.0
+    store_aislado.setenv(config.ENV_FUSION_INTERVALO_SEG, "abc")  # inválido
+    assert config.fusion_intervalo_seg() == 300.0
+
+
+def test_fusion_min_score_default(limpio, store_aislado):
+    """El filtro de relevancia antes de Fusionar sale de `KENI_FUSION_MIN_SCORE` (def 0.3, [0,1]);
+    `0` lo desactiva; valor inválido → def."""
+    store_aislado.delenv(config.ENV_FUSION_MIN_SCORE, raising=False)
+    assert config.fusion_min_score() == 0.3
+    store_aislado.setenv(config.ENV_FUSION_MIN_SCORE, "0")
+    assert config.fusion_min_score() == 0.0
+    store_aislado.setenv(config.ENV_FUSION_MIN_SCORE, "0.5")
+    assert config.fusion_min_score() == 0.5
+
+
+def test_fusion_cotejar_default_off(limpio, store_aislado):
+    """Cotejar (verificación por grupo) va OFF por defecto: los grupos de la pasada principal se
+    aceptan tal cual; `KENI_FUSION_COTEJAR=1` la enciende."""
+    store_aislado.delenv(config.ENV_FUSION_COTEJAR, raising=False)
+    assert config.fusion_cotejar_activo() is False
+    store_aislado.setenv(config.ENV_FUSION_COTEJAR, "1")
+    assert config.fusion_cotejar_activo() is True
+
+
+def test_subtema_modelo_default_haiku(limpio, store_aislado):
+    """Subtema usa `KENI_SUBTEMA_MODELO` (def haiku), aparte del modelo de la fusión principal."""
+    store_aislado.delenv(config.ENV_SUBTEMA_MODELO, raising=False)
+    assert config.subtema_modelo() == "haiku"
+    store_aislado.setenv(config.ENV_SUBTEMA_MODELO, "sonnet")
+    assert config.subtema_modelo() == "sonnet"
 
 
 # --------------------------------------------------------------------------- #

@@ -70,8 +70,8 @@ def paso_fusionar_semantica(
     las demás. El gate de parada/presupuesto lo aplica `cola.encolar` (además del `ia_fondo_bloqueada`
     que el barrido comprueba antes de llamar aquí). Devuelve `{encolados, marcas, candidatos}`.
 
-    Throttle: como mucho una pasada por `_FUSIONAR_INTERVALO_SEG` (no re-evaluar la ventana en cada
-    tick de 30s); `forzar=True` lo salta (tests). Skip-if-unchanged: si el conjunto candidato no
+    Throttle: como mucho una pasada por `config.fusion_intervalo_seg()` (no re-evaluar la ventana en
+    cada tick de 30s); `forzar=True` lo salta (tests). Skip-if-unchanged: si el conjunto candidato no
     cambió desde la última pasada, no hay nada nuevo que encolar. `recientes` (opcional): los clusters
     de la ventana YA cargados por el paso de agrupar del MISMO barrido (evita re-leer la BD).
 
@@ -87,7 +87,7 @@ def paso_fusionar_semantica(
     if (
         not forzar
         and _comun._ultimo_fusionar
-        and (ahora_mono - _comun._ultimo_fusionar) < _comun._FUSIONAR_INTERVALO_SEG
+        and (ahora_mono - _comun._ultimo_fusionar) < config.fusion_intervalo_seg()
     ):
         return {"encolados": 0, "marcas": 0, "candidatos": 0}
     ventana_h = config.cluster_ventana_h()
@@ -109,6 +109,14 @@ def paso_fusionar_semantica(
     # reprocesaría historias de hace días sin nada que cambiar. También estabiliza la huella.
     corte_fusion = ahora - timedelta(hours=config.fusion_ventana_h())
     nuevos = [c for c in nuevos if _fresco_para_fusion(c, corte_fusion)]
+
+    # FILTRO DE RELEVANCIA: no gastar fusión (ni sus sub-llamadas Cotejar/Subtema) en historias que
+    # no se publicarían. Fuera del lote los clusters con `score` por debajo del umbral (mismo campo
+    # que el umbral de promoción). `0` desactiva el filtro. SALVAGUARDA: si una marca queda con <2
+    # clusters tras el filtro, el bloque por marca de abajo la salta (no fusiona ese ciclo).
+    umbral_score = config.fusion_min_score()
+    if umbral_score > 0:
+        nuevos = [c for c in nuevos if float(c.get("score") or 0.0) >= umbral_score]
 
     # Skip-if-unchanged: si el conjunto candidato no cambió desde la última pasada evaluada, no hay
     # nada nuevo que encolar -> no se evalúa por marca. `forzar` lo salta.

@@ -155,6 +155,10 @@ from ._config_comun import (  # noqa: F401
     ENV_FUENTES_BAJA_CONFIANZA,
     ENV_FUSION_SEMANTICA_MAX,
     ENV_FUSION_VENTANA_H,
+    ENV_FUSION_INTERVALO_SEG,
+    ENV_FUSION_MIN_SCORE,
+    ENV_FUSION_COTEJAR,
+    ENV_SUBTEMA_MODELO,
     ENV_GENERACION_PAUSADA,
     ENV_GENERACIONES,
     ENV_GENERACIONES_TTL_HORAS,
@@ -399,6 +403,7 @@ from .config_contenido import (  # noqa: F401
     fusion_modelo,
     hashtags_modelo,
     insumos_modelo,
+    subtema_modelo,
 )
 from .config_generacion import (  # noqa: F401
     CLAUDE_DISALLOWED_TOOLS_DEF,
@@ -481,6 +486,9 @@ from .config_noticias import (  # noqa: F401
     fusionar_semantica_activo,
     fusion_semantica_max,
     fusion_ventana_h,
+    fusion_intervalo_seg,
+    fusion_min_score,
+    fusion_cotejar_activo,
     recolectar_activo,
     ingesta_batch,
     ingesta_intervalo_categoria,

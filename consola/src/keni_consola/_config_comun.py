@@ -448,6 +448,17 @@ ENV_PERFIL_EDITORIAL_TTL_HORAS = "KENI_PERFIL_EDITORIAL_TTL_HORAS"
 ENV_PIPELINE_FUSIONAR = "KENI_PIPELINE_FUSIONAR"
 ENV_FUSION_SEMANTICA_MAX = "KENI_FUSION_SEMANTICA_MAX"
 ENV_FUSION_VENTANA_H = "KENI_FUSION_VENTANA_H"
+# Intervalo (segundos) del throttle de Fusionar: como mucho una pasada de encolado por marca cada
+# tanto. Re-fundir la misma ventana en cada tick dispara Cotejar/Subtema redundantes (el grueso del
+# gasto Sonnet); espaciarlo baja el volumen sin perder agrupación (los eventos aparecen despacio).
+ENV_FUSION_INTERVALO_SEG = "KENI_FUSION_INTERVALO_SEG"
+# Score mínimo [0,1] para que un cluster entre al lote de Fusionar: por debajo no se manda al LLM
+# (no gastar fusión en noticias que no se publicarían — mismo campo `score` que el umbral de
+# promoción). Una marca que quede con <2 clusters tras el filtro no fusiona ese ciclo.
+ENV_FUSION_MIN_SCORE = "KENI_FUSION_MIN_SCORE"
+# Verificación por grupo («Cotejar»): con OFF (def) los grupos propuestos por la pasada principal se
+# aceptan tal cual (0 sub-llamadas de cotejo); con ON se re-pregunta cada grupo antes de fundir.
+ENV_FUSION_COTEJAR = "KENI_FUSION_COTEJAR"
 
 # Señal de RENDIMIENTO en la priorización (Fase 2c): prioriza historias de las líneas editoriales que
 # MEJOR funcionan en redes (Metricool). GATEADO por `KENI_RENDIMIENTO_RANKING` (def OFF). Anti-sesgo:
@@ -466,6 +477,10 @@ ENV_INSUMOS_MODELO = "KENI_INSUMOS_MODELO"
 # Modelo de Fusionar (fusión semántica) historias (decide qué se corrobora con qué; el juicio
 # fino "mismo evento vs mismo tema" se le escapaba a haiku). Def "sonnet"; "" = sin --model.
 ENV_FUSION_MODELO = "KENI_FUSION_MODELO"
+# Modelo de Subtema (facetear un macro-evento ya etiquetado en subgrupos coherentes): tarea acotada
+# de clasificación (repartir ids por faceta), va con haiku por defecto, aparte de la pasada PRINCIPAL
+# de Fusionar (sonnet). Def "haiku"; "" = sin --model. Ver `dominio/fusionar_semantica.py`.
+ENV_SUBTEMA_MODELO = "KENI_SUBTEMA_MODELO"
 # Modelo de Sugerir hashtags: elegir de una lista fija de candidatos de la marca es una tarea
 # acotada, así que va con haiku por defecto (no necesita el modelo grande). Def "haiku"; "" = sin
 # --model. Ver `dominio/sugerir_hashtags.py`.
@@ -788,7 +803,12 @@ FUSION_SEMANTICA_MAX_DEF = 80
 # Ventana de FRESCURA (horas) del lote de fusión/macro-evento: más corta que la de agrupación
 # (72h). Un cluster sin actividad nueva en esta ventana ya se digirió y no se reenvía al LLM de
 # fusión/macro en cada barrido; si recibe un item nuevo su `ultimo_visto` avanza y reentra.
-FUSION_VENTANA_H_DEF = 48
+FUSION_VENTANA_H_DEF = 24
+# Throttle de Fusionar (segundos): def 300 (min 60). Espacia el encolado por marca para no re-fundir
+# la misma ventana en cada tick (cada pasada arrastra Cotejar/Subtema, el grueso del gasto).
+FUSION_INTERVALO_SEG_DEF = 300.0
+# Score mínimo [0,1] de un cluster para entrar a Fusionar (def 0.3; 0 desactiva el filtro).
+FUSION_MIN_SCORE_DEF = 0.3
 
 # Rendimiento en la priorización (Fase 2c): peso de la señal (0.15), top-3 líneas, muestra mínima 5.
 SCORE_PESO_RENDIMIENTO_DEF = 0.15
@@ -965,6 +985,10 @@ __all__ = [
     'ENV_PIPELINE_FUSIONAR',
     'ENV_FUSION_SEMANTICA_MAX',
     'ENV_FUSION_VENTANA_H',
+    'ENV_FUSION_INTERVALO_SEG',
+    'ENV_FUSION_MIN_SCORE',
+    'ENV_FUSION_COTEJAR',
+    'ENV_SUBTEMA_MODELO',
     'ENV_FFMPEG_BIN',
     'ENV_FUENTES_BAJA_CONFIANZA',
     'ENV_GENERACIONES',
@@ -1089,6 +1113,8 @@ __all__ = [
     'FUENTES_BAJA_CONFIANZA_DEF',
     'FUSION_SEMANTICA_MAX_DEF',
     'FUSION_VENTANA_H_DEF',
+    'FUSION_INTERVALO_SEG_DEF',
+    'FUSION_MIN_SCORE_DEF',
     'GENERACIONES_TTL_HORAS_DEF',
     'HOST_DEF',
     'INGESTA_BACKOFF_TOPE_SEG',

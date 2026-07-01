@@ -35,10 +35,10 @@ _log = logging.getLogger("keni_consola.recolectar_daemon")
 _RESCORE_INTERVALO_SEG = 900.0
 _ultimo_rescore = 0.0  # time.monotonic() de la última pasada completada
 
-# Fusionar semántico (Haiku): como mucho una pasada por intervalo. Mandar la ventana a Haiku en
-# cada tick de 30s sería coste de tokens redundante (las historias del mismo evento aparecen
-# despacio); el throttle ligero deja que la dedup semántica corra sin re-llamar en cada barrido.
-_FUSIONAR_INTERVALO_SEG = 90.0
+# Fusionar semántico: como mucho una pasada por intervalo. Re-fundir la ventana en cada tick de 30s
+# arrastraría Cotejar/Subtema redundantes (las historias del mismo evento aparecen despacio); el
+# throttle deja que la dedup semántica corra sin re-encolar en cada barrido. El intervalo es
+# configurable (`config.fusion_intervalo_seg`, `KENI_FUSION_INTERVALO_SEG`); aquí solo vive el sello.
 _ultimo_fusionar = 0.0  # time.monotonic() de la última pasada completada
 # Huella del lote candidato evaluado en la última pasada (skip-if-unchanged): si el lote no
 # cambió desde entonces, no se vuelve a llamar al LLM (no habría nada nuevo que fusionar). En

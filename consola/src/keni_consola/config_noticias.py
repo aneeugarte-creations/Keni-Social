@@ -25,6 +25,9 @@ from ._config_comun import (
     ENV_FUENTES_BAJA_CONFIANZA,
     ENV_FUSION_SEMANTICA_MAX,
     ENV_FUSION_VENTANA_H,
+    ENV_FUSION_INTERVALO_SEG,
+    ENV_FUSION_MIN_SCORE,
+    ENV_FUSION_COTEJAR,
     ENV_INGESTA_BATCH,
     ENV_INGESTA_INTERVALO_BREAKING,
     ENV_INGESTA_INTERVALO_DEFECTO,
@@ -78,6 +81,8 @@ from ._config_comun import (
     FUENTES_BAJA_CONFIANZA_DEF,
     FUSION_SEMANTICA_MAX_DEF,
     FUSION_VENTANA_H_DEF,
+    FUSION_INTERVALO_SEG_DEF,
+    FUSION_MIN_SCORE_DEF,
     INGESTA_BATCH_DEF,
     INGESTA_INTERVALO_BREAKING_DEF,
     INGESTA_INTERVALO_DEFECTO_DEF,
@@ -596,7 +601,7 @@ def fusion_semantica_max() -> int:
 
 
 def fusion_ventana_h() -> int:
-    """Ventana de FRESCURA (horas) del lote de fusión/macro-evento (`KENI_FUSION_VENTANA_H`, def 48, min 1).
+    """Ventana de FRESCURA (horas) del lote de fusión/macro-evento (`KENI_FUSION_VENTANA_H`, def 24, min 1).
 
     Más corta que la ventana de agrupación (`KENI_CLUSTER_VENTANA_H`, 72h): solo los clusters con
     actividad (`ultimo_visto`) dentro de esta ventana entran al LLM de fusión/macro. Un cluster ya
@@ -604,6 +609,44 @@ def fusion_ventana_h() -> int:
     nuevo su `ultimo_visto` avanza y reentra. Acota el lote a lo VIVO, no a todo el feed reciente.
     """
     return _entero(ENV_FUSION_VENTANA_H, FUSION_VENTANA_H_DEF, minimo=1)
+
+
+def fusion_intervalo_seg() -> float:
+    """Segundos mínimos entre pasadas de encolado de Fusionar (`KENI_FUSION_INTERVALO_SEG`, def 300, min 60).
+
+    Throttle del paso `paso_fusionar_semantica`: como mucho una pasada por este intervalo. Espaciarlo
+    reduce el número de jobs de Fusionar (y con ellos las sub-llamadas de Cotejar/Subtema, el grueso
+    del gasto Sonnet), sin perder agrupación: las historias del mismo evento aparecen despacio. Valor
+    inválido → def; se acota a un mínimo de 60s (por debajo el throttle deja de tener efecto útil).
+    """
+    crudo = _crudo(ENV_FUSION_INTERVALO_SEG)
+    if not crudo:
+        return FUSION_INTERVALO_SEG_DEF
+    try:
+        valor = float(crudo)
+    except ValueError:
+        return FUSION_INTERVALO_SEG_DEF
+    return max(60.0, valor)
+
+
+def fusion_min_score() -> float:
+    """Score mínimo [0,1] de un cluster para entrar al lote de Fusionar (`KENI_FUSION_MIN_SCORE`, def 0.3).
+
+    Filtra fuera del candidato a fusión los clusters con `score` por debajo del umbral: no gastar
+    fusión (ni sus sub-llamadas) en noticias que no se publicarían. Mismo campo `score` que usa el
+    umbral de promoción (`KENI_PROMOVER_MIN_SCORE`). `0` desactiva el filtro. Valor inválido → def.
+    """
+    return _peso01(ENV_FUSION_MIN_SCORE, FUSION_MIN_SCORE_DEF)
+
+
+def fusion_cotejar_activo() -> bool:
+    """True si Fusionar VERIFICA cada grupo propuesto («Cotejar») antes de fundir (`KENI_FUSION_COTEJAR`).
+
+    Def OFF: los grupos que propone la pasada principal (Sonnet) se aceptan tal cual, SIN la
+    sub-llamada de cotejo por grupo (0 jobs Cotejar). Con ON se re-pregunta cada grupo con solo esas
+    historias antes de fundirlo (comportamiento conservador previo). Idiom default-OFF (vacío → False).
+    """
+    return _crudo(ENV_FUSION_COTEJAR).lower() in _VERDADEROS
 
 
 # --------------------------------------------------------------------------- #
