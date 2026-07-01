@@ -16,7 +16,7 @@
  * base, y luego se autoguarda. El estado "listo" es organización, NO publicación.
  */
 import { useMutation } from "@tanstack/react-query";
-import { Captions, Check, CheckCircle2, Film, FolderOpen, Layers, Music, PictureInPicture2, Redo2, Save, Undo2, Upload, Video as VideoIcon } from "lucide-react";
+import { Captions, Check, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, Film, FolderOpen, Layers, Music, PanelLeftClose, PictureInPicture2, Redo2, Save, Undo2, Upload, Video as VideoIcon } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -524,6 +524,10 @@ export default function Video() {
   // ancho): el preview alimenta `tiempoSeg`; el timeline busca vía `playerRef.buscarA`.
   const playerRef = React.useRef<PreviewPlayerHandle>(null);
   const [tiempoSeg, setTiempoSeg] = React.useState(0);
+  // Cromo OCULTABLE (como el editor de imagen): panel lateral y línea de tiempo se pueden colapsar
+  // para dar todo el espacio al lienzo.
+  const [panelAbierto, setPanelAbierto] = React.useState(true);
+  const [timelineAbierto, setTimelineAbierto] = React.useState(true);
 
   return (
     // FULL-BLEED (mismo patrón que Imagen.tsx): anula el padding del `<main>` del shell para
@@ -754,7 +758,19 @@ export default function Video() {
             // (formato in-place arriba) + timeline multipista debajo.
             <div className="flex h-full min-h-0 flex-col">
               <div className="flex min-h-0 flex-1">
-              <aside className="w-[300px] shrink-0 overflow-y-auto border-r border-border p-4">
+              {panelAbierto ? (
+              <aside className="flex w-[300px] shrink-0 flex-col overflow-hidden border-r border-border">
+                <div className="flex shrink-0 items-center justify-end border-b border-border/60 px-1.5 py-1">
+                  <button
+                    type="button"
+                    onClick={() => setPanelAbierto(false)}
+                    title="Ocultar el panel"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                  >
+                    <PanelLeftClose className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto p-4">
                 {seccion === "base" && (
                   <PistaBase
                     doc={doc}
@@ -807,7 +823,18 @@ export default function Video() {
                     }}
                   />
                 )}
+                </div>
               </aside>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setPanelAbierto(true)}
+                  title="Mostrar el panel"
+                  className="flex w-8 shrink-0 items-center justify-center border-r border-border text-muted-foreground hover:bg-accent/50"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              )}
 
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 {/* Formato IN-PLACE sobre el lienzo (un solo selector). */}
@@ -864,33 +891,58 @@ export default function Video() {
               </div>
             </div>
 
-            {/* TIMELINE a TODO EL ANCHO, abajo (dock estilo editor de vídeo). */}
-            {baseUrl && (
-              <div className="min-w-0 shrink-0 border-t border-border bg-background px-3 py-2">
-                <TimelineMultipista
-                  doc={doc}
-                  tiempoSeg={tiempoSeg}
-                  onSeek={(s) => playerRef.current?.buscarA(s)}
-                  onTrimSegmento={(idx, inMs, outMs) =>
-                    mutar((d) => setRecorteBase(d, inMs, outMs, undefined, idx))
-                  }
-                  onDividirSegmento={(idx, msLocal) => mutar((d) => dividirClipBase(d, idx, msLocal))}
-                  onQuitarSegmento={(idx) => mutar((d) => quitarSegmentoBase(d, idx))}
-                  onMoverSegmento={(idx, dest) => mutar((d) => moverSegmentoBase(d, idx, dest))}
-                  onAudioBase={(c) => mutar((d) => setAudioBase(d, c))}
-                  onAnadirMusica={pedirMusica}
-                  onVolumenMusica={(c) => mutar((d) => setVolumenMusica(d, c))}
-                  onQuitarMusica={quitarMusicaLocal}
-                  onTrimPip={(inMs, outMs) => mutar((d) => setRecortePip(d, inMs, outMs))}
-                  onFadeMusica={(c) => mutar((d) => setFadeMusica(d, c))}
-                  onAgregarMarcador={(ms, et) => mutar((d) => agregarMarcador(d, ms, et))}
-                  onQuitarMarcador={(id) => mutar((d) => quitarMarcador(d, id))}
-                  baseUrl={baseUrl}
-                  segmentos={segmentos}
-                  disabled={sinMarca}
-                />
-              </div>
-            )}
+            {/* TIMELINE a TODO EL ANCHO, abajo, OCULTABLE y con alto ACOTADO (no ahoga el lienzo). */}
+            {baseUrl &&
+              (timelineAbierto ? (
+                <div className="flex min-w-0 max-h-[42%] shrink-0 flex-col border-t border-border bg-background">
+                  <div className="flex shrink-0 items-center justify-between px-3 pt-1">
+                    <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Línea de tiempo
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setTimelineAbierto(false)}
+                      title="Ocultar la línea de tiempo"
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-2">
+                    <TimelineMultipista
+                      doc={doc}
+                      tiempoSeg={tiempoSeg}
+                      onSeek={(s) => playerRef.current?.buscarA(s)}
+                      onTrimSegmento={(idx, inMs, outMs) =>
+                        mutar((d) => setRecorteBase(d, inMs, outMs, undefined, idx))
+                      }
+                      onDividirSegmento={(idx, msLocal) => mutar((d) => dividirClipBase(d, idx, msLocal))}
+                      onQuitarSegmento={(idx) => mutar((d) => quitarSegmentoBase(d, idx))}
+                      onMoverSegmento={(idx, dest) => mutar((d) => moverSegmentoBase(d, idx, dest))}
+                      onAudioBase={(c) => mutar((d) => setAudioBase(d, c))}
+                      onAnadirMusica={pedirMusica}
+                      onVolumenMusica={(c) => mutar((d) => setVolumenMusica(d, c))}
+                      onQuitarMusica={quitarMusicaLocal}
+                      onTrimPip={(inMs, outMs) => mutar((d) => setRecortePip(d, inMs, outMs))}
+                      onFadeMusica={(c) => mutar((d) => setFadeMusica(d, c))}
+                      onAgregarMarcador={(ms, et) => mutar((d) => agregarMarcador(d, ms, et))}
+                      onQuitarMarcador={(id) => mutar((d) => quitarMarcador(d, id))}
+                      baseUrl={baseUrl}
+                      segmentos={segmentos}
+                      disabled={sinMarca}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setTimelineAbierto(true)}
+                  title="Mostrar la línea de tiempo"
+                  className="flex h-8 shrink-0 items-center gap-1.5 border-t border-border bg-background px-3 text-xs font-medium text-muted-foreground hover:bg-accent/50"
+                >
+                  <ChevronUp className="h-4 w-4" /> Mostrar la línea de tiempo
+                </button>
+              ))}
           </div>
           )}
         </div>

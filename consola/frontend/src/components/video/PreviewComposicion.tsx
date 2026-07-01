@@ -780,22 +780,27 @@ export function PreviewComposicion({
           </div>
         )}
 
-        {/* Zonas seguras (líneas punteadas). Con el toggle `zonas` activo, además VELA las franjas
-            (patrón Canva/IG) para ver claramente dónde no debe caer texto/logos. */}
-        <div
-          className="pointer-events-none absolute inset-x-0 top-0 border-b border-dashed border-cyan-400/40"
-          style={{
-            height: preset.safe_top * escala,
-            background: conEncuadre && enc.zonas ? "rgba(0,0,0,0.35)" : undefined,
-          }}
-        />
-        <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 border-t border-dashed border-cyan-400/40"
-          style={{
-            height: preset.safe_bottom * escala,
-            background: conEncuadre && enc.zonas ? "rgba(0,0,0,0.35)" : undefined,
-          }}
-        />
+        {/* Zonas seguras (líneas punteadas + velo). En el editor de vídeo (`conEncuadre`) SOLO se
+            muestran con el toggle `zonas` (como el Estudio de imagen): así el preview no sale
+            "partido" con líneas azules por defecto. Fuera del editor se muestran siempre. */}
+        {(!conEncuadre || enc.zonas) && (
+          <>
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 border-b border-dashed border-cyan-400/40"
+              style={{
+                height: preset.safe_top * escala,
+                background: conEncuadre ? "rgba(0,0,0,0.35)" : undefined,
+              }}
+            />
+            <div
+              className="pointer-events-none absolute inset-x-0 bottom-0 border-t border-dashed border-cyan-400/40"
+              style={{
+                height: preset.safe_bottom * escala,
+                background: conEncuadre ? "rgba(0,0,0,0.35)" : undefined,
+              }}
+            />
+          </>
+        )}
 
         {/* Controles del player (solo con clip base): botón central + barra de progreso. */}
         {baseUrl && (
@@ -862,8 +867,10 @@ export function PreviewComposicion({
   // Con encuadre: lienzo centrado + scroll/pan + barra inferior de zoom/encuadre (igual que el
   // Estudio de imagen). El lienzo puede desbordar al hacer zoom y se navega con scroll/pan.
   if (conEncuadre) {
+    // El lienzo LLENA el área (como el Estudio de imagen); la barra de zoom FLOTA sobre él (no roba
+    // alto) y el aviso "aproximado" es una etiqueta discreta. Así el preview usa todo el espacio.
     return (
-      <div ref={contRef} className="flex min-h-0 w-full flex-1 flex-col gap-2">
+      <div ref={contRef} className="relative flex min-h-0 w-full flex-1 flex-col">
         <div ref={medirRef} className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
           <div
             ref={scrollRef}
@@ -875,25 +882,32 @@ export function PreviewComposicion({
             {lienzo}
           </div>
         </div>
-        <p className="text-center text-[11px] text-muted-foreground/70">Preview aproximado</p>
-        <ControlesEncuadre
-          iman={enc.iman}
-          setIman={enc.setIman}
-          grid={enc.grid}
-          setGrid={enc.setGrid}
-          tamCelda={enc.tamCelda}
-          setTamCelda={enc.setTamCelda}
-          dentroMarco={enc.dentroMarco}
-          setDentroMarco={enc.setDentroMarco}
-          zonas={enc.zonas}
-          setZonas={enc.setZonas}
-          escala={escala}
-          alejar={alejar}
-          acercar={acercar}
-          zoomReal={zoomReal}
-          ajustarPantalla={ajustarPantalla}
-          fijarEscala={fijarEscala}
-        />
+        <span className="pointer-events-none absolute left-2 top-2 text-[10px] text-muted-foreground/60">
+          Preview aproximado
+        </span>
+        {/* Barra de zoom/encuadre FLOTANTE, centrada abajo (igual que el editor de imagen). */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-center">
+          <div className="pointer-events-auto">
+            <ControlesEncuadre
+              iman={enc.iman}
+              setIman={enc.setIman}
+              grid={enc.grid}
+              setGrid={enc.setGrid}
+              tamCelda={enc.tamCelda}
+              setTamCelda={enc.setTamCelda}
+              dentroMarco={enc.dentroMarco}
+              setDentroMarco={enc.setDentroMarco}
+              zonas={enc.zonas}
+              setZonas={enc.setZonas}
+              escala={escala}
+              alejar={alejar}
+              acercar={acercar}
+              zoomReal={zoomReal}
+              ajustarPantalla={ajustarPantalla}
+              fijarEscala={fijarEscala}
+            />
+          </div>
+        </div>
       </div>
     );
   }
