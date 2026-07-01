@@ -41,17 +41,17 @@ function railEscritorio() {
 }
 
 describe("EditorDocumento — rail estilo Canva", () => {
-  it("con panelDiseno, «Diseño» es la PRIMERA herramienta del rail", () => {
+  it("con panelDiseno, «Plantillas» es la PRIMERA herramienta del rail", () => {
     montar({ panelDiseno: <div>panel-de-plantillas</div> });
     const botones = within(railEscritorio()).getAllByRole("button");
-    expect(botones[0]).toHaveTextContent("Diseño");
-    // Orden completo del rail (estilo Canva): Diseño · Elementos · Galería · Marca · Subidas ·
+    expect(botones[0]).toHaveTextContent("Plantillas");
+    // Orden completo del rail (estilo Canva): Plantillas · Elementos · Recursos · Marca · Subidas ·
     // Capas · [Atajos · Ajustes]. «Subidas» (tus propias fotos) va tras Marca y antes de Capas;
     // «Atajos» (chuleta de teclado) y «Ajustes» van al fondo del rail.
     expect(botones.map((b) => b.textContent)).toEqual([
-      "Diseño",
+      "Plantillas",
       "Elementos",
-      "Galería",
+      "Recursos",
       "Marca",
       "Subidas",
       "Capas",
@@ -80,7 +80,7 @@ describe("EditorDocumento — rail estilo Canva", () => {
 
   it("«Diseño» abre el panel de la página como columna del rail (y se cierra al re-pulsar)", () => {
     montar({ panelDiseno: <div>panel-de-plantillas</div> });
-    const boton = within(railEscritorio()).getByTitle("Diseño");
+    const boton = within(railEscritorio()).getByTitle("Plantillas");
     fireEvent.click(boton);
     expect(screen.getByText("panel-de-plantillas")).toBeInTheDocument();
     // Toggle: re-pulsar cierra el flyout.
@@ -91,7 +91,7 @@ describe("EditorDocumento — rail estilo Canva", () => {
   it("solo con onPlantillas (sin panelDiseno) «Diseño» cae al modal clásico", () => {
     const onPlantillas = vi.fn();
     montar({ onPlantillas });
-    fireEvent.click(within(railEscritorio()).getByTitle("Diseño"));
+    fireEvent.click(within(railEscritorio()).getByTitle("Plantillas"));
     expect(onPlantillas).toHaveBeenCalledTimes(1);
     // No se abre ningún flyout propio.
     expect(document.querySelector("aside")).toBeNull();
@@ -99,13 +99,13 @@ describe("EditorDocumento — rail estilo Canva", () => {
 
   it("sin panelDiseno ni onPlantillas, «Diseño» no aparece en el rail", () => {
     montar();
-    expect(within(railEscritorio()).queryByTitle("Diseño")).not.toBeInTheDocument();
+    expect(within(railEscritorio()).queryByTitle("Plantillas")).not.toBeInTheDocument();
     expect(within(railEscritorio()).getAllByRole("button")[0]).toHaveTextContent("Elementos");
   });
 
   it("el flyout de escritorio mide ~350px (md:w-[350px], patrón Canva)", () => {
     montar({ panelDiseno: <div>panel-de-plantillas</div> });
-    fireEvent.click(within(railEscritorio()).getByTitle("Diseño"));
+    fireEvent.click(within(railEscritorio()).getByTitle("Plantillas"));
     const aside = document.querySelector("aside");
     expect(aside?.className).toContain("md:w-[350px]");
   });
@@ -119,9 +119,9 @@ describe("EditorDocumento — rail estilo Canva", () => {
 
   it("«Galería» abre el panel de galería (id interno renombrado a «galeria»)", () => {
     montar();
-    fireEvent.click(within(railEscritorio()).getByTitle("Galería"));
+    fireEvent.click(within(railEscritorio()).getByTitle("Recursos"));
     expect(screen.getByText("panel-galeria")).toBeInTheDocument();
-    fireEvent.click(within(railEscritorio()).getByTitle("Galería"));
+    fireEvent.click(within(railEscritorio()).getByTitle("Recursos"));
     expect(screen.queryByText("panel-galeria")).not.toBeInTheDocument();
   });
 
@@ -137,6 +137,44 @@ describe("EditorDocumento — rail estilo Canva", () => {
     fireEvent.click(screen.getByTitle("Más acciones"));
     fireEvent.click(screen.getByText("Atajos de teclado"));
     expect(screen.getByRole("dialog", { name: "Atajos de teclado" })).toBeInTheDocument();
+  });
+});
+
+describe("EditorDocumento — estado vacío guía del lienzo", () => {
+  it("con el lienzo en blanco pinta el estado vacío con las CTAs de subir foto y texto", () => {
+    montar();
+    expect(screen.getByText("Empieza tu diseño")).toBeInTheDocument();
+    expect(screen.getByText("Sube una foto")).toBeInTheDocument();
+    expect(screen.getByText("Añade texto")).toBeInTheDocument();
+  });
+
+  it("la CTA «Elige una plantilla» solo aparece si la página aporta plantillas", () => {
+    const { unmount } = montar();
+    expect(screen.queryByText("Elige una plantilla")).not.toBeInTheDocument();
+    unmount();
+    montar({ panelDiseno: <div>panel-de-plantillas</div> });
+    expect(screen.getByText("Elige una plantilla")).toBeInTheDocument();
+  });
+
+  it("«Sube una foto» del estado vacío abre el flyout de subidas", () => {
+    montar();
+    fireEvent.click(screen.getByText("Sube una foto"));
+    expect(screen.getByText("panel-subidas")).toBeInTheDocument();
+  });
+
+  it("«Añade texto» del estado vacío abre el flyout de elementos", () => {
+    montar();
+    fireEvent.click(screen.getByText("Añade texto"));
+    expect(screen.getByText("panel-elementos")).toBeInTheDocument();
+  });
+});
+
+describe("EditorDocumento — rail agrupado por función", () => {
+  it("el rail separa los grupos con divisores (empezar · añadir · medios · estructura)", () => {
+    montar({ panelDiseno: <div>panel-de-plantillas</div> });
+    // 6 herramientas en 4 grupos → 3 divisores internos + 1 antes de Atajos/Ajustes = 4.
+    const divisores = railEscritorio().querySelectorAll("div.h-px");
+    expect(divisores.length).toBe(4);
   });
 });
 
@@ -239,7 +277,7 @@ describe("EditorDocumento — hover del rail (abre sin fijar; el clic fija)", ()
     stubHover(true);
     const onPlantillas = vi.fn();
     montar({ onPlantillas });
-    fireEvent.mouseEnter(within(railEscritorio()).getByTitle("Diseño"));
+    fireEvent.mouseEnter(within(railEscritorio()).getByTitle("Plantillas"));
     act(() => void vi.advanceTimersByTime(1000));
     expect(onPlantillas).not.toHaveBeenCalled();
     expect(document.querySelector("aside")).toBeNull();

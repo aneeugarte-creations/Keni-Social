@@ -33,6 +33,7 @@ import {
   Eye,
   ImageOff,
   ImagePlay,
+  ImagePlus,
   Keyboard,
   LayoutTemplate,
   Layers,
@@ -116,20 +117,24 @@ function prefiereMenosMovimiento(): boolean {
   );
 }
 
-const HERRAMIENTAS: { clave: Herramienta; etiqueta: string; Icono: typeof Shapes; costo?: boolean }[] = [
+// `grupo` agrupa el rail por FUNCIÓN para el escritorio (un divisor por grupo): empezar (plantillas),
+// añadir (elementos), medios (galería · marca · subidas) y estructura (capas). El orden Canva se
+// mantiene; el mobile rail ignora los grupos.
+type GrupoRail = "empezar" | "anadir" | "medios" | "estructura";
+const HERRAMIENTAS: { clave: Herramienta; etiqueta: string; Icono: typeof Shapes; grupo: GrupoRail; costo?: boolean }[] = [
   // Orden Canva: «Diseño» (plantillas) SIEMPRE primero. Solo aparece si la página aporta
   // `panelDiseno` u `onPlantillas` (se filtra en el componente).
-  { clave: "diseno", etiqueta: "Diseño", Icono: LayoutTemplate },
-  { clave: "elementos", etiqueta: "Elementos", Icono: Shapes },
-  // `clave: "galeria"` es el id INTERNO del panel; la etiqueta visible es «Galería» (galería de
-  // imágenes/activos de la marca), que es lo que de verdad es este panel.
-  { clave: "galeria", etiqueta: "Galería", Icono: ImageIcon },
+  { clave: "diseno", etiqueta: "Plantillas", Icono: LayoutTemplate, grupo: "empezar" },
+  { clave: "elementos", etiqueta: "Elementos", Icono: Shapes, grupo: "anadir" },
+  // `clave: "galeria"` es el id INTERNO del panel; la etiqueta visible es «Recursos» (biblioteca de
+  // activos de la marca: logos, artes, iconos, fondos…), distinta del kit «Marca».
+  { clave: "galeria", etiqueta: "Recursos", Icono: ImageIcon, grupo: "medios" },
   // «Marca» (Brand Kit estilo Canva): kit de identidad de la marca del documento a un clic
   // (logos + colores + tipografías). Tras Galería (orden Canva: …Texto, Marca…), antes de Capas.
-  { clave: "marca", etiqueta: "Marca", Icono: Palette },
+  { clave: "marca", etiqueta: "Marca", Icono: Palette, grupo: "medios" },
   // «Subidas» (patrón Canva): sube tus propias fotos y reutilízalas. Tras Marca, antes de Capas.
-  { clave: "subidas", etiqueta: "Subidas", Icono: Upload },
-  { clave: "capas", etiqueta: "Capas", Icono: Layers },
+  { clave: "subidas", etiqueta: "Subidas", Icono: Upload, grupo: "medios" },
+  { clave: "capas", etiqueta: "Capas", Icono: Layers, grupo: "estructura" },
 ];
 
 export function EditorDocumento({
@@ -223,6 +228,13 @@ export function EditorDocumento({
   // arriba), así el aviso aparece/desaparece al marcar una imagen como hueco.
   const faltaHueco =
     !!avisaHueco && !store.getState().documento.capas.some((c) => c.tipo === "imagen" && c.es_foto);
+
+  // LIENZO EN BLANCO: un documento nuevo trae solo el hueco de foto OCULTO (`visible: false`), así que
+  // no pinta nada. Mientras no haya ninguna capa que se renderice, el lienzo está vacío y mostramos el
+  // estado guía (3 CTAs) sobre él. Al añadir la primera capa visible desaparece. No aplica al Estudio
+  // de vídeo (`fondoLienzo`): ahí el fondo es el vídeo, no un lienzo en blanco.
+  const lienzoVacio =
+    !fondoLienzo && !store.getState().documento.capas.some((c) => c.visible !== false);
 
   // Herramientas visibles del rail: «Diseño» solo si la página aporta su panel o el modal clásico.
   const herramientas = HERRAMIENTAS.filter(
@@ -601,10 +613,25 @@ export function EditorDocumento({
           onMouseLeave={hoverSalir}
           className="hidden w-16 shrink-0 flex-col items-center gap-1 border-r border-border bg-muted/30 py-2 md:flex"
         >
-          {herramientas.map((h) => (
-            <RailBtn key={h.clave} etiqueta={h.etiqueta} Icono={h.Icono} costo={h.costo} activo={tool === h.clave} onClick={() => pulsarTool(h.clave)} onHover={() => hoverBoton(h.clave)} />
+          {herramientas.map((h, i) => (
+            <div key={h.clave} className="w-full">
+              {/* Divisor entre grupos de función (no antes del primero). */}
+              {i > 0 && herramientas[i - 1].grupo !== h.grupo && (
+                <div className="mx-auto my-1 h-px w-6 bg-border" />
+              )}
+              <RailBtn
+                etiqueta={h.etiqueta}
+                Icono={h.Icono}
+                costo={h.costo}
+                destacado={h.clave === "diseno"}
+                activo={tool === h.clave}
+                onClick={() => pulsarTool(h.clave)}
+                onHover={() => hoverBoton(h.clave)}
+              />
+            </div>
           ))}
           <div className="mt-auto w-full">
+            <div className="mx-auto my-1 h-px w-6 bg-border" />
             <RailBtn etiqueta="Atajos" Icono={Keyboard} activo={atajos} onClick={() => setAtajos(true)} />
             <RailBtn etiqueta="Ajustes" Icono={Settings2} activo={ajustes} onClick={() => setAjustes((v) => !v)} />
           </div>
@@ -666,6 +693,46 @@ export function EditorDocumento({
           )}
 
           <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-muted/30 p-2 md:p-4">
+            {/* ESTADO VACÍO GUÍA: con el lienzo en blanco (documento nuevo), una tarjeta centrada con
+                3 CTAs que abren sus flyouts (plantillas · subir foto · elementos). Desaparece al
+                añadir la primera capa. Deja pasar los clics al lienzo salvo en la propia tarjeta. */}
+            {lienzoVacio && (
+              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-4">
+                <div className="pointer-events-auto flex max-w-sm flex-col items-center gap-4 rounded-xl border border-border bg-background/95 p-6 text-center shadow-md">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Empieza tu diseño</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Parte de una plantilla o construye desde cero.
+                    </p>
+                  </div>
+                  <div className="grid w-full grid-cols-3 gap-2">
+                    {(panelDiseno !== undefined || onPlantillas !== undefined) && (
+                      <button
+                        onClick={() => pulsarTool("diseno")}
+                        className="flex flex-col items-center gap-1.5 rounded-lg border border-border px-2 py-3 text-[11px] text-muted-foreground transition-colors hover:border-primary hover:bg-accent/50 hover:text-foreground"
+                      >
+                        <LayoutTemplate className="h-5 w-5" />
+                        Elige una plantilla
+                      </button>
+                    )}
+                    <button
+                      onClick={() => pulsarTool("subidas")}
+                      className="flex flex-col items-center gap-1.5 rounded-lg border border-border px-2 py-3 text-[11px] text-muted-foreground transition-colors hover:border-primary hover:bg-accent/50 hover:text-foreground"
+                    >
+                      <ImagePlus className="h-5 w-5" />
+                      Sube una foto
+                    </button>
+                    <button
+                      onClick={() => pulsarTool("elementos")}
+                      className="flex flex-col items-center gap-1.5 rounded-lg border border-border px-2 py-3 text-[11px] text-muted-foreground transition-colors hover:border-primary hover:bg-accent/50 hover:text-foreground"
+                    >
+                      <Type className="h-5 w-5" />
+                      Añade texto
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             {/* Aviso de hueco de foto: chip flotante discreto, centrado, por encima de la
                 barra inferior de zoom/encuadre (no roba una franja entera de cromo). */}
             {faltaHueco && (
@@ -735,14 +802,18 @@ export function EditorDocumento({
   );
 }
 
-function RailBtn({ etiqueta, Icono, activo, costo, onClick, onHover }: { etiqueta: string; Icono: typeof Shapes; activo?: boolean; costo?: boolean; onClick: () => void; onHover?: () => void }) {
+function RailBtn({ etiqueta, Icono, activo, costo, destacado, onClick, onHover }: { etiqueta: string; Icono: typeof Shapes; activo?: boolean; costo?: boolean; destacado?: boolean; onClick: () => void; onHover?: () => void }) {
   return (
     <button
       onClick={onClick}
       onMouseEnter={onHover}
       title={costo ? `${etiqueta} · usa IA con coste` : etiqueta}
       className={`flex w-full flex-col items-center gap-0.5 rounded-md py-2 text-[10px] transition-colors ${
-        activo ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+        activo
+          ? "bg-accent text-foreground"
+          : destacado
+            ? "font-medium text-foreground hover:bg-accent/60"
+            : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
       }`}
     >
       <span className="relative">
