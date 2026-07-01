@@ -573,7 +573,14 @@ export default function Video() {
           guardado vive en la cabecera unificada (AccionesPaginaFin, arriba). Fuera del gestor
           (en el gestor no se edita un borrador concreto). */}
       {seccion !== "gestor" && (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-1">
+          {/* Formato en la MISMA barra (una sola fila fina, sin barra de formato aparte). */}
+          <SelectorFormato
+            aspecto={aspecto}
+            onCambio={onCambioFormato}
+            disabled={sinMarca}
+            mostrarAyuda={false}
+          />
           <input
             type="text"
             value={titulo}
@@ -581,7 +588,7 @@ export default function Video() {
             placeholder={tituloBorradorPorDefecto(aspecto)}
             aria-label="Título del borrador"
             disabled={sinMarca}
-            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2.5 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
           />
 
           {/* Badge de estado. */}
@@ -837,22 +844,8 @@ export default function Video() {
               )}
 
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                {/* Formato IN-PLACE sobre el lienzo (un solo selector). */}
-                <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1.5">
-                  <span className="text-xs font-medium text-muted-foreground">Formato</span>
-                  <SelectorFormato aspecto={aspecto} onCambio={onCambioFormato} disabled={sinMarca} />
-                  {seccion === "base" && tieneBase && (
-                    <span className="ml-auto hidden text-[11px] text-muted-foreground sm:inline">
-                      Arrastra sobre el vídeo para mover el foco
-                    </span>
-                  )}
-                  {seccion === "pip" && (
-                    <span className="ml-auto hidden text-[11px] text-muted-foreground sm:inline">
-                      Arrastra y redimensiona el PiP en el lienzo
-                    </span>
-                  )}
-                </div>
-                {/* LIENZO central: CTA prominente si no hay clip base; de lo contrario el preview. */}
+                {/* LIENZO central: CTA prominente si no hay clip base; de lo contrario el preview.
+                    (El formato vive en la barra fina de arriba; sin barra de formato aparte.) */}
                 <div className="flex min-h-0 flex-1 bg-muted/30 p-3">
                   {!tieneBase ? (
                     // Sin clip base, el área central muestra un CTA claro en vez de un lienzo vacío.

@@ -15,7 +15,7 @@ const DIMS: Record<AspectoVideo, { vw: number; vh: number }> = {
   "16:9": { vw: 16, vh: 9 },
 };
 
-const PX_BASE = 18; // dimensión máxima en píxeles para los iconos
+const PX_BASE = 13; // dimensión máxima en píxeles para los iconos
 
 function IconoAspecto({ aspecto, activo }: { aspecto: AspectoVideo; activo: boolean }) {
   const { vw, vh } = DIMS[aspecto];
@@ -59,9 +59,9 @@ export function SelectorFormato({
   mostrarAyuda = true,
 }: SelectorFormatoProps) {
   return (
-    <div className="space-y-2">
+    <div className={mostrarAyuda ? "space-y-1.5" : undefined}>
       <div
-        className="inline-flex gap-1 rounded-md border border-border p-0.5"
+        className="inline-flex gap-0.5 rounded-md border border-border p-0.5"
         role="radiogroup"
         aria-label="Formato de video"
       >
@@ -75,7 +75,7 @@ export function SelectorFormato({
               aria-checked={activo}
               disabled={disabled}
               onClick={() => onCambio(a)}
-              className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 ${
+              className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium transition-colors disabled:opacity-50 ${
                 activo
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
