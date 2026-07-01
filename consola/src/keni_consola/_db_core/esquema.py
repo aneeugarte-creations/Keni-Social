@@ -1245,6 +1245,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         nombre                TEXT NOT NULL DEFAULT '',
         url                   TEXT NOT NULL DEFAULT '',
         marca                 TEXT NOT NULL DEFAULT '',
+        marcas                TEXT NOT NULL DEFAULT '[]',
         fecha                 TEXT NOT NULL DEFAULT '',
         activo                INTEGER NOT NULL DEFAULT 1,
         incluir               TEXT NOT NULL DEFAULT '',

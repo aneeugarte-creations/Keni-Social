@@ -125,6 +125,25 @@ def test_delega_en_db_editorial_reutilizable(entorno):
     assert any(x["id"] == f["id"] for x in db.listar_franjas())
     fr = repos.crear_fuente_rss("Diario", "https://example.com/feed.xml", marca="unotv")
     assert db.obtener_fuente_rss(fr["id"])["nombre"] == "Diario"
+    # Marca única → `marcas` backfilleada a [marca] (paridad con la migración multimarca).
+    assert db.obtener_fuente_rss(fr["id"])["marcas"] == ["unotv"]
+
+
+def test_fuente_multimarca_por_repos(entorno):
+    # Una fuente puede servir a varias marcas: ingiere una vez y hace fan-out por marca.
+    fr = repos.crear_fuente_rss(
+        "Mundo", "https://ej.com/world.xml", marca="unotv", marcas=["unotv", "unotv-us"]
+    )
+    leido = db.obtener_fuente_rss(fr["id"])
+    assert leido["marca"] == "unotv"  # principal/display
+    assert leido["marcas"] == ["unotv", "unotv-us"]
+    # Aparece para AMBAS marcas: propia de unotv y servida a unotv-us.
+    assert fr["id"] in {f["id"] for f in db.listar_fuentes_rss(marca="unotv")}
+    assert fr["id"] in {f["id"] for f in db.listar_fuentes_rss(marca="unotv-us")}
+    # Editar la lista sincroniza la principal a la primera.
+    act = repos.actualizar_fuente_rss(fr["id"], {"marcas": ["claro-sports", "unotv"]})
+    assert act["marcas"] == ["claro-sports", "unotv"]
+    assert act["marca"] == "claro-sports"
 
 
 def test_historial_prompt_por_repos(entorno):

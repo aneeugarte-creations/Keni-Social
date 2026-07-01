@@ -63,6 +63,7 @@ from .migraciones_columnas import (
     _migrar_columnas_etiquetas,
     _migrar_columnas_eventos_rota,
     _migrar_columnas_fuentes_rss,
+    _migrar_fuentes_marcas,
     _migrar_columnas_noticias_algoritmo,
     _migrar_columnas_noticias_clusters,
     _migrar_columnas_noticias_items,
@@ -610,6 +611,10 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # One-shot e idempotente (`ADD COLUMN IF NOT EXISTS`); el DDL la trae para BDs virgenes. Sin
     # backfill (muestreo prospectivo). Ver `_migrar_sesion_reset` y `db_cuenta_uso`.
     Migracion("0069-reset-sesion-iso", _migrar_sesion_reset),
+    # MULTIMARCA de fuentes: columna `marcas` (array JSON) en `fuentes_rss`, backfilleada desde
+    # la `marca` singular. Permite que una fuente sirva a varias marcas (ingesta una vez, fan-out
+    # por marca aguas abajo). El DDL la trae para BDs virgenes; esta migra las viejas. Idempotente.
+    Migracion("0070-fuentes-marcas", _migrar_fuentes_marcas),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

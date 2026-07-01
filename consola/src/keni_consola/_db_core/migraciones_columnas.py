@@ -1380,6 +1380,31 @@ def _migrar_columnas_fuentes_rss(con: Any) -> None:
         if columna not in columnas:
             con.execute(f"ALTER TABLE fuentes_rss ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
+
+def _migrar_fuentes_marcas(con: Any) -> None:
+    """Migra `fuentes_rss` de marca ÚNICA a `marcas` (multimarca). Idempotente.
+
+    Añade la columna `marcas` (array JSON) si falta y backfilla desde la `marca` (singular)
+    solo las filas aún sin migrar (`marcas = '[]'`). Para BDs nuevas es no-op: la tabla nace
+    ya con `marcas` y sin filas que migrar. `marca` se conserva como principal/display.
+    """
+    columnas = _columnas_existentes(con, "fuentes_rss")
+    if not columnas:
+        return  # BD virgen: el DDL crea la tabla con `marcas`.
+    if "marcas" not in columnas:
+        con.execute(
+            "ALTER TABLE fuentes_rss ADD COLUMN IF NOT EXISTS marcas TEXT NOT NULL DEFAULT '[]'"
+        )
+    if "marca" in columnas:
+        filas = con.execute(
+            "SELECT id, marca FROM fuentes_rss WHERE marcas = '[]' AND marca <> ''"
+        ).fetchall()
+        for fila in filas:
+            con.execute(
+                "UPDATE fuentes_rss SET marcas = ? WHERE id = ?",
+                (json.dumps([fila["marca"]], ensure_ascii=False), fila["id"]),
+            )
+
 # COBERTURA + traducción + verificación (Ola D): columnas nuevas de `noticias_clusters`. El
 # `CREATE TABLE` ya las declara para BDs nuevas; estas migran las BDs viejas (mismo patrón
 # idempotente). Algunas pueden existir ya (orden de despliegue de agentes en paralelo): el

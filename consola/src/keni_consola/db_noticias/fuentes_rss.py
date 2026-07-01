@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from .._db_comun import UTC, Any, _conectar, datetime, timedelta, uuid
+from .._db_json import a_json_lista, de_json_lista
 from ..tiempo import ahora_iso, hoy_utc, iso_utc
 
 # --- Fuentes RSS ----------------------------------------------------------- #
@@ -13,6 +14,7 @@ _COLS_FUENTE_RSS = (
     "nombre",
     "url",
     "marca",
+    "marcas",
     "fecha",
     "activo",
     "incluir",
@@ -37,7 +39,7 @@ _COLS_FUENTE_RSS = (
 )
 _SELECT_FUENTE_RSS = f"SELECT {', '.join(_COLS_FUENTE_RSS)} FROM fuentes_rss"
 _CAMPOS_EDITABLES_FUENTE_RSS: tuple[str, ...] = (
-    "nombre", "url", "marca", "activo", "incluir", "excluir", "redes_def", "propia",
+    "nombre", "url", "marca", "marcas", "activo", "incluir", "excluir", "redes_def", "propia",
     "intervalo_min", "categoria", "linea_id", "prioridad",  # linea_id: la edita la UI de Fuentes
     # Ola D: reactivar un feed auto-desactivado (resetear estado del motor de ingesta).
     "desactivado_auto", "errores_seguidos", "proximo_sondeo", "pausado_hasta",
@@ -55,6 +57,9 @@ def _fila_a_fuente_rss(fila: Any) -> dict[str, Any]:
         "nombre": fila["nombre"] or "",
         "url": fila["url"] or "",
         "marca": fila["marca"] or "",
+        # Marcas SERVIDAS por la fuente (multimarca): una fuente ingiere una vez y hace fan-out
+        # por marca aguas abajo. `marca` (singular) es la principal/display. Vacía → [marca].
+        "marcas": [str(m) for m in de_json_lista(fila["marcas"])] or ([fila["marca"]] if fila["marca"] else []),
         "fecha": fila["fecha"] or "",
         "activo": bool(fila["activo"]),
         "incluir": fila["incluir"] or "",
@@ -101,9 +106,11 @@ def listar_fuentes_rss(
     sql = _SELECT_FUENTE_RSS
     params: list[Any] = []
     if marca:
-        # Marca seleccionada: propias de la marca + compartidas (vacia/NULL).
-        sql += " WHERE (marca = ? OR marca IS NULL OR marca = '')"
+        # Marca seleccionada: propias de la marca (singular o dentro de `marcas`) + compartidas
+        # (vacia/NULL). `marcas` es un array JSON de slugs entrecomillados: el LIKE casa el token.
+        sql += " WHERE (marca = ? OR marca IS NULL OR marca = '' OR marcas LIKE ?)"
         params.append(marca)
+        params.append(f'%"{marca}"%')
     sql += " ORDER BY creado DESC, fecha DESC, id DESC"
     if limite is not None:
         sql += " LIMIT ?"
@@ -166,6 +173,7 @@ def crear_fuente_rss(
     url: str,
     marca: str = "",
     *,
+    marcas: list[str] | None = None,
     incluir: str = "",
     excluir: str = "",
     redes_def: str = "",
@@ -188,11 +196,16 @@ def crear_fuente_rss(
     # Microsegundos (no segundos): el listado ordena por `creado DESC` y dos fuentes creadas
     # en el mismo segundo empataban, dejando el orden al `id` (uuid aleatorio) -> test flaky.
     ahora = datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="microseconds")
+    # `marcas` servidas: lo pasado (dedup, orden estable) o [marca] si solo vino la singular.
+    # `marca` (principal/display) se deriva a la primera de la lista si no se dio explícita.
+    lista_marcas = list(dict.fromkeys(m for m in (marcas or ([marca] if marca else [])) if m))
+    principal = marca or (lista_marcas[0] if lista_marcas else "")
     fila = {
         "id": uuid.uuid4().hex[:12],
         "nombre": nombre or "",
         "url": url or "",
-        "marca": marca or "",
+        "marca": principal,
+        "marcas": a_json_lista(lista_marcas),
         "fecha": hoy_utc().isoformat(),
         "activo": 1,
         "incluir": incluir or "",
@@ -241,6 +254,12 @@ def actualizar_fuente_rss(
         cambios["propia"] = 1 if cambios["propia"] else 0
     if "desactivado_auto" in cambios:
         cambios["desactivado_auto"] = 1 if cambios["desactivado_auto"] else 0
+    if "marcas" in cambios:
+        lista = list(dict.fromkeys(str(m) for m in (cambios["marcas"] or []) if m))
+        cambios["marcas"] = a_json_lista(lista)
+        # Sincroniza la principal/display si esta edición no la fija a mano.
+        if "marca" not in cambios and lista:
+            cambios["marca"] = lista[0]
     if not cambios:
         return obtener_fuente_rss(fuente_id)
     asignaciones = [f"{k} = ?" for k in cambios]
