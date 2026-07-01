@@ -5,7 +5,7 @@ import { Crop as CropIcon, FlipHorizontal2, FlipVertical2 } from "lucide-react";
 
 import { ColorControl } from "../ColorControl";
 
-import type { Capa, CapaImagen, Forma } from "../documento";
+import type { Capa, CapaImagen, Filtros, Forma } from "../documento";
 import { CATALOGO_FORMAS, ETIQUETA_FORMA } from "../documento";
 import { Seccion } from "../Seccion";
 import { useStoreEditor } from "../usarEditor";
@@ -144,6 +144,37 @@ export function CuerpoImagen({ capa, set, onRecortar }: PropsCuerpoCapa<CapaImag
           />
         )}
         <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Filtros</div>
+        {/* Presets de un clic: fijan brillo/contraste/saturación/desenfoque de golpe (reusan el
+            esquema `filtros`, sin campos nuevos). "B&N" desatura del todo (saturación 0 = gris en
+            previa y export); "Quitar" vuelve a neutro. El duotono se conserva si estaba activo. */}
+        <div className="flex flex-wrap gap-1">
+          {(() => {
+            const presets: { etiqueta: string; cambios: Filtros | null }[] = [
+              { etiqueta: "B&N", cambios: { brillo: 1.05, contraste: 1.1, saturacion: 0, desenfoque: 0 } },
+              { etiqueta: "Cálido", cambios: { brillo: 1.05, contraste: 1.05, saturacion: 1.35, desenfoque: 0 } },
+              { etiqueta: "Dramático", cambios: { brillo: 0.9, contraste: 1.5, saturacion: 1.15, desenfoque: 0 } },
+              { etiqueta: "Desaturado marca", cambios: { brillo: 1, contraste: 1.08, saturacion: 0.55, desenfoque: 0 } },
+              { etiqueta: "Quitar", cambios: null },
+            ];
+            return presets.map((p) => (
+              <button
+                key={p.etiqueta}
+                type="button"
+                onClick={() => {
+                  if (!p.cambios) {
+                    // Conserva el duotono (es un filtro aparte); si no hay, colapsa a null.
+                    set({ filtros: capa.filtros?.duotono ? { brillo: 1, contraste: 1, saturacion: 1, desenfoque: 0, duotono: capa.filtros.duotono } : null } as Partial<Capa>);
+                    return;
+                  }
+                  set({ filtros: { ...p.cambios, duotono: capa.filtros?.duotono ?? null } } as Partial<Capa>);
+                }}
+                className="rounded border border-input bg-background px-1.5 py-0.5 text-[11px] hover:bg-accent"
+              >
+                {p.etiqueta}
+              </button>
+            ));
+          })()}
+        </div>
         <Campo etiqueta="Brillo">
           <input type="range" min={0.2} max={1.8} step={0.05} value={fil.brillo ?? 1} onChange={(e) => setFiltro("brillo", Number(e.target.value))} className="w-24" />
         </Campo>
