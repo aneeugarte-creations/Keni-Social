@@ -43,7 +43,7 @@ def test_crear_listar_obtener_fuente_rss(entorno):
     # prioridad, pausado_hasta, errores_seguidos, desactivado_auto, ultimo_filtrados) y el
     # `peso` editorial (pondera la corroboración del ranking; normal=1.0 por defecto).
     assert set(f) == {
-        "id", "nombre", "url", "marca", "fecha", "activo", "incluir", "excluir",
+        "id", "nombre", "url", "marca", "marcas", "fecha", "activo", "incluir", "excluir",
         "redes_def", "ultima_actualizacion", "ultimo_error", "ultimo_conteo", "propia",
         "categoria", "linea_id", "intervalo_min", "proximo_sondeo", "prioridad", "pausado_hasta",
         "errores_seguidos", "desactivado_auto", "ultimo_filtrados", "peso", "idioma",
