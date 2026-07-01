@@ -23,10 +23,7 @@ import { api, mensajeError } from "@/lib/api";
 import type { Campania, EnlacePublicoCampania } from "@/types";
 
 import { CLAVE_CAMPANIAS } from "./claves";
-
-function urlEnlace(token: string): string {
-  return `${window.location.origin}/c/${token}`;
-}
+import { urlEnlace } from "./formato";
 
 function fechaCaducidad(expira: string): string {
   if (!expira) return "no caduca";

@@ -22,6 +22,7 @@ import { toast } from "sonner";
 
 import { ItemMenu } from "@/components/layout/MenuAcciones";
 import { api } from "@/lib/api";
+import { slug } from "@/lib/formato";
 
 import { construirCsvCompleto, descargarTexto } from "./exportarCsv";
 import { descargarPresentacion } from "./exportarPdf";
@@ -40,16 +41,6 @@ interface ItemsDescargaProps {
   periodoEtiqueta: string;
   /** ISO de generación del reporte, para el pie de la portada. */
   generadoEn?: string;
-}
-
-/** Slug minimal para el nombre del archivo (sin acentos ni espacios). */
-function slug(texto: string): string {
-  return texto
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
 }
 
 /** Comandos de descarga (CSV + PDF) para meter DENTRO de un `<MenuAcciones/>`. */

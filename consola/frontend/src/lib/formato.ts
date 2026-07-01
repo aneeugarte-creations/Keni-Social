@@ -430,3 +430,13 @@ export function tituloLimpio(t: string, maxLen: number): string {
   const base = corte > 0 ? recorte.slice(0, corte) : recorte;
   return `${base.replace(/[\s.,;:¡!¿?·-]+$/u, "")}…`;
 }
+
+/** Slug minimal para nombres de archivo (sin acentos ni espacios). */
+export function slug(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}

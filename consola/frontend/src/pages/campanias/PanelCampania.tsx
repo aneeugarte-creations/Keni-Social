@@ -59,7 +59,7 @@ import { useOrdenTabla } from "@/pages/metricas/useOrdenTabla";
 import { columnasVisibles, useVistaConfig } from "@/pages/metricas/vistaConfig";
 import { CLAVE_CAMPANIAS } from "./claves";
 import { GraficaTendencia } from "./GraficaTendencia";
-import { fechaCorta } from "./formato";
+import { fechaCorta, visEfectivas } from "./formato";
 
 /** Tarjeta KPI con su variación vs. el periodo anterior (flecha + color). */
 function TarjetaKpiComparada({
@@ -582,12 +582,6 @@ const ALINEAR_PIEZA: Record<string, "left" | "right"> = {
   interacciones: "right",
   engagement_pct: "right",
 };
-
-/** Visualizaciones a MOSTRAR de una pieza: en modo cliente (ocultarAds) se suman las pagadas
- * a las orgánicas para que el inorgánico se vea como un post normal. */
-function visEfectivas(p: PiezaCampania, ocultarAds: boolean): number {
-  return p.visualizaciones + (ocultarAds ? p.visualizaciones_pagadas : 0);
-}
 
 /** Tabla de piezas del periodo: filtrable por red/formato y ordenable por columna. */
 function TablaPiezas({ piezas, ocultarAds }: { piezas: PiezaCampania[]; ocultarAds: boolean }) {

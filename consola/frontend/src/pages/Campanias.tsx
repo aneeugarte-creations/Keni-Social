@@ -9,7 +9,17 @@
  * (cada pieza de la tabla lleva su propia marca).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckSquare, Download, Link2, Megaphone, Pencil, Plus, Square, Trash2 } from "lucide-react";
+import {
+  CheckSquare,
+  Download,
+  Link2,
+  Megaphone,
+  Pencil,
+  Plus,
+  Presentation,
+  Square,
+  Trash2,
+} from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -28,13 +38,16 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { hoyCDMX } from "@/lib/fecha";
 import { api, mensajeError } from "@/lib/api";
-import type { Campania } from "@/types";
+import type { AnaliticaCampania, Campania } from "@/types";
 
 import { CLAVE_CAMPANIAS } from "./campanias/claves";
 import { DialogoCampania } from "./campanias/DialogoCampania";
 import { DialogoEnlacesPublicos } from "./campanias/DialogoEnlacesPublicos";
+import { descargarPdfCampania } from "./campanias/exportarPdfCampania";
+import { enlaceVigentePara } from "./campanias/formato";
 import { PanelCampania } from "./campanias/PanelCampania";
 import { SelectorTiempo } from "./metricas/Controles";
+import { etiquetaPeriodo } from "./metricas/exportarPdf";
 
 /**
  * Token `rango:AAAA-MM-DD_AAAA-MM-DD` de los últimos `n` días (incluye `hoy`, día CDMX).
@@ -128,6 +141,35 @@ export default function Campanias() {
     setDialogoAbierto(true);
   };
 
+  // PDF "testigo" de la campaña: reusa la analítica ya cargada por el panel (misma queryKey,
+  // sin volver a pedirla) y, si hay un enlace público vigente para este periodo/modo, lo cierra
+  // con su QR. Sin enlace, el PDF sale igual, solo sin esa última lámina.
+  const exportarPdf = async () => {
+    if (!campaniaActual) return;
+    const datos = queryClient.getQueryData<AnaliticaCampania>([
+      ...CLAVE_CAMPANIAS,
+      "analitica",
+      campaniaActual.id,
+      rango,
+    ]);
+    if (!datos) {
+      toast.error("Aún no hay datos cargados para el PDF.");
+      return;
+    }
+    try {
+      const { enlaces } = await api.enlacesCampania(campaniaActual.id);
+      const vigente = enlaceVigentePara(enlaces, rango, ocultarAds);
+      await descargarPdfCampania(datos, {
+        periodoEtiqueta: etiquetaPeriodo(rango, RANGOS),
+        ocultarAds,
+        tokenEnlace: vigente?.token ?? null,
+      });
+      toast.success("PDF de la campaña descargado.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo generar el PDF.");
+    }
+  };
+
   return (
     <>
       {listaQuery.isPending ? (
@@ -202,6 +244,9 @@ export default function Campanias() {
                       {`Descargar (${etiqueta})`}
                     </ItemMenu>
                   ))}
+                  <ItemMenu icono={Presentation} onClick={() => void exportarPdf()}>
+                    Descargar PDF
+                  </ItemMenu>
                   {/* Modo cliente: ajuste de vista persistente, como toggle directo del menú
                       (oculta Ads y suma sus visualizaciones a las orgánicas). */}
                   <div role="separator" className="my-1 h-px bg-border" />
