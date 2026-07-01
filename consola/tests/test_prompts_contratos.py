@@ -23,15 +23,6 @@ from keni_consola.prompts_contratos import (
     resolver_contrato,
 )
 
-# Fragmentos ADITIVOS que el código compone DENTRO de otro prompt (no son autónomos): su forma
-# JSON va entretejida en el cuerpo, fuera del mecanismo `{{CONTRATO_SALIDA}}`. Excepción declarada.
-_FRAGMENTOS_JSON_INLINE = {
-    "prompt/envoltorios/redes",
-    "prompt/envoltorios/copy-unico",
-    "prompt/envoltorios/carrusel",
-    "prompt/redactar-carrusel",
-}
-
 # Un objeto JSON con clave string: la huella de un contrato inline en el cuerpo.
 _RE_OBJETO_JSON = re.compile(r'\{\s*"')
 
@@ -66,24 +57,23 @@ def test_parrilla_tiene_contrato_inyectado_desde_codigo():
     assert c and '"operaciones"' in c and "crear_evento" in c
 
 
-def test_ningun_prompt_estructurado_lleva_contrato_inline():
-    # Todo prompt AUTÓNOMO cuyo copy parsea el código debe declarar su contrato en
-    # `CONTRATO_POR_PROMPT` y terminar en `{{CONTRATO_SALIDA}}` (el editor lo pinta read-only, así
-    # nadie lo rompe al editar). Caza el hueco: un seed con objeto JSON inline que NO usa el
-    # placeholder ni es un fragmento/documento declarado.
+def test_ningun_prompt_lleva_forma_json_inline():
+    # NINGÚN cuerpo editable puede llevar la FORMA del JSON que exige el parser: un prompt
+    # AUTÓNOMO la declara en `CONTRATO_POR_PROMPT` y termina en `{{CONTRATO_SALIDA}}` (el editor la
+    # pinta read-only); un FRAGMENTO aditivo (envoltorios) la inyecta desde código con su propio
+    # placeholder (`{{PIEZAS_JSON}}`/`{{SLIDES_JSON}}`/`{{CIERRE_JSON}}`). En ambos casos editar la
+    # Prompts NO puede romper el contrato. Este test caza un objeto JSON inline sin bloquear.
     ofensores = []
     for pid in sorted(_ids_seed_prompt()):
         doc = libprompts.obtener_inicial(pid)
         assert doc is not None, pid
         if PLACEHOLDER in doc.cuerpo:
-            continue  # ya bloqueado: el contrato va read-only desde código
-        if pid in _FRAGMENTOS_JSON_INLINE:
-            continue  # fragmento aditivo declarado (lo compone el código dentro de otro prompt)
+            continue  # contrato read-only desde código (prompt autónomo)
         if _RE_OBJETO_JSON.search(doc.cuerpo):
             ofensores.append(pid)
     assert not ofensores, (
-        f"prompts con contrato JSON inline SIN bloquear: {ofensores}. "
-        "Muévelo a CONTRATO_POR_PROMPT y termina el cuerpo en {{CONTRATO_SALIDA}}."
+        f"prompts con la forma JSON inline SIN bloquear: {ofensores}. Un prompt autónomo va a "
+        "CONTRATO_POR_PROMPT + {{CONTRATO_SALIDA}}; un fragmento inyecta la forma desde código."
     )
 
 

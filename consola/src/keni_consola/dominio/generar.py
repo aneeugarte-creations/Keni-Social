@@ -177,18 +177,26 @@ def _limites_redes(redes_ids: list[str]) -> str:
     return ", ".join(partes)
 
 
+# FORMA del bloque json que exige el parser (una pieza por red). Vive en CÓDIGO —no en el cuerpo
+# editable del envoltorio— para que editar la Prompts NO pueda romper el contrato del parser; el
+# envoltorio solo la referencia con `{{PIEZAS_JSON}}`.
+_PIEZAS_JSON = '{"piezas": [{"red": "<id>", "texto": "<copy de esa red>", "copy_in": "<texto que va DENTRO de la imagen>"}, ...]}'
+
+
 def instruccion_redes(redes_ids: list[str]) -> str:
     """Instrucción ADITIVA: limita las redes, ancla sus límites técnicos (desde el código)
     y pide el bloque json con las piezas por red (contrato, incluidas piezas compuestas).
 
-    El TEXTO vive SOLO en la Prompts/inicial (`PROMPT_ENVOLTORIO_REDES`); los VALORES de
-    las variables los sigue calculando el código desde sus fuentes (`redes`, `limites_plataforma`)."""
+    El TEXTO vive SOLO en la Prompts/inicial (`PROMPT_ENVOLTORIO_REDES`); los VALORES de las
+    variables y la FORMA del json (`_PIEZAS_JSON`) los calcula el código desde sus fuentes
+    (`redes`, `limites_plataforma`)."""
     plantilla = _plantilla_envoltorio(PROMPT_ENVOLTORIO_REDES)
     return (
         plantilla
         .replace("{{ETIQUETAS}}", ", ".join(redes.nombre_por_id(r) for r in redes_ids))
         .replace("{{LIMITES}}", _limites_redes(redes_ids))
         .replace("{{IDS_JSON}}", ", ".join(f'"{r}"' for r in redes_ids))
+        .replace("{{PIEZAS_JSON}}", _PIEZAS_JSON)
     )
 
 
@@ -203,6 +211,11 @@ UMBRAL_COPY_ESTRECHO = 600
 
 # Tope de SLIDES extra de un carrusel editorial (10 nativas de IG/FB - 1 de portada).
 MAX_SLIDES_CARRUSEL = 9
+
+# FORMA del array de slides que exige el parser. Vive en CÓDIGO —no en el cuerpo editable de los
+# envoltorios de carrusel— para que editar la Prompts NO pueda romper el contrato; los envoltorios
+# (`envoltorios/carrusel`, `redactar-carrusel`) solo la referencian con `{{SLIDES_JSON}}`.
+_SLIDES_JSON = '[{"titular": "<titular corto de ESA sub-historia, sin emojis, misma línea editorial de texto-en-imagen>", "foto": <número del catálogo o 0 si ninguna>}, …]'
 
 
 def _bloque_decision_carrusel(
@@ -243,6 +256,7 @@ def _bloque_decision_carrusel(
         plantilla
         .replace("{{N_NOTAS}}", str(n_notas))
         .replace("{{MAX_SLIDES}}", str(max_slides))
+        .replace("{{SLIDES_JSON}}", _SLIDES_JSON)
         .replace("{{CATALOGO_FOTOS}}", catalogo)
     )
 
