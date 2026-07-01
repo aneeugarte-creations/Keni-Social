@@ -12,10 +12,10 @@ import { cn } from "@/lib/utils";
  * Indicador SUTIL del uso de las cuentas de Claude del servidor, alojado en el pie del sidebar.
  * Expandido pinta, por cuenta, UNA sola línea («Uso» + %) con una barra de progreso fina debajo; la
  * cabecera «Cuenta A/B» solo aparece en la vista "Todas" (varias cuentas), porque con una sola es su
- * cuenta siempre. Colapsado, un anillo fino con el mismo %. Esa línea es un BOTÓN: un click despliega
- * un panel flotante con el desglose completo (Semana/24h/5h, cada uno con su barra), igual que antes
- * se veían siempre — así el pie ocupa una línea en reposo pero el detalle sigue a un solo click, no
- * solo al tooltip.
+ * cuenta siempre. Colapsado, un anillo fino con el mismo %. Esa línea es un BOTÓN: pasar el ratón por
+ * encima despliega un panel flotante con el desglose completo (Semana/24h/5h, cada uno con su barra),
+ * igual que antes se veían siempre — así el pie ocupa una línea en reposo pero el detalle asoma solo
+ * con acercarse, sin necesidad de click (que sigue alternándolo, para teclado/táctil).
  *
  * EL NÚMERO QUE SE VE (`pctPrincipal`, tanto expandido como colapsado): el burn rate
  * (`limiteMasUrgente`, el límite que ANTES tocará el 100 % por ventanas duras 5h/semana) — una
@@ -154,10 +154,16 @@ function PopoverDesgloseUso({
   uso,
   anclaRef,
   contenedorRef,
+  onMouseEnter,
+  onMouseLeave,
 }: {
   uso: UsoCuenta;
   anclaRef: React.RefObject<HTMLButtonElement>;
   contenedorRef: React.RefObject<HTMLDivElement>;
+  /** El panel vive fuera del botón (portal a `<body>`): sin esto, mover el ratón hacia él pasaría
+   *  por un hueco sin hover y se cerraría antes de llegar. */
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
 }) {
   const [pos, setPos] = React.useState<{ x: number; y: number } | null>(null);
   const rojo = uso.alerta_roja;
@@ -182,6 +188,8 @@ function PopoverDesgloseUso({
       ref={contenedorRef}
       role="dialog"
       aria-label="Desglose de uso"
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       style={pos ? { left: pos.x, top: pos.y } : { left: 0, top: 0, visibility: "hidden" }}
       className="pointer-events-auto fixed z-50 w-52 rounded-lg border border-border bg-popover p-2.5 text-popover-foreground shadow-md"
     >
@@ -237,19 +245,22 @@ function CirculoUso({ pct, rojo }: { pct: number | null; rojo: boolean }) {
 }
 
 /** Bloque expandido de UNA cuenta: UNA línea («Uso» + %) + su barra, más el aviso rojo. El número es
- *  el burn rate (`pctPrincipal`, el límite que antes bloqueará); un click en la línea despliega el
- *  desglose completo (Semana/24h/5h) en un panel flotante. La cabecera "Cuenta A/B" solo cuando hay
- *  VARIAS cuentas (vista "Todas"): con una sola es su cuenta siempre. */
+ *  el burn rate (`pctPrincipal`, el límite que antes bloqueará); el hover despliega el desglose
+ *  completo (Semana/24h/5h) en un panel flotante — el click sigue alternándolo, para teclado/táctil.
+ *  La cabecera "Cuenta A/B" solo cuando hay VARIAS cuentas (vista "Todas"): con una sola es su cuenta
+ *  siempre. */
 function BloqueCuenta({
   uso,
   etiquetada,
   abierto,
-  onToggle,
+  onAbrir,
+  onCerrar,
 }: {
   uso: UsoCuenta;
   etiquetada: boolean;
   abierto: boolean;
-  onToggle: () => void;
+  onAbrir: () => void;
+  onCerrar: () => void;
 }) {
   const rojo = uso.alerta_roja;
   const alerta = mensajeRojo(uso);
@@ -258,17 +269,38 @@ function BloqueCuenta({
   const tooltip = tooltipCompleto(uso);
   const anclaRef = React.useRef<HTMLButtonElement>(null);
   const panelRef = React.useRef<HTMLDivElement>(null);
+  // Cierre con un pequeño retardo: al mover el ratón del botón al panel (que se porta FUERA de este
+  // árbol, encima) hay un instante sin hover en ninguno de los dos — sin el retardo, el panel se
+  // cerraría y reabriría (parpadeo) en ese hueco.
+  const cierreTimeoutRef = React.useRef<number | null>(null);
+
+  function cancelarCierre() {
+    if (cierreTimeoutRef.current != null) {
+      window.clearTimeout(cierreTimeoutRef.current);
+      cierreTimeoutRef.current = null;
+    }
+  }
+  function abrirAlVuelo() {
+    cancelarCierre();
+    onAbrir();
+  }
+  function cerrarConRetardo() {
+    cancelarCierre();
+    cierreTimeoutRef.current = window.setTimeout(onCerrar, 120);
+  }
+
+  React.useEffect(() => cancelarCierre, []);
 
   React.useEffect(() => {
     if (!abierto) return;
     function fuera(e: MouseEvent) {
       const t = e.target as Node;
       if (anclaRef.current?.contains(t) || panelRef.current?.contains(t)) return;
-      onToggle();
+      onCerrar();
     }
     function tecla(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        onToggle();
+        onCerrar();
         anclaRef.current?.focus();
       }
     }
@@ -278,7 +310,7 @@ function BloqueCuenta({
       document.removeEventListener("mousedown", fuera);
       document.removeEventListener("keydown", tecla);
     };
-  }, [abierto, onToggle]);
+  }, [abierto, onCerrar]);
 
   return (
     <div className="w-full space-y-1">
@@ -291,9 +323,16 @@ function BloqueCuenta({
       <button
         ref={anclaRef}
         type="button"
+        onMouseEnter={abrirAlVuelo}
+        onMouseLeave={cerrarConRetardo}
         onClick={(e) => {
+          // Sin auto-abrir por foco: `.focus()` tras cerrar con Escape (más abajo) dispararía este
+          // mismo evento y reabriría el panel en el acto. Con teclado, Enter/Espacio ya activan este
+          // click sobre el botón enfocado — no hace falta un atajo de "foco abre".
           e.stopPropagation();
-          onToggle();
+          cancelarCierre();
+          if (abierto) onCerrar();
+          else onAbrir();
         }}
         aria-expanded={abierto}
         aria-haspopup="dialog"
@@ -338,7 +377,15 @@ function BloqueCuenta({
           />
         </div>
       </button>
-      {abierto ? <PopoverDesgloseUso uso={uso} anclaRef={anclaRef} contenedorRef={panelRef} /> : null}
+      {abierto ? (
+        <PopoverDesgloseUso
+          uso={uso}
+          anclaRef={anclaRef}
+          contenedorRef={panelRef}
+          onMouseEnter={cancelarCierre}
+          onMouseLeave={cerrarConRetardo}
+        />
+      ) : null}
     </div>
   );
 }
@@ -436,7 +483,8 @@ function IndicadorUsoContenido({
           uso={c}
           etiquetada={etiquetada}
           abierto={cuentaAbiertaId === c.cuenta}
-          onToggle={() => setCuentaAbiertaId((v) => (v === c.cuenta ? null : c.cuenta))}
+          onAbrir={() => setCuentaAbiertaId(c.cuenta)}
+          onCerrar={() => setCuentaAbiertaId((v) => (v === c.cuenta ? null : v))}
         />
       ))}
     </div>

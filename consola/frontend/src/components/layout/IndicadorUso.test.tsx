@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { IndicadorUso } from "@/components/layout/IndicadorUso";
@@ -199,26 +199,49 @@ describe("IndicadorUso", () => {
     expect(screen.getByLabelText(/Sin cuenta/)).toBeInTheDocument();
   });
 
-  it("click en «Uso» despliega el desglose (Semana/24h/5h); un segundo click lo cierra", () => {
-    renderIndicador({ data: { cuentas: [cuenta({ semana_pct: 42, sesion_5h_pct: 18 })] } }, "claro-sports");
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  it("hover en «Uso» despliega el desglose (Semana/24h/5h); al salir el ratón se cierra tras un instante", () => {
+    vi.useFakeTimers();
+    try {
+      renderIndicador({ data: { cuentas: [cuenta({ semana_pct: 42, sesion_5h_pct: 18 })] } }, "claro-sports");
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
-    const boton = screen.getByRole("button", { name: /Semana 42%/ });
-    fireEvent.click(boton);
-    const panel = screen.getByRole("dialog", { name: "Desglose de uso" });
-    expect(within(panel).getByText("Semana")).toBeInTheDocument();
-    expect(within(panel).getByText("24h")).toBeInTheDocument();
-    expect(within(panel).getByText("5h")).toBeInTheDocument();
-    expect(boton).toHaveAttribute("aria-expanded", "true");
+      const boton = screen.getByRole("button", { name: /Semana 42%/ });
+      fireEvent.mouseEnter(boton);
+      const panel = screen.getByRole("dialog", { name: "Desglose de uso" });
+      expect(within(panel).getByText("Semana")).toBeInTheDocument();
+      expect(within(panel).getByText("24h")).toBeInTheDocument();
+      expect(within(panel).getByText("5h")).toBeInTheDocument();
+      expect(boton).toHaveAttribute("aria-expanded", "true");
 
-    fireEvent.click(boton);
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(boton).toHaveAttribute("aria-expanded", "false");
+      fireEvent.mouseLeave(boton);
+      expect(screen.getByRole("dialog")).toBeInTheDocument(); // el retardo aún no venció
+      act(() => vi.runAllTimers()); // el cierre lo dispara un setTimeout, fuera de un evento React
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(boton).toHaveAttribute("aria-expanded", "false");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("mover el ratón del botón al panel (que vive fuera, portado) no lo cierra", () => {
+    vi.useFakeTimers();
+    try {
+      renderIndicador({ data: { cuentas: [cuenta({})] } }, "claro-sports");
+      const boton = screen.getByRole("button", { name: /Semana/ });
+      fireEvent.mouseEnter(boton);
+      const panel = screen.getByRole("dialog");
+      fireEvent.mouseLeave(boton);
+      fireEvent.mouseEnter(panel);
+      act(() => vi.runAllTimers()); // el cierre lo dispara un setTimeout, fuera de un evento React
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("Escape cierra el desglose abierto", () => {
     renderIndicador({ data: { cuentas: [cuenta({})] } }, "claro-sports");
-    fireEvent.click(screen.getByRole("button", { name: /Semana/ }));
+    fireEvent.mouseEnter(screen.getByRole("button", { name: /Semana/ }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -226,18 +249,27 @@ describe("IndicadorUso", () => {
 
   it("click fuera cierra el desglose abierto", () => {
     renderIndicador({ data: { cuentas: [cuenta({})] } }, "claro-sports");
-    fireEvent.click(screen.getByRole("button", { name: /Semana/ }));
+    fireEvent.mouseEnter(screen.getByRole("button", { name: /Semana/ }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     fireEvent.mouseDown(document.body);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("dos cuentas: solo un panel abierto a la vez (abrir el de B cierra el de A)", () => {
+  it("el click sigue alternando el desglose (fallback táctil/accesible)", () => {
+    renderIndicador({ data: { cuentas: [cuenta({ semana_pct: 42 })] } }, "claro-sports");
+    const boton = screen.getByRole("button", { name: /Semana 42%/ });
+    fireEvent.click(boton);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    fireEvent.click(boton);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("dos cuentas: pasar el ratón de una a otra cierra la primera y abre la segunda", () => {
     renderIndicador({ data: { cuentas: [cuenta({}), CUENTA_B] } }, null);
     const [botonA, botonB] = screen.getAllByRole("button");
-    fireEvent.click(botonA);
+    fireEvent.mouseEnter(botonA);
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
-    fireEvent.click(botonB);
+    fireEvent.mouseEnter(botonB);
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
   });
 });
