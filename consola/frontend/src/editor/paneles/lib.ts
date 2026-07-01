@@ -2,7 +2,7 @@
 
 import { Group as GroupIcon, Image as ImageIcon, PanelBottom, Square, Type } from "lucide-react";
 
-import type { Capa, CapaTexto } from "../documento";
+import type { Capa, CapaMarco, CapaTexto, FormaMarco } from "../documento";
 
 // Color totalmente transparente (#RRGGBBAA con alfa 00). Válido en render y validación.
 export const COLOR_TRANSPARENTE = "#00000000";
@@ -32,9 +32,24 @@ export const ICONO_TIPO: Record<Capa["tipo"], typeof Type> = {
   grupo: GroupIcon,
 };
 
+// Nombre por FORMA de un marco (espejo del catálogo de «Formas» de PanelElementos). `rect` sin
+// nombre propio cae en la etiqueta genérica «Marco».
+export const ETIQUETA_FORMA: Record<FormaMarco, string> = {
+  rect: "Marco",
+  elipse: "Elipse",
+  triangulo: "Triángulo",
+  rombo: "Rombo",
+  pentagono: "Pentágono",
+  hexagono: "Hexágono",
+  estrella: "Estrella",
+  flecha: "Flecha",
+  linea: "Línea",
+};
+
 // Nombre a mostrar: el `nombre` editable, o una etiqueta derivada del tipo/contenido.
 export function nombreCapa(c: Capa): string {
   if (c.nombre) return c.nombre;
   if (c.tipo === "texto") return (c as CapaTexto).texto?.slice(0, 22) || "Texto";
+  if (c.tipo === "marco") return ETIQUETA_FORMA[(c as CapaMarco).forma] ?? ETIQUETA_TIPO.marco;
   return ETIQUETA_TIPO[c.tipo];
 }
