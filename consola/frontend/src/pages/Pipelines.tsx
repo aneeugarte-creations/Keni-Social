@@ -31,15 +31,16 @@ const VERIFICACION_TEXTO: Record<string, string> = {
 // consola (`components/comunes/ChipEstado`): misma etiqueta y color que Actividad/Monitor.
 export { ChipEstado };
 
-// Etapa (clave) -> código de etapa de los eventos de actividad (la traza Fusionar/Priorizar/Verificar/Decisor/Redactar/Sugerir hashtags/Ilustrar).
+// Etapa (clave) -> código de etapa de los eventos de actividad (la traza Fusionar/Priorizar/Verificar/Decisor/Redactar/Sugerir hashtags/Ilustrar/Carrusel).
 export const ETAPA_A_EVENTO: Record<string, string> = {
-  fusionar: "FUSIONAR", priorizar: "PRIORIZAR", admitir: "ADMITIR", verificar: "VERIFICAR", decisor: "DECISOR", redactar: "REDACTAR", sugerir_hashtags: "SUGERIR_HASHTAGS", ilustrar: "ILUSTRAR", critica: "CRITICA",
+  fusionar: "FUSIONAR", priorizar: "PRIORIZAR", admitir: "ADMITIR", verificar: "VERIFICAR", decisor: "DECISOR", redactar: "REDACTAR", sugerir_hashtags: "SUGERIR_HASHTAGS", ilustrar: "ILUSTRAR", carrusel: "CARRUSEL", critica: "CRITICA",
 };
 
 // Catálogo de etapas para el filtro `?etapa=` (espeja `_ETAPAS` del back, en orden de flujo).
-// «Sugerir hashtags» NO entra: el filtro lista runs PARADAS en una etapa, y esa etapa nunca
-// bloquea (solo "ok"/"saltada", es una sugerencia opcional), así que filtrar por ella no daría nada.
-// Decisor SÍ entra: bloquea de verdad el arranque de Redactar mientras está pendiente.
+// «Sugerir hashtags» y «Carrusel» NO entran: el filtro lista runs PARADAS en una etapa, y
+// ninguna de las dos bloquea (solo "ok"/"saltada", son trabajo opcional), así que filtrar por
+// ellas no daría nada. Decisor SÍ entra: bloquea de verdad el arranque de Redactar mientras
+// está pendiente.
 export const ETAPAS_FILTRO: { clave: string; nombre: string }[] = [
   { clave: "fusionar", nombre: "Fusionar" },
   { clave: "priorizar", nombre: "Priorizar" },
@@ -482,10 +483,17 @@ function PublicacionEtapa({
       </div>
     );
   }
-  if (clave === "trabajo" || clave === "critica" || clave === "sugerir_hashtags" || clave === "decisor") {
+  if (
+    clave === "trabajo" ||
+    clave === "critica" ||
+    clave === "sugerir_hashtags" ||
+    clave === "decisor" ||
+    clave === "carrusel"
+  ) {
     // Trabajo SUELTO (item `clase="actividad"`), Crítica IA (revisión con visión en la cadena
-    // de aprobación), Sugerir hashtags (propuesta tras Redactar) o Decisor (formato foto/carrusel,
-    // justo antes de Redactar): el contenido es el bloque entrada/salida (prompt + razonamiento +
+    // de aprobación), Sugerir hashtags (propuesta tras Redactar), Decisor (formato foto/carrusel,
+    // justo antes de Redactar) o Carrusel (convierte el copy ya redactado en slides, justo
+    // después de Ilustrar): el contenido es el bloque entrada/salida (prompt + razonamiento +
     // resultado).
     return <BloqueIA gen={generacion} plantilla={plantilla} />;
   }

@@ -60,15 +60,15 @@ def test_run_verificacion_no_verificado_con_copy(cliente):
     assert run is not None
     assert [e["clave"] for e in run["etapas"]] == [
         "fusionar", "priorizar", "admitir", "verificar", "decisor", "redactar",
-        "sugerir_hashtags", "ilustrar", "aprobar", "critica",
+        "sugerir_hashtags", "ilustrar", "carrusel", "aprobar", "critica",
     ]
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
     # Sin cluster -> Fusionar/Priorizar saltadas; Decisor OFF por defecto -> saltada; sin
-    # sugerencia ni arte -> Sugerir hashtags/Ilustrar saltadas. Ninguna bloquea.
+    # sugerencia/arte/carrusel -> Sugerir hashtags/Ilustrar/Carrusel saltadas. Ninguna bloquea.
     assert etapas == {
         "fusionar": "saltada", "priorizar": "saltada", "admitir": "ok", "verificar": "ok",
         "decisor": "saltada", "redactar": "ok", "sugerir_hashtags": "saltada", "ilustrar": "saltada",
-        "aprobar": "pendiente", "critica": "saltada",
+        "carrusel": "saltada", "aprobar": "pendiente", "critica": "saltada",
     }
     assert run["estado_global"] == "pendiente"
     assert run["cluster"] is None
@@ -345,7 +345,7 @@ def test_detalle_run(cliente):
     assert body["pipeline"]["id"] == tema["id"]
     assert [e["clave"] for e in body["pipeline"]["etapas"]] == [
         "fusionar", "priorizar", "admitir", "verificar", "decisor", "redactar",
-        "sugerir_hashtags", "ilustrar", "aprobar", "critica",
+        "sugerir_hashtags", "ilustrar", "carrusel", "aprobar", "critica",
     ]
     assert "actividad" in body
     assert "verificacion" in body["pipeline"]
@@ -492,6 +492,7 @@ def test_etapas_marcan_ia_y_detalle_trae_prompts(cliente):
     assert ia["verificar"] is True and ia["redactar"] is True and ia["ilustrar"] is True
     assert ia["sugerir_hashtags"] is True
     assert ia["decisor"] is True
+    assert ia["carrusel"] is True
     assert ia["critica"] is True
     assert ia["admitir"] is False and ia["aprobar"] is False
     body = cliente.get(f"/api/pipelines/{tema['id']}").json()
@@ -685,10 +686,11 @@ def test_run_suma_metricas_de_sus_generaciones(cliente):
     assert det["metricas"] == run["metricas"]
 
 
-def test_carrusel_de_un_post_sale_suelto_aunque_su_post_sea_run(cliente):
-    """Convertir un post (que ES una run) en carrusel es una ACCIÓN MANUAL del equipo: sale como
-    su PROPIA fila suelta en el feed (`clase='actividad'`, `tipo='carrusel'`), NO se pliega en la
-    run como el copy/arte. Su coste vive en su fila y NO suma a la run (no se cuenta dos veces)."""
+def test_carrusel_se_pliega_en_su_run_como_etapa(cliente):
+    """Convertir un post (que ES una run) en carrusel es trabajo de PRODUCCIÓN sobre la MISMA
+    historia (una alternativa de formato a Redactar, no un proceso aparte): vive DENTRO de la
+    run de su tema como etapa "ok" tras Ilustrar, NO sale como su propia fila suelta. Su coste
+    SUMA al de la run (ya no se duplica en una fila aparte)."""
     tema = _tema_pipeline("Post que se vuelve carrusel")
     _gen_suelta(
         "Carrusel largo · Post que se vuelve carrusel",
@@ -699,22 +701,21 @@ def test_carrusel_de_un_post_sale_suelto_aunque_su_post_sea_run(cliente):
     )
     body = cliente.get("/api/pipelines").json()
     por_titulo = {x["titulo"]: x for x in body["pipelines"]}
-    # La conversión a carrusel SÍ aparece como actividad suelta (su propia fila).
-    suelta = por_titulo["Carrusel largo · Post que se vuelve carrusel"]
-    assert suelta["clase"] == "actividad"
-    assert suelta["tipo"] == "carrusel"
-    assert suelta["metricas"]["tokens"] == 999
-    # ...y su coste NO se duplica dentro de la run de su post (la run no lo absorbe).
+    # La conversión a carrusel NO aparece como su propia fila suelta.
+    assert "Carrusel largo · Post que se vuelve carrusel" not in por_titulo
     run = por_titulo["Post que se vuelve carrusel"]
     assert run["clase"] == "run"
-    assert run["metricas"]["tokens"] == 0
-    assert run["metricas"]["items"] == 0
-    # El sumatorio del feed cuenta el carrusel UNA sola vez (run 0 + suelta 999).
+    etapas = {e["clave"]: e for e in run["etapas"]}
+    assert etapas["carrusel"]["estado"] == "ok"
+    assert etapas["carrusel"]["es_ia"] is True
+    # ...y su coste SÍ suma al de la run (ya no vive duplicado en una fila aparte).
+    assert run["metricas"]["tokens"] == 999
+    assert run["metricas"]["items"] == 1
     assert body["totales"]["tokens"] == 999
     assert body["totales"]["items"] == 1
-    # El filtro por tipo lo localiza como trabajo suelto.
-    solo = cliente.get("/api/pipelines?tipo=carrusel").json()["pipelines"]
-    assert {x["titulo"] for x in solo} == {"Carrusel largo · Post que se vuelve carrusel"}
+    # El detalle enlaza el stream de la generación a la etapa (código CARRUSEL).
+    det = cliente.get(f"/api/pipelines/{tema['id']}").json()
+    assert "CARRUSEL" in det["generaciones_por_etapa"]
 
 
 def test_sugerir_hashtags_se_pliega_en_su_run_como_etapa(cliente):
@@ -1043,7 +1044,7 @@ def test_tema_futuro_sin_trabajo_sale_en_gris(cliente):
     # Las etapas de `_ETAPAS` se derivan del estado (mismas que cualquier run del tablero).
     assert [e["clave"] for e in fut["etapas"]] == [
         "fusionar", "priorizar", "admitir", "verificar", "decisor", "redactar",
-        "sugerir_hashtags", "ilustrar", "aprobar", "critica",
+        "sugerir_hashtags", "ilustrar", "carrusel", "aprobar", "critica",
     ]
     assert por_titulo["Run trabajada"]["futuro"] is False
     # Los contadores reportan el backlog.

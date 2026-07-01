@@ -32,17 +32,14 @@ _ORIGENES_RUN = frozenset({ORIGEN_PIPELINE, *ORIGENES_AUTOGEN})
 # Decisor corre ANTES que Redactar, así que sin esta entrada un tema del tablero cuya ÚNICA
 # evidencia de trabajo fuera el Decisor no contaría como "trabajado" (`_temas_trabajados`) y su
 # generación saldría como actividad independiente, huérfana de la historia a la que pertenece.
+# El Carrusel (`carrusel`, convierte el copy YA redactado en slides) NO entra aquí: nunca es la
+# ÚNICA evidencia de un tema (exige copy previo), así que no hace falta para clasificar runs —
+# ver en cambio la etapa "carrusel" de `_ETAPAS`, que sí lo pliega dentro de su run.
 _TIPO_SUGERIR_HASHTAGS = "sugerir-hashtags"
 _TIPO_DECISOR = "decisor"
 _TIPOS_TRABAJO_PIPELINE = frozenset(
     {"pipeline", TIPO_ACTIVIDAD, "autogen", _TIPO_SUGERIR_HASHTAGS, _TIPO_DECISOR}
 )
-# Tipos de generación que son una ACCIÓN MANUAL del equipo sobre un post YA hecho (no trabajo
-# del pipeline): convertir un post del feed en carrusel. SIEMPRE se listan como actividad suelta
-# —su propia fila en el feed de Producción— aunque su post sea una run, porque es un evento que
-# el equipo dispara y quiere ver en Actividad, no un coste que se diluya dentro de la run. Su
-# coste tampoco suma a la run (viajaría duplicado): vive en su fila.
-_TIPOS_ACCION_SUELTA = frozenset({"carrusel"})
 
 # Estado de etapa cuando su toggle está DESACTIVADO para la marca (1 toggle = 1 etapa): la etapa
 # no se ejecuta y se pinta "Saltada" (no bloquea el estado global ni cuenta como fallo).
@@ -56,8 +53,10 @@ _LIMITE_MAX = 200
 # trabajo del POOL (dedup + encaje/score), DERIVADO de la historia (cluster), no de un toggle.
 # Admitir/Verificar/Decisor/Redactar son TOGGLABLES por marca (activa = estado real; desactivada
 # = "saltada"). Decisor va ENTRE Verificar y Redactar (elige el formato foto/carrusel antes de
-# redactar; ver `dominio.decisor`). Aprobar es el gate humano. `estado_global` toma la primera
-# no-{ok,saltada}.
+# redactar; ver `dominio.decisor`). Carrusel va JUSTO DESPUÉS de Ilustrar: convierte el copy YA
+# redactado en slides que van DESPUÉS de la portada que produjo Ilustrar (acción del equipo, sin
+# toggle propio — nunca bloquea, como Sugerir hashtags). Aprobar es el gate humano. `estado_global`
+# toma la primera no-{ok,saltada}. Mismo orden que `detalle._ORDEN_LINEA_TIEMPO`.
 _ETAPAS = (
     ("fusionar", "Fusionar"),
     ("priorizar", "Priorizar"),
@@ -67,6 +66,7 @@ _ETAPAS = (
     ("redactar", "Redactar"),
     ("sugerir_hashtags", "Keywords"),
     ("ilustrar", "Ilustrar"),
+    ("carrusel", "Carrusel"),
     ("aprobar", "Aprobar"),
     ("critica", "Crítica"),
 )
@@ -77,7 +77,7 @@ _ETAPA_CLAVES = frozenset(clave for clave, _ in _ETAPAS)
 # Admitir (crea el tema en BD) y Aprobar (humana) NO lo son: la UI las pinta como FRONTERAS.
 _ETAPAS_IA = frozenset(
     {
-        "fusionar", "priorizar", "verificar", "decisor", "redactar",
+        "fusionar", "priorizar", "verificar", "decisor", "redactar", "carrusel",
         "sugerir_hashtags", "ilustrar", "critica",
     }
 )
@@ -89,6 +89,7 @@ _PROMPT_POR_ETAPA = {
     "VERIFICAR": "prompt/verificar",
     "DECISOR": "prompt/decisor",
     "REDACTAR": "prompt/redactar",
+    "CARRUSEL": "prompt/carrusel-desde-post",
     "SUGERIR_HASHTAGS": "prompt/sugerir-hashtags",
     "ILUSTRAR": "prompt/ilustrar",
     "CRITICA": "prompt/critica",

@@ -34,7 +34,6 @@ from ._comun import (
     _ORIGENES_RUN,
     _PREFIJO_POOL_EDITORIAL,
     _PREFIJO_POOL_FUSION,
-    _TIPOS_ACCION_SUELTA,
     _TIPOS_TRABAJO_PIPELINE,
     _UNIVERSO_MAX,
     _marca_nombre,
@@ -45,6 +44,7 @@ from ._metricas import (
     _metricas_por_run,
     _pool_por_marca,
     _runs_con_arte_ia,
+    _runs_con_carrusel,
     _runs_con_critica_ia,
     _runs_con_decisor,
     _runs_con_hashtags,
@@ -104,19 +104,17 @@ def _actividad_suelta(gens: list[dict], ids_runs: set[str], marca: str | None) -
     y toda generación cuyo `publicacion_id` apunte a una run de `ids_runs` (su coste ya viaja en
     la run; listarla otra vez sería la duplicación que teníamos con dos pestañas). Una
     generación correlacionada a un contenido que NO es run (p. ej. un copy manual sobre el
-    tablero) SÍ sale suelta. Las ACCIONES MANUALES sobre un post (`_TIPOS_ACCION_SUELTA`:
-    convertir el post en carrusel) salen suelta SIEMPRE, aunque su post sea una run: son un
-    evento que el equipo dispara y quiere ver en Actividad (su coste no suma a la run).
+    tablero) SÍ sale suelta. Convertir un post en Carrusel (`tipo='carrusel'`) NO es una
+    excepción: es trabajo de PRODUCCIÓN sobre la misma historia (alternativa a un post de foto
+    simple), así que se pliega en su run como cualquier otra etapa (ver `_ETAPAS`), no sale
+    suelta aunque su post sea una run.
     """
     sueltas = [
         actividad.normalizar_generacion(g)
         for g in gens
         if not _es_marcador_pipeline(g)
         and (g.get("tipo") or "") not in _TIPOS_TRABAJO_PIPELINE
-        and (
-            (g.get("tipo") or "") in _TIPOS_ACCION_SUELTA
-            or (g.get("publicacion_id") or "") not in ids_runs
-        )
+        and (g.get("publicacion_id") or "") not in ids_runs
     ]
     runs_agente = agentes.listar_runs_globales()
     if marca:
@@ -272,6 +270,7 @@ def _feed(
     critica_ia_runs = _runs_con_critica_ia(gens)
     hashtags_runs = _runs_con_hashtags(gens)
     decisor_runs = _runs_con_decisor(gens)
+    carrusel_runs = _runs_con_carrusel(gens)
     # Una sola lectura de las plataformas (acotada a la marca enfocada), agrupada por contenido
     # (evita N consultas). Solo se consultan piezas de las runs listadas, todas de esta marca.
     por_contenido: dict[str, list[dict]] = {}
@@ -301,6 +300,7 @@ def _feed(
             arte_ia=(it.get("id", "") or "") in arte_ia_runs,
             critica_ia=(it.get("id", "") or "") in critica_ia_runs,
             decisor_ia=(it.get("id", "") or "") in decisor_runs,
+            carrusel_ia=(it.get("id", "") or "") in carrusel_runs,
         )
         for it in runs_items
     ]

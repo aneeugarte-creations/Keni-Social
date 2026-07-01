@@ -25,6 +25,7 @@ from ._metricas import (
     _metricas_por_run,
     _pool_por_marca,
     _runs_con_arte_ia,
+    _runs_con_carrusel,
     _runs_con_critica_ia,
     _runs_con_decisor,
     _runs_con_hashtags,
@@ -323,6 +324,14 @@ def _detalle(pipeline_id: str) -> tuple[int, dict]:
         gen_decisor = _generacion_publica(decisor_gens[0].get("id", "") or "")
         if gen_decisor is not None:
             generaciones_por_etapa.setdefault("DECISOR", gen_decisor)
+    # Carrusel: su job (`tipo='carrusel'`) corre por pieza y sella el `publicacion_id` del tema
+    # (= esta run). Enlazamos el más reciente para enseñar su prompt+salida REALES en la etapa.
+    carrusel_gens = [g for g in gens if (g.get("tipo") or "") == "carrusel" and (g.get("publicacion_id") or "") == pipeline_id]
+    if carrusel_gens:
+        carrusel_gens.sort(key=lambda g: g.get("fecha_fin") or g.get("fecha_inicio") or "", reverse=True)
+        gen_carrusel = _generacion_publica(carrusel_gens[0].get("id", "") or "")
+        if gen_carrusel is not None:
+            generaciones_por_etapa.setdefault("CARRUSEL", gen_carrusel)
     # Métricas de la run + evidencia del pool y del arte IA: las MISMAS derivaciones que la
     # lista, para que detalle y tarjeta no se contradigan (p. ej. "Saltada" aquí y "ok" allá).
     # La suma incluye las etapas de POOL enlazadas (Fusionar/Encaje): la cabecera cuadra con el
@@ -343,6 +352,7 @@ def _detalle(pipeline_id: str) -> tuple[int, dict]:
             arte_ia=pipeline_id in _runs_con_arte_ia(gens),
             critica_ia=pipeline_id in _runs_con_critica_ia(gens),
             decisor_ia=pipeline_id in _runs_con_decisor(gens),
+            carrusel_ia=pipeline_id in _runs_con_carrusel(gens),
         ),
         "actividad": eventos,
         # Línea de tiempo unificada del POST: TODA la actividad real del mismo tema (incluido el

@@ -15,7 +15,6 @@ from ._comun import (
     _METRICAS_CERO,
     _PREFIJO_POOL_EDITORIAL,
     _PREFIJO_POOL_FUSION,
-    _TIPOS_ACCION_SUELTA,
 )
 
 
@@ -53,10 +52,6 @@ def _metricas_por_run(gens: list[dict], ids_runs: set[str]) -> dict[str, dict]:
     out: dict[str, dict] = {}
     for g in gens:
         if _es_marcador_pipeline(g):
-            continue
-        # Las acciones manuales sobre el post (convertir en carrusel) NO suman a la run: salen
-        # como su propia fila suelta en el feed; sumarlas aquí las contaría dos veces.
-        if (g.get("tipo") or "") in _TIPOS_ACCION_SUELTA:
             continue
         cid = (g.get("publicacion_id") or "") or cid_por_gen.get(g.get("id") or "", "")
         if cid not in ids_runs:
@@ -166,6 +161,20 @@ def _runs_con_decisor(gens: list[dict]) -> set[str]:
         cid
         for g in gens
         if (g.get("tipo") or "") == "decisor" and (cid := g.get("publicacion_id") or "")
+    }
+
+
+def _runs_con_carrusel(gens: list[dict]) -> set[str]:
+    """Ids de contenido con EVIDENCIA de que el equipo convirtió su copy en Carrusel (`tipo='carrusel'`).
+
+    La conversión se lanza POR PIEZA sobre un post YA redactado y sella el `publicacion_id` del
+    tema padre (= id de la run). Su presencia es la evidencia de que la etapa corrió, igual que
+    el arte IA lo es para Ilustrar.
+    """
+    return {
+        cid
+        for g in gens
+        if (g.get("tipo") or "") == "carrusel" and (cid := g.get("publicacion_id") or "")
     }
 
 
