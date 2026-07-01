@@ -280,13 +280,13 @@ def _nivel_global(marca: str = "") -> str:
     """
     if config.generacion_pausada() or (marca and config.generacion_pausada_marca(marca)):
         return NIVEL_PAUSADO
-    # Gate DIARIO por % del limite SEMANAL POR CUENTA: corte TOTAL (auto y manual) de las marcas de
-    # una cuenta cuando el consumo del dia de ESA cuenta alcanza su umbral. Solo aplica con `marca`
-    # (=> cuenta concreta via `ruteo_cuentas`): asi cae en la ADMISION, donde se conoce la marca, y
-    # pausa solo las marcas de la cuenta gateada. Sin marca (gate de reclamo global, jobs sin marca)
-    # NO corta por % — no hay cuenta concreta; el kill switch global sigue aparte. Inerte mientras
-    # la fuente del % de la cuenta no exista (devuelve False).
-    if marca and gate_diario.pausado_por_pct(ruteo_cuentas.cuenta_de_marca(marca)):
+    # Gate DIARIO por % del limite SEMANAL POR CUENTA: corte TOTAL (auto y manual) del trabajo de
+    # una cuenta cuando el consumo del dia de ESA cuenta alcanza su umbral. Resuelve la cuenta de
+    # CUALQUIER job via `ruteo_cuentas`: con `marca`, la cuenta de esa marca; sin marca (jobs
+    # cross-marca), la cuenta POR DEFECTO ("a"). Asi el freno aplica al trabajo de una cuenta
+    # completo —sus marcas Y su fondo sin marca— y cae tanto en la ADMISION como en el reclamo del
+    # worker. Inerte mientras la fuente del % de la cuenta no exista (devuelve False).
+    if gate_diario.pausado_por_pct(ruteo_cuentas.cuenta_de_marca(marca)):
         return NIVEL_PAUSADO
     margen = 1 + config.presupuesto_margen_manual_pct() / 100.0
     nivel_vigente = NIVEL_NORMAL

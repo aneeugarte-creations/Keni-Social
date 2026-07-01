@@ -1121,11 +1121,31 @@ def test_gate_diario_pausa_solo_las_marcas_de_la_cuenta_gateada(entorno, monkeyp
     assert _encolar_marca("claro-sports", jobspec.PRIORIDAD_AUTOMATICO)
 
 
-def test_gate_diario_sin_marca_no_corta_por_pct(entorno, monkeypatch):
-    """Sin marca concreta (cuenta indeterminada), el gate por % NO corta: el global queda NORMAL y
-    un encolado sin marca pasa. El kill switch global sigue aparte."""
-    _patch_consumo(monkeypatch, {_CUENTA_A: 50.0, _CUENTA_B: 50.0})  # ambas en umbral
-    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_NORMAL  # global sin marca: no corta por %
+def test_gate_diario_sin_marca_usa_la_cuenta_por_defecto(entorno, monkeypatch):
+    """Sin marca (cross-marca), el job rutea a la cuenta POR DEFECTO: su gate lo frena igual que a
+    las marcas de esa cuenta. Con la por defecto en umbral, el global sin marca es PAUSADO y el
+    encolado sin marca (fondo Y manual) se rechaza; la OTRA cuenta gateada no afecta al sin-marca."""
+    defecto = ruteo_cuentas.cuenta_por_defecto()
+    otra = _CUENTA_B if defecto == _CUENTA_A else _CUENTA_A
+    # Solo la cuenta por defecto alcanza su umbral; la otra sigue muy por debajo.
+    _patch_consumo(monkeypatch, {defecto: 50.0, otra: 0.0})
+    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_PAUSADO  # sin marca: gate de la por defecto
+    assert presupuesto_ia.bloqueo_inline("", es_fondo=True) == presupuesto_ia.NIVEL_PAUSADO
+    assert presupuesto_ia.bloqueo_inline("", es_fondo=False) == presupuesto_ia.NIVEL_PAUSADO  # manual
+    # ADMISION sin marca: rechaza el fondo Y el manual (mismo freno duro que las marcas).
+    with pytest.raises(generaciones.GeneracionPausadaError):
+        _encolar(jobspec.PRIORIDAD_AUTOMATICO)
+    with pytest.raises(generaciones.GeneracionPausadaError):
+        _encolar(jobspec.PRIORIDAD_MANUAL)
+
+
+def test_gate_diario_sin_marca_pasa_con_la_por_defecto_bajo_umbral(entorno, monkeypatch):
+    """Con la cuenta por defecto por debajo de su umbral, el trabajo sin marca sigue pasando aunque
+    OTRA cuenta este gateada (el sin-marca rutea solo a la por defecto)."""
+    defecto = ruteo_cuentas.cuenta_por_defecto()
+    otra = _CUENTA_B if defecto == _CUENTA_A else _CUENTA_A
+    _patch_consumo(monkeypatch, {defecto: 0.0, otra: 50.0})
+    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_NORMAL
     assert presupuesto_ia.bloqueo_inline("", es_fondo=True) is None
     assert _encolar(jobspec.PRIORIDAD_AUTOMATICO)  # encolado SIN marca: pasa
 
