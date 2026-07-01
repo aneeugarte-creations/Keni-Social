@@ -102,3 +102,29 @@ describe("edicionInline — estilo del texto (espejo del render, a escala)", () 
     expect(estiloTextoEdicion(nuevaCapaTexto({ familia: "condensada" }), 1).fontFamily).toBe('"Barlow Condensed", sans-serif');
   });
 });
+
+describe("edicionInline — sombra/contorno WYSIWYG (el texto no salta al cerrar)", () => {
+  it("la sombra se replica como text-shadow a escala, con rgba de color+opacidad", () => {
+    const c = nuevaCapaTexto({ sombra: { dx: 4, dy: 8, color: "#000000", desenfoque: 16, opacidad: 0.5 } });
+    const st = estiloTextoEdicion(c, 0.5);
+    expect(st.textShadow).toBe("2px 4px 8px rgba(0, 0, 0, 0.5)");
+  });
+
+  it("sombra sin desenfoque/opacidad => blur 0 y alfa 1 (defaults)", () => {
+    const c = nuevaCapaTexto({ sombra: { dx: 2, dy: 2, color: "#FF0000" } });
+    expect(estiloTextoEdicion(c, 1).textShadow).toBe("2px 2px 0px rgba(255, 0, 0, 1)");
+  });
+
+  it("el contorno se replica como -webkit-text-stroke (grosor a escala)", () => {
+    const c = nuevaCapaTexto({ contorno: { color: "#22D3EE", grosor: 6 } });
+    expect(estiloTextoEdicion(c, 0.5).WebkitTextStroke).toBe("3px #22D3EE");
+  });
+
+  it("sin sombra ni contorno => ambas propiedades undefined; grosor 0 no dibuja stroke", () => {
+    const sin = estiloTextoEdicion(nuevaCapaTexto(), 1);
+    expect(sin.textShadow).toBeUndefined();
+    expect(sin.WebkitTextStroke).toBeUndefined();
+    const grosorCero = estiloTextoEdicion(nuevaCapaTexto({ contorno: { color: "#000000", grosor: 0 } }), 1);
+    expect(grosorCero.WebkitTextStroke).toBeUndefined();
+  });
+});

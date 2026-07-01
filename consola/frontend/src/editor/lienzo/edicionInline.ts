@@ -6,16 +6,18 @@
 //    copy de muestra (muestra.ts), así que la edición escribe AHÍ para que el cambio se refleje
 //    en el lienzo. Sin muestra se edita `capa.texto`.
 //  · QUÉ aspecto tiene el editor: los MISMOS estilos que el texto pintado (familia/peso/cursiva,
-//    tamaño·escala, color, alineación, interlineado, interletra·escala, mayúsculas, valign y
-//    rotación), para escribir "sobre la imagen" y no en una caja genérica. El contorno, la sombra
-//    y el degradado del relleno no se replican (texto plano del color base mientras se edita); el
-//    auto-encogido tampoco: divergencias asumidas solo durante la edición.
+//    tamaño·escala, color, alineación, interlineado, interletra·escala, mayúsculas, valign,
+//    rotación, y la SOMBRA/CONTORNO vía `text-shadow`/`-webkit-text-stroke`), para escribir "sobre
+//    la imagen" y no en una caja genérica, sin que el texto "salte" al cerrar. El degradado del
+//    relleno no se replica (texto plano del color base mientras se edita) ni el auto-encogido:
+//    divergencias asumidas solo durante la edición.
 
 import type { CSSProperties } from "react";
 
 import { tieneCursiva } from "../../lib/placa/dibujar.mjs";
 import { familiaReal } from "../capas/tipografia";
 import type { Alineacion, CapaTexto } from "../documento";
+import { hexARgb } from "../legibilidad";
 import { copyMuestra } from "../muestra";
 
 /** Dónde guarda la edición: el texto de la capa, o el copy de muestra (titular / pleca). */
@@ -68,10 +70,24 @@ export function estiloCajaEdicion(c: CapaTexto, escala: number): CSSProperties {
   };
 }
 
+// Color hex (+ opacidad 0..1) a `rgba(...)` CSS, para la sombra con opacidad propia.
+function rgbaDe(hex: string, opacidad = 1): string {
+  const [r, g, b] = hexARgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, opacidad))})`;
+}
+
+// `text-shadow` CSS equivalente a la sombra de la capa, a escala (dx/dy/desenfoque en px de tablero).
+function textShadowDe(c: CapaTexto, escala: number): string | undefined {
+  if (!c.sombra) return undefined;
+  const { dx, dy, color, desenfoque = 0, opacidad = 1 } = c.sombra;
+  return `${dx * escala}px ${dy * escala}px ${desenfoque * escala}px ${rgbaDe(color, opacidad)}`;
+}
+
 /**
  * Estilo del TEXTO editable: espejo CSS de lo que pinta Konva (`estiloFuente`/`textoMuestra`),
  * a la escala actual del tablero. La cursiva solo si la familia real la tiene registrada (misma
- * regla que el render y el export: nada de oblicuas sintéticas).
+ * regla que el render y el export: nada de oblicuas sintéticas). La sombra (`text-shadow`) y el
+ * contorno (`-webkit-text-stroke`) se replican a escala para que el texto no "salte" al cerrar.
  */
 export function estiloTextoEdicion(c: CapaTexto, escala: number): CSSProperties {
   const cursiva = !!c.cursiva && tieneCursiva(familiaReal(c.familia));
@@ -86,5 +102,9 @@ export function estiloTextoEdicion(c: CapaTexto, escala: number): CSSProperties 
     caretColor: c.color,
     textAlign: ALINEACION_CSS[c.alineacion] ?? "left",
     textTransform: c.mayusculas ? "uppercase" : undefined,
+    textShadow: textShadowDe(c, escala),
+    WebkitTextStroke: c.contorno && c.contorno.grosor > 0
+      ? `${c.contorno.grosor * escala}px ${c.contorno.color}`
+      : undefined,
   };
 }
