@@ -1405,6 +1405,74 @@ def _migrar_fuentes_marcas(con: Any) -> None:
                 (json.dumps([fila["marca"]], ensure_ascii=False), fila["id"]),
             )
 
+
+def _marcas_de_fila(marcas_crudo: Any, marca: Any) -> list[str]:
+    """Lista de marcas de una fila de `fuentes_rss` (JSON `marcas`; fallback a [marca])."""
+    try:
+        lista = json.loads(marcas_crudo or "[]")
+    except (ValueError, TypeError):
+        lista = []
+    out = [str(m) for m in lista if m] if isinstance(lista, list) else []
+    if not out and marca:
+        out = [str(marca)]
+    return out
+
+
+def _consolidar_fuentes_duplicadas(con: Any) -> None:
+    """Consolida fuentes RSS duplicadas (misma url en varias marcas) en UNA fuente multimarca.
+
+    Antes de la multimarca, una fuente compartida entre marcas se daba de alta como N filas (una
+    por marca): ingesta/clustering/traducción por duplicado. Esta one-shot agrupa por url, elige la
+    fila canónica (la más antigua), le une TODAS las marcas del grupo en `marcas`, RE-APUNTA los
+    items históricos de las redundantes a la canónica (preserva el histórico; caen en la forma
+    (canónica, marcaY, clave) sin colisionar con el índice único) y DESACTIVA las redundantes
+    (activo=0, auditables). Idempotente y NO destructiva (no borra fuentes ni clusters).
+    """
+    if not _tabla_existe(con, "fuentes_rss"):
+        return
+    cols = _columnas_existentes(con, "fuentes_rss")
+    if "marcas" not in cols or "url" not in cols:
+        return
+    filas = con.execute(
+        "SELECT id, url, marca, marcas, creado FROM fuentes_rss WHERE url <> ''"
+    ).fetchall()
+    grupos: dict[str, list[Any]] = {}
+    for f in filas:
+        grupos.setdefault((f["url"] or "").strip(), []).append(f)
+    for url, rows in grupos.items():
+        if not url or len(rows) < 2:
+            continue
+        marcas_union: list[str] = []
+        for r in rows:
+            for m in _marcas_de_fila(r["marcas"], r["marca"]):
+                if m not in marcas_union:
+                    marcas_union.append(m)
+        if len(marcas_union) < 2:
+            continue  # misma url pero una sola marca real: nada que consolidar
+        canon = min(rows, key=lambda r: ((r["creado"] or ""), r["id"]))
+        redundantes = [r["id"] for r in rows if r["id"] != canon["id"]]
+        if not redundantes:
+            continue
+        con.execute(
+            "UPDATE fuentes_rss SET marcas = ? WHERE id = ?",
+            (json.dumps(marcas_union, ensure_ascii=False), canon["id"]),
+        )
+        marks = ",".join("?" for _ in redundantes)
+        # Re-apunta los items de las redundantes a la canónica SIN colisionar con el índice único
+        # (fuente_id, marca, clave): solo los que la canónica no tenga ya para esa (marca, clave).
+        con.execute(
+            "UPDATE noticias_items SET fuente_id = ? "  # noqa: S608 -- marcadores parametrizados
+            f"WHERE fuente_id IN ({marks}) "
+            "AND NOT EXISTS (SELECT 1 FROM noticias_items j "
+            "WHERE j.fuente_id = ? AND j.marca = noticias_items.marca "
+            "AND j.clave = noticias_items.clave)",
+            (canon["id"], *redundantes, canon["id"]),
+        )
+        con.execute(
+            f"UPDATE fuentes_rss SET activo = 0 WHERE id IN ({marks})",  # noqa: S608 -- marcadores
+            tuple(redundantes),
+        )
+
 # COBERTURA + traducción + verificación (Ola D): columnas nuevas de `noticias_clusters`. El
 # `CREATE TABLE` ya las declara para BDs nuevas; estas migran las BDs viejas (mismo patrón
 # idempotente). Algunas pueden existir ya (orden de despliegue de agentes en paralelo): el

@@ -64,6 +64,7 @@ from .migraciones_columnas import (
     _migrar_columnas_eventos_rota,
     _migrar_columnas_fuentes_rss,
     _migrar_fuentes_marcas,
+    _consolidar_fuentes_duplicadas,
     _migrar_columnas_noticias_algoritmo,
     _migrar_columnas_noticias_clusters,
     _migrar_columnas_noticias_items,
@@ -615,6 +616,11 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # la `marca` singular. Permite que una fuente sirva a varias marcas (ingesta una vez, fan-out
     # por marca aguas abajo). El DDL la trae para BDs virgenes; esta migra las viejas. Idempotente.
     Migracion("0070-fuentes-marcas", _migrar_fuentes_marcas),
+    # CONSOLIDACIÓN de fuentes duplicadas: las fuentes con la misma url dadas de alta una vez por
+    # marca (BBC Mundo ×3, BBC World/NYT World/Al Jazeera/Guardian World ×2 entre unotv/unotv-us/
+    # fundacion) se funden en UNA multimarca; re-apunta items históricos y desactiva las redundantes.
+    # Corre tras 0070 (que ya backfilleó `marcas`). Idempotente y no destructiva.
+    Migracion("0071-consolidar-fuentes-duplicadas", _consolidar_fuentes_duplicadas),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

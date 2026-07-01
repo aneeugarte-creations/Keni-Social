@@ -332,6 +332,59 @@ def test_backfill_idioma_fuente_rellena_desde_preset(cliente):  # noqa: ARG001
     assert repos.obtener_fuente_rss(fuente["id"])["idioma"] == "es"
 
 
+def test_consolidar_fuentes_duplicadas(cliente):  # noqa: ARG001
+    """La misma url dada de alta en 3 marcas se funde en UNA multimarca: la más antigua reúne las
+    marcas, los items históricos se re-apuntan a ella y las redundantes quedan desactivadas."""
+    from keni_consola import repos
+    from keni_consola._db_comun import _conectar
+    from keni_consola._db_core.migraciones_columnas import _consolidar_fuentes_duplicadas
+
+    url = "https://feeds.ej.com/world.xml"
+    f1 = repos.crear_fuente_rss("Mundo unotv", url, marca="unotv")
+    f2 = repos.crear_fuente_rss("Mundo us", url, marca="unotv-us")
+    f3 = repos.crear_fuente_rss("Mundo fundacion", url, marca="fundacion")
+    # Un item histórico por fuente redundante (con su marca).
+    repos.crear_noticias_items([
+        {"fuente_id": f2["id"], "marca": "unotv-us", "clave": "url:ej.com/a",
+         "titulo": "A", "url": "https://ej.com/a"},
+        {"fuente_id": f3["id"], "marca": "fundacion", "clave": "url:ej.com/a",
+         "titulo": "A", "url": "https://ej.com/a"},
+    ])
+
+    def _correr():
+        con = _conectar()
+        try:
+            _consolidar_fuentes_duplicadas(con)
+            con.commit()
+        finally:
+            con.close()
+
+    _correr()
+
+    # f1 (la más antigua) es canónica: reúne las 3 marcas y sigue activa.
+    canon = repos.obtener_fuente_rss(f1["id"])
+    assert set(canon["marcas"]) == {"unotv", "unotv-us", "fundacion"}
+    assert canon["activo"] is True
+    # Redundantes desactivadas (auditables, no borradas).
+    assert repos.obtener_fuente_rss(f2["id"])["activo"] is False
+    assert repos.obtener_fuente_rss(f3["id"])["activo"] is False
+    # Items históricos de las redundantes re-apuntados a la canónica, conservando su marca.
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT fuente_id, marca FROM noticias_items WHERE clave = ? ORDER BY marca",
+            ("url:ej.com/a",),
+        ).fetchall()
+    finally:
+        con.close()
+    assert [(r["fuente_id"], r["marca"]) for r in filas] == [
+        (f1["id"], "fundacion"), (f1["id"], "unotv-us")
+    ]
+    # Idempotente: re-correr no cambia el resultado.
+    _correr()
+    assert set(repos.obtener_fuente_rss(f1["id"])["marcas"]) == {"unotv", "unotv-us", "fundacion"}
+
+
 def test_post_activar_idempotente(cliente, monkeypatch):
     """Activar el mismo preset dos veces no duplica la fuente."""
     from keni_consola.dominio import http_feed
