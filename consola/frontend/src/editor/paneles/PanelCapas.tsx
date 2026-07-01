@@ -19,6 +19,7 @@ import { urlMedia } from "@/lib/api";
 import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaTexto } from "../documento";
 import { useEditor, useStoreEditor } from "../usarEditor";
 
+import { BarraCapasAcciones } from "./BarraCapasAcciones";
 import { ICONO_TIPO, nombreCapa } from "./lib";
 
 // Miniatura/icono de una capa para el panel.
@@ -66,6 +67,23 @@ export function PanelCapas() {
 
   // Fila como FUNCIÓN (no componente): se llama inline para no crear un tipo de componente nuevo
   // en cada render (que remontaría las filas y perdería el foco al renombrar).
+  // Ojo/candado sobre TODA la multi-selección cuando la fila pulsada forma parte de ella: el nuevo
+  // estado (`visible`/`bloqueada`) se aplica a todas las capas seleccionadas de una vez, no solo a
+  // la fila. Los huecos de foto (`es_foto`) quedan SIEMPRE bloqueados: no se tocan al bloquear en
+  // lote. Con selección única (o fila fuera de la multi) afecta solo a esa capa.
+  const esFotoCapa = (c: Capa) => c.tipo === "imagen" && !!(c as CapaImagen).es_foto;
+  const idsAfectados = (capa: Capa) =>
+    seleccionMulti.length > 1 && seleccionMulti.includes(capa.id) ? seleccionMulti : [capa.id];
+  const alternarVisible = (capa: Capa) => {
+    const visible = !capa.visible;
+    for (const id of idsAfectados(capa)) store.getState().actualizar(id, { visible } as Partial<Capa>);
+  };
+  const alternarBloqueada = (capa: Capa) => {
+    const bloqueada = !capa.bloqueada;
+    const capasSel = capas.filter((c) => idsAfectados(capa).includes(c.id) && !esFotoCapa(c));
+    for (const c of capasSel) store.getState().actualizar(c.id, { bloqueada } as Partial<Capa>);
+  };
+
   const fila = (capa: Capa) => {
     // El HUECO DE FOTO (`es_foto`) nace bloqueado (no se arrastra por error en el lienzo) pero SÍ se
     // puede borrar desde su papelera; al quitar el último hueco el editor avisa con el chip ámbar.
@@ -123,7 +141,7 @@ export function PanelCapas() {
       )}
       <button
         className="shrink-0 text-muted-foreground hover:text-foreground"
-        onClick={(e) => { e.stopPropagation(); store.getState().actualizar(capa.id, { visible: !capa.visible } as Partial<Capa>); }}
+        onClick={(e) => { e.stopPropagation(); alternarVisible(capa); }}
         title={capa.visible ? "Ocultar" : "Mostrar"}
       >
         {capa.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
@@ -131,7 +149,7 @@ export function PanelCapas() {
       <button
         className="shrink-0 text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
         disabled={esFoto}
-        onClick={(e) => { e.stopPropagation(); store.getState().actualizar(capa.id, { bloqueada: !capa.bloqueada } as Partial<Capa>); }}
+        onClick={(e) => { e.stopPropagation(); alternarBloqueada(capa); }}
         title={esFoto ? "Hueco de foto: siempre bloqueado" : capa.bloqueada ? "Desbloquear" : "Bloquear"}
       >
         {capa.bloqueada ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
@@ -174,6 +192,9 @@ export function PanelCapas() {
           )}
         </div>
       </div>
+      {seleccionMulti.length > 0 && (
+        <BarraCapasAcciones store={store} seleccion={seleccion} seleccionMulti={seleccionMulti} />
+      )}
       <div className="flex-1 overflow-auto">
         {ordenadas.length === 0 && (
           <p className="p-3 text-sm text-muted-foreground">Sin capas. Añade texto, marco o imagen desde «Elementos».</p>
