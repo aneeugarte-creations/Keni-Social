@@ -4,8 +4,9 @@
  * Se elige una campaña (definida por sus hashtags) y un periodo, y se ven KPIs
  * (visualizaciones, interacciones, engagement) con comparativa, la tendencia diaria
  * y la tabla de piezas del periodo —solo las piezas cuyo texto lleva alguno
- * de los hashtags—. La marca la fija el switch global de la barra superior; cada
- * campaña pertenece a una marca.
+ * de los hashtags—. Las campañas son MULTIMARCA: no se acotan al switch de marca
+ * de la barra superior, una misma campaña puede abarcar varias marcas a la vez
+ * (cada pieza de la tabla lleva su propia marca).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckSquare, Download, Link2, Megaphone, Pencil, Plus, Square, Trash2 } from "lucide-react";
