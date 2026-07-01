@@ -545,7 +545,7 @@ def _partir_en_subtemas(
     etiquetados_ids = [i for i in ids if i in por_id and i not in faltantes_ids]
 
     if etiquetados_ids and config.subtema_incremental_activo():
-        existentes = [str(por_id[i].get("subtema") or "").strip() for i in etiquetados_ids]
+        existentes = list(dict.fromkeys(str(por_id[i].get("subtema") or "").strip() for i in etiquetados_ids))
         nuevos = [por_id[i] for i in faltantes_ids]
         try:
             grupos = proponer_subtemas_incremental(
@@ -555,7 +555,8 @@ def _partir_en_subtemas(
             _log.exception("fusionar_semantica: fallo clasificando subtemas nuevos de «%s».", tema[:60])
             return 0
     else:
-        familia = [por_id[i] for i in faltantes_ids]
+        todo_ids = ids if etiquetados_ids else faltantes_ids
+        familia = [por_id[i] for i in todo_ids if i in por_id]
         if len(familia) < 2:
             return 0
         try:
