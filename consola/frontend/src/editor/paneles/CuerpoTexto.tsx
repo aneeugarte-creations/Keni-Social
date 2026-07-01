@@ -1,6 +1,9 @@
 // Inspector · capa de TEXTO: contenido, rol/binding, tipografía, efectos (presets + manual),
 // relleno degradado y chip.
 
+import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
+
+import { pesoDisponible } from "../capas/pesosFamilia";
 import { ColorControl } from "../ColorControl";
 
 import type { Capa, CapaTexto } from "../documento";
@@ -53,6 +56,11 @@ export function CuerpoTexto({ capa, set, familias }: PropsCuerpoCapa<CapaTexto>)
           placeholder={capa.binding ? "Texto de ejemplo (se sustituye por el de la pieza)…" : "Texto…"}
           className="min-h-[60px] rounded border border-input bg-background p-1.5 text-sm"
         />
+        {/* Longitud del texto de la placa. La placa no se ata a una red concreta (el mismo titular
+            viaja a varias), así que solo el conteo, sin tope. */}
+        <div className="flex justify-end">
+          <ContadorCaracteres caracteres={capa.texto.length} limite={null} />
+        </div>
         <Campo etiqueta="Mayúsculas">
           <input type="checkbox" checked={capa.mayusculas} onChange={(e) => set({ mayusculas: e.target.checked } as Partial<Capa>)} />
         </Campo>
@@ -98,16 +106,21 @@ export function CuerpoTexto({ capa, set, familias }: PropsCuerpoCapa<CapaTexto>)
         <div className="grid grid-cols-2 gap-2">
           <Campo etiqueta="Tamaño"><Num valor={capa.tamano} onChange={(v) => set({ tamano: v } as Partial<Capa>)} /></Campo>
           <Campo etiqueta="Peso">
+            {/* Atenúa (patrón Canva) los pesos que la familia NO embebe: elegirlos caería a la cara
+                más cercana sin avisar. `pesoDisponible` deja pasar las fuentes de marca desconocidas. */}
             <select
               value={capa.peso}
               onChange={(e) => set({ peso: Number(e.target.value) } as Partial<Capa>)}
               className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
             >
-              {PESOS.map((p) => (
-                <option key={p.valor} value={p.valor}>
-                  {p.etiqueta}
-                </option>
-              ))}
+              {PESOS.map((p) => {
+                const hay = pesoDisponible(capa.familia, p.valor);
+                return (
+                  <option key={p.valor} value={p.valor} disabled={!hay}>
+                    {hay ? p.etiqueta : `${p.etiqueta} — no disponible`}
+                  </option>
+                );
+              })}
               {/* Si la capa trae un peso fuera de la lista, lo mostramos igual (no lo perdemos). */}
               {!PESOS.some((p) => p.valor === capa.peso) && (
                 <option value={capa.peso}>{capa.peso}</option>
