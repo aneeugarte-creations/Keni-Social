@@ -11,10 +11,13 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-/** Clases de un item del sidebar (estilo shadcn: activo resaltado con acento). */
+/** Clases de un item del sidebar (estilo shadcn: activo resaltado con acento).
+ *  `py-2.5` (no `py-2`): con `text-sm` da una fila de 40px, la misma altura que el icono `h-10` del
+ *  rail colapsado — si difieren, cada fila siguiente acumula el desfase y la lista entera parece
+ *  "saltar" verticalmente al abrir/cerrar la barra. */
 function clasesItem({ isActive }: { isActive: boolean }) {
   return cn(
-    "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+    "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors",
     isActive
       ? "bg-accent font-medium text-foreground"
       : "font-normal text-foreground hover:bg-accent hover:text-foreground",
@@ -143,17 +146,25 @@ export function Sidebar({
       aria-label="Navegación principal"
       className="flex h-full w-full flex-col border-r border-border bg-background"
     >
-      <div className="flex h-12 items-center border-b border-border px-2">
+      {/* `pl-3.5` (no `px-2`): el botón de CuentaUsuario suma su propio `px-2`, así el avatar
+          queda centrado en el mismo x que colapsado (14+8=22px de borde, igual que el `p-1.5` del
+          botón `soloIcono` centrado en el rail de 64px) — si no, el avatar salta ~6px al expandir. */}
+      <div className="flex h-12 items-center border-b border-border pl-3.5 pr-2">
         <CuentaUsuario onAbiertoChange={onCuentaAbierta} />
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-4">
+      {/* `py-3` (no `py-4`): mismo padding vertical que el contenedor del rail colapsado — si no, la
+          primera fila ya arranca 4px más abajo que colapsado y el desfase se arrastra al resto. */}
+      <div className="flex-1 overflow-y-auto px-3 py-3">
         {bloques.map((bloque, i) => (
           <div key={bloque.etiqueta || i}>
             {/* Sin encabezado visible: los bloques se separan con un hilo discreto (como el rail) y
-                el nombre del bloque vive como rótulo accesible de la lista, no como texto. */}
+                el nombre del bloque vive como rótulo accesible de la lista, no como texto.
+                `space-y-1`/`my-2` (no `space-y-0.5`): mismo espaciado que el rail colapsado
+                (`gap-1`/`my-1` a escala de icono, aquí a escala de fila) — si difieren, la lista
+                se desalinea verticalmente al abrir/cerrar la barra. */}
             {i > 0 && <hr className="my-2 border-border" aria-hidden="true" />}
-            <ul className="space-y-0.5" aria-label={bloque.etiqueta || undefined}>
+            <ul className="space-y-1" aria-label={bloque.etiqueta || undefined}>
               {bloque.items.map((item) => {
                 const Icono = iconoDe(item.icono);
                 return (

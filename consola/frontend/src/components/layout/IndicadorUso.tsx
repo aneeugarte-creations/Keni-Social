@@ -6,16 +6,18 @@ import { cn } from "@/lib/utils";
 
 /**
  * Indicador SUTIL del uso de las cuentas de Claude del servidor, alojado en el pie del sidebar.
- * Expandido pinta, por cuenta, una FRANJA FINA con tres medidores en fila (Semana / 24h / 5h), cada
- * uno con su % y una barra de progreso breve; la cabecera «Cuenta A/B» solo aparece en la vista
- * "Todas" (varias cuentas), porque con una sola es su cuenta siempre. Colapsado, un anillo fino con
- * el % del límite que ANTES bloqueará (burn rate, el resto va al tooltip).
+ * Expandido pinta, por cuenta, UNA sola línea («Uso» + %) con una barra de progreso fina debajo; la
+ * cabecera «Cuenta A/B» solo aparece en la vista "Todas" (varias cuentas), porque con una sola es su
+ * cuenta siempre. Colapsado, un anillo fino con el % del límite que ANTES bloqueará (burn rate). En
+ * ambos casos el desglose completo (Semana/24h/5h) vive en el tooltip, no a la vista: así el pie
+ * ocupa una línea en vez de tres.
  *
- * EL QUE PRIMERO SE AGOTA / BLOQUEA: «Semana» es el mayor de all-models vs cuota Sonnet, «24h» el
- * cupo del día del límite que primero se agota (backend `uso.dia`), y el anillo colapsado el que
- * antes tocará el 100 % por burn rate (`limiteMasUrgente`, ventanas duras 5h/semana/Sonnet). Así
- * cada barra muestra el límite que de verdad frena; el tooltip rotula "(Sonnet)" cuando ata Sonnet
- * y "Antes al 100%: …" con la predicción.
+ * EL NÚMERO QUE SE VE: la ventana SEMANAL que primero se agota (el mayor de all-models vs cuota
+ * Sonnet) — es el límite de mayor alcance y el que de verdad frena el trabajo de la semana. «24h» y
+ * «5h» siguen calculándose (van en el tooltip) pero no compiten por espacio visual con el número
+ * principal. El anillo colapsado usa en cambio el burn rate (`limiteMasUrgente`, el que antes
+ * tocará el 100 % por ventanas duras 5h/semana/Sonnet), porque ahí sí importa la predicción, no solo
+ * el nivel actual.
  *
  * QUÉ CUENTAS muestra: el backend devuelve solo las que el usuario PUEDE ver (suelo por marcas);
  * de esas, el selector de marca activo (`useMarcaActiva`) decide cuál(es) PINTAR — en "Todas"
@@ -103,54 +105,6 @@ function tooltipCompleto(uso: UsoCuenta): string {
   return partes.join(" · ");
 }
 
-/** Medidor compacto (una CELDA de la franja): etiqueta + % en una fila y, debajo, una barra de
- *  progreso fina rellena a ancho completo. Pensado para ir en fila con sus hermanos (`flex-1`). */
-function MiniMedidor({
-  etiqueta,
-  pct,
-  rojo,
-}: {
-  etiqueta: string;
-  pct: number | null;
-  rojo: boolean;
-}) {
-  const valor = pctEntero(pct);
-  const tiene = valor != null;
-  return (
-    <div className="min-w-0 flex-1 space-y-1">
-      <div className="flex items-baseline justify-between gap-1">
-        <span className="text-[10px] uppercase leading-none tracking-wide text-muted-foreground/70">
-          {etiqueta}
-        </span>
-        <span
-          className={cn(
-            "text-[10px] leading-none tabular-nums",
-            rojo ? "text-destructive" : "text-muted-foreground",
-          )}
-        >
-          {tiene ? `${valor}%` : "—"}
-        </span>
-      </div>
-      <div
-        className="h-1 w-full overflow-hidden rounded-full bg-border"
-        role="progressbar"
-        aria-label={`Uso ${etiqueta}`}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={valor ?? 0}
-      >
-        <div
-          className={cn(
-            "h-full rounded-full transition-[width] duration-500",
-            rojo ? "bg-destructive" : "bg-foreground",
-          )}
-          style={{ width: `${tiene ? valor : 0}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
 /** Círculo del rail colapsado: un anillo fino con el % del límite que ANTES bloqueará (burn rate);
  *  el desglose va al tooltip. */
 function CirculoUso({ pct, rojo }: { pct: number | null; rojo: boolean }) {
@@ -191,25 +145,50 @@ function CirculoUso({ pct, rojo }: { pct: number | null; rojo: boolean }) {
   );
 }
 
-/** Bloque expandido de UNA cuenta: sus tres medidores en UNA FRANJA (fila) + el aviso rojo. La
- *  cabecera "Cuenta A/B" solo cuando hay VARIAS cuentas (vista "Todas"): con una sola es su cuenta
- *  siempre. */
+/** Bloque expandido de UNA cuenta: UNA línea («Uso» + %) + su barra, más el aviso rojo. El número es
+ *  el binding semanal (el límite de mayor alcance); el desglose completo va al tooltip. La cabecera
+ *  "Cuenta A/B" solo cuando hay VARIAS cuentas (vista "Todas"): con una sola es su cuenta siempre. */
 function BloqueCuenta({ uso, etiquetada }: { uso: UsoCuenta; etiquetada: boolean }) {
   const rojo = uso.alerta_roja;
   const alerta = mensajeRojo(uso);
+  const pct = pctEntero(semanaBinding(uso).pct);
+  const tiene = pct != null;
+  const tooltip = tooltipCompleto(uso);
   return (
-    <Tooltip label={tooltipCompleto(uso)} side="top" className="w-full">
-      <div className="w-full space-y-1" aria-label={tooltipCompleto(uso)}>
+    <Tooltip label={tooltip} side="top" className="w-full">
+      <div className="w-full space-y-1" aria-label={tooltip}>
         {etiquetada ? (
           <p className="truncate px-0.5 text-[10px] font-medium text-muted-foreground/80">
             {etiquetaCuenta(uso)}
           </p>
         ) : null}
         {alerta ? <p className="px-0.5 text-[10px] font-medium text-destructive">{alerta}</p> : null}
-        <div className="flex items-end gap-2.5">
-          <MiniMedidor etiqueta="Semana" pct={semanaBinding(uso).pct} rojo={rojo} />
-          <MiniMedidor etiqueta="24h" pct={dia24hPct(uso)} rojo={rojo} />
-          <MiniMedidor etiqueta="5h" pct={uso.sesion_5h_pct} rojo={rojo} />
+        <div className="flex items-baseline justify-between gap-1 px-0.5">
+          <span className="text-[11px] text-muted-foreground">Uso</span>
+          <span
+            className={cn(
+              "text-xs font-medium tabular-nums",
+              rojo ? "text-destructive" : "text-foreground",
+            )}
+          >
+            {tiene ? `${pct}%` : "—"}
+          </span>
+        </div>
+        <div
+          className="h-0.5 w-full overflow-hidden rounded-full bg-border"
+          role="progressbar"
+          aria-label="Uso"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={pct ?? 0}
+        >
+          <div
+            className={cn(
+              "h-full rounded-full transition-[width] duration-500",
+              rojo ? "bg-destructive" : "bg-foreground",
+            )}
+            style={{ width: `${tiene ? pct : 0}%` }}
+          />
         </div>
       </div>
     </Tooltip>
@@ -252,10 +231,21 @@ function IndicadorUsoContenido({ colapsado }: { colapsado: boolean }) {
       );
     }
     return (
-      <div className="flex items-end gap-2.5">
-        <MiniMedidor etiqueta="Semana" pct={null} rojo={false} />
-        <MiniMedidor etiqueta="24h" pct={null} rojo={false} />
-        <MiniMedidor etiqueta="5h" pct={null} rojo={false} />
+      <div className="w-full space-y-1 px-0.5">
+        <div className="flex items-baseline justify-between gap-1">
+          <span className="text-[11px] text-muted-foreground">Uso</span>
+          <span className="text-xs font-medium tabular-nums text-muted-foreground">—</span>
+        </div>
+        <div
+          className="h-0.5 w-full overflow-hidden rounded-full bg-border"
+          role="progressbar"
+          aria-label="Uso"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={0}
+        >
+          <div className="h-full rounded-full bg-foreground" style={{ width: "0%" }} />
+        </div>
       </div>
     );
   }

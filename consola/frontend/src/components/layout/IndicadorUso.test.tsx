@@ -60,12 +60,10 @@ function renderIndicador(
 }
 
 describe("IndicadorUso", () => {
-  it("estado de carga (sin dato) es NEUTRO, no rojo: muestra «—» y los tres medidores", () => {
+  it("estado de carga (sin dato) es NEUTRO, no rojo: muestra «—»", () => {
     renderIndicador({ data: undefined });
-    expect(screen.getByText("Semana")).toBeInTheDocument();
-    expect(screen.getByText("24h")).toBeInTheDocument();
-    expect(screen.getByText("5h")).toBeInTheDocument();
-    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+    expect(screen.getByText("Uso")).toBeInTheDocument();
+    expect(screen.getByText("—")).toBeInTheDocument();
     expect(screen.queryByText(/Sin cuenta|100%/)).not.toBeInTheDocument();
   });
 
@@ -75,7 +73,7 @@ describe("IndicadorUso", () => {
     expect(screen.queryByText("40%")).not.toBeInTheDocument();
   });
 
-  it("barra «24h»: pinta el cupo del día (consumo/umbral del límite que primero se agota)", () => {
+  it("barra «24h»: el cupo del día (consumo/umbral del límite que primero se agota) va en el tooltip", () => {
     renderIndicador(
       {
         data: {
@@ -84,14 +82,13 @@ describe("IndicadorUso", () => {
       },
       "claro-sports",
     );
-    expect(screen.getByText("24h")).toBeInTheDocument();
-    expect(screen.getByText("70%")).toBeInTheDocument(); // 10 / 14.3 ≈ 70 %
+    expect(screen.getByLabelText(/24h 70% \(Sonnet\)/)).toBeInTheDocument(); // 10 / 14.3 ≈ 70 %
   });
 
-  it("una cuenta (marca concreta): SIN cabecera (es su cuenta siempre), solo sus porcentajes", () => {
+  it("una cuenta (marca concreta): SIN cabecera (es su cuenta siempre); un solo número (Semana), el resto al tooltip", () => {
     renderIndicador({ data: { cuentas: [cuenta({})] } }, "claro-sports");
     expect(screen.getByText("42%")).toBeInTheDocument();
-    expect(screen.getByText("18%")).toBeInTheDocument();
+    expect(screen.getByLabelText(/5h 18%/)).toBeInTheDocument();
     // Con una sola cuenta no se rotula cabecera: ni "Cuenta A" ni la lista de marcas.
     expect(screen.queryByText("Cuenta A")).not.toBeInTheDocument();
     expect(screen.queryByText("Claro Sports")).not.toBeInTheDocument();
@@ -108,9 +105,9 @@ describe("IndicadorUso", () => {
 
   it("marca concreta filtra a la cuenta de esa marca aunque el back devuelva ambas", () => {
     renderIndicador({ data: { cuentas: [cuenta({}), CUENTA_B] } }, "unotv");
-    // Solo la cuenta B (la de unotv): sus porcentajes presentes; los de A ausentes.
+    // Solo la cuenta B (la de unotv): su número está presente; el de A ausente.
     expect(screen.getByText("70%")).toBeInTheDocument();
-    expect(screen.getByText("30%")).toBeInTheDocument();
+    expect(screen.getByLabelText(/5h 30%/)).toBeInTheDocument();
     expect(screen.queryByText("42%")).not.toBeInTheDocument();
     // Una sola cuenta tras el filtro: no se rotula la etiqueta de marca (igual que antes).
     expect(screen.queryByText("UnoTV · Nación Gamer · Fundación")).not.toBeInTheDocument();
