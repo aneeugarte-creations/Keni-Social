@@ -127,8 +127,36 @@ def _validar_marcas(marcas_ids: list[str]) -> list[str]:
 # --- CRUD de configuración ----------------------------------------------------
 
 
+def _validar_precio_venta(valor: Any) -> float:
+    """Precio de venta de la campaña (MXN); 0 = sin definir. No puede ser negativo."""
+    try:
+        precio = float(valor)
+    except (TypeError, ValueError):
+        raise CampaniaInvalida("El precio de venta debe ser un número.") from None
+    if precio < 0:
+        raise CampaniaInvalida("El precio de venta no puede ser negativo.")
+    return precio
+
+
+def _validar_margen_objetivo(valor: Any) -> float:
+    """Margen mínimo (%) a proteger; entre 0 y 100."""
+    try:
+        margen = float(valor)
+    except (TypeError, ValueError):
+        raise CampaniaInvalida("El margen objetivo debe ser un número.") from None
+    if not 0 <= margen <= 100:
+        raise CampaniaInvalida("El margen objetivo debe estar entre 0 y 100.")
+    return margen
+
+
 def crear_campania(
-    *, marcas_ids: list[str], nombre: str, hashtags: list[str], etiqueta_web: str = ""
+    *,
+    marcas_ids: list[str],
+    nombre: str,
+    hashtags: list[str],
+    etiqueta_web: str = "",
+    precio_venta: Any = 0,
+    margen_objetivo_pct: Any = 40,
 ) -> dict[str, Any]:
     """Crea una campaña (multimarca) validando marcas, nombre y al menos un hashtag."""
     marcas_validas = _validar_marcas(marcas_ids)
@@ -143,6 +171,8 @@ def crear_campania(
         nombre=nombre,
         hashtags=tags,
         etiqueta_web=normalizar_etiqueta_web(etiqueta_web),
+        precio_venta=_validar_precio_venta(precio_venta),
+        margen_objetivo_pct=_validar_margen_objetivo(margen_objetivo_pct),
     )
     return _enriquecer(cam)
 
@@ -159,7 +189,8 @@ def obtener_campania(campania_id: str) -> dict[str, Any] | None:
 
 
 def actualizar_campania(campania_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
-    """Edita parcialmente una campaña (nombre/marcas/hashtags/activa); None si no existe."""
+    """Edita parcialmente una campaña (nombre/marcas/hashtags/precio_venta/margen/activa);
+    None si no existe."""
     cambios: dict[str, Any] = {}
     if "nombre" in campos:
         nombre = (campos["nombre"] or "").strip()
@@ -175,6 +206,10 @@ def actualizar_campania(campania_id: str, campos: dict[str, Any]) -> dict[str, A
         cambios["hashtags"] = tags
     if "etiqueta_web" in campos:
         cambios["etiqueta_web"] = normalizar_etiqueta_web(campos["etiqueta_web"])
+    if "precio_venta" in campos:
+        cambios["precio_venta"] = _validar_precio_venta(campos["precio_venta"])
+    if "margen_objetivo_pct" in campos:
+        cambios["margen_objetivo_pct"] = _validar_margen_objetivo(campos["margen_objetivo_pct"])
     if "activa" in campos:
         cambios["activa"] = bool(campos["activa"])
     cam = repos.actualizar_campania(campania_id, cambios)

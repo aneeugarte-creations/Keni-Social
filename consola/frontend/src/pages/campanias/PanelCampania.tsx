@@ -60,6 +60,7 @@ import { columnasVisibles, useVistaConfig } from "@/pages/metricas/vistaConfig";
 import { CLAVE_CAMPANIAS } from "./claves";
 import { GraficaTendencia } from "./GraficaTendencia";
 import { fechaCorta, visEfectivas } from "./formato";
+import { BloqueRentabilidad } from "./Rentabilidad";
 
 /** Tarjeta KPI con su variación vs. el periodo anterior (flecha + color). */
 function TarjetaKpiComparada({
@@ -167,7 +168,7 @@ export function PanelCampania({
 
   const datos = datosProp ?? consulta.data;
   if (!datos) return null;
-  const { kpis, comparativa, tendencia, desglose_red, inorganico, piezas, web } = datos;
+  const { campania, kpis, comparativa, tendencia, desglose_red, inorganico, piezas, web } = datos;
 
   return (
     <div className="space-y-6">
@@ -202,6 +203,8 @@ export function PanelCampania({
       </div>
 
       {!ocultarAds && <BloqueOrganicoVsPagado kpis={kpis} inorganico={inorganico} />}
+
+      {!ocultarAds && <BloqueRentabilidad campania={campania} inorganico={inorganico} />}
 
       {web && web.piezas > 0 && <BloqueWeb web={web} />}
 

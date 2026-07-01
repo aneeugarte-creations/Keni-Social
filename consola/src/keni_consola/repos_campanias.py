@@ -17,10 +17,18 @@ def crear_campania(
     nombre: str,
     hashtags: list[str],
     etiqueta_web: str = "",
+    precio_venta: float = 0.0,
+    margen_objetivo_pct: float = 40.0,
     activa: bool = True,
 ) -> dict[str, Any]:
     return db.crear_campania(
-        marcas=marcas, nombre=nombre, hashtags=hashtags, etiqueta_web=etiqueta_web, activa=activa
+        marcas=marcas,
+        nombre=nombre,
+        hashtags=hashtags,
+        etiqueta_web=etiqueta_web,
+        precio_venta=precio_venta,
+        margen_objetivo_pct=margen_objetivo_pct,
+        activa=activa,
     )
 
 

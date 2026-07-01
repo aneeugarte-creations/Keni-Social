@@ -28,6 +28,13 @@ _MARCAS_IDS = {mid for mid, _ in marcas.opciones()}
 # --------------------------------------------------------------------------- #
 
 
+def _leer_numero(valor: Any, etiqueta: str) -> tuple[float | None, str | None]:
+    """Acepta un `int`/`float` (no `bool`, que en Python es subclase de `int`)."""
+    if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+        return None, f"{etiqueta} debe ser un número."
+    return float(valor), None
+
+
 def _leer_hashtags(valor: Any) -> tuple[list[str] | None, str | None]:
     """Acepta lista de strings o un string con hashtags separados por espacios/comas."""
     if isinstance(valor, str):
@@ -79,9 +86,22 @@ async def crear_campania(request: Request) -> Response:
     etiqueta_web = datos.get("etiqueta_web", "")
     if not isinstance(etiqueta_web, str):
         return JSONResponse({"error": "La etiqueta web debe ser texto."}, status_code=400)
+    precio_venta, error = _leer_numero(datos.get("precio_venta", 0), "El precio de venta")
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
+    margen_objetivo_pct, error = _leer_numero(
+        datos.get("margen_objetivo_pct", 40), "El margen objetivo"
+    )
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
     try:
         cam = campanias.crear_campania(
-            marcas_ids=marcas_ids, nombre=nombre, hashtags=tags, etiqueta_web=etiqueta_web
+            marcas_ids=marcas_ids,
+            nombre=nombre,
+            hashtags=tags,
+            etiqueta_web=etiqueta_web,
+            precio_venta=precio_venta,
+            margen_objetivo_pct=margen_objetivo_pct,
         )
     except campanias.CampaniaInvalida as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -96,7 +116,8 @@ async def detalle_campania(request: Request) -> Response:
 
 
 async def actualizar_campania(request: Request) -> Response:
-    """Edición parcial: `{nombre?, marcas?, hashtags?, activa?}`; 404 si no existe."""
+    """Edición parcial: `{nombre?, marcas?, hashtags?, precio_venta?, margen_objetivo_pct?,
+    activa?}`; 404 si no existe."""
     campania_id = request.path_params["campania_id"]
     datos = await leer_json(request)
     campos: dict[str, Any] = {}
@@ -118,6 +139,16 @@ async def actualizar_campania(request: Request) -> Response:
         if not isinstance(datos["etiqueta_web"], str):
             return JSONResponse({"error": "La etiqueta web debe ser texto."}, status_code=400)
         campos["etiqueta_web"] = datos["etiqueta_web"]
+    if "precio_venta" in datos:
+        precio_venta, error = _leer_numero(datos["precio_venta"], "El precio de venta")
+        if error is not None:
+            return JSONResponse({"error": error}, status_code=400)
+        campos["precio_venta"] = precio_venta
+    if "margen_objetivo_pct" in datos:
+        margen, error = _leer_numero(datos["margen_objetivo_pct"], "El margen objetivo")
+        if error is not None:
+            return JSONResponse({"error": error}, status_code=400)
+        campos["margen_objetivo_pct"] = margen
     if "activa" in datos:
         campos["activa"] = bool(datos["activa"])
     try:
@@ -325,10 +356,22 @@ def _export_md(datos: dict[str, Any], ocultar_ads: bool) -> str:
     return "\n".join(lineas) + "\n"
 
 
+def _campania_sin_rentabilidad(cam: dict[str, Any]) -> dict[str, Any]:
+    """Copia de la campaña SIN precio de venta ni margen objetivo (rentabilidad interna:
+    el cliente no debe ver cuánto vendimos ni qué margen cuidamos, ver transcripción
+    2026-06-30)."""
+    q = dict(cam)
+    q.pop("precio_venta", None)
+    q.pop("margen_objetivo_pct", None)
+    return q
+
+
 def _payload_modo_cliente(datos: dict[str, Any]) -> dict[str, Any]:
     """Copia del payload SIN rastro de pauta: vistas fundidas, sin columnas/bloque de Ads."""
     salida = dict(datos)
     salida.pop("inorganico", None)
+    if "campania" in salida:
+        salida["campania"] = _campania_sin_rentabilidad(salida["campania"])
     piezas = []
     for p in datos.get("piezas", []):
         q = dict(p)
@@ -399,8 +442,14 @@ def _publico_modo_cliente(datos: dict[str, Any]) -> dict[str, Any]:
         q["visualizaciones_pagadas"] = 0
         q["es_inorganico"] = False
         piezas.append(q)
+    cam = dict(datos.get("campania", {}))
+    # Rentabilidad interna (precio de venta, margen objetivo): a cero, no se le muestra al
+    # cliente cuánto vendimos ni qué margen cuidamos.
+    cam["precio_venta"] = 0
+    cam["margen_objetivo_pct"] = 0
     return {
         **datos,
+        "campania": cam,
         "kpis": kpis,
         "piezas": piezas,
         "inorganico": {"visualizaciones": 0, "gasto": 0, "clics": 0, "campanias": 0, "moneda": ""},

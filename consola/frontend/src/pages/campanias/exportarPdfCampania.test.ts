@@ -13,6 +13,8 @@ function datosVacios(): AnaliticaCampania {
       nombre: "Mundial 2026",
       hashtags: ["Mundial2026"],
       etiqueta_web: "",
+      precio_venta: 0,
+      margen_objetivo_pct: 40,
       activa: true,
       fecha_creacion: "2026-06-01T00:00:00Z",
       fecha_actualizacion: "2026-06-01T00:00:00Z",

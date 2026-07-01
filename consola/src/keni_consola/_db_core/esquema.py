@@ -59,6 +59,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         nombre               TEXT NOT NULL DEFAULT '',
         hashtags             TEXT NOT NULL DEFAULT '[]',
         etiqueta_web         TEXT NOT NULL DEFAULT '',
+        precio_venta         DOUBLE PRECISION NOT NULL DEFAULT 0,
+        margen_objetivo_pct  DOUBLE PRECISION NOT NULL DEFAULT 40,
         activa               INTEGER NOT NULL DEFAULT 1,
         fecha_creacion       TEXT NOT NULL DEFAULT '',
         fecha_actualizacion  TEXT NOT NULL DEFAULT ''
@@ -67,6 +69,12 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # `etiqueta_web` (slug de la etiqueta del sitio, p.ej. 'w-radio') vincula la campaña con
     # las notas web que la llevan, para cruzar su tráfico de GA4. ADD COLUMN para BDs viejas.
     "ALTER TABLE campanias ADD COLUMN IF NOT EXISTS etiqueta_web TEXT NOT NULL DEFAULT ''",
+    # Calculadora de rentabilidad: `precio_venta` (0 = sin definir) es lo que se vendió la
+    # campaña; `margen_objetivo_pct` el margen mínimo a proteger (40 = el piso que usa AMX).
+    # Con ambos se deriva el tope de pauta (`precio_venta * (1 - margen/100)`) en la capa de
+    # presentación, sin persistir el cálculo. ADD COLUMN para BDs viejas.
+    "ALTER TABLE campanias ADD COLUMN IF NOT EXISTS precio_venta DOUBLE PRECISION NOT NULL DEFAULT 0",
+    "ALTER TABLE campanias ADD COLUMN IF NOT EXISTS margen_objetivo_pct DOUBLE PRECISION NOT NULL DEFAULT 40",
     # Enlaces PÚBLICOS de una campaña: capability-URL de solo lectura. El `token`
     # (indescifrable) es la única llave: resuelve a UNA campaña y un periodo+modo CONGELADOS
     # (`rango` absoluto + `ocultar_ads`), nada más. `expira` (ISO UTC, '' = sin caducidad) y

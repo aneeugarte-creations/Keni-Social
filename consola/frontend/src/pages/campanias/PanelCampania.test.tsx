@@ -33,7 +33,10 @@ afterEach(() => {
 
 const COMP: ComparativaKpi = { actual: 0, anterior: 0, delta: 0, variacion_pct: null };
 
-function datos(visualizacionesPagadas: number): AnaliticaCampania {
+function datos(
+  visualizacionesPagadas: number,
+  campaniaOverrides: Partial<AnaliticaCampania["campania"]> = {},
+): AnaliticaCampania {
   return {
     campania: {
       id: "c1",
@@ -42,9 +45,12 @@ function datos(visualizacionesPagadas: number): AnaliticaCampania {
       nombre: "Mundial 2026",
       hashtags: ["Mundial2026"],
       etiqueta_web: "",
+      precio_venta: 0,
+      margen_objetivo_pct: 40,
       activa: true,
       fecha_creacion: "2026-06-01T00:00:00Z",
       fecha_actualizacion: "2026-06-01T00:00:00Z",
+      ...campaniaOverrides,
     },
     rango: "mes",
     periodo: { desde: "2026-05-26", hasta: "2026-06-25" },
@@ -88,5 +94,48 @@ describe("PanelCampania · orgánico vs pagado", () => {
 
     expect(screen.queryByText("Orgánico vs pagado")).not.toBeInTheDocument();
     expect(screen.queryByText("Pagado (Meta Ads)")).not.toBeInTheDocument();
+  });
+});
+
+describe("PanelCampania · rentabilidad", () => {
+  it("muestra el tope de pauta cuando la campaña tiene precio de venta", () => {
+    renderPanel(<PanelCampania datos={datos(0, { precio_venta: 1200000, margen_objetivo_pct: 40 })} />);
+
+    expect(screen.getByText("Rentabilidad")).toBeInTheDocument();
+    // Tope = 1,200,000 * (1 - 0.4) = 720,000.
+    expect(screen.getByText("720,000 MXN")).toBeInTheDocument();
+  });
+
+  it("NO se muestra sin precio de venta definido", () => {
+    renderPanel(<PanelCampania datos={datos(0, { precio_venta: 0 })} />);
+
+    expect(screen.queryByText("Rentabilidad")).not.toBeInTheDocument();
+  });
+
+  it("no avisa cuando el gasto del periodo está dentro del tope", () => {
+    renderPanel(
+      <PanelCampania datos={datos(180000, { precio_venta: 1000000, margen_objetivo_pct: 40 })} />,
+    );
+
+    // Tope = 600,000; gasto (mock) = 12,000 -> dentro del tope, no hay aviso.
+    expect(screen.queryByText(/ya superó el tope/i)).not.toBeInTheDocument();
+  });
+
+  it("avisa cuando el gasto del periodo ya superó el tope", () => {
+    // Gasto (mock) = 12,000; tope = 10,000 * (1 - 0) = 10,000 -> por encima del tope.
+    renderPanel(
+      <PanelCampania datos={datos(0, { precio_venta: 10000, margen_objetivo_pct: 0 })} />,
+    );
+
+    expect(screen.getByText(/ya superó el tope/i)).toBeInTheDocument();
+    expect(screen.getByText("Por encima del tope")).toBeInTheDocument();
+  });
+
+  it("oculta la rentabilidad en modo cliente (ocultarAds)", () => {
+    renderPanel(
+      <PanelCampania datos={datos(0, { precio_venta: 1200000 })} ocultarAds />,
+    );
+
+    expect(screen.queryByText("Rentabilidad")).not.toBeInTheDocument();
   });
 });

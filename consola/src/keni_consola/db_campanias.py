@@ -22,12 +22,22 @@ _COLS_CAMPANIA = (
     "nombre",
     "hashtags",
     "etiqueta_web",
+    "precio_venta",
+    "margen_objetivo_pct",
     "activa",
     "fecha_creacion",
     "fecha_actualizacion",
 )
 _SELECT_CAMPANIA = f"SELECT {', '.join(_COLS_CAMPANIA)} FROM campanias"
-_CAMPOS_EDITABLES_CAMPANIA = ("nombre", "marcas", "hashtags", "etiqueta_web", "activa")
+_CAMPOS_EDITABLES_CAMPANIA = (
+    "nombre",
+    "marcas",
+    "hashtags",
+    "etiqueta_web",
+    "precio_venta",
+    "margen_objetivo_pct",
+    "activa",
+)
 
 
 def _lista_json(valor: Any) -> list[str]:
@@ -51,6 +61,8 @@ def crear_campania(
     nombre: str,
     hashtags: list[str],
     etiqueta_web: str = "",
+    precio_venta: float = 0.0,
+    margen_objetivo_pct: float = 40.0,
     activa: bool = True,
 ) -> dict[str, Any]:
     """Inserta una campaña (multimarca) y la devuelve. NO valida (lo hace `campanias.py`)."""
@@ -61,6 +73,8 @@ def crear_campania(
         "nombre": nombre,
         "hashtags": a_json_lista(list(hashtags)),
         "etiqueta_web": etiqueta_web,
+        "precio_venta": precio_venta,
+        "margen_objetivo_pct": margen_objetivo_pct,
         "activa": 1 if activa else 0,
         "fecha_creacion": ahora,
         "fecha_actualizacion": ahora,
@@ -114,8 +128,9 @@ def actualizar_campania(
 ) -> dict[str, Any] | None:
     """Edita parcialmente una campaña; None si el id no existe.
 
-    Solo toca `nombre`/`marcas`/`hashtags`/`activa`. `marcas`/`hashtags` (si vienen) se
-    serializan a JSON; `activa` a 0/1. NO valida (lo hace `campanias.py`).
+    Solo toca `nombre`/`marcas`/`hashtags`/`etiqueta_web`/`precio_venta`/
+    `margen_objetivo_pct`/`activa`. `marcas`/`hashtags` (si vienen) se serializan a JSON;
+    `activa` a 0/1. NO valida (lo hace `campanias.py`).
     """
     cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_CAMPANIA}
     for clave in ("marcas", "hashtags"):

@@ -5,6 +5,10 @@
  * la persona tiene acceso). Los hashtags se escriben separados por espacios o comas y se
  * previsualizan conservando su casing ('#Chihuahua') tal como los guardará el backend.
  *
+ * Precio de venta + margen objetivo alimentan la calculadora de rentabilidad del panel
+ * (`Rentabilidad.tsx`). Precio de venta es OPCIONAL (vacío = 0 = "sin definir", no se
+ * muestra la calculadora); margen objetivo nace en 40% (el piso que usa AMX) y es editable.
+ *
  * Validación EN LÍNEA (design-system §8): al pulsar Guardar con un campo obligatorio vacío,
  * el error sale bajo ese campo (y le marca el borde), no como toast.
  */
@@ -69,6 +73,8 @@ export function DialogoCampania({
   const [nombre, setNombre] = React.useState("");
   const [hashtagsTexto, setHashtagsTexto] = React.useState("");
   const [etiquetaWeb, setEtiquetaWeb] = React.useState("");
+  const [precioVentaTexto, setPrecioVentaTexto] = React.useState("");
+  const [margenTexto, setMargenTexto] = React.useState("40");
   const [marcasSel, setMarcasSel] = React.useState<string[]>([]);
   // El error solo se muestra tras un intento de guardar (no mientras se escribe).
   const [intentado, setIntentado] = React.useState(false);
@@ -80,11 +86,15 @@ export function DialogoCampania({
     setNombre(campania?.nombre ?? "");
     setHashtagsTexto(campania ? campania.hashtags.map((h) => `#${h}`).join(" ") : "");
     setEtiquetaWeb(campania?.etiqueta_web ?? "");
+    setPrecioVentaTexto(campania && campania.precio_venta > 0 ? String(campania.precio_venta) : "");
+    setMargenTexto(campania ? String(campania.margen_objetivo_pct) : "40");
     setMarcasSel(campania ? campania.marcas : marcaActiva ? [marcaActiva] : []);
     setIntentado(false);
   }, [abierto, campania, marcaActiva]);
 
   const hashtags = parsearHashtags(hashtagsTexto);
+  const precioVenta = precioVentaTexto.trim() === "" ? 0 : Number(precioVentaTexto);
+  const margenObjetivo = margenTexto.trim() === "" ? 40 : Number(margenTexto);
 
   const alternarMarca = (id: string, marcada: boolean) =>
     setMarcasSel((prev) => (marcada ? [...prev, id] : prev.filter((m) => m !== id)));
@@ -92,7 +102,15 @@ export function DialogoCampania({
   const errNombre = !nombre.trim() ? "El nombre es obligatorio." : null;
   const errMarcas = marcasSel.length === 0 ? "Elige al menos una marca." : null;
   const errHashtags = hashtags.length === 0 ? "Añade al menos un hashtag." : null;
-  const hayErrores = Boolean(errNombre || errMarcas || errHashtags);
+  const errPrecioVenta =
+    precioVentaTexto.trim() !== "" && (Number.isNaN(precioVenta) || precioVenta < 0)
+      ? "Debe ser un número positivo."
+      : null;
+  const errMargen =
+    Number.isNaN(margenObjetivo) || margenObjetivo < 0 || margenObjetivo > 100
+      ? "Debe estar entre 0 y 100."
+      : null;
+  const hayErrores = Boolean(errNombre || errMarcas || errHashtags || errPrecioVenta || errMargen);
 
   const guardar = useMutation({
     mutationFn: () => {
@@ -101,6 +119,8 @@ export function DialogoCampania({
         nombre: nombre.trim(),
         hashtags,
         etiqueta_web: etiquetaWeb.trim(),
+        precio_venta: precioVenta,
+        margen_objetivo_pct: margenObjetivo,
       };
       return editando
         ? api.actualizarCampania(campania.id, cuerpo)
@@ -203,6 +223,43 @@ export function DialogoCampania({
               placeholder="https://…/etiqueta/w-radio/"
             />
           </Campo>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Campo
+              etiqueta="Precio de venta (MXN)"
+              htmlFor="campania-precio-venta"
+              ayuda="Opcional. Con margen objetivo, calcula cuánta pauta cabe sin comprometer la venta."
+              error={intentado ? errPrecioVenta : null}
+            >
+              <Input
+                id="campania-precio-venta"
+                type="number"
+                min={0}
+                inputMode="decimal"
+                value={precioVentaTexto}
+                onChange={(e) => setPrecioVentaTexto(e.target.value)}
+                placeholder="1200000"
+                aria-invalid={(intentado && Boolean(errPrecioVenta)) || undefined}
+              />
+            </Campo>
+
+            <Campo
+              etiqueta="Margen objetivo (%)"
+              htmlFor="campania-margen-objetivo"
+              error={intentado ? errMargen : null}
+            >
+              <Input
+                id="campania-margen-objetivo"
+                type="number"
+                min={0}
+                max={100}
+                inputMode="decimal"
+                value={margenTexto}
+                onChange={(e) => setMargenTexto(e.target.value)}
+                aria-invalid={(intentado && Boolean(errMargen)) || undefined}
+              />
+            </Campo>
+          </div>
         </div>
 
         <DialogFooter>

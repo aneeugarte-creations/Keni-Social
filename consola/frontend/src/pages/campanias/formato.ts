@@ -5,7 +5,7 @@
  * para que toda la consola hable el mismo idioma visual.
  */
 import { formatearDia, formatearFechaCorta, formatearFechaHoraCorta } from "@/lib/fecha";
-import type { EnlacePublicoCampania, PiezaCampania } from "@/types";
+import type { Campania, EnlacePublicoCampania, PiezaCampania } from "@/types";
 
 // Fechas en hora CDMX (los instantes del backend son UTC): el formateo vive en
 // `@/lib/fecha`. Aquí solo se conserva el fallback "—" propio de Campañas.
@@ -44,4 +44,16 @@ export function enlaceVigentePara(
   ocultarAds: boolean,
 ): EnlacePublicoCampania | null {
   return enlaces.find((e) => e.vigente && e.rango === rango && e.ocultar_ads === ocultarAds) ?? null;
+}
+
+/** Tope de pauta y disponible restante dado lo gastado en el periodo. `null` si la campaña
+ * no tiene precio de venta definido (0). */
+export function calcularRentabilidad(
+  campania: Pick<Campania, "precio_venta" | "margen_objetivo_pct">,
+  gastoPeriodo: number,
+): { tope: number; disponible: number; sobreTope: boolean } | null {
+  if (campania.precio_venta <= 0) return null;
+  const tope = campania.precio_venta * (1 - campania.margen_objetivo_pct / 100);
+  const disponible = tope - gastoPeriodo;
+  return { tope, disponible, sobreTope: disponible < 0 };
 }

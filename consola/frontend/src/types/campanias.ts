@@ -13,6 +13,10 @@ export interface Campania {
   hashtags: string[];
   /** Etiqueta del sitio web (slug o URL) que cruza el tráfico de notas en GA4. "" si no hay. */
   etiqueta_web: string;
+  /** Precio de venta de la campaña (MXN). 0 = sin definir (no se muestra la calculadora). */
+  precio_venta: number;
+  /** Margen mínimo (%) a proteger; define el tope de pauta junto con `precio_venta`. */
+  margen_objetivo_pct: number;
   activa: boolean;
   fecha_creacion: string;
   fecha_actualizacion: string;
@@ -178,6 +182,8 @@ export interface CuerpoCrearCampania {
   nombre: string;
   hashtags: string[];
   etiqueta_web?: string;
+  precio_venta?: number;
+  margen_objetivo_pct?: number;
 }
 
 export interface CuerpoActualizarCampania {
@@ -185,5 +191,7 @@ export interface CuerpoActualizarCampania {
   marcas?: string[];
   hashtags?: string[];
   etiqueta_web?: string;
+  precio_venta?: number;
+  margen_objetivo_pct?: number;
   activa?: boolean;
 }

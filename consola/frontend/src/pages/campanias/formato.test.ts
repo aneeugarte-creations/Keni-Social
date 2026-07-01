@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { EnlacePublicoCampania, PiezaCampania } from "@/types";
 
-import { enlaceVigentePara, urlEnlace, visEfectivas } from "./formato";
+import { calcularRentabilidad, enlaceVigentePara, urlEnlace, visEfectivas } from "./formato";
 
 function pieza(visualizaciones: number, visualizacionesPagadas: number): PiezaCampania {
   return {
@@ -76,5 +76,39 @@ describe("enlaceVigentePara", () => {
 
   it("sin enlaces, devuelve null", () => {
     expect(enlaceVigentePara([], "mes", false)).toBeNull();
+  });
+});
+
+describe("calcularRentabilidad", () => {
+  it("null si no hay precio de venta definido (0)", () => {
+    expect(calcularRentabilidad({ precio_venta: 0, margen_objetivo_pct: 40 }, 0)).toBeNull();
+  });
+
+  it("deriva el tope como precio_venta * (1 - margen/100)", () => {
+    const r = calcularRentabilidad({ precio_venta: 1200000, margen_objetivo_pct: 40 }, 0);
+    expect(r?.tope).toBe(720000);
+  });
+
+  it("disponible = tope - gasto; sobreTope falso mientras no se pase", () => {
+    const r = calcularRentabilidad({ precio_venta: 1000000, margen_objetivo_pct: 40 }, 500000);
+    expect(r?.tope).toBe(600000);
+    expect(r?.disponible).toBe(100000);
+    expect(r?.sobreTope).toBe(false);
+  });
+
+  it("sobreTope true cuando el gasto ya pasó el tope", () => {
+    const r = calcularRentabilidad({ precio_venta: 1000000, margen_objetivo_pct: 40 }, 700000);
+    expect(r?.disponible).toBe(-100000);
+    expect(r?.sobreTope).toBe(true);
+  });
+
+  it("margen 0 permite gastar hasta el precio de venta completo", () => {
+    const r = calcularRentabilidad({ precio_venta: 100000, margen_objetivo_pct: 0 }, 0);
+    expect(r?.tope).toBe(100000);
+  });
+
+  it("margen 100 no deja margen de pauta", () => {
+    const r = calcularRentabilidad({ precio_venta: 100000, margen_objetivo_pct: 100 }, 0);
+    expect(r?.tope).toBe(0);
   });
 });
