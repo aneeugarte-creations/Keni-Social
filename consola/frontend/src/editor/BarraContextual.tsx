@@ -19,12 +19,15 @@ import {
   Bold,
   Crop,
   FoldVertical,
+  Highlighter,
   Italic,
   Replace,
   Scissors,
   Settings2,
   Strikethrough,
+  TriangleAlert,
   Underline,
+  Wand2,
 } from "lucide-react";
 
 import { useEffect, useRef, useState } from "react";
@@ -34,8 +37,15 @@ import { tieneCursiva } from "../lib/placa/dibujar.mjs";
 
 import { familiaReal } from "./capas/tipografia";
 import { ColorControl } from "./ColorControl";
-import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto } from "./documento";
+import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto, Documento } from "./documento";
 import { CATALOGO_FUENTES } from "./documento";
+import {
+  analizarLegibilidad,
+  correccionPara,
+  hexARgb,
+  luminanciaRGB,
+  type Muestreador,
+} from "./legibilidad";
 import { useEditor, useStoreEditor } from "./usarEditor";
 
 const ALIN_ICONO = { izquierda: AlignLeft, centro: AlignCenter, derecha: AlignRight, justificado: AlignJustify } as const;
@@ -48,6 +58,31 @@ const ANCLAJES = [
   { valor: "centro", etiqueta: "Anclar al centro", Icono: FoldVertical },
   { valor: "abajo", etiqueta: "Anclar abajo", Icono: ArrowDownToLine },
 ] as const;
+
+// Muestreador CONSERVADOR construido solo del DOCUMENTO (sin píxeles del lienzo): devuelve la
+// luminancia del fondo bajo una caja SOLO cuando ese fondo es un color sólido y NADA lo cubre
+// (ni foto, ni overlay, ni marco entre el fondo y el texto). En cualquier otro caso devuelve null
+// y `analizarLegibilidad` omite la capa: así el aviso pasivo de la barra no da falsos positivos
+// sobre fotos/degradados/bandas —esos casos siguen en «Revisar legibilidad», que muestrea el
+// canvas real. El z del texto seleccionado acota qué capas cuentan como "encima del fondo".
+function muestreadorSolidoDeDoc(doc: Documento, zTexto: number): Muestreador {
+  if (doc.fondo.tipo !== "color" || !doc.fondo.color) {
+    return () => null;
+  }
+  const lumFondo = luminanciaRGB(...hexARgb(doc.fondo.color));
+  return (caja) => {
+    // Cualquier capa VISIBLE por debajo del texto que solape la caja mete color desconocido bajo
+    // el texto: no podemos garantizar el contraste sin muestrear píxeles, así que nos abstenemos.
+    for (const c of doc.capas) {
+      if (!c.visible || c.z >= zTexto) continue;
+      if (c.tipo === "texto" || c.tipo === "grupo") continue;
+      const solapa = c.x < caja.x + caja.w && c.x + c.w > caja.x && c.y < caja.y + caja.h && c.y + c.h > caja.y;
+      // El overlay cubre TODO el lienzo (banda a alto_frac); cualquier overlay visible tapa el fondo.
+      if (solapa || c.tipo === "overlay") return null;
+    }
+    return lumFondo;
+  };
+}
 
 function Sep() {
   return <div className="mx-0.5 h-5 w-px shrink-0 bg-border" />;
@@ -328,10 +363,33 @@ export function BarraContextual({
   onReemplazar: () => void;
 }) {
   const store = useStoreEditor();
+  const doc = useEditor((s) => s.documento);
   const capa = useEditor((s) => s.documento.capas.find((c) => c.id === s.seleccion) ?? null);
   const seleccionMulti = useEditor((s) => s.seleccionMulti);
   const set = (cambios: Partial<Capa>) => capa && store.getState().actualizar(capa.id, cambios);
   const familias = [...CATALOGO_FUENTES, ...fuentesExtra.filter((f) => !CATALOGO_FUENTES.includes(f as never))];
+
+  // AVISO PASIVO de legibilidad: sobre fondo SÓLIDO evaluamos AA de la capa seleccionada sin
+  // muestrear píxeles (muestreador de documento). Solo se enciende con certeza; sobre foto/banda
+  // se abstiene (null → sin aviso) y queda para «Revisar legibilidad», que lee el canvas real.
+  const diagnosticoTexto =
+    capa?.tipo === "texto"
+      ? analizarLegibilidad(
+          { ...doc, capas: doc.capas.filter((c) => c.id === capa.id) },
+          muestreadorSolidoDeDoc(doc, capa.z),
+        )[0] ?? null
+      : null;
+
+  // Arregla el titular poco legible con la corrección conservadora de `legibilidad.ts` (overlay
+  // inferior, o contorno/sombra en el propio texto), como un solo gesto de historial.
+  const arreglarLegibilidad = () => {
+    if (!diagnosticoTexto) return;
+    const c = correccionPara(doc, diagnosticoTexto);
+    const st = store.getState();
+    st.comenzarGesto();
+    if (c.tipo === "overlay") st.agregar(c.capa);
+    else st.actualizar(c.id, c.cambios, false);
+  };
 
   // Estilo de PÍLDORA flotante (mismo lenguaje que la barra de alinear/orden del Lienzo).
   const PILDORA =
@@ -443,6 +501,19 @@ export function BarraContextual({
             onChange={(c) => set({ color: c, relleno_degradado: null } as Partial<Capa>)}
             titulo="Color del texto"
           />
+          {/* RESALTADO (chip/fondo del texto): sube el toggle del Inspector a la barra rápida
+              (patrón Canva: el «highlight»). El color/margen/redondeo del chip siguen en Ajustes;
+              aquí solo enciende/apaga con el default de marca. */}
+          <BotonIcono
+            titulo="Resaltado (fondo del texto)"
+            ariaLabel="Resaltado"
+            activo={!!(capa as CapaTexto).chip}
+            onClick={() =>
+              set({ chip: (capa as CapaTexto).chip ? null : { color: "#E30613", pad_x: 24, pad_y: 14, radio: 0 } } as Partial<Capa>)
+            }
+          >
+            <Highlighter className="h-4 w-4" />
+          </BotonIcono>
           {(() => {
             const al = (capa as CapaTexto).alineacion;
             const Icono = ALIN_ICONO[al];
@@ -505,6 +576,25 @@ export function BarraContextual({
               </BotonPopover>
             );
           })()}
+          {/* AVISO PASIVO de legibilidad: si el titular seleccionado no llega a AA sobre un fondo
+              sólido, un chip ámbar lo señala con «Arreglar» a un clic (reusa la corrección
+              conservadora de `legibilidad.ts`). Se abstiene sobre foto/banda (sin falso positivo). */}
+          {diagnosticoTexto && (
+            <>
+              <Sep />
+              <button
+                onClick={arreglarLegibilidad}
+                title={`Contraste bajo (${diagnosticoTexto.ratio.toFixed(1)}:1, mínimo ${diagnosticoTexto.umbral}:1). Clic para arreglar.`}
+                aria-label="Contraste bajo: arreglar legibilidad"
+                className="flex h-8 shrink-0 items-center gap-1 rounded-md bg-amber-100 px-2 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:hover:bg-amber-900"
+              >
+                <TriangleAlert className="h-4 w-4" />
+                <span className="whitespace-nowrap">Contraste bajo</span>
+                <Wand2 className="h-4 w-4" />
+                <span className="whitespace-nowrap">Arreglar</span>
+              </button>
+            </>
+          )}
         </>
       )}
 

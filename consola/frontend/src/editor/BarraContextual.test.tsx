@@ -338,3 +338,75 @@ describe("BarraContextual — Recortar (cualquier objeto, no solo fotos)", () =>
     expect(screen.queryByRole("button", { name: "Recortar" })).toBeNull();
   });
 });
+
+describe("BarraContextual — resaltado (chip) en la barra rápida", () => {
+  it("el toggle enciende el chip con el default de marca y lo apaga de nuevo", () => {
+    const store = montarConTexto(); // sin chip de fábrica
+    const btn = screen.getByRole("button", { name: "Resaltado" });
+    expect(btn).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(btn);
+    expect(capaTexto(store).chip).toEqual({ color: "#E30613", pad_x: 24, pad_y: 14, radio: 0 });
+    expect(screen.getByRole("button", { name: "Resaltado" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Resaltado" }));
+    expect(capaTexto(store).chip).toBeNull();
+  });
+});
+
+// Monta un texto sobre un FONDO SÓLIDO concreto (para el aviso pasivo de legibilidad, que solo
+// evalúa AA sobre color sólido y se abstiene sobre foto/banda).
+function montarConFondo(fondoColor: string, parcial: Partial<CapaTexto> = {}) {
+  const doc = documentoVacio(FORMATO, "m1");
+  doc.fondo = { tipo: "color", color: fondoColor };
+  const capa = nuevaCapaTexto({ id: "t1", ...parcial });
+  doc.capas.push(capa);
+  const store = crearStoreEditor(doc);
+  store.getState().seleccionar(capa.id);
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <ProveedorEditor store={store}>
+        <BarraContextual onAbrirAjustes={vi.fn()} onReencuadrar={vi.fn()} onRecortar={vi.fn()} onReemplazar={vi.fn()} />
+      </ProveedorEditor>
+    </QueryClientProvider>,
+  );
+  return store;
+}
+
+describe("BarraContextual — aviso pasivo de legibilidad (fondo sólido)", () => {
+  it("texto blanco sobre fondo BLANCO => avisa de contraste bajo", () => {
+    montarConFondo("#FFFFFF", { color: "#FFFFFF", texto: "Titular", tamano: 64 });
+    expect(screen.getByRole("button", { name: "Contraste bajo: arreglar legibilidad" })).toBeInTheDocument();
+  });
+
+  it("texto blanco sobre fondo NEGRO => sin aviso (contraste de sobra)", () => {
+    montarConFondo("#000000", { color: "#FFFFFF", texto: "Titular", tamano: 64 });
+    expect(screen.queryByRole("button", { name: "Contraste bajo: arreglar legibilidad" })).toBeNull();
+  });
+
+  it("«Arreglar» aplica una corrección: overlay nuevo o contorno/sombra en el texto", () => {
+    // Texto en la mitad SUPERIOR (y pequeño) sobre fondo claro => la corrección es contorno+sombra
+    // en el propio texto (no overlay inferior).
+    const store = montarConFondo("#FFFFFF", { color: "#FFFFFF", texto: "Titular", tamano: 64, y: 40 });
+    fireEvent.click(screen.getByRole("button", { name: "Contraste bajo: arreglar legibilidad" }));
+    const t = store.getState().documento.capas.find((c) => c.id === "t1") as CapaTexto;
+    expect(t.contorno).not.toBeNull();
+  });
+
+  it("se abstiene si una capa opaca (marco) cubre el texto: no hay aviso sin muestrear píxeles", () => {
+    // Fondo blanco + texto blanco encima de un marco que solapa la caja => background desconocido.
+    const doc = documentoVacio(FORMATO, "m1");
+    doc.fondo = { tipo: "color", color: "#FFFFFF" };
+    const marco = nuevaCapaMarco({ id: "m1", x: 0, y: 0, w: 1080, h: 1350, z: 10 });
+    const texto = nuevaCapaTexto({ id: "t1", color: "#FFFFFF", texto: "Titular", tamano: 64, x: 80, y: 80, w: 600, z: 20 });
+    doc.capas.push(marco, texto);
+    const store = crearStoreEditor(doc);
+    store.getState().seleccionar("t1");
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <ProveedorEditor store={store}>
+          <BarraContextual onAbrirAjustes={vi.fn()} onReencuadrar={vi.fn()} onRecortar={vi.fn()} onReemplazar={vi.fn()} />
+        </ProveedorEditor>
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByRole("button", { name: "Contraste bajo: arreglar legibilidad" })).toBeNull();
+  });
+});
