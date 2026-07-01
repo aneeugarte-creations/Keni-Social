@@ -244,6 +244,35 @@ def test_proponer_subtemas_menos_de_dos_o_json_invalido():
     assert fusionar_semantica.proponer_subtemas(dos, ejecutor=_ej_subtemas("no soy json")) == []
 
 
+def test_proponer_subtemas_incremental_clasifica_contra_lo_existente():
+    """Solo se mandan las historias NUEVAS; el resultado reutiliza la etiqueta existente."""
+    nuevos = [{"id": "p3", "titulo": "Brasil vence a Corea en octavos"}]
+    salida = {"subtemas": [{"subtema": "Partidos", "ids": ["p3"]}]}
+    subtemas = fusionar_semantica.proponer_subtemas_incremental(
+        nuevos, ["Partidos", "Espectáculo"], ejecutor=_ej_subtemas(salida),
+    )
+    assert subtemas == [{"subtema": "Partidos", "ids": ["p3"]}]
+
+
+def test_proponer_subtemas_incremental_filtra_ids_ajenos_al_lote():
+    """Un id que no vino en `nuevos` (alucinado o de la familia vieja) se descarta."""
+    nuevos = [{"id": "p3", "titulo": "X"}]
+    salida = {"subtemas": [{"subtema": "Partidos", "ids": ["p3", "p1"]}]}
+    assert fusionar_semantica.proponer_subtemas_incremental(
+        nuevos, ["Partidos"], ejecutor=_ej_subtemas(salida),
+    ) == [{"subtema": "Partidos", "ids": ["p3"]}]
+
+
+def test_proponer_subtemas_incremental_vacio_sin_nuevos_o_sin_existentes():
+    nuevo = [{"id": "p3", "titulo": "X"}]
+    assert fusionar_semantica.proponer_subtemas_incremental(
+        [], ["Partidos"], ejecutor=_ej_subtemas({"subtemas": []}),
+    ) == []
+    assert fusionar_semantica.proponer_subtemas_incremental(
+        nuevo, [], ejecutor=_ej_subtemas({"subtemas": []}),
+    ) == []
+
+
 def test_subtema_usa_haiku_y_fusion_usa_sonnet(monkeypatch):
     """La ruta de Subtema corre con `config.subtema_modelo()` (haiku) y la pasada principal/Cotejar
     con `config.fusion_modelo()` (sonnet): separar el modelo baja el gasto de Subtema sin cambiar el
@@ -334,6 +363,63 @@ def test_fusionar_marca_solo_facetea_familias_con_subtema_pendiente(entorno, mon
 
     fusionar_semantica.fusionar_marca("unotv", _recientes(), salida_principal=salida, ejecutor=_ej([]))
     assert faceteadas == [["c3", "c4"]]  # la familia ya faceteada [c1, c2] no se reenvía al LLM
+
+
+def test_fusionar_marca_subtema_incremental_manda_solo_lo_nuevo(entorno, monkeypatch):
+    """Una familia YA faceteada que suma una historia nueva manda SOLO la nueva a Haiku (con las
+    etiquetas existentes como contexto); los miembros ya estables no se reenvían. Postgres (CI)."""
+    for cid in ("c1", "c2", "c5"):
+        _inicializar(cid)
+    repos.marcar_clusters_tema_macro(["c1", "c2", "c5"], "Mundial 2026")
+    repos.marcar_clusters_subtema(["c1", "c2"], "Partidos")  # c5 llega nuevo, sin subtema
+
+    salida = json.dumps({"grupos": [], "familias": [
+        {"tema": "Mundial 2026", "ids": ["c1", "c2", "c5"]},
+    ]})
+    llamadas: list[tuple[list[str], list[str]]] = []
+
+    def fake_incremental(nuevos, existentes, **_kw):
+        llamadas.append((sorted(c["id"] for c in nuevos), sorted(existentes)))
+        return [{"subtema": "Partidos", "ids": [c["id"] for c in nuevos]}]
+
+    def fake_completo(_familia, **_kw):
+        raise AssertionError("no debería re-partir la familia entera si ya hay subtemas")
+
+    monkeypatch.setattr(fusionar_semantica, "proponer_subtemas_incremental", fake_incremental)
+    monkeypatch.setattr(fusionar_semantica, "proponer_subtemas", fake_completo)
+
+    fusionar_semantica.fusionar_marca("unotv", _recientes(), salida_principal=salida, ejecutor=_ej([]))
+
+    assert llamadas == [(["c5"], ["Partidos"])]
+    assert (repos.obtener_noticia_cluster("c5") or {}).get("subtema") == "Partidos"
+    assert (repos.obtener_noticia_cluster("c1") or {}).get("subtema") == "Partidos"  # sin tocar
+
+
+def test_fusionar_marca_subtema_incremental_off_reenvia_familia_completa(entorno, monkeypatch):
+    """Con `KENI_SUBTEMA_INCREMENTAL=0` vuelve al camino previo: re-envía la familia entera."""
+    monkeypatch.setenv("KENI_SUBTEMA_INCREMENTAL", "0")
+    for cid in ("c1", "c2", "c5"):
+        _inicializar(cid)
+    repos.marcar_clusters_tema_macro(["c1", "c2", "c5"], "Mundial 2026")
+    repos.marcar_clusters_subtema(["c1", "c2"], "Partidos")
+
+    salida = json.dumps({"grupos": [], "familias": [
+        {"tema": "Mundial 2026", "ids": ["c1", "c2", "c5"]},
+    ]})
+    faceteadas: list[list[str]] = []
+
+    def fake_subtemas(familia, **_kw):
+        faceteadas.append(sorted(str(c["id"]) for c in familia))
+        return []
+
+    def fake_incremental(*_a, **_kw):
+        raise AssertionError("no debería usar el camino incremental con el flag OFF")
+
+    monkeypatch.setattr(fusionar_semantica, "proponer_subtemas", fake_subtemas)
+    monkeypatch.setattr(fusionar_semantica, "proponer_subtemas_incremental", fake_incremental)
+
+    fusionar_semantica.fusionar_marca("unotv", _recientes(), salida_principal=salida, ejecutor=_ej([]))
+    assert faceteadas == [["c1", "c2", "c5"]]
 
 
 def test_fusionar_marca_ancla_familias_por_agenda(entorno, monkeypatch):

@@ -655,6 +655,14 @@ def test_subtema_modelo_default_haiku(limpio, store_aislado):
     assert config.subtema_modelo() == "sonnet"
 
 
+def test_subtema_incremental_default_on(limpio, store_aislado):
+    """Subtema incremental va ON por defecto; `KENI_SUBTEMA_INCREMENTAL=0` lo apaga."""
+    store_aislado.delenv(config.ENV_SUBTEMA_INCREMENTAL, raising=False)
+    assert config.subtema_incremental_activo() is True
+    store_aislado.setenv(config.ENV_SUBTEMA_INCREMENTAL, "0")
+    assert config.subtema_incremental_activo() is False
+
+
 # --------------------------------------------------------------------------- #
 # Redes del plan diario (`KENI_PLAN_REDES[::marca]`): declaran las redes esperadas #
 # --------------------------------------------------------------------------- #

@@ -403,6 +403,7 @@ from .config_contenido import (  # noqa: F401
     fusion_modelo,
     hashtags_modelo,
     insumos_modelo,
+    subtema_incremental_activo,
     subtema_modelo,
 )
 from .config_generacion import (  # noqa: F401

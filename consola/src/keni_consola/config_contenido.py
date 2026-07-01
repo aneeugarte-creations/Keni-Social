@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 from ._config_comun import (
+    _FALSOS,
     ENV_COPY_MODELO,
     ENV_DECISOR_MODELO,
     ENV_FUSION_MODELO,
     ENV_HASHTAGS_MODELO,
     ENV_INSUMOS_MODELO,
+    ENV_SUBTEMA_INCREMENTAL,
     ENV_SUBTEMA_MODELO,
+    _crudo,
     os,
 )
 
@@ -60,6 +63,20 @@ def subtema_modelo() -> str:
     if raw is None:
         return "haiku"
     return raw.strip()
+
+
+def subtema_incremental_activo() -> bool:
+    """True si Subtema clasifica SOLO lo nuevo de una familia ya faceteada (`KENI_SUBTEMA_INCREMENTAL`).
+
+    Con ON (def) una familia que ya tiene subtemas asignados y recibe historias nuevas manda a Haiku
+    solo esas, con las etiquetas existentes como contexto a reutilizar — evita re-pagar (y
+    re-arriesgar) las etiquetas ya estables cada vez que llega una historia más. Con OFF vuelve al
+    camino previo (re-envía la familia entera). Idiom default-ON (vacío → True).
+    """
+    crudo = _crudo(ENV_SUBTEMA_INCREMENTAL).lower()
+    if not crudo:
+        return True
+    return crudo not in _FALSOS
 
 
 def hashtags_modelo() -> str:

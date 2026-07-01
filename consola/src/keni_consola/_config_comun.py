@@ -459,6 +459,11 @@ ENV_FUSION_MIN_SCORE = "KENI_FUSION_MIN_SCORE"
 # Verificación por grupo («Cotejar»): con OFF (def) los grupos propuestos por la pasada principal se
 # aceptan tal cual (0 sub-llamadas de cotejo); con ON se re-pregunta cada grupo antes de fundir.
 ENV_FUSION_COTEJAR = "KENI_FUSION_COTEJAR"
+# Subtema INCREMENTAL: con ON (def) una familia que YA tiene subtemas asignados y recibe historias
+# nuevas manda a Haiku SOLO las nuevas (con las etiquetas existentes como contexto a reutilizar), en
+# vez de re-partir la familia entera cada vez. Con OFF vuelve al camino previo (re-envía todo). Ver
+# `dominio/fusionar_semantica.py::_partir_en_subtemas`.
+ENV_SUBTEMA_INCREMENTAL = "KENI_SUBTEMA_INCREMENTAL"
 
 # Señal de RENDIMIENTO en la priorización (Fase 2c): prioriza historias de las líneas editoriales que
 # MEJOR funcionan en redes (Metricool). GATEADO por `KENI_RENDIMIENTO_RANKING` (def OFF). Anti-sesgo:
@@ -989,6 +994,7 @@ __all__ = [
     'ENV_FUSION_MIN_SCORE',
     'ENV_FUSION_COTEJAR',
     'ENV_SUBTEMA_MODELO',
+    'ENV_SUBTEMA_INCREMENTAL',
     'ENV_FFMPEG_BIN',
     'ENV_FUENTES_BAJA_CONFIANZA',
     'ENV_GENERACIONES',

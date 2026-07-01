@@ -23,7 +23,10 @@ confirmado, PARTIDO en subgrupos o descartado (fusionar por error es caro: infla
 auto-produce piezas con fuentes que no hablan de lo mismo — pasó con «Shakira en la inauguración»
 fundida con «alerta de la embajada» por el «Mundial»). Con Cotejar OFF los grupos de la pasada
 principal se aceptan tal cual. Las familias NO se verifican (no se funden). La pasada principal y
-Cotejar usan `config.fusion_modelo()` (sonnet); Subtema usa `config.subtema_modelo()` (haiku).
+Cotejar usan `config.fusion_modelo()` (sonnet); Subtema usa `config.subtema_modelo()` (haiku). Subtema
+es INCREMENTAL (def ON): una familia que ya tiene facetas asignadas y recibe historias nuevas solo
+manda ESAS a Haiku (con las etiquetas existentes como contexto); solo re-parte todo si es enteramente
+nueva.
 """
 
 from __future__ import annotations
@@ -64,7 +67,9 @@ _MAX_CHARS_ITEM = 240        # recorte del titulo por historia
 _PROMPT_ID = "prompt/fusionar"
 _PROMPT_VERIFICACION_ID = "prompt/fusionar-verificar"
 _PROMPT_SUBTEMA_ID = "prompt/fusionar-subtema"
+_PROMPT_SUBTEMA_INCREMENTAL_ID = "prompt/fusionar-subtema-incremental"
 _MARCA_HISTORIAS = "{{HISTORIAS}}"
+_MARCA_SUBTEMAS_EXISTENTES = "{{SUBTEMAS_EXISTENTES}}"
 
 
 def _plantilla(prompt_id: str = _PROMPT_ID) -> str:
@@ -84,6 +89,16 @@ def _construir_prompt(payload_json: str, prompt_id: str = _PROMPT_ID) -> str:
     if _MARCA_HISTORIAS in plantilla:
         return plantilla.replace(_MARCA_HISTORIAS, payload_json)
     return f"{plantilla}\n\nHistorias:\n{payload_json}"
+
+
+def _construir_prompt_subtema_incremental(payload_json: str, existentes_json: str) -> str:
+    """Prompt de Subtema INCREMENTAL: solo las historias sin subtema + las etiquetas ya en uso."""
+    plantilla = _plantilla(_PROMPT_SUBTEMA_INCREMENTAL_ID).replace(
+        _MARCA_SUBTEMAS_EXISTENTES, existentes_json
+    )
+    if _MARCA_HISTORIAS in plantilla:
+        return plantilla.replace(_MARCA_HISTORIAS, payload_json)
+    return f"{plantilla}\n\nSubtemas existentes:\n{existentes_json}\n\nHistorias nuevas:\n{payload_json}"
 
 
 def _extraer_grupos(texto: str) -> list[list[str]]:
@@ -378,6 +393,64 @@ def proponer_subtemas(
     return subtemas
 
 
+def proponer_subtemas_incremental(
+    nuevos: list[dict[str, Any]],
+    subtemas_existentes: list[str],
+    *,
+    ejecutor: Ejecutor | None = None,
+    al_ejecutar: Callable[[str, str], None] | None = None,
+) -> list[dict[str, Any]]:
+    """Clasifica historias NUEVAS de una familia YA faceteada contra sus subtemas existentes (Haiku).
+    PURO de repos.
+
+    Complemento incremental de `proponer_subtemas`: cuando una familia ya tiene subtemas asignados y
+    solo LLEGARON historias nuevas, manda a Haiku SOLO esas historias + la lista de etiquetas ya en
+    uso (para reutilizarlas verbatim), en vez de re-partir la familia entera. Mismo contrato de salida
+    que `proponer_subtemas` (`[{"subtema": "...", "ids": [...]}, ...]`, disjuntos, solo ids del
+    input). `[]` ante lote/etiquetas vacías o cualquier fallo (best-effort).
+    """
+    validos = [c for c in nuevos if (c.get("id") and (c.get("titulo") or "").strip())][:_MAX_CLUSTERS]
+    existentes = [e for e in dict.fromkeys(subtemas_existentes) if e]
+    if not validos or not existentes:
+        return []
+    ids_validos = {str(c["id"]) for c in validos}
+
+    payload = [
+        {
+            "id": str(c["id"]),
+            "titulo": json_llm.truncar_avisando(
+                str(c.get("titulo", "")).strip(), _MAX_CHARS_ITEM,
+                campo=f"titulo de {c['id']}", log=_log,
+            )[0],
+        }
+        for c in validos
+    ]
+    correr = ejecutor or _ejecutar_subtema
+    prompt = _construir_prompt_subtema_incremental(
+        json.dumps(payload, ensure_ascii=False), json.dumps(existentes, ensure_ascii=False),
+    )
+    try:
+        with tempfile.TemporaryDirectory(prefix="keni-subtema-inc-") as carpeta:
+            salida = correr(prompt, carpeta)
+    except Exception as e:  # noqa: BLE001 -- best-effort: cualquier fallo -> no clasifica nada
+        _log.warning("fusionar_semantica: falló la llamada a Haiku (subtema incremental): %s", e)
+        return []
+    if al_ejecutar is not None:
+        try:
+            al_ejecutar(prompt, salida)
+        except Exception:  # noqa: BLE001 -- el callback (registrar actividad) es best-effort
+            _log.warning("fusionar_semantica: fallo en al_ejecutar (subtema incremental).", exc_info=True)
+
+    vistos: set[str] = set()
+    subtemas: list[dict[str, Any]] = []
+    for s in _extraer_subtemas(salida):
+        ids = [i for i in dict.fromkeys(s["ids"]) if i in ids_validos and i not in vistos]
+        if ids:
+            vistos.update(ids)
+            subtemas.append({"subtema": s["subtema"], "ids": ids})
+    return subtemas
+
+
 def _ejecutar_haiku(prompt: str, dir_permitido: str) -> str:
     """Ejecutor real: el runner síncrono de `traduccion` con el modelo de la fusión.
 
@@ -454,19 +527,42 @@ def _partir_en_subtemas(
     carrusel sea coherente y la cadencia sea por subtema. Best-effort: cualquier fallo (Haiku o
     persistencia) se loguea y devuelve lo que llevara, sin abortar el paso.
 
+    INCREMENTAL (`config.subtema_incremental_activo()`, def ON): si la familia YA tiene subtemas
+    asignados y solo hay historias NUEVAS sin facetar, manda a Haiku SOLO esas
+    (`proponer_subtemas_incremental`, con las etiquetas existentes como contexto a reutilizar) en vez
+    de re-partir la familia entera — evita re-pagar (y re-arriesgar) las etiquetas ya estables cada
+    vez que la familia recibe una historia más. Solo re-parte TODO cuando la familia es enteramente
+    nueva (ningún miembro tiene subtema aún) o el flag está OFF.
+
     `al_ejecutar(prompt, salida)` recibe el prompt+salida REALES de la llamada de subtema
     (observabilidad: el job de fusión lo usa para sellar su gasto bajo la etapa «Subtema»).
     """
-    from .. import repos
+    from .. import config, repos
 
-    familia = [por_id[i] for i in ids if i in por_id]
-    if len(familia) < 2:
+    faltantes_ids = [i for i in ids if i in por_id and not str(por_id[i].get("subtema") or "").strip()]
+    if not faltantes_ids:
         return 0
-    try:
-        grupos = proponer_subtemas(familia, ejecutor=ejecutor, al_ejecutar=al_ejecutar)
-    except Exception:  # noqa: BLE001 -- un fallo de Haiku no aborta el etiquetado del evento
-        _log.exception("fusionar_semantica: fallo proponiendo subtemas de «%s».", tema[:60])
-        return 0
+    etiquetados_ids = [i for i in ids if i in por_id and i not in faltantes_ids]
+
+    if etiquetados_ids and config.subtema_incremental_activo():
+        existentes = [str(por_id[i].get("subtema") or "").strip() for i in etiquetados_ids]
+        nuevos = [por_id[i] for i in faltantes_ids]
+        try:
+            grupos = proponer_subtemas_incremental(
+                nuevos, existentes, ejecutor=ejecutor, al_ejecutar=al_ejecutar,
+            )
+        except Exception:  # noqa: BLE001 -- un fallo de Haiku no aborta el etiquetado del evento
+            _log.exception("fusionar_semantica: fallo clasificando subtemas nuevos de «%s».", tema[:60])
+            return 0
+    else:
+        familia = [por_id[i] for i in faltantes_ids]
+        if len(familia) < 2:
+            return 0
+        try:
+            grupos = proponer_subtemas(familia, ejecutor=ejecutor, al_ejecutar=al_ejecutar)
+        except Exception:  # noqa: BLE001 -- un fallo de Haiku no aborta el etiquetado del evento
+            _log.exception("fusionar_semantica: fallo proponiendo subtemas de «%s».", tema[:60])
+            return 0
     etiquetados = 0
     for g in grupos:
         subtema = str(g.get("subtema") or "").strip()
