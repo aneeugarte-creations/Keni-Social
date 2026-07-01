@@ -390,3 +390,65 @@ def test_spec_prompt_round_trip_reconstruye_identidad():
     assert revivido["procesar"]["kind"] == jobspec.PROC_PROMPT
     procesar = jobspec.reconstruir_procesar(revivido)
     assert procesar("cualquier salida", None) == {}
+
+
+# --------------------------------------------------------------------------- #
+# Modelo del copy: sonnet por defecto en TODOS los caminos de copy             #
+# --------------------------------------------------------------------------- #
+
+
+def test_lanzar_copy_pipeline_usa_sonnet(encolado):
+    """El copy AUTOMÁTICO del pipeline (`lanzar_copy(tipo=TIPO_PIPELINE)`) sale con sonnet.
+
+    `lanzar` no puede fijarlo (tipo=pipeline lo comparten verificación/fusión, con su propio
+    modelo); lo fija `lanzar_copy`, que sabe que es copy, para AMBOS tipos que pasan por él.
+    """
+    from keni_consola.dominio import generar
+    from keni_consola.pipeline_contenido import TIPO_PIPELINE
+
+    generar.lanzar_copy(
+        marca=_MARCA, contexto="La nota de origen.", redes_ids=["x"],
+        titulo="Tema X", titulo_dado="Tema X", tipo=TIPO_PIPELINE,
+    )
+    assert encolado["spec"]["endurecer"]["modelo"] == config.copy_modelo()
+
+
+def test_lanzar_copy_manual_usa_sonnet(encolado):
+    """El copy MANUAL (`lanzar_copy(tipo="copy")`) sigue con sonnet."""
+    from keni_consola.dominio import generar
+
+    generar.lanzar_copy(
+        marca=_MARCA, contexto="La nota de origen.", redes_ids=["x"],
+        titulo="Tema X", titulo_dado="Tema X", tipo="copy",
+    )
+    assert encolado["spec"]["endurecer"]["modelo"] == config.copy_modelo()
+
+
+def test_lanzar_copy_respeta_modelo_explicito(encolado):
+    """Un `endurecer["modelo"]` explícito (incl. "" = default de la cuenta) se respeta."""
+    from keni_consola.dominio import generar
+    from keni_consola.pipeline_contenido import TIPO_PIPELINE
+
+    generar.lanzar_copy(
+        marca=_MARCA, contexto="La nota de origen.", redes_ids=["x"],
+        titulo="Tema X", titulo_dado="Tema X", tipo=TIPO_PIPELINE,
+        endurecer={"modelo": ""},
+    )
+    assert encolado["spec"]["endurecer"]["modelo"] == ""
+
+
+def test_lanzar_pipeline_no_copy_no_fuerza_sonnet(encolado):
+    """Una etapa de pipeline que NO es copy (p. ej. verificación) NO queda forzada a sonnet.
+
+    `lanzar` es agnóstico del modelo: sin `endurecer["modelo"]` el spec no fija modelo (el
+    runner cae al default de la cuenta); las etapas con modelo propio lo pasan explícito.
+    """
+    from keni_consola.dominio import generar
+    from keni_consola.pipeline_contenido import TIPO_PIPELINE
+
+    generar.lanzar(
+        tipo=TIPO_PIPELINE, titulo="Verificar", marca=_MARCA, prompt="verifica esto",
+        procesar=lambda salida, metricas: {}, procesar_spec={},
+    )
+    e = encolado["spec"]["endurecer"]
+    assert e is None or "modelo" not in e

@@ -614,16 +614,10 @@ def lanzar(
     from .. import ruteo_cuentas
 
     carril = ruteo_cuentas.carril_de_marca(marca) if marca else jobspec.CARRIL_INFERENCIA
-    # MODELO DEL COPY: por defecto sonnet (`config.copy_modelo()`). El copy salía con el modelo
-    # por defecto de la cuenta (opus); medido sobre runs reales, sonnet da copy equivalente o
-    # mejor a ~mitad de coste de salida. Solo el copy (`tipo == "copy"`); ambos caminos de copy
-    # (`lanzar_copy` y el MODO PIEZAS de `prompts_lanzar`) pasan por aquí. Un caller que ya fije
-    # `endurecer["modelo"]` (incluido "" para forzar el default de la cuenta) se respeta.
-    if tipo == "copy":
-        from .. import config  # noqa: PLC0415 -- perezoso: no acopla config al paquete `dominio`
-
-        endurecer = dict(endurecer or {})
-        endurecer.setdefault("modelo", config.copy_modelo())
+    # MODELO: `lanzar` es AGNOSTICO del modelo (no puede: `tipo=TIPO_PIPELINE` cubre por igual
+    # el copy y las etapas de verificación/fusión, cada una con SU modelo). El default de copy
+    # (sonnet) lo fija el caller que SÍ sabe que es copy —`lanzar_copy` y el MODO PIEZAS de
+    # `prompts_lanzar`— vía `endurecer["modelo"]` antes de delegar aquí.
     spec = jobspec.construir(
         prompt=prompt,
         procesar=procesar_spec,
@@ -928,6 +922,17 @@ def lanzar_copy(
     if estable:
         endurecer = dict(endurecer or {})
         endurecer["system_prompt"] = estable
+    # MODELO DEL COPY: sonnet por defecto (`config.copy_modelo()`). Se fija AQUÍ —el punto que
+    # sabe "esto es copy"— para cubrir TODOS los tipos de copy que pasan por `lanzar_copy`:
+    # manual (tipo="copy") y de pipeline (tipo=TIPO_PIPELINE), que `lanzar` no distingue de
+    # otras etapas de pipeline (verificación/fusión, con su propio modelo). El copy es el mayor
+    # consumidor unitario y sonnet da copy equivalente a ~mitad de coste que el default de la
+    # cuenta (opus). Un caller que ya fije `endurecer["modelo"]` (incl. "" = default de la
+    # cuenta) se respeta.
+    from .. import config  # noqa: PLC0415 -- perezoso: no acopla config al paquete `dominio`
+
+    endurecer = dict(endurecer or {})
+    endurecer.setdefault("modelo", config.copy_modelo())
     # Defensivo: solo propagamos fuente_id/clave si AMBOS vienen (un caso parcial no debe
     # marcar el item del feed). Reparamos y enviamos ambos o ninguno.
     fuente = fuente_id.strip() if isinstance(fuente_id, str) and fuente_id.strip() else None

@@ -166,8 +166,14 @@ def lanzar(
             titulo_dado=titulo_contenido.strip(),
             texto_base=bloque_contexto, autor=autor,
         )
+        # MODELO DEL COPY: sonnet por defecto (`config.copy_modelo()`), igual que el resto del
+        # copy. MODO PIEZAS lanza directo por `generar.lanzar` (no por `lanzar_copy`), así que
+        # inyecta aquí el modelo del copy. Import perezoso, como el resto del módulo.
+        from .. import config
+
         return generar.lanzar(
             tipo="copy", titulo=titulo, marca=marca, prompt=prompt_final,
+            endurecer={"modelo": config.copy_modelo()},
             procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
             procesar_spec=procesar_spec, dir_temporal=dir_temporal, autor=autor,
             # MODO PIEZAS = SALIDA ESTRUCTURADA (se parsea a piezas por red + auto-crea borradores;
