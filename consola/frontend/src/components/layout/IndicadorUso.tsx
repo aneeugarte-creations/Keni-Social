@@ -11,17 +11,18 @@ import { cn } from "@/lib/utils";
  * Indicador SUTIL del uso de las cuentas de Claude del servidor, alojado en el pie del sidebar.
  * Expandido pinta, por cuenta, UNA sola línea («Uso» + %) con una barra de progreso fina debajo; la
  * cabecera «Cuenta A/B» solo aparece en la vista "Todas" (varias cuentas), porque con una sola es su
- * cuenta siempre. Colapsado, un anillo fino con el % del límite que ANTES bloqueará (burn rate). Esa
- * línea es un BOTÓN: un click despliega un panel flotante con el desglose completo (Semana/24h/5h,
- * cada uno con su barra), igual que antes se veían siempre — así el pie ocupa una línea en reposo
- * pero el detalle sigue a un solo click, no solo al tooltip.
+ * cuenta siempre. Colapsado, un anillo fino con el mismo %. Esa línea es un BOTÓN: un click despliega
+ * un panel flotante con el desglose completo (Semana/24h/5h, cada uno con su barra), igual que antes
+ * se veían siempre — así el pie ocupa una línea en reposo pero el detalle sigue a un solo click, no
+ * solo al tooltip.
  *
- * EL NÚMERO QUE SE VE: la ventana SEMANAL que primero se agota (el mayor de all-models vs cuota
- * Sonnet) — es el límite de mayor alcance y el que de verdad frena el trabajo de la semana. «24h» y
- * «5h» siguen calculándose (van en el desglose del panel) pero no compiten por espacio visual con el
- * número principal. El anillo colapsado usa en cambio el burn rate (`limiteMasUrgente`, el que antes
- * tocará el 100 % por ventanas duras 5h/semana/Sonnet), porque ahí sí importa la predicción, no solo
- * el nivel actual.
+ * EL NÚMERO QUE SE VE (`pctPrincipal`, tanto expandido como colapsado): el burn rate
+ * (`limiteMasUrgente`, el límite que ANTES tocará el 100 % por ventanas duras 5h/semana/Sonnet) — una
+ * ventana puede ir alta pero resetear antes de llenarse (no bloquea), y otra más baja pero con un
+ * ritmo que la lleva al tope antes; esa es la que de verdad frena el trabajo. Sin resets suficientes
+ * para predecir, cae al binding semanal (el mayor de all-models vs cuota Sonnet). «24h» y «5h» siguen
+ * calculándose (van en el desglose del panel) pero no compiten por espacio visual con el número
+ * principal.
  *
  * QUÉ CUENTAS muestra: el backend devuelve solo las que el usuario PUEDE ver (suelo por marcas);
  * de esas, el selector de marca activo (`useMarcaActiva`) decide cuál(es) PINTAR — en "Todas"
@@ -60,9 +61,9 @@ function etiquetaCuenta(uso: UsoCuenta): string {
   return `Cuenta ${uso.cuenta.toUpperCase()}`;
 }
 
-/** % que pinta el anillo colapsado: el límite que ANTES bloqueará (burn rate); si aún no hay resets
- *  para predecir, cae al binding semanal de hoy (el mayor de all-models vs Sonnet). */
-function pctColapsado(uso: UsoCuenta): number | null {
+/** % que se PINTA (expandido y colapsado): el límite que ANTES bloqueará (burn rate); si aún no hay
+ *  resets suficientes para predecir, cae al binding semanal de hoy (el mayor de all-models vs Sonnet). */
+function pctPrincipal(uso: UsoCuenta): number | null {
   return limiteMasUrgente(uso)?.pct ?? semanaBinding(uso).pct;
 }
 
@@ -248,9 +249,9 @@ function CirculoUso({ pct, rojo }: { pct: number | null; rojo: boolean }) {
 }
 
 /** Bloque expandido de UNA cuenta: UNA línea («Uso» + %) + su barra, más el aviso rojo. El número es
- *  el binding semanal (el límite de mayor alcance); un click en la línea despliega el desglose
- *  completo (Semana/24h/5h) en un panel flotante. La cabecera "Cuenta A/B" solo cuando hay VARIAS
- *  cuentas (vista "Todas"): con una sola es su cuenta siempre. */
+ *  el burn rate (`pctPrincipal`, el límite que antes bloqueará); un click en la línea despliega el
+ *  desglose completo (Semana/24h/5h) en un panel flotante. La cabecera "Cuenta A/B" solo cuando hay
+ *  VARIAS cuentas (vista "Todas"): con una sola es su cuenta siempre. */
 function BloqueCuenta({
   uso,
   etiquetada,
@@ -264,7 +265,7 @@ function BloqueCuenta({
 }) {
   const rojo = uso.alerta_roja;
   const alerta = mensajeRojo(uso);
-  const pct = pctEntero(semanaBinding(uso).pct);
+  const pct = pctEntero(pctPrincipal(uso));
   const tiene = pct != null;
   const tooltip = tooltipCompleto(uso);
   const anclaRef = React.useRef<HTMLButtonElement>(null);
@@ -351,7 +352,7 @@ function CirculoCuenta({ uso }: { uso: UsoCuenta }) {
   return (
     <Tooltip label={etiqueta} side="right">
       <div aria-label={etiqueta} className="flex items-center justify-center">
-        <CirculoUso pct={pctColapsado(uso)} rojo={uso.alerta_roja} />
+        <CirculoUso pct={pctPrincipal(uso)} rojo={uso.alerta_roja} />
       </div>
     </Tooltip>
   );

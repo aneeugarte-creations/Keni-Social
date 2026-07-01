@@ -67,10 +67,38 @@ describe("IndicadorUso", () => {
     expect(screen.queryByText(/Sin cuenta|100%/)).not.toBeInTheDocument();
   });
 
-  it("«Semana» muestra el límite que primero se agota: con Sonnet por encima, pinta Sonnet", () => {
+  it("sin burn rate activo (reset semanal ya pasado en el fixture): cae al binding semanal, con Sonnet por encima", () => {
     renderIndicador({ data: { cuentas: [cuenta({ semana_pct: 40, sonnet_pct: 78 })] } }, "claro-sports");
     expect(screen.getByText("78%")).toBeInTheDocument(); // toma el mayor (Sonnet), no all-models
     expect(screen.queryByText("40%")).not.toBeInTheDocument();
+  });
+
+  it("burn rate activo: si el 5h va a bloquear antes que la semana, «Uso» muestra el 5h (no el semanal)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T10:00:00Z"));
+    try {
+      renderIndicador(
+        {
+          data: {
+            cuentas: [
+              cuenta({
+                semana_pct: 30,
+                // Ventana de 5h que empezó hace 3h (resetea en 2h): a ritmo de 80/3 %/h llega al
+                // 100% en ~45 min, mucho antes que la semana (cuyo reset cae fuera de la ventana
+                // "iniciada" a esta hora simulada, así que ni compite).
+                sesion_5h_pct: 80,
+                reset_sesion_iso: "2026-06-15T12:00:00Z",
+              }),
+            ],
+          },
+        },
+        "claro-sports",
+      );
+      expect(screen.getByText("80%")).toBeInTheDocument();
+      expect(screen.queryByText("30%")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("barra «24h»: el cupo del día (consumo/umbral del límite que primero se agota) va en el tooltip", () => {
