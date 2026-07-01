@@ -13,8 +13,9 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { AreaChart } from "@tremor/react";
-import { ExternalLink, Gauge, Info } from "lucide-react";
+import { ExternalLink, Gauge } from "lucide-react";
 
+import { AyudaInfo } from "@/components/comunes/AyudaInfo";
 import {
   Dialog,
   DialogContent,
@@ -294,23 +295,14 @@ function Kpi({
 }: {
   etiqueta: string;
   valor: string;
-  /** Nota de transparencia opcional: pinta un icono de info con el texto en el tooltip nativo. */
+  /** Nota de transparencia opcional: pinta un icono "i" que la despliega al clicar. */
   info?: string;
 }) {
   return (
     <div className="rounded-md border border-border bg-muted/30 px-3 py-2">
       <p className="flex items-center gap-1 text-xs text-muted-foreground">
         {etiqueta}
-        {info ? (
-          <button
-            type="button"
-            title={info}
-            aria-label={info}
-            className="inline-flex text-muted-foreground/70 hover:text-muted-foreground focus-visible:text-muted-foreground"
-          >
-            <Info className="h-3 w-3" aria-hidden="true" />
-          </button>
-        ) : null}
+        {info ? <AyudaInfo texto={info} etiqueta={`Qué es ${etiqueta}`} /> : null}
       </p>
       <p className="text-base font-semibold tabular-nums">{valor}</p>
     </div>

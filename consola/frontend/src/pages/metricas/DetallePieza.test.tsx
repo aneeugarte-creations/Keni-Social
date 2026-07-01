@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import * as React from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -99,8 +99,9 @@ describe("DetallePieza", () => {
     // Alcance único (solo Meta lo mide): se pinta con su valor.
     expect(screen.getByText("Alcance único")).toBeInTheDocument();
     // Transparencia de "Vistas": en Meta (instagram) la nota aclara que excluye repeticiones.
+    fireEvent.click(screen.getByRole("button", { name: "Qué es Vistas" }));
     expect(
-      screen.getByRole("button", { name: /no incluye repeticiones \(loops\)/i }),
+      screen.getByText(/no incluye repeticiones \(loops\)/i),
     ).toBeInTheDocument();
     // KPIs de velocidad aparecen tras cargar el histórico.
     expect(await screen.findByText("% en las primeras 24 h")).toBeInTheDocument();
@@ -133,12 +134,11 @@ describe("DetallePieza", () => {
     );
 
     // Nota honesta genérica para redes no-Meta; NO afirma "repeticiones (loops)".
+    fireEvent.click(screen.getByRole("button", { name: "Qué es Vistas" }));
     expect(
-      screen.getByRole("button", { name: /la definición de vistas\/reproducciones varía por red/i }),
+      screen.getByText(/la definición de vistas\/reproducciones varía por red/i),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /repeticiones \(loops\)/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/repeticiones \(loops\)/i)).not.toBeInTheDocument();
   });
 
   it("no consulta el histórico mientras el modal está cerrado", () => {

@@ -71,6 +71,9 @@ export const METRICAS: MetaMetrica[] = [
     compacto: numeroCompacto,
     completo: numeroCompleto,
     color: "violet",
+    descripcion:
+      "Suma de me gusta, comentarios, compartidos y guardados. Es la única métrica " +
+      "homogénea entre redes: se puede sumar entre plataformas sin distorsión.",
   },
   {
     clave: "engagement_pct",

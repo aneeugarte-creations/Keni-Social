@@ -11,6 +11,7 @@
  */
 import * as React from "react";
 
+import { AyudaInfo } from "@/components/comunes/AyudaInfo";
 import { Card, CardContent } from "@/components/ui/card";
 
 interface TarjetaKpiProps {
@@ -23,6 +24,11 @@ interface TarjetaKpiProps {
    * muestra el propio `valor`.
    */
   titulo?: string;
+  /**
+   * Explicación breve del concepto (qué es, cómo se calcula). Si se pasa, se
+   * pinta un icono "i" junto a la etiqueta que la despliega al clicar.
+   */
+  ayuda?: string;
   /**
    * Variante visual.
    * - `"borde"` (por defecto): caja con borde, sin Card de shadcn.
@@ -41,15 +47,23 @@ export function TarjetaKpi({
   etiqueta,
   valor,
   titulo,
+  ayuda,
   variante = "borde",
   insignia,
 }: TarjetaKpiProps) {
+  const etiquetaFila = (
+    <div className="flex min-w-0 items-center gap-1">
+      <p className="truncate text-sm text-muted-foreground">{etiqueta}</p>
+      {ayuda ? <AyudaInfo texto={ayuda} etiqueta={`Qué es ${etiqueta}`} /> : null}
+    </div>
+  );
+
   if (variante === "card") {
     return (
       <Card>
         <CardContent className="space-y-1.5 p-5">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-sm text-muted-foreground">{etiqueta}</p>
+            {etiquetaFila}
             {insignia}
           </div>
           <p
@@ -66,7 +80,7 @@ export function TarjetaKpi({
   return (
     <div className="rounded-lg border border-border p-4">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">{etiqueta}</p>
+        {etiquetaFila}
         {insignia}
       </div>
       <p className="truncate text-xl font-semibold tabular-nums" title={titulo ?? valor}>

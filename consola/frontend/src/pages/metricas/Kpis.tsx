@@ -115,9 +115,8 @@ export function Kpis({
           variante="card"
           etiqueta="Impresiones"
           valor={numeroCompacto(total.impresiones)}
-          titulo={`${numeroCompleto(
-            total.impresiones,
-          )} — volumen total del periodo (veces que el contenido se mostró). El alcance único se lee como tendencia.`}
+          titulo={numeroCompleto(total.impresiones)}
+          ayuda="Volumen total del periodo (veces que el contenido se mostró). El alcance único se lee como tendencia."
         />
       );
     }
@@ -134,7 +133,8 @@ export function Kpis({
         variante="card"
         etiqueta={m.etiqueta}
         valor={compacto}
-        titulo={m.descripcion ? `${completo} — ${m.descripcion}` : completo}
+        titulo={completo}
+        ayuda={m.descripcion}
         insignia={insigniaDe(m.metrica)}
       />
     );
