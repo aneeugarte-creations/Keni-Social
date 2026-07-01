@@ -95,6 +95,25 @@ def _validar_marca(marca: Any) -> tuple[str | None, str | None]:
     return marca, None
 
 
+def _validar_marcas(valor: Any) -> tuple[list[str] | None, str | None]:
+    """Normaliza/valida la LISTA de marcas servidas por la fuente. `([...], None)` o `(None, msg)`.
+
+    Cada elemento pasa por `_validar_marca`; dedup preservando el orden. `None`/ausente → [].
+    """
+    if valor is None:
+        return [], None
+    if not isinstance(valor, list):
+        return None, "Las marcas deben ser una lista."
+    fuera: list[str] = []
+    for m in valor:
+        marca, error = _validar_marca(m)
+        if error is not None:
+            return None, error
+        if marca and marca not in fuera:
+            fuera.append(marca)
+    return fuera, None
+
+
 def _validar_filtro(valor: Any, nombre: str) -> tuple[str | None, str | None]:
     """Normaliza un CSV de filtro (`incluir`/`excluir`). `(csv, None)` o `(None, msg)`.
 
@@ -164,6 +183,13 @@ def _fuente_a_dict(fuente: dict[str, Any]) -> dict[str, Any]:
         "url": fuente["url"],
         "marca": fuente["marca"],
         "marca_nombre": marcas.etiqueta_de(fuente["marca"]) if fuente["marca"] else "",
+        # Marcas SERVIDAS por la fuente (multimarca): una fuente ingiere una vez y hace fan-out por
+        # marca. `marca` es la principal/display; `marcas` la lista completa (con sus etiquetas).
+        "marcas": list(fuente.get("marcas") or ([fuente["marca"]] if fuente["marca"] else [])),
+        "marcas_nombres": [
+            marcas.etiqueta_de(m)
+            for m in (fuente.get("marcas") or ([fuente["marca"]] if fuente["marca"] else []))
+        ],
         "activo": bool(fuente.get("activo", True)),
         "incluir": fuente.get("incluir", ""),
         "excluir": fuente.get("excluir", ""),
@@ -279,6 +305,14 @@ def _crear_fuente(datos: dict) -> tuple[int, dict]:
     marca, error = _validar_marca(datos.get("marca", ""))
     if error is not None:
         return 400, {"error": error}
+    marcas_servidas, error = _validar_marcas(datos.get("marcas"))
+    if error is not None:
+        return 400, {"error": error}
+    # Compat: sin lista, la marca singular define la fuente. La PRINCIPAL (para validar
+    # categoría/línea, que son por marca) es la singular o la primera servida.
+    if not marcas_servidas and marca:
+        marcas_servidas = [marca]
+    marca = marca or (marcas_servidas[0] if marcas_servidas else "")
     incluir, error = _validar_filtro(datos.get("incluir"), "inclusión")
     if error is not None:
         return 400, {"error": error}
@@ -307,6 +341,7 @@ def _crear_fuente(datos: dict) -> tuple[int, dict]:
         nombre.strip(),
         url,
         marca=marca,
+        marcas=marcas_servidas or None,
         incluir=incluir,
         excluir=excluir,
         redes_def=redes_def,
@@ -350,6 +385,11 @@ def _actualizar_fuente(fuente_id: str, datos: dict) -> tuple[int, dict]:
         if error is not None:
             return 400, {"error": error}
         campos["marca"] = marca
+    if "marcas" in datos:
+        marcas_servidas, error = _validar_marcas(datos.get("marcas"))
+        if error is not None:
+            return 400, {"error": error}
+        campos["marcas"] = marcas_servidas
     if "activo" in datos:
         campos["activo"] = bool(datos.get("activo"))
     if "incluir" in datos:

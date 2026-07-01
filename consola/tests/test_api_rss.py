@@ -125,7 +125,28 @@ def test_crear_fuente_y_listar(cliente):
     assert f["nombre"] == "Diario"
     assert f["url"] == _URL_OK
     assert f["marca_nombre"] == "UnoTV"
+    # Marca única → `marcas` = [marca] (paridad con la multimarca).
+    assert f["marcas"] == ["unotv"]
     assert len(cliente.get("/api/rss/fuentes").json()["fuentes"]) == 1
+
+
+def test_crear_y_editar_fuente_multimarca(cliente):
+    """Una fuente puede servir a varias marcas: se guarda `marcas`, la principal es la primera y
+    aparece al filtrar por CUALQUIERA de sus marcas."""
+    r = cliente.post(
+        "/api/rss/fuentes", json={"nombre": "Mundo", "url": _URL_OK, "marcas": ["unotv", "unotv-us"]}
+    )
+    assert r.status_code == 200
+    f = r.json()["fuente"]
+    assert f["marcas"] == ["unotv", "unotv-us"]
+    assert f["marca"] == "unotv"  # principal = primera servida
+    # Filtrar por la marca secundaria la encuentra.
+    ids_us = {x["id"] for x in cliente.get("/api/rss/fuentes?marca=unotv-us").json()["fuentes"]}
+    assert f["id"] in ids_us
+    # Editar la lista de marcas.
+    r2 = cliente.put(f"/api/rss/fuentes/{f['id']}", json={"marcas": ["claro-sports", "unotv"]})
+    assert r2.status_code == 200
+    assert r2.json()["fuente"]["marcas"] == ["claro-sports", "unotv"]
 
 
 def test_listar_fuentes_filtra_por_marca(cliente):

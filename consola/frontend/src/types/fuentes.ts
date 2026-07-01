@@ -221,9 +221,13 @@ export interface FuenteRss {
   id: string;
   nombre: string;
   url: string;
-  /** Marca asociada (`""` si es general). */
+  /** Marca PRINCIPAL/display (`""` si es general). Para multimarca, la primera de `marcas`. */
   marca: string;
   marca_nombre: string;
+  /** Marcas SERVIDAS por la fuente (multimarca): ingiere una vez y hace fan-out por marca. */
+  marcas: string[];
+  /** Etiquetas legibles de `marcas` (mismo orden). */
+  marcas_nombres: string[];
   /** `true` si el feed está activo (se incluye al refrescar items). */
   activo: boolean;
   /** Palabra(s) clave que deben aparecer para incluir un item (`""` = todos). */
@@ -267,6 +271,8 @@ export interface CuerpoCrearFuenteRss {
   url: string;
   /** Marca asociada (opcional). */
   marca?: string;
+  /** Marcas servidas (multimarca, opcional). Si viene, la principal es la primera. */
+  marcas?: string[];
   /** Palabra(s) clave de inclusión (opcional). */
   incluir?: string;
   /** Palabra(s) clave de exclusión (opcional). */
@@ -288,6 +294,8 @@ export interface CuerpoActualizarFuenteRss {
   nombre?: string;
   url?: string;
   marca?: string;
+  /** Marcas servidas (multimarca, opcional). Reemplaza la lista completa. */
+  marcas?: string[];
   activo?: boolean;
   incluir?: string;
   excluir?: string;

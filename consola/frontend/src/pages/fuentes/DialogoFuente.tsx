@@ -4,7 +4,6 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { Campo } from "@/components/comunes/Campo";
-import { desdeMarca, marcaParam } from "@/components/comunes/selectores";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -89,22 +88,39 @@ function FormularioFuente({
   const { marcaActiva } = useMarcaActiva();
   const [nombre, setNombre] = React.useState(fuente?.nombre ?? "");
   const [url, setUrl] = React.useState(fuente?.url ?? "");
-  // La marca la fija el switch global (ya no hay selector propio): un feed NUEVO es de la marca
-  // activa (o compartido cuando el global está en "Todas"); al EDITAR se conserva la del feed.
-  const marca = fuente
-    ? desdeMarca(fuente.marca)
-    : desdeMarca(marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : undefined);
-  const nombreMarcaFuente =
-    marcas.find((m) => m.id === marcaParam(marca))?.nombre ?? "Compartida (todas las marcas)";
+  // Marcas SERVIDAS por el feed (multimarca): ingiere una vez y hace fan-out por marca. Feed NUEVO:
+  // por defecto la marca activa (compartido si el switch global está en "Todas"). Editando: las del
+  // feed. La PRINCIPAL (display + validación de línea, que es por marca) es la primera de la lista.
+  const marcaBase = fuente
+    ? fuente.marca
+    : marcaActiva && marcas.some((m) => m.id === marcaActiva)
+      ? marcaActiva
+      : "";
+  const [marcasServidas, setMarcasServidas] = React.useState<string[]>(
+    fuente
+      ? fuente.marcas.length
+        ? fuente.marcas
+        : fuente.marca
+          ? [fuente.marca]
+          : []
+      : marcaBase
+        ? [marcaBase]
+        : [],
+  );
+  const marcaPrincipal = marcasServidas[0] ?? "";
+  const alternarMarca = (id: string) =>
+    setMarcasServidas((prev) =>
+      prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id],
+    );
   const [activo, setActivo] = React.useState(fuente?.activo ?? true);
   const [propia, setPropia] = React.useState(fuente?.propia ?? false);
   // CATEGORÍA de la que cuelga el feed (catch-all "" = General). La cadencia se hereda.
   const [lineaId, setLineaId] = React.useState(fuente?.linea_id ?? "");
   // Líneas de la marca del feed (clase `categoria`, activas): de aquí cuelga el feed.
   const lineasQuery = useQuery({
-    queryKey: ["etiquetas", "categoria", marcaParam(marca) ?? ""],
+    queryKey: ["etiquetas", "categoria", marcaPrincipal],
     queryFn: ({ signal }) =>
-      api.etiquetas({ marca: marcaParam(marca) ?? "", clase: "categoria", activas: true }, signal),
+      api.etiquetas({ marca: marcaPrincipal, clase: "categoria", activas: true }, signal),
   });
   const lineas = lineasQuery.data?.etiquetas ?? [];
   // Relevancia. Alta nueva: "" = el back decide por el medio; al editar, la del feed.
@@ -114,13 +130,13 @@ function FormularioFuente({
 
   const guardar = useMutation({
     mutationFn: () => {
-      const marcaVal = marcaParam(marca) ?? "";
       const pesoVal = RELEVANCIAS.find((t) => t.id === tier)?.peso;
       if (fuente) {
         return api.actualizarFuenteRss(fuente.id, {
           nombre: nombre.trim(),
           url: url.trim(),
-          marca: marcaVal,
+          marca: marcaPrincipal,
+          marcas: marcasServidas,
           activo,
           propia,
           linea_id: lineaId,
@@ -130,7 +146,8 @@ function FormularioFuente({
       return api.crearFuenteRss({
         nombre: nombre.trim(),
         url: url.trim(),
-        marca: marcaVal || undefined,
+        marca: marcaPrincipal || undefined,
+        marcas: marcasServidas.length ? marcasServidas : undefined,
         propia: propia || undefined,
         linea_id: lineaId || undefined,
         // Sin relevancia elegida, el back la asigna por el medio.
@@ -183,10 +200,26 @@ function FormularioFuente({
           aria-invalid={(intentado && Boolean(errUrl)) || undefined}
         />
       </Campo>
+      <Campo etiqueta="Marcas">
+        <div className="space-y-1.5 pt-1">
+          {marcas.map((m) => (
+            <label key={m.id} className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox
+                checked={marcasServidas.includes(m.id)}
+                onCheckedChange={() => alternarMarca(m.id)}
+                aria-label={`Servir a ${m.nombre}`}
+              />
+              {m.nombre}
+            </label>
+          ))}
+          <p className="text-xs text-muted-foreground">
+            {marcasServidas.length === 0
+              ? "Compartida (todas las marcas)."
+              : "El feed ingiere una vez y alimenta a cada marca marcada."}
+          </p>
+        </div>
+      </Campo>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Campo etiqueta="Marca">
-          <p className="text-sm text-muted-foreground pt-1.5">{nombreMarcaFuente}</p>
-        </Campo>
         <Campo etiqueta="Línea" htmlFor="fuente-linea">
           <Select
             value={lineaId || "__sin__"}
