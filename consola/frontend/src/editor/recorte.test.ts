@@ -8,14 +8,15 @@ import {
   cajaConAspecto,
   clampCrop,
   docALocal,
+  encajarRecorte,
   escalarCrop,
   localADoc,
   moverAsa,
   recortarCaja,
   recortarCajaRotada,
   recorteLateral,
+  recorteMarco,
   vistaRecorte,
-  zoomMarcoFoto,
 } from "./recorte";
 
 describe("clampCrop", () => {
@@ -447,45 +448,94 @@ describe("recortarCajaRotada (recorte a lo largo de los ejes locales del objeto)
   });
 });
 
-describe("zoomMarcoFoto (tiradores del marco: ACERCAR/alejar con el marco FIJO)", () => {
-  // Caja 100×100; foto == caja (cover, fuente completa, crop {0,0,1,1}, escala 1:1).
-  const vv = { fx: 0, fy: 0, fw: 100, fh: 100, escalaSrc: 1 };
-  const full = { cx: 0, cy: 0, cw: 1, ch: 1 };
-
-  it("'mover' no cambia el crop (lo cubre el pan)", () => {
-    expect(zoomMarcoFoto(full, 100, 100, vv, "mover", 10, 10)).toEqual(full);
+describe("recorteMarco / encajarRecorte (tiradores del marco: ENCOGER la caja, corta sin ampliar)", () => {
+  // Caja 400×300 == foto (cover, fuente 800×600, escala 1:2, sin crop/zoom/flip).
+  const base = (extra: Partial<GestoLateral> = {}): GestoLateral => ({
+    w: 400,
+    h: 300,
+    iw: 800,
+    ih: 600,
+    ajuste: "cover",
+    foco: [0.5, 0.5],
+    zoom: 1,
+    crop: null,
+    caja: { x: 0, y: 0, w: 400, h: 300 },
+    ...extra,
   });
 
-  it("borde derecho hacia dentro acerca anclado a la IZQUIERDA (centrado en vertical)", () => {
-    // dx=-50 => factor 100/(100-50)=2 alrededor de (0, 0.5): se queda la mitad izquierda, centrada.
-    expect(zoomMarcoFoto(full, 100, 100, vv, "e", -50, 0)).toEqual({ cx: 0, cy: 0.25, cw: 0.5, ch: 0.5 });
+  it("arrastrar el borde derecho hacia dentro ENCOGE la caja y recorta ese lado (no amplía)", () => {
+    const r = recorteMarco(base(), "e", -100, 0)!;
+    expect(r).not.toBeNull();
+    expect({ x: r.x, y: r.y, w: r.w, h: r.h }).toEqual({ x: 0, y: 0, w: 300, h: 300 });
+    expect(r.crop).toEqual({ cx: 0, cy: 0, cw: 0.75, ch: 1 });
+    expect(r.zoom).toBe(1);
+    expect(r.foco).toEqual([0.5, 0.5]);
   });
 
-  it("borde izquierdo hacia dentro acerca anclado a la DERECHA", () => {
-    expect(zoomMarcoFoto(full, 100, 100, vv, "w", 50, 0)).toEqual({ cx: 0.5, cy: 0.25, cw: 0.5, ch: 0.5 });
+  it("el borde izquierdo mueve el origen de la caja y compensa cx (los píxeles no se mueven)", () => {
+    const r = recorteMarco(base(), "w", 100, 0)!;
+    expect({ x: r.x, w: r.w }).toEqual({ x: 100, w: 300 });
+    expect(r.crop).toEqual({ cx: 0.25, cy: 0, cw: 0.75, ch: 1 });
   });
 
-  it("borde inferior hacia dentro acerca anclado ARRIBA", () => {
-    expect(zoomMarcoFoto(full, 100, 100, vv, "s", 0, -50)).toEqual({ cx: 0.25, cy: 0, cw: 0.5, ch: 0.5 });
+  it("una esquina (se) encoge los DOS lados que la tocan", () => {
+    const r = recorteMarco(base(), "se", -100, -100)!;
+    expect({ x: r.x, y: r.y, w: r.w, h: r.h }).toEqual({ x: 0, y: 0, w: 300, h: 200 });
+    expect(r.crop.cw).toBeCloseTo(0.75, 6);
+    expect(r.crop.ch).toBeCloseTo(2 / 3, 6);
   });
 
-  it("una esquina acerca anclada a la esquina OPUESTA", () => {
-    expect(zoomMarcoFoto(full, 100, 100, vv, "se", -50, -50)).toEqual({ cx: 0, cy: 0, cw: 0.5, ch: 0.5 });
+  it("hacia fuera sin material NO crece: se clava en la foto completa", () => {
+    const r = recorteMarco(base(), "e", 999, 0)!;
+    expect(r.w).toBe(400);
+    expect(r.crop).toEqual({ cx: 0, cy: 0, cw: 1, ch: 1 });
   });
 
-  it("hacia fuera (alejar) se clava en la foto completa (no se sale de la fuente)", () => {
-    expect(zoomMarcoFoto(full, 100, 100, vv, "e", 1000, 0)).toEqual({ cx: 0, cy: 0, cw: 1, ch: 1 });
+  it("respeta el tamaño mínimo del lado al recortar a fondo", () => {
+    const r = recorteMarco(base(), "e", -999, 0)!;
+    expect(r.w).toBe(MIN_LADO_PX);
   });
 
-  it("siempre devuelve un crop válido ∈ [0,1] sea cual sea el tirador", () => {
-    for (const asa of ["nw", "n", "ne", "e", "se", "s", "sw", "w"] as const) {
-      const c = zoomMarcoFoto({ cx: 0.1, cy: 0.1, cw: 0.8, ch: 0.8 }, 100, 100, vv, asa, -30, -30);
-      expect(c.cx).toBeGreaterThanOrEqual(0);
-      expect(c.cy).toBeGreaterThanOrEqual(0);
-      expect(c.cx + c.cw).toBeLessThanOrEqual(1 + 1e-9);
-      expect(c.cy + c.ch).toBeLessThanOrEqual(1 + 1e-9);
-      expect(c.cw).toBeGreaterThan(0);
-      expect(c.ch).toBeGreaterThan(0);
+  it("con flipH, arrastrar el borde derecho (pantalla) recorta el lado IZQUIERDO de la fuente", () => {
+    const r = recorteMarco(base({ flipH: true }), "e", -100, 0)!;
+    expect({ x: r.x, w: r.w }).toEqual({ x: 0, w: 300 });
+    expect(r.crop.cx).toBeCloseTo(0.25, 6);
+    expect(r.crop.cw).toBeCloseTo(0.75, 6);
+  });
+
+  it("mantiene los píxeles visibles (posición y escala) ante crop+zoom+foco previos", () => {
+    const p = base({ crop: { cx: 0.1, cy: 0.05, cw: 0.7, ch: 0.8 }, zoom: 1.3, foco: [0.4, 0.6] });
+    const r = recorteMarco(p, "e", -80, 0)!;
+    const despues: GestoLateral = { ...p, w: r.w, h: r.h, crop: r.crop, zoom: r.zoom, foco: r.foco, caja: { x: 0, y: 0, w: r.w, h: r.h } };
+    const fuenteEn = (g: GestoLateral, x: number, y: number) => {
+      const v = vistaRecorte(g.iw, g.ih, g.w, g.h, g.ajuste, g.foco, g.zoom ?? 1, g.crop);
+      return { u: (x - v.fx) / v.escalaSrc, w: (y - v.fy) / v.escalaSrc, k: v.escalaSrc };
+    };
+    // La caja no movió su origen (borde derecho): mismo punto del documento => mismo píxel y escala.
+    for (const [x, y] of [[10, 10], [100, 150], [r.w - 2, r.h - 2]] as const) {
+      const antes = fuenteEn(p, x + r.x, y + r.y);
+      const ahora = fuenteEn(despues, x, y);
+      expect(ahora.u).toBeCloseTo(antes.u, 3);
+      expect(ahora.w).toBeCloseTo(antes.w, 3);
+      expect(ahora.k).toBeCloseTo(antes.k, 6);
     }
+  });
+
+  it("'mover' y la falta de bitmap no producen gesto", () => {
+    expect(recorteMarco(base(), "mover", 10, 10)).toBeNull();
+    expect(recorteMarco(base({ iw: 0, ih: 0 }), "e", -50, 0)).toBeNull();
+  });
+
+  it("encajarRecorte deriva el crop canónico de un sub-rect del marco", () => {
+    const r = encajarRecorte(base(), 50, 30, 200, 150)!;
+    expect(r).toEqual({
+      x: 50,
+      y: 30,
+      w: 200,
+      h: 150,
+      crop: { cx: 0.125, cy: 0.1, cw: 0.5, ch: 0.5 },
+      zoom: 1,
+      foco: [0.5, 0.5],
+    });
   });
 });

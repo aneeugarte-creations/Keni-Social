@@ -1,10 +1,10 @@
 // Capa HTML sobre la imagen en MODO RECORTE: se ve la imagen ORIGINAL COMPLETA —nítida dentro del
-// marco, ATENUADA fuera— y los 8 tiradores van SOBRE EL MARCO. El MARCO (la caja de la capa) NO
-// cambia de tamaño: arrastrar un tirador ACERCA/ALEJA la foto dentro del marco anclado al borde
-// opuesto (= recorta esa franja y el resto rellena el marco; la foto no se hace más pequeña).
-// Arrastrar la IMAGEN la reencuadra (mueve cx/cy del crop) y la rueda hace ZOOM al centro. El crop
-// sigue siendo {cx,cy,cw,ch} normalizado sobre la fuente: NUNCA destruye píxeles. Todo gesto cuenta
-// como UN paso de deshacer. Confirmar/cancelar viven fuera (banner Hecho/Cancelar + Enter/Esc).
+// marco, ATENUADA fuera— y los 8 tiradores van SOBRE EL MARCO. Arrastrar un tirador ENCOGE/AGRANDA
+// el MARCO (la caja) y COMPENSA el crop para que los píxeles no se muevan ni cambien de escala: CORTA
+// la foto (la franja fuera del marco queda atenuada por el velo), no la amplía. Arrastrar la IMAGEN
+// la reencuadra (mueve cx/cy del crop) y la rueda hace ZOOM al centro. El crop sigue siendo
+// {cx,cy,cw,ch} normalizado sobre la fuente: NUNCA destruye píxeles. Todo gesto cuenta como UN paso
+// de deshacer. Confirmar/cancelar viven fuera (banner Hecho/Cancelar + Enter/Esc).
 
 import {
   type PointerEvent as PointerEventReact,
@@ -17,7 +17,7 @@ import {
 
 import type { Capa, CapaImagen, Crop } from "../documento";
 import { fotoMuestra } from "../muestra";
-import { type AsaRecorte, type VistaRecorte, cajaConAspecto, escalarCrop, moverAsa, vistaRecorte, zoomMarcoFoto } from "../recorte";
+import { type AsaRecorte, type GestoLateral, cajaConAspecto, encajarRecorte, escalarCrop, moverAsa, recorteMarco, vistaRecorte } from "../recorte";
 import type { StoreEditor } from "../store";
 import { useImagen } from "../useImagen";
 import { aspectoRecorteStore } from "./aspectoRecorte";
@@ -51,7 +51,7 @@ export function CropOverlay({
   // estados intermedios).
   const drag = useRef<
     | { modo: "pan"; crop: Crop; px: number; py: number; fw: number; fh: number }
-    | { modo: "marco"; asa: AsaRecorte; crop: Crop; vv: VistaRecorte; w: number; h: number; px: number; py: number }
+    | { modo: "marco"; asa: AsaRecorte; g: GestoLateral; x0: number; y0: number; px: number; py: number }
     | null
   >(null);
   // Rejilla de tercios activa solo DURANTE el gesto (arrastre de marco o de imagen).
@@ -72,6 +72,31 @@ export function CropOverlay({
       if (!r || !(r > 0)) return;
       const nueva = cajaConAspecto(c.w, c.h, r);
       if (Math.abs(nueva.w - c.w) < 0.5 && Math.abs(nueva.h - c.h) < 0.5) return;
+      // Re-encuadra el marco a la proporción RECORTANDO (compensa el crop para no mover ni ampliar
+      // los píxeles), igual que arrastrar un tirador. Sin bitmap cae a solo re-encuadrar la caja.
+      if (img && img.width > 0 && img.height > 0) {
+        const g: GestoLateral = {
+          w: c.w,
+          h: c.h,
+          iw: img.width,
+          ih: img.height,
+          ajuste: c.ajuste,
+          foco: c.foco,
+          zoom: c.zoom,
+          crop: c.crop,
+          flipH: c.flip_h,
+          flipV: c.flip_v,
+          caja: { x: 0, y: 0, w: c.w, h: c.h },
+        };
+        const res = encajarRecorte(g, nueva.x, nueva.y, nueva.w, nueva.h);
+        if (res) {
+          store.getState().actualizar(
+            capa.id,
+            { x: c.x + res.x, y: c.y + res.y, w: res.w, h: res.h, crop: res.crop, zoom: res.zoom, foco: res.foco } as Partial<Capa>,
+          );
+          return;
+        }
+      }
       store.getState().actualizar(
         capa.id,
         { x: c.x + nueva.x, y: c.y + nueva.y, w: nueva.w, h: nueva.h } as Partial<Capa>,
@@ -121,8 +146,8 @@ export function CropOverlay({
     setGesticulando(true);
   };
 
-  // Arrastrar un tirador del MARCO: ACERCA/ALEJA la foto dentro del marco FIJO (anclado al borde
-  // opuesto). NO cambia la caja; solo el `crop` → la foto rellena el marco y no se hace más pequeña.
+  // Arrastrar un tirador del MARCO: ENCOGE/AGRANDA la caja moviendo ese borde (o los dos de una
+  // esquina) y COMPENSA el crop → corta la foto sin ampliarla; la franja fuera del marco se atenúa.
   const onDownMarco = (asa: AsaRecorte) => (e: PointerEventReact) => {
     e.stopPropagation();
     try {
@@ -133,9 +158,20 @@ export function CropOverlay({
     comenzar();
     const c = actual();
     if (!c || !img || !(img.width > 0) || !(img.height > 0)) return;
-    const vv = vistaRecorte(img.width, img.height, c.w, c.h, c.ajuste, c.foco, c.zoom, c.crop);
-    if (!(vv.fw > 0) || !(vv.fh > 0)) return;
-    drag.current = { modo: "marco", asa, crop: c.crop ?? SIN_CROP, vv, w: c.w, h: c.h, px: e.clientX, py: e.clientY };
+    const g: GestoLateral = {
+      w: c.w,
+      h: c.h,
+      iw: img.width,
+      ih: img.height,
+      ajuste: c.ajuste,
+      foco: c.foco,
+      zoom: c.zoom,
+      crop: c.crop,
+      flipH: c.flip_h,
+      flipV: c.flip_v,
+      caja: { x: 0, y: 0, w: c.w, h: c.h },
+    };
+    drag.current = { modo: "marco", asa, g, x0: c.x, y0: c.y, px: e.clientX, py: e.clientY };
     setGesticulando(true);
   };
 
@@ -150,7 +186,13 @@ export function CropOverlay({
     }
     const dx = (e.clientX - d.px) / escala;
     const dy = (e.clientY - d.py) / escala;
-    store.getState().actualizar(capa.id, { crop: zoomMarcoFoto(d.crop, d.w, d.h, d.vv, d.asa, dx, dy) } as Partial<Capa>, false);
+    const r = recorteMarco(d.g, d.asa, dx, dy);
+    if (!r) return;
+    store.getState().actualizar(
+      capa.id,
+      { x: d.x0 + r.x, y: d.y0 + r.y, w: r.w, h: r.h, crop: r.crop, zoom: r.zoom, foco: r.foco } as Partial<Capa>,
+      false,
+    );
   };
 
   const onUp = () => {
@@ -203,7 +245,7 @@ export function CropOverlay({
               igual que el recorte de forma. Unifica el lenguaje: dentro nítido, fuera atenuado. */}
           <div
             className="pointer-events-none absolute inset-0"
-            style={{ boxShadow: "0 0 0 9999px rgba(0,0,0,0.45)" }}
+            style={{ boxShadow: "0 0 0 9999px rgba(0,0,0,0.55)" }}
           />
           {/* Contorno de la imagen completa (referencia de hasta dónde llega la foto). */}
           <div

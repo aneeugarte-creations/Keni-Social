@@ -94,7 +94,7 @@ export function RecorteCajaOverlay({
       {/* Oscurecido de TODO lo de fuera del recuadro (sombra gigante) + contorno del recuadro. */}
       <div
         className="absolute inset-0 ring-2 ring-primary"
-        style={{ boxShadow: "0 0 0 9999px rgba(0,0,0,0.45)" }}
+        style={{ boxShadow: "0 0 0 9999px rgba(0,0,0,0.55)" }}
       />
       {/* Rejilla de tercios durante el gesto (guía de composición). */}
       <RejillaTercios visible={gesticulando} />

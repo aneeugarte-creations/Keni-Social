@@ -203,46 +203,64 @@ export function recorteLateral(g: GestoLateral, lado: LadoCaja, borde: number): 
   return { x: nx, y: ny, w: nw, h: nh, crop, zoom: 1, foco: [0.5, 0.5] };
 }
 
-// ── Recorte de MARCO de FOTO (modo Recortar: tiradores que ACERCAN dentro del marco FIJO) ────────
-// En el MODO RECORTE de una IMAGEN, el recuadro de la capa NO cambia de tamaño: arrastrar un tirador
-// del MARCO hace ZOOM de la foto anclado al borde/esquina OPUESTO (la foto rellena siempre el marco,
-// cover). Hacia DENTRO acerca (recorta esa franja); hacia FUERA aleja (hasta la foto completa). Solo
-// cambia el `crop`; el alto/ancho/posición de la caja se quedan igual → la foto no se hace más
-// pequeña en el lienzo. Reusa `escalarCrop`. `vv` es la geometría (vistaRecorte) al INICIO del gesto;
-// (dx,dy) el delta del puntero en px del DOCUMENTO. La rotación no entra (el modo exige rotación 0).
-export function zoomMarcoFoto(
-  crop: Crop,
-  w: number,
-  h: number,
-  vv: VistaRecorte,
-  asa: AsaRecorte,
-  dx: number,
-  dy: number,
-): Crop {
-  if (asa === "mover" || !(w > 0) || !(h > 0) || !(vv.fw > 0) || !(vv.fh > 0)) return crop;
+// ── Recorte de MARCO de FOTO (modo Recortar: tiradores que ENCOGEN el marco, estilo Canva) ────────
+// En el MODO RECORTE de una IMAGEN, arrastrar un tirador del marco ENCOGE/AGRANDA la CAJA (el marco)
+// y COMPENSA el crop para que los píxeles NO se muevan ni cambien de escala: CORTA la foto, no la
+// amplía. La foto original completa se sigue viendo (atenuada fuera del marco); el marco es lo que
+// queda. Hacia DENTRO recorta esa franja; hacia FUERA des-recorta hasta el material original y ahí
+// se clava. Es `recorteLateral` extendido a las 8 asas (las esquinas mueven dos bordes). La rotación
+// no entra (el modo exige rotación 0).
+
+// Núcleo compartido: dado un sub-rect NUEVO del marco (coords locales de PANTALLA de la caja, con el
+// flip ya reflejado en la geometría de la foto), devuelve la caja desplazada + el crop CANÓNICO que
+// muestra ESOS MISMOS píxeles a la misma escala (crop == visible, zoom 1, foco centrado). El
+// llamador entrega un rect ya válido (dentro de la foto); aquí no se re-acota a los bordes.
+export function encajarRecorte(g: GestoLateral, nx: number, ny: number, nw: number, nh: number): ResultadoLateral | null {
+  const { w, h, iw, ih } = g;
+  if (!(iw > 0) || !(ih > 0) || !(w > 0) || !(h > 0) || !(nw > 0) || !(nh > 0)) return null;
+  const v = vistaRecorte(iw, ih, w, h, g.ajuste, g.foco, g.zoom ?? 1, g.crop);
+  const k = v.escalaSrc;
+  if (!(k > 0)) return null;
+  // Deshace el flip para leer el sub-rect de la FUENTE (coords de contenido).
+  const cxc = g.flipH ? w - nx - nw : nx;
+  const cyc = g.flipV ? h - ny - nh : ny;
+  const crop = clampCrop({
+    cx: (cxc - v.fx) / k / iw,
+    cy: (cyc - v.fy) / k / ih,
+    cw: nw / k / iw,
+    ch: nh / k / ih,
+  });
+  return { x: nx, y: ny, w: nw, h: nh, crop, zoom: 1, foco: [0.5, 0.5] };
+}
+
+// Aplica el arrastre de un tirador del MARCO. `caja` de partida = el marco entero (0,0,w,h); cada
+// borde arrastrado se acota al material de la foto (no crece hacia el vacío) y a un mínimo. (dx,dy)
+// = delta del puntero en px del DOCUMENTO. Devuelve `null` sin bitmap.
+export function recorteMarco(g: GestoLateral, asa: AsaRecorte, dx: number, dy: number): ResultadoLateral | null {
+  if (asa === "mover") return null;
+  const { w, h, iw, ih } = g;
+  if (!(iw > 0) || !(ih > 0) || !(w > 0) || !(h > 0)) return null;
+  const v = vistaRecorte(iw, ih, w, h, g.ajuste, g.foco, g.zoom ?? 1, g.crop);
+  if (!(v.escalaSrc > 0) || !(v.fw > 0) || !(v.fh > 0)) return null;
+  // Foto ORIGINAL completa en coords de PANTALLA locales (el flip espeja el contenido).
+  const fx = g.flipH ? w - v.fx - v.fw : v.fx;
+  const fy = g.flipV ? h - v.fy - v.fh : v.fy;
   const oeste = asa === "nw" || asa === "w" || asa === "sw";
   const este = asa === "ne" || asa === "e" || asa === "se";
   const norte = asa === "nw" || asa === "n" || asa === "ne";
   const sur = asa === "sw" || asa === "s" || asa === "se";
-  // Punto-ancla = borde/esquina OPUESTO al tirador, en px LOCALES de la caja (lo que hay ahí no se
-  // mueve al acercar/alejar). Un lado deja su eje perpendicular en el centro (no aporta zoom).
-  const axLocal = este ? 0 : oeste ? w : w / 2;
-  const ayLocal = sur ? 0 : norte ? h : h / 2;
-  // Factor por eje = distancia_inicial(ancla→borde) / distancia_actual: la arista arrastrada parte a
-  // distancia w (o h) del ancla; acercarla al ancla => f>1 (acerca la foto), alejarla => f<1.
-  const EPS = 1;
-  let fx = 1;
-  let fy = 1;
-  if (este) fx = w / Math.max(EPS, w + dx);
-  else if (oeste) fx = w / Math.max(EPS, w - dx);
-  if (sur) fy = h / Math.max(EPS, h + dy);
-  else if (norte) fy = h / Math.max(EPS, h - dy);
-  const f = (este || oeste) && (norte || sur) ? Math.max(fx, fy) : este || oeste ? fx : fy;
-  // Ancla en fracciones de la FUENTE (sin flip, igual que el zoom de rueda). `escalarCrop` acota el
-  // factor para no salirse de la fuente (alejar tope = foto completa) ni bajar de MIN_CROP (acercar).
-  const ax = (axLocal - vv.fx) / vv.fw;
-  const ay = (ayLocal - vv.fy) / vv.fh;
-  return escalarCrop(crop, f, ax, ay);
+  const minW = Math.min(w, Math.max(MIN_LADO_PX, MIN_CROP * v.fw));
+  const minH = Math.min(h, Math.max(MIN_LADO_PX, MIN_CROP * v.fh));
+  // Bordes del marco. Solo el lado (o los dos de la esquina) del tirador se mueve; el opuesto queda.
+  let left = 0;
+  let top = 0;
+  let right = w;
+  let bottom = h;
+  if (este) right = Math.max(left + minW, Math.min(fx + v.fw, w + dx));
+  if (oeste) left = Math.min(right - minW, Math.max(fx, dx));
+  if (sur) bottom = Math.max(top + minH, Math.min(fy + v.fh, h + dy));
+  if (norte) top = Math.min(bottom - minH, Math.max(fy, dy));
+  return encajarRecorte(g, left, top, right - left, bottom - top);
 }
 
 // Punto en coords LOCALES de una capa (origen = su esquina sup. izq., ejes girados `rot`°, como el
