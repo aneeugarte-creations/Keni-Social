@@ -57,5 +57,14 @@ export const apiImagen = {
       `/imagen/pieza/${encodeURIComponent(publicacionId)}/${encodeURIComponent(piezaId)}`,
       { metodo: "POST", json: { documento, bindings }, timeoutMs: 120_000 },
     ),
+  // Recorta el sujeto de un objeto de media (rembg server-side) y devuelve un objeto NUEVO: un
+  // PNG con el fondo transparente. No muta el original; la capa de imagen cambia su `objeto` al id
+  // devuelto. Puede tardar unos segundos (inferencia del modelo); 503 si el servidor no lo soporta.
+  imagenQuitarFondo: (objeto: string) =>
+    peticion<{ id: string; url: string }>("/imagen/quitar-fondo", {
+      metodo: "POST",
+      json: { objeto },
+      timeoutMs: 120_000,
+    }),
 
 };

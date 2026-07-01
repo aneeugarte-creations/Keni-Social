@@ -1,7 +1,11 @@
 // Inspector · capa de IMAGEN: hueco de foto, forma/ajuste, reencuadre, filtros, duotono, sombra,
 // recorte por % y conversión a forma.
 
-import { Crop as CropIcon, FlipHorizontal2, FlipVertical2 } from "lucide-react";
+import { Crop as CropIcon, FlipHorizontal2, FlipVertical2, Loader2, Scissors } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
+
+import { api, mensajeError } from "@/lib/api";
 
 import { ColorControl } from "../ColorControl";
 
@@ -15,6 +19,23 @@ import type { PropsCuerpoCapa } from "./tipos";
 
 export function CuerpoImagen({ capa, set, onRecortar }: PropsCuerpoCapa<CapaImagen> & { onRecortar?: () => void }) {
   const store = useStoreEditor();
+
+  // «Quitar fondo»: manda el objeto de la capa al servidor (rembg), que devuelve un PNG con el
+  // fondo transparente como objeto NUEVO; la capa cambia su `objeto` al recorte (se puede deshacer).
+  const [quitandoFondo, setQuitandoFondo] = useState(false);
+  const quitarFondo = async () => {
+    if (!capa.objeto || quitandoFondo) return;
+    setQuitandoFondo(true);
+    try {
+      const res = await api.imagenQuitarFondo(capa.objeto);
+      store.getState().actualizar(capa.id, { objeto: res.id } as Partial<Capa>);
+      toast.success("Fondo quitado.");
+    } catch (e) {
+      toast.error(mensajeError(e));
+    } finally {
+      setQuitandoFondo(false);
+    }
+  };
 
   // Edita un filtro de imagen fusionando con el resto (neutros por defecto). Si el resultado es
   // neutro (brillo=contraste=saturacion=1, desenfoque=0) colapsa a `null`, igual que el back.
@@ -106,6 +127,26 @@ export function CuerpoImagen({ capa, set, onRecortar }: PropsCuerpoCapa<CapaImag
             </button>
           </div>
         </Campo>
+        {/* QUITAR FONDO: recorta el sujeto y deja el fondo transparente (server-side). Solo tiene
+            sentido cuando la capa YA tiene una foto real cargada (`objeto`), no en un hueco vacío. */}
+        {capa.objeto && (
+          <Campo etiqueta="Fondo">
+            <button
+              type="button"
+              onClick={quitarFondo}
+              disabled={quitandoFondo}
+              title="Recorta el sujeto y deja el fondo transparente"
+              className="flex items-center gap-1 rounded border border-input bg-background px-1.5 py-0.5 text-xs hover:bg-accent disabled:opacity-60"
+            >
+              {quitandoFondo ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Scissors className="h-3.5 w-3.5" />
+              )}
+              {quitandoFondo ? "Quitando…" : "Quitar fondo"}
+            </button>
+          </Campo>
+        )}
       </div>
 
       {/* IMAGEN · MÁS: reencuadre rápido (recorte visual + zoom). */}

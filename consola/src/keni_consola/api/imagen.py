@@ -28,9 +28,10 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import plantillas_marca, repos
+from .. import media, plantillas_marca, repos
 from .._http_json import leer_json
 from ..dominio import estudio_imagen
+from ..dominio import quitar_fondo as _fondo
 from ..seguridad import autor_de_peticion
 
 
@@ -234,10 +235,41 @@ async def pieza_versiones(request: Request) -> Response:
     return JSONResponse(cuerpo)
 
 
+async def quitar_fondo(request: Request) -> Response:
+    """POST /api/imagen/quitar-fondo: recorta el sujeto de un objeto de media -> `{id, url}` PNG nuevo.
+
+    Body `{objeto}` (la key del media a recortar). El resultado es un PNG con el fondo transparente,
+    guardado como objeto NUEVO (no muta el original). 503 si el servidor no tiene la herramienta
+    (rembg no instalado); 404 si el objeto no existe; 400 si el cuerpo es inválido o falla el motor.
+    """
+    datos = await leer_json(request)
+    if not isinstance(datos, dict):
+        return JSONResponse({"error": "Cuerpo JSON inválido."}, status_code=400)
+    objeto = str(datos.get("objeto") or "").strip()
+    if not objeto:
+        return JSONResponse({"error": "Falta el objeto de imagen."}, status_code=400)
+    if not _fondo.disponible():
+        return JSONResponse(
+            {"error": "La herramienta de quitar fondo no está disponible en este servidor."},
+            status_code=503,
+        )
+    origen = media.leer_objeto(objeto)
+    if origen is None:
+        return JSONResponse({"error": "No se encontró la imagen."}, status_code=404)
+    try:
+        # rembg es bloqueante (inferencia del modelo); ejecutar en threadpool para no bloquear el loop.
+        png = await run_in_threadpool(_fondo.quitar_fondo, origen)
+    except _fondo.FondoError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    clave = media.guardar_bytes(png, ext="png", categoria="generadas")
+    return JSONResponse({"id": clave, "url": f"/api/media/{clave}"})
+
+
 RUTAS = [
     Route("/api/imagen/render", render, methods=["POST"]),
     Route("/api/imagen/plantilla/{marca}/{formato}", plantilla, methods=["GET"]),
     Route("/api/imagen/pieza/{publicacion_id}/{pieza_id}", pieza_documento, methods=["GET"]),
     Route("/api/imagen/pieza/{publicacion_id}/{pieza_id}", pieza_guardar, methods=["POST"]),
     Route("/api/imagen/pieza/{publicacion_id}/{pieza_id}/versiones", pieza_versiones, methods=["GET"]),
+    Route("/api/imagen/quitar-fondo", quitar_fondo, methods=["POST"]),
 ]
