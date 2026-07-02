@@ -11,7 +11,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from keni_consola import db, db_metricas, metricas_cache, metricas_pieza, repos
+from keni_consola import db, metricas_cache, metricas_pieza, repos
+from keni_consola.db import metricas as db_metricas
 
 
 # --------------------------------------------------------------------------- #

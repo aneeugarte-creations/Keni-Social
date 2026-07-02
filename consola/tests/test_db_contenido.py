@@ -9,7 +9,8 @@ y que `actualizado` se refresca. Reutiliza la fixture `entorno` (Postgres de pru
 
 from __future__ import annotations
 
-from keni_consola import db, db_publicacion, repos
+from keni_consola import db, repos
+from keni_consola.db import publicacion as db_publicacion
 
 
 def test_crear_contenido_minimal(entorno):

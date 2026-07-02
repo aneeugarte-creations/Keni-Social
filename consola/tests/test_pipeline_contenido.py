@@ -19,7 +19,8 @@ from __future__ import annotations
 
 import json
 
-from keni_consola import config, db_intentos, generaciones, redes, repos
+from keni_consola import config, generaciones, redes, repos
+from keni_consola.db import intentos as db_intentos
 from keni_consola import pipeline_contenido as pc
 from keni_consola.pipeline_contenido import _intentos
 

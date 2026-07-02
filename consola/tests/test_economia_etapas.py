@@ -6,7 +6,7 @@ nombre limpio en vez de en Producción con la etiqueta cruda «prompt».
 
 from __future__ import annotations
 
-from keni_consola import db_jobs
+from keni_consola.db import jobs as db_jobs
 
 
 def test_prompt_cae_en_herramientas_con_nombre_limpio():

@@ -23,7 +23,8 @@ import threading
 
 import pytest
 
-from keni_consola import db, db_jobs, generaciones, repos
+from keni_consola import db, generaciones, repos
+from keni_consola.db import jobs as db_jobs
 from keni_consola.dominio import colaboracion
 from keni_consola.estados import (
     DECISION_APROBADO,

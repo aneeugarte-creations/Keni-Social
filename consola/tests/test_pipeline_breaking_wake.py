@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from keni_shared import marcas
 
-from keni_consola import db_latidos
+from keni_consola.db import latidos as db_latidos
 from keni_consola.pipeline_contenido import _barrido
 
 # --------------------------------------------------------------------------- #

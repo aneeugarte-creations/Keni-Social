@@ -10,7 +10,8 @@ Dos capas:
 from __future__ import annotations
 
 from keni_consola import cuenta_uso_daemon as dae
-from keni_consola import db_cuenta_uso, repos
+from keni_consola import repos
+from keni_consola.db import cuenta_uso as db_cuenta_uso
 
 # Salida típica de `cuenta_claude.uso()` con medidor completo (tras parsear `/usage`).
 _USO_COMPLETO = {

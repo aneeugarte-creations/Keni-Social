@@ -113,7 +113,7 @@ def test_ciclo_throttleado(monkeypatch):
     def _falso_ciclo(daemon, **kwargs):
         llamadas.append(daemon)
 
-    from keni_consola import db_latidos
+    from keni_consola.db import latidos as db_latidos
 
     monkeypatch.setattr(db_latidos, "latido_ciclo", _falso_ciclo)
     monkeypatch.setattr(latidos, "_ultimo_ciclo", {})
@@ -579,7 +579,7 @@ def test_solicitar_y_consumir_barrido(entorno):
 
 def test_consumir_solicitud_sin_bd_devuelve_false(monkeypatch):
     # Best-effort: un fallo de BD degrada a False (el bucle sigue, sin barrido extra).
-    from keni_consola import db_latidos
+    from keni_consola.db import latidos as db_latidos
 
     def _explota(daemon):
         raise RuntimeError("BD caida")
@@ -745,7 +745,7 @@ def test_registrar_barrido_inserta_y_lista_nuevo_primero(entorno):
 
 
 def test_registrar_barrido_poda_cota_dura(entorno, monkeypatch):
-    from keni_consola import db_latidos
+    from keni_consola.db import latidos as db_latidos
 
     monkeypatch.setattr(db_latidos, "_MAX_BARRIDOS_POR_DAEMON", 3)
     for i in range(6):

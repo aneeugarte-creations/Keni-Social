@@ -469,7 +469,7 @@ def test_listar_backfill_desde_yaml_si_indice_vacio(entorno):
     Simula el primer uso tras el deploy (indice recien creado, YAML ya en disco): se purga el
     indice a mano y el siguiente `listar` lo reconstruye desde los YAML (idempotente).
     """
-    from keni_consola import db_jobs
+    from keni_consola.db import jobs as db_jobs
 
     ids = [
         generaciones.crear({"tipo": "copy", "marca": _MARCA, "etiqueta": f"B{i}"})["id"]

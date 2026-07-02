@@ -8,7 +8,9 @@ origen fuera de la allowlist. Postgres (`entorno`). La edad se fija por SQL dire
 
 from __future__ import annotations
 
-from keni_consola import db_latidos, db_purga_piezas, limpiador_piezas, repos
+from keni_consola import limpiador_piezas, repos
+from keni_consola.db import latidos as db_latidos
+from keni_consola.db import purga_piezas as db_purga_piezas
 
 _MARCA = "claro-sports"
 # Muy anterior a cualquier retencion razonable.

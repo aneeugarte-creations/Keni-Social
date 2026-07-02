@@ -11,7 +11,8 @@ La fixture `pg` se autodescubre vía `pytest_plugins` en conftest (`tests._postg
 
 from __future__ import annotations
 
-from keni_consola import db, db_intentos
+from keni_consola import db
+from keni_consola.db import intentos as db_intentos
 from keni_consola.pipeline_contenido import _intentos
 from keni_consola.tiempo import ahora_iso
 

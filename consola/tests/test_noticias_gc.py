@@ -284,7 +284,7 @@ def test_purgar_usados_huerfanos_cero_es_noop(entorno):
 
 
 def _envejecer_vista(fuente_id, clave, visto_en):
-    from keni_consola import db_jobs
+    from keni_consola.db import jobs as db_jobs
 
     con = db_jobs._conectar()
     try:

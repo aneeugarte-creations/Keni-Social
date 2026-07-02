@@ -8,7 +8,8 @@ del fichero YAML: aquí no se crea ningún YAML y aun así borra las filas huér
 
 from __future__ import annotations
 
-from keni_consola import db_jobs, generaciones, limpiador_generaciones
+from keni_consola import generaciones, limpiador_generaciones
+from keni_consola.db import jobs as db_jobs
 from keni_consola.tiempo import ahora_iso, hoy_cdmx
 
 # Edades de control: "viejo" (muy anterior a cualquier retención) y "reciente" (ahora mismo).

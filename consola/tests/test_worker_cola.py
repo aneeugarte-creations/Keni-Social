@@ -24,7 +24,8 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from keni_consola import cola, config, db, db_jobs, generaciones, repos, worker
+from keni_consola import cola, config, db, generaciones, repos, worker
+from keni_consola.db import jobs as db_jobs
 from keni_consola.dominio import jobspec
 
 _MARCA = "unotv"
