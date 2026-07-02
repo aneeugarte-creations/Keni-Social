@@ -4,7 +4,10 @@ from __future__ import annotations
 from ._config_comun import (
     ENV_PROMPTS_DIR,
     ENV_PROMPTS_DIR_LEGACY,
+    ENV_PROMPTS_ESTRICTO,
     Path,
+    _crudo,
+    _VERDADEROS,
     os,
 )
 
@@ -24,3 +27,15 @@ def prompts_dir() -> Path | None:
     """
     crudo = os.environ.get(ENV_PROMPTS_DIR) or os.environ.get(ENV_PROMPTS_DIR_LEGACY)
     return Path(crudo).expanduser() if crudo else None
+
+
+def prompts_estricto() -> bool:
+    """Modo ESTRICTO de la biblioteca (`KENI_PROMPTS_ESTRICTO`, store > env > OFF).
+
+    Con el flag afirmativo, un documento con puntero de produccion cuyo sha NO es
+    legible en el repo git ABORTA la generacion (el job falla con un mensaje claro,
+    via `libprompts.ProduccionIlegibleError`) en vez de sustituir en silencio por la
+    working copy. Con el flag OFF (defecto) todo se comporta como siempre (migracion
+    suave). El editor y su preview leen la working copy en ambos casos.
+    """
+    return _crudo(ENV_PROMPTS_ESTRICTO).lower() in _VERDADEROS

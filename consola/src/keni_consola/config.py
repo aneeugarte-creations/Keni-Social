@@ -55,6 +55,7 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
 
   Texto de prompts + linea editorial (`texto`, `dominio.prompts_lanzar`):
     - KENI_PROMPTS_DIR         almacen de documentos markdown     def <dir_config>/texto
+    - KENI_PROMPTS_ESTRICTO    puntero de produccion ilegible ABORTA la generacion  def OFF
 
   Programadores en segundo plano (`programador`):
     - KENI_METRICAS_REFRESCO_HORAS       refresco cache metricas (h) def 4   (min 1)
@@ -591,6 +592,7 @@ from .config_programadores import (  # noqa: F401
 )
 from .config_prompts import (  # noqa: F401
     prompts_dir,
+    prompts_estricto,
 )
 from .config_video import (  # noqa: F401
     ffmpeg_bin,

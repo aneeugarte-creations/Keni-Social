@@ -98,6 +98,7 @@ from ._editorial import (
 )
 from ._io import _leer, _parsear, _serializar, rev_documento
 from ._publicacion import (
+    ProduccionIlegibleError,
     aplicar_produccion,
     cuerpo_publicado,
     estado_publicacion,
@@ -217,6 +218,7 @@ __all__ = [
     "descartar_borrador",
     "fijar_version",
     # pieza (_publicacion): versiones inmutables + puntero "produccion"
+    "ProduccionIlegibleError",
     "produccion_de",
     "producciones",
     "sha_actual",

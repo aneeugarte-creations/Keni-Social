@@ -9,6 +9,12 @@ ESTABLE de cada documento, NUNCA el working copy mutable que el autosave reescri
   - Sin puntero NI commit legible (versionado apagado / sin repo / doc aun sin commits): el
     llamante cae al working copy. Es la migracion suave y nada se rompe.
 
+MODO ESTRICTO (`KENI_PROMPTS_ESTRICTO`, default OFF): con el flag ON, un documento CON
+puntero de produccion cuyo sha no es legible en git NO cae a la working copy: `cuerpo_publicado`
+y `aplicar_produccion` lanzan `ProduccionIlegibleError` y el job de generacion falla con ese
+mensaje (el worker lo registra en `generaciones.error`; no hay reintento). El editor y su
+preview (`estado_publicacion`, `_crud.obtener`) siguen sobre la working copy en ambos modos.
+
 Publicar = mover el puntero (tabla `texto_publicaciones`, solo admin; los editores proponen
 via `texto_solicitudes`).
 
@@ -46,6 +52,7 @@ from ._comun import Documento
 from ._io import _parsear
 
 __all__ = [
+    "ProduccionIlegibleError",
     "produccion_de",
     "producciones",
     "sha_actual",
@@ -54,6 +61,30 @@ __all__ = [
     "aplicar_produccion",
     "estado_publicacion",
 ]
+
+
+class ProduccionIlegibleError(RuntimeError):
+    """El puntero de produccion de un documento apunta a un sha NO legible en git.
+
+    Solo se lanza en modo ESTRICTO (`KENI_PROMPTS_ESTRICTO`, ver `config.prompts_estricto`):
+    con el flag OFF (defecto), un puntero ilegible cae en silencio a la working copy
+    (migracion suave). El mensaje es autoexplicativo: es el error con el que FALLA el job
+    de generacion (el worker lo registra tal cual en `generaciones.error`)."""
+
+
+def _estricto() -> bool:
+    """True si el modo estricto esta activo (import perezoso: config carga ajustes/rutas)."""
+    from .. import config
+
+    return config.prompts_estricto()
+
+
+def _fallo_produccion(doc_id: str, sha: str) -> ProduccionIlegibleError:
+    return ProduccionIlegibleError(
+        f"La version PUBLICADA del documento '{doc_id}' (sha {sha}) no es legible en el "
+        "repo git de la biblioteca y el modo estricto esta activo (KENI_PROMPTS_ESTRICTO): "
+        "republica el documento desde la Biblioteca o desactiva el modo estricto."
+    )
 
 
 def produccion_de(doc_id: str) -> dict[str, Any] | None:
@@ -114,11 +145,18 @@ def cuerpo_publicado(doc_id: str) -> str | None:
       3. None: ni puntero ni commit legibles (versionado apagado / sin repo / doc sin commits,
          p. ej. los de la inicial nunca commiteados). El llamante cae entonces al working copy.
 
+    En modo ESTRICTO (`KENI_PROMPTS_ESTRICTO`), un puntero de produccion cuyo sha no es
+    legible LANZA `ProduccionIlegibleError` en vez de devolver None: la generacion falla
+    con un mensaje claro en lugar de sustituir en silencio la version publicada.
+
     Lo usan `cuerpo_efectivo` (prompts base) y `prompts_lanzar` (prompt elegido a mano).
     """
     pub = produccion_de(doc_id)
     if pub and pub.get("sha"):
-        return _cuerpo_en_sha(doc_id, str(pub["sha"]))
+        cuerpo = _cuerpo_en_sha(doc_id, str(pub["sha"]))
+        if cuerpo is None and _estricto():
+            raise _fallo_produccion(doc_id, str(pub["sha"]))
+        return cuerpo
     sha = sha_actual(doc_id)
     if sha:
         return _cuerpo_en_sha(doc_id, sha)
@@ -132,11 +170,14 @@ def aplicar_produccion(docs: list[Documento]) -> list[Documento]:
     (`shas_actuales`) + un `git show` por doc resuelto. Para cada doc: el cuerpo del puntero
     de produccion si lo hay, si no el del HEAD git (snapshot estable que el autosave no toca).
     Los docs sin puntero NI commit legible quedan INTACTOS (working copy: migracion suave).
+    En modo ESTRICTO (`KENI_PROMPTS_ESTRICTO`), un doc CON puntero cuyo sha no es legible
+    LANZA `ProduccionIlegibleError` (misma politica que `cuerpo_publicado`).
     Devuelve copias; no muta los documentos de entrada. Es el gancho del ensamblaje de adjuntos
     editoriales (`dominio.generar.componer`).
     """
     if not docs:
         return list(docs)
+    estricto = _estricto()
     punteros = producciones()
     shas = shas_actuales()
     resultado: list[Documento] = []
@@ -144,6 +185,8 @@ def aplicar_produccion(docs: list[Documento]) -> list[Documento]:
         pub = punteros.get(d.id)
         if pub and pub.get("sha"):
             cuerpo = _cuerpo_en_sha(d.id, str(pub["sha"]))
+            if cuerpo is None and estricto:
+                raise _fallo_produccion(d.id, str(pub["sha"]))
         else:
             sha = shas.get(d.id)
             cuerpo = _cuerpo_en_sha(d.id, sha) if sha else None

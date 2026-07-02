@@ -177,6 +177,10 @@ ENV_CLAUDE_IDLE_TIMEOUT = "KENI_CLAUDE_IDLE_TIMEOUT"
 ENV_PROMPTS_DIR = "KENI_PROMPTS_DIR"
 # Nombre legacy de la env var (back-compat): se lee como fallback de `KENI_PROMPTS_DIR`.
 ENV_PROMPTS_DIR_LEGACY = "KENI_TEXTO_DIR"
+# Modo ESTRICTO de la biblioteca (flag, default OFF): con el ON, un puntero de produccion
+# cuyo sha no es legible en git ABORTA la generacion con un error claro en vez de caer en
+# silencio a la working copy. No afecta al editor/preview (siguen sobre la working copy).
+ENV_PROMPTS_ESTRICTO = "KENI_PROMPTS_ESTRICTO"
 
 # Programadores en segundo plano.
 ENV_METRICAS_REFRESCO_HORAS = "KENI_METRICAS_REFRESCO_HORAS"
@@ -985,6 +989,7 @@ __all__ = [
     'ENV_AUTO_PREAPROBACION',
     'ENV_PROMPTS_DIR',
     'ENV_PROMPTS_DIR_LEGACY',
+    'ENV_PROMPTS_ESTRICTO',
     'ENV_CLAUDE_DISALLOWED_TOOLS',
     'ENV_CLAUDE_EXCLUDE_DYNAMIC_SECTIONS',
     'ENV_CLAUDE_FALLBACK_MODEL',
