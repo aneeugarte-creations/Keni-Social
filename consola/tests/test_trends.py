@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import pytest
 
-from keni_consola import trends_daemon
+from keni_consola.produccion import trends_daemon
 from keni_consola.dominio import http_feed
-from keni_consola.dominio import trends as dom
+from keni_consola.produccion import trends as dom
 
 # Feed de Google Trends mínimo pero realista: 2 términos con ht:approx_traffic + sus noticias.
 _TRENDS_XML = """<?xml version="1.0" encoding="UTF-8"?>

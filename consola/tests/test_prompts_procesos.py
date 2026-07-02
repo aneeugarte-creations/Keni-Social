@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from keni_consola import libprompts, prompts_procesos as pp
+from keni_consola import libprompts
+from keni_consola.produccion import prompts_procesos as pp
 
 
 def _ids_seed_prompt() -> set[str]:

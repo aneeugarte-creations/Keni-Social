@@ -34,7 +34,7 @@ from starlette.routing import Route
 
 from .. import agencias, bootstrap_categorias, repos
 from .._http_json import leer_json
-from ..db_noticias import _TIPOS_FUENTE
+from ..db.noticias import _TIPOS_FUENTE
 from ..dominio import fuentes_pesos, fuentes_presets, http_feed
 
 _MARCAS_IDS = {m[0] for m in marcas.opciones()}

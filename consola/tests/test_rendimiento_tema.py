@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from keni_consola.dominio import rendimiento_tema as rt
+from keni_consola.produccion import rendimiento_tema as rt
 
 
 def test_lineas_top_ordena_por_engagement_y_respeta_muestra_minima():

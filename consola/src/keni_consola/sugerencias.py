@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import db_sugerencias
+from .db import sugerencias as db_sugerencias
 
 # Categorías de ADMISIÓN (la UI las pinta con etiquetas legibles).
 CATEGORIAS: tuple[str, ...] = ("idea", "producto", "mejora", "bug")

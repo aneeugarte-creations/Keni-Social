@@ -34,8 +34,8 @@ _ALIAS = {
     "media_gc_daemon": "media_gc",
     "noticias_gc_daemon": "noticias_gc",
     "trends_daemon": "trends",
-    "algoritmos_refresco": "algoritmos",
-    "patrones_refresco": "patrones",
+    "refresco_algoritmos": "algoritmos",
+    "refresco_patrones": "patrones",
     "limpiador_generaciones": "limpiador",
 }
 
@@ -422,7 +422,7 @@ def ciclo(daemon: str, *, activo: bool, intervalo_seg: float, tick_seg: float) -
     if ahora - _ultimo_ciclo.get(daemon, 0.0) < _MIN_ENTRE_CICLOS_SEG:
         return
     try:
-        from . import db_latidos
+        from .db import latidos as db_latidos
 
         db_latidos.latido_ciclo(
             daemon, activo=activo, intervalo_seg=intervalo_seg, tick_seg=tick_seg
@@ -450,7 +450,7 @@ def barrido(
     texto corto opcional (qué hizo / nº items) que aporta el bucle si el sweep devuelve un str.
     """
     try:
-        from . import db_latidos
+        from .db import latidos as db_latidos
 
         db_latidos.latido_barrido(
             daemon,
@@ -466,7 +466,7 @@ def barrido(
         _log.debug("Latido de barrido de %s no registrado: %s", daemon, e)
     # Historial por barrido (independiente del resumen acumulado: un fallo de uno no toca el otro).
     try:
-        from . import db_latidos
+        from .db import latidos as db_latidos
 
         db_latidos.registrar_barrido(
             daemon, ok=ok, duracion_ms=duracion_ms, resumen=resumen, error_txt=error
@@ -485,7 +485,7 @@ def consumir_solicitud(daemon: str) -> bool:
     sin romper el bucle).
     """
     try:
-        from . import db_latidos
+        from .db import latidos as db_latidos
 
         return db_latidos.consumir_solicitud_barrido(daemon)
     except Exception as e:  # noqa: BLE001 -- la consulta del flag jamás rompe el bucle

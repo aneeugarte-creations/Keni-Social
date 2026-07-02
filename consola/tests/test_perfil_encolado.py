@@ -15,7 +15,7 @@ import pytest
 from keni_consola import config, generaciones, ruteo_cuentas
 from keni_consola.dominio import jobspec
 from keni_consola.dominio import perfil_editorial as pe
-from keni_consola.recolectar_daemon.pasos import agrupar
+from keni_consola.produccion.recolectar_daemon.pasos import agrupar
 
 
 @pytest.fixture(autouse=True)

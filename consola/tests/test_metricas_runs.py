@@ -18,7 +18,7 @@ import json
 
 import pytest
 
-from keni_consola import agentes
+from keni_consola.produccion import agentes
 from keni_consola.dominio import stream
 
 from .conftest import _cliente, lanzador_generacion_completa

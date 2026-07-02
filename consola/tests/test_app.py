@@ -276,8 +276,8 @@ def _arrancar_capturando(monkeypatch, capsys):
     # 15 de ellos) + los 2 de refresco de métricas que NO lo usan: los hilos arrancan pero su
     # bucle es un no-op (no barren, no contaminan). Rot-proof y sin tocar `threading`.
     import keni_consola.daemon_util as daemon_util
-    import keni_consola.metricas_piezas_refresco as metricas_piezas_refresco
-    import keni_consola.metricas_refresco as metricas_refresco
+    import keni_consola.metricas.refresco_piezas as metricas_piezas_refresco
+    import keni_consola.metricas.refresco_cuentas as metricas_refresco
 
     monkeypatch.setattr(daemon_util, "bucle_gateado", lambda *a, **k: None)
     monkeypatch.setattr(metricas_refresco, "iniciar_refresco_metricas", lambda: None)

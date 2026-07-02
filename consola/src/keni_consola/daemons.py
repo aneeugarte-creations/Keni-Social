@@ -64,18 +64,18 @@ def main() -> int:
         )
 
     from .alertas_rendimiento import iniciar_alertas_rendimiento
-    from .algoritmos_refresco import iniciar_refresco_algoritmos
+    from .produccion.refresco_algoritmos import iniciar_refresco_algoritmos
     from .cuenta_uso_daemon import iniciar_muestreo_uso
-    from .recolectar_daemon import iniciar_ingesta
+    from .produccion.recolectar_daemon import iniciar_ingesta
     from .media_gc_daemon import iniciar_media_gc
-    from .metricas_piezas_refresco import iniciar_refresco_piezas
-    from .metricas_refresco import iniciar_refresco_metricas
-    from .noticias_gc_daemon import iniciar_noticias_gc
-    from .patrones_refresco import iniciar_refresco_patrones
+    from .metricas.refresco_piezas import iniciar_refresco_piezas
+    from .metricas.refresco_cuentas import iniciar_refresco_metricas
+    from .produccion.noticias_gc_daemon import iniciar_noticias_gc
+    from .produccion.refresco_patrones import iniciar_refresco_patrones
     from .pipeline_contenido import iniciar_pipeline
     from .programador import iniciar_programador
     from .limpiador_generaciones import iniciar_limpiador
-    from .trends_daemon import iniciar_trends
+    from .produccion.trends_daemon import iniciar_trends
 
     # PUBLICADOR ("reloj del servidor"): publica las piezas `programado` cuando vence su
     # `fecha_programada`. Gateado por marca (`KENI_PUBLICAR_REAL`/`publicar_real_para`); en

@@ -653,7 +653,7 @@ def test_marcador_corrupto_no_bloquea(monkeypatch, tmp_path):
 
 def test_fresco_para_fusion_excluye_lo_rancio_e_incluye_lo_vivo():
     """Un cluster sin actividad dentro de la ventana de fusión NO entra al lote (ya se digirió)."""
-    from keni_consola.recolectar_daemon.pasos.fusionar_semantica import _fresco_para_fusion
+    from keni_consola.produccion.recolectar_daemon.pasos.fusionar_semantica import _fresco_para_fusion
 
     ahora = datetime.now(UTC)
     corte = ahora - timedelta(hours=48)
@@ -665,7 +665,7 @@ def test_fresco_para_fusion_excluye_lo_rancio_e_incluye_lo_vivo():
 
 def test_fresco_para_fusion_tolera_canon_sin_offset_y_marca_ilegible():
     """`fromisoformat` lee el canon de `iso_utc` (naive=UTC); marca vacía/ilegible -> conservador (se procesa)."""
-    from keni_consola.recolectar_daemon.pasos.fusionar_semantica import _fresco_para_fusion
+    from keni_consola.produccion.recolectar_daemon.pasos.fusionar_semantica import _fresco_para_fusion
     from keni_consola.tiempo import iso_utc
 
     ahora = datetime.now(UTC)

@@ -16,12 +16,13 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from keni_consola import cola as _cola
-from keni_consola import config, recolectar_daemon
+from keni_consola import config
+from keni_consola.produccion import recolectar_daemon
 from keni_consola import generaciones as _generaciones
 from keni_consola import ruteo_cuentas as _ruteo
 from keni_consola.dominio import ingesta
 from keni_consola.dominio import jobspec as _jobspec
-from keni_consola.recolectar_daemon import _comun
+from keni_consola.produccion.recolectar_daemon import _comun
 
 _AHORA = datetime(2026, 6, 5, 12, 0, 0, tzinfo=UTC)
 
@@ -122,7 +123,7 @@ def test_intervalo_feed_cae_a_default_por_categoria():
 
 def test_intervalo_feed_usa_cadencia_de_la_linea(monkeypatch):
     # Con línea asociada, el ritmo lo dicta la CADENCIA de la línea, no el slug `categoria`.
-    from keni_consola.recolectar_daemon import _bucle
+    from keni_consola.produccion.recolectar_daemon import _bucle
 
     monkeypatch.setattr(_bucle.db, "obtener_etiqueta", lambda _id: {"cadencia": "evergreen"})
     assert recolectar_daemon._intervalo_feed({"linea_id": "L1", "categoria": "futbol"}) == (
@@ -916,7 +917,7 @@ def test_paso_fusionar_semantica_salta_si_el_lote_no_cambio(monkeypatch):
     """Skip-if-unchanged: si el conjunto candidato no cambió desde la última pasada, NO se encola
     (no hay nada nuevo que fusionar). Una historia NUEVA (o un re-titulado) mueve la huella y
     re-evalúa; un artículo más a la MISMA historia (solo avanza `ultimo_visto`) NO la mueve."""
-    from keni_consola.recolectar_daemon.pasos import fusionar_semantica as paso
+    from keni_consola.produccion.recolectar_daemon.pasos import fusionar_semantica as paso
 
     monkeypatch.setattr(recolectar_daemon.repos, "intentos_etapa", lambda _s, _e: 0)
     monkeypatch.setattr(recolectar_daemon.repos, "intento_ts", lambda _s, _e: None)

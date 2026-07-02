@@ -110,7 +110,7 @@ def test_hook_error_tambien_registra(entorno):
 
 def _proceso_de_gasto(gen_id: str) -> str | None:
     """Lee la columna `proceso` de la fila del ledger (sin reader publico)."""
-    from keni_consola._db_comun import _conectar
+    from keni_consola.db._comun import _conectar
 
     con = _conectar()
     try:
@@ -152,7 +152,7 @@ def test_hook_cierre_sella_proceso_produccion(entorno):
 
 def _etapa_de_gasto(gen_id: str) -> str | None:
     """Lee la columna `etapa` de la fila del ledger (sin reader publico)."""
-    from keni_consola._db_comun import _conectar
+    from keni_consola.db._comun import _conectar
 
     con = _conectar()
     try:
@@ -440,7 +440,7 @@ def test_tope_tokens_por_marca_corta_su_motor(entorno):
 def test_fase_inline_del_pool_registra_gasto_con_etapa(entorno, monkeypatch):
     """Una fase INLINE del pool (Fusionar) vuelca su gasto al ledger con su ETAPA explícita; la
     economía la muestra como su propia fila de Investigación, no colapsada en «Verificar»."""
-    from keni_consola import recolectar_daemon
+    from keni_consola.produccion import recolectar_daemon
     from keni_consola.dominio import traducir as _trad
 
     # El ejecutor síncrono no corre (no hay claude): simulamos las métricas acumuladas del paso.

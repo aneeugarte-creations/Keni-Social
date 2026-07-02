@@ -14,7 +14,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from keni_consola import auto_responsable, metricas_pieza
+from keni_consola.operacion import auto_responsable
+from keni_consola import metricas_pieza
 from keni_consola import rota as r
 from keni_consola.dominio import eventos
 

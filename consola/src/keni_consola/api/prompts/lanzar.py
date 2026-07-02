@@ -21,7 +21,8 @@ from starlette.responses import JSONResponse, Response
 
 from ... import libprompts, redes
 from ..._http_json import leer_json
-from ...dominio import extraccion_url, prompts_lanzar
+from ...dominio import extraccion_url
+from ...produccion import prompts_lanzar
 from ...seguridad import autor_de_peticion
 from ._comun import _MAX_TEXTO
 

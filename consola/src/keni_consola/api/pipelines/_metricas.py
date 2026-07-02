@@ -8,7 +8,7 @@ por `feed` y `detalle`.
 
 from __future__ import annotations
 
-from ... import actividad
+from ...produccion import actividad
 from ...pipeline_contenido import TIPO_ACTIVIDAD
 from ..actividad import _es_marcador_pipeline
 from ._comun import (

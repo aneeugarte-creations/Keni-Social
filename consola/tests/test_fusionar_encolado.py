@@ -13,11 +13,12 @@ from datetime import UTC, datetime
 
 import pytest
 
-from keni_consola import config, generaciones, recolectar_daemon, ruteo_cuentas
+from keni_consola import config, generaciones, ruteo_cuentas
+from keni_consola.produccion import recolectar_daemon
 from keni_consola.dominio import fusionar_semantica as fs
 from keni_consola.dominio import jobspec
-from keni_consola.recolectar_daemon import _comun
-from keni_consola.recolectar_daemon.pasos import fusionar_semantica as paso
+from keni_consola.produccion.recolectar_daemon import _comun
+from keni_consola.produccion.recolectar_daemon.pasos import fusionar_semantica as paso
 
 
 @pytest.fixture(autouse=True)

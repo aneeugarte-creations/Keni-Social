@@ -17,7 +17,6 @@ from starlette.requests import Request
 
 from ... import (
     auth,
-    auto_responsable,
     autogen_redactar,
     config,
     generaciones,
@@ -30,6 +29,7 @@ from ... import (
     rutas,
     transcripcion,
 )
+from ...operacion import auto_responsable
 from ..._http_json import leer_json
 from ...dominio import estudio_imagen, eventos, jobspec, placeholders
 from ...estados import (

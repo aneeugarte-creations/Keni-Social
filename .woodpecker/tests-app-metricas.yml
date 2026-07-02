@@ -8,9 +8,9 @@ when:
   - event: [push, pull_request]
     path:
       include:
-        - "consola/src/keni_consola/api/metricas.py"
-        - "consola/src/keni_consola/api/comercial.py"
-        - "consola/src/keni_consola/comercial.py"
+        - "consola/src/keni_consola/metricas/**"
+        - "consola/src/keni_consola/api/{campanias,vistas,inbox}.py"
+        - "consola/src/keni_consola/api/metricas/**"
         - "consola/src/keni_consola/apps/metricas.toml"
 
 services:

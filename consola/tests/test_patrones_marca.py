@@ -5,7 +5,8 @@ from __future__ import annotations
 
 import json
 
-from keni_consola import patrones_derivar, patrones_marca
+from keni_consola.produccion import patrones_derivar
+from keni_consola import patrones_marca
 
 
 # --------------------------------------------------------------------------- #

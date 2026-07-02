@@ -40,7 +40,7 @@ from starlette.routing import Route
 
 from .. import autogen_redactar, redes, repos
 from .._http_json import leer_json
-from ..dominio import breaking as dom_breaking
+from ..produccion import breaking as dom_breaking
 from ..estados import FLUJO_IMPORTANTE
 from ..seguridad import autor_de_peticion
 from ..tiempo import hoy_utc

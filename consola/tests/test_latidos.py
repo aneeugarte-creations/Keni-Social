@@ -227,7 +227,7 @@ def test_endpoint_daemons_contrato_y_estados(entorno):
 
 def _envejecer_latido(daemon: str) -> None:
     """Deja el `visto` del daemon muy atras en el tiempo (mas alla de todo umbral)."""
-    from keni_consola._db_comun import _conectar
+    from keni_consola.db._comun import _conectar
 
     con = _conectar()
     try:
@@ -522,7 +522,7 @@ def test_prompts_de_devuelve_copias_aisladas():
 def test_prompts_docs_existen_en_el_catalogo_de_procesos():
     # Cada `doc` de PROMPTS debe ser un prompt REAL del catálogo de procesos (mismo doc que se
     # inyecta a la IA). Si alguien renombra/retira un prompt, este test cae antes que el front.
-    from keni_consola import prompts_procesos
+    from keni_consola.produccion import prompts_procesos
 
     for daemon, prompts in latidos.PROMPTS.items():
         for p in prompts:
@@ -785,7 +785,7 @@ def test_bucle_gateado_escribe_historial_con_resumen(entorno):
 def test_resumen_fn_formatea_dict_de_conteos():
     # Los formateadores de resumen son PUROS: derivan un str humano de los conteos del sweep
     # (dict que consumen tests/disparo a demanda) sin tocar ese contrato. Vacio => "sin novedad".
-    from keni_consola.recolectar_daemon import _bucle as ingesta_bucle
+    from keni_consola.produccion.recolectar_daemon import _bucle as ingesta_bucle
     from keni_consola.pipeline_contenido import _barrido as pc_barrido
 
     assert ingesta_bucle._resumen_barrido(
@@ -805,7 +805,7 @@ def test_resumen_fn_formatea_dict_de_conteos():
 def test_bucle_gateado_resumen_fn_escribe_historial(entorno):
     # Daemon GATEADO con dict de conteos: el `resumen_fn` deriva el str del resultado del sweep
     # y ese texto aterriza NO VACIO en `daemon_barridos` (lo que pinta la pagina de detalle).
-    from keni_consola.recolectar_daemon import _bucle as ingesta_bucle
+    from keni_consola.produccion.recolectar_daemon import _bucle as ingesta_bucle
 
     daemon_util.bucle_gateado(
         activo_fn=lambda: True,

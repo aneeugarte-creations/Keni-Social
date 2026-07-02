@@ -126,7 +126,7 @@ def ejecutar_barrido() -> int:
     # Retención de la cola de jobs: borra los `terminado` antiguos. La tabla crecía sin límite (nada
     # purgaba jobs), engordando el TOAST del `spec` y los seq-scans del polling de la cola.
     try:
-        from . import db_jobs
+        from .db import jobs as db_jobs
 
         p = db_jobs.purgar_jobs_terminados()
         if p:
@@ -137,7 +137,7 @@ def ejecutar_barrido() -> int:
     # diario (`gasto_ia_diario`) y lo borra del crudo. El día vivo (freno de presupuesto) y
     # toda la ventana de los paneles quedan intactos; ver `db_jobs.purgar_gasto_ia`.
     try:
-        from . import db_jobs
+        from .db import jobs as db_jobs
 
         g = db_jobs.purgar_gasto_ia()
         if g:

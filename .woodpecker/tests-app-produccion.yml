@@ -10,13 +10,9 @@ when:
   - event: [push, pull_request]
     path:
       include:
-        - "consola/src/keni_consola/agentes.py"
-        - "consola/src/keni_consola/api/generaciones.py"
-        - "consola/src/keni_consola/api/hashtags.py"
-        - "consola/src/keni_consola/api/qa_editorial.py"
-        - "consola/src/keni_consola/api/verificaciones.py"
-        - "consola/src/keni_consola/api/rss.py"
-        - "consola/src/keni_consola/dominio/{hashtags,qa_editorial,extraccion_url}.py"
+        - "consola/src/keni_consola/produccion/**"
+        - "consola/src/keni_consola/api/{actividad,produccion,bloques,imagen,idear,historial,marca_activos,plantillas_diseno,etiquetas_plantilla,plantillas_marca,verificaciones,rss,breaking,fuentes,insumos,presidencia,clips,algoritmos,patrones,video,audio}.py"
+        - "consola/src/keni_consola/api/{prompts,noticias,pipelines}/**"
         - "consola/src/keni_consola/apps/produccion.toml"
 
 services:

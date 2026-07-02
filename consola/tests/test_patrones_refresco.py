@@ -9,7 +9,8 @@ from datetime import datetime, timedelta, timezone
 
 from keni_shared import marcas as cat_marcas
 
-from keni_consola import config, patrones_marca, patrones_refresco
+from keni_consola import config, patrones_marca
+from keni_consola.produccion import refresco_patrones as patrones_refresco
 
 
 def test_gate_apagado_por_defecto_y_en_vivo(monkeypatch):
@@ -41,7 +42,7 @@ def test_refrescar_no_toca_si_los_perfiles_son_frescos(tmp_path, monkeypatch):
     def _no_debe_llamarse(*a, **k):  # noqa: ANN002, ANN003
         raise AssertionError("con perfiles frescos NO se extrae de Metricool")
 
-    from keni_consola import patrones_derivar
+    from keni_consola.produccion import patrones_derivar
 
     monkeypatch.setattr(patrones_derivar, "extraer_piezas_metricool", _no_debe_llamarse)
     assert patrones_refresco.refrescar_patrones() == 0
@@ -54,7 +55,7 @@ def test_refrescar_deriva_si_el_perfil_esta_viejo(tmp_path, monkeypatch):
          "engagement_pct": i / 10.0, "visualizaciones": 1000, "publicado": "2026-05-01"}
         for i in range(120)
     ]
-    from keni_consola import patrones_derivar
+    from keni_consola.produccion import patrones_derivar
 
     monkeypatch.setattr(
         patrones_derivar, "extraer_piezas_metricool",
@@ -72,7 +73,7 @@ def test_refrescar_deriva_si_el_perfil_esta_viejo(tmp_path, monkeypatch):
 def test_refrescar_sin_runtime_deriva(tmp_path, monkeypatch):
     # Primer arranque con el daemon activo: sin perfiles runtime, toca derivar.
     monkeypatch.setenv("KENI_PATRONES_DIR", str(tmp_path))
-    from keni_consola import patrones_derivar
+    from keni_consola.produccion import patrones_derivar
 
     llamado = {}
 
@@ -88,7 +89,7 @@ def test_refrescar_sin_runtime_deriva(tmp_path, monkeypatch):
 def test_extraccion_vacia_conserva_el_perfil_anterior(tmp_path, monkeypatch):
     _runtime_fresco(tmp_path, monkeypatch, hace_dias=45)
     antes = (tmp_path / "unotv.json").read_text(encoding="utf-8")
-    from keni_consola import patrones_derivar
+    from keni_consola.produccion import patrones_derivar
 
     monkeypatch.setattr(
         patrones_derivar, "extraer_piezas_metricool", lambda ids, meses: {}

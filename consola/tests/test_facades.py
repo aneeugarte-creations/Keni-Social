@@ -21,8 +21,6 @@ import importlib
 import inspect
 import pkgutil
 
-import keni_consola
-
 # Parámetros que la fachada DEJA CAER a propósito (la `db` los acepta pero la fachada no los
 # expone). Clave: nombre de la función (igual en fachada y db). Valor: set de params omitidos
 # adrede, cada uno con su porqué en el comentario. Hoy está VACÍO: toda deriva detectada era
@@ -40,12 +38,13 @@ _PASABLES_POR_KEYWORD = (
 
 
 def _modulos_fachada() -> list[str]:
-    """`repos` (barrel) + cada `repos_<dominio>` del paquete."""
+    """`repos` (barrel) + cada submódulo público de `repos/`."""
+    repos = importlib.import_module("keni_consola.repos")
     nombres = ["repos"]
     nombres += sorted(
-        m.name
-        for m in pkgutil.iter_modules(keni_consola.__path__)
-        if m.name.startswith("repos_")
+        f"repos.{m.name}"
+        for m in pkgutil.iter_modules(repos.__path__)
+        if not m.name.startswith("_")
     )
     return nombres
 
@@ -129,8 +128,8 @@ def test_fachada_reenvia_parametros_de_db() -> None:
 
 
 def test_repos_barrel_reexporta_todo_lo_publico_de_los_submodulos() -> None:
-    """El barrel `repos` reexpone TODA función pública de cada `repos_<dominio>` /
-    `db_sugerencias` / `_repos_comun`.
+    """El barrel `repos` reexpone TODA función pública de cada submódulo de `repos/` /
+    `db.sugerencias` / `repos._comun`.
 
     Solo se exigen FUNCIONES (la API de persistencia que consumen los `api/*.py`); las
     constantes/clases entran igual por la derivación, pero las funciones son lo que rompía
@@ -138,12 +137,14 @@ def test_repos_barrel_reexporta_todo_lo_publico_de_los_submodulos() -> None:
     repos = importlib.import_module("keni_consola.repos")
     expuestos = set(dir(repos))
 
-    submods = ["_repos_comun"]
+    repos_pkg = importlib.import_module("keni_consola.repos")
+    submods = ["repos._comun"]
     submods += sorted(
-        m.name
-        for m in pkgutil.iter_modules(keni_consola.__path__)
-        if m.name.startswith("repos_") or m.name == "db_sugerencias"
+        f"repos.{m.name}"
+        for m in pkgutil.iter_modules(repos_pkg.__path__)
+        if not m.name.startswith("_")
     )
+    submods.append("db.sugerencias")
 
     faltan: list[str] = []
     revisadas = 0

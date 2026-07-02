@@ -12,7 +12,7 @@ pregunta) en un PERFIL JSON por marca. Ese perfil alimenta dos consumidores:
     post-procesado del copy ANTES de la revisión humana: una pieza fuera de patrón no se
     bloquea, se ANOTA y degrada el revision `listo` -> `revisar`.
 
-El perfil es REGENERABLE (`keni_consola.patrones_derivar`, CLI + daemon opcional): la
+El perfil es REGENERABLE (`keni_consola.produccion.patrones_derivar`, CLI + daemon opcional): la
 base viaja en el paquete (`patrones_inicial/<marca>.json`) y el runtime puede
 sobrescribirla bajo el dir de datos (`<dir_config>/patrones/<marca>.json`), misma
 filosofía base/store que `libprompts`. Sin perfil para una marca/red el verificador
@@ -469,7 +469,7 @@ def renderizar_doc(perfil: dict[str, object], etiqueta_marca: str) -> str:
         f"Derivado automáticamente de {perfil.get('piezas', 0):,} piezas publicadas "
         f"({v.get('desde', '?')} → {v.get('hasta', '?')}), comparando el cuartil de mayor "
         "engagement (TOP) contra el peor (FONDO) por red. Regenerable con "
-        "`python -m keni_consola.patrones_derivar`; NO editar a mano (el criterio "
+        "`python -m keni_consola.produccion.patrones_derivar`; NO editar a mano (el criterio "
         "editorial va en Voz/Reglas). Estas bandas son recomendación medida: el copy "
         "nuevo debe caer dentro de la banda TOP de su red.",
         "",

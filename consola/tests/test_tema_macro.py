@@ -9,7 +9,7 @@ from __future__ import annotations
 
 def test_serializer_expone_tema_macro_y_default_vacio():
     """`_fila_a_noticia_cluster` mapea `tema_macro`; NULL/"" -> "" (sin macro-evento)."""
-    from keni_consola.db_noticias.clusters import _fila_a_noticia_cluster
+    from keni_consola.db.noticias.clusters import _fila_a_noticia_cluster
 
     base = {c: "" for c in _columnas_base()}
     base.update({"n_items": 0, "n_fuentes": 0, "senal": 0, "score": 0.0, "breaking": 0,
@@ -24,7 +24,7 @@ def test_serializer_expone_tema_macro_y_default_vacio():
 
 def test_marcar_clusters_tema_macro_lista_vacia_no_toca_bd():
     """`ids` vacío -> 0 sin abrir conexión (early-return puro, no requiere Postgres)."""
-    from keni_consola.db_noticias.clusters import marcar_clusters_tema_macro
+    from keni_consola.db.noticias.clusters import marcar_clusters_tema_macro
 
     assert marcar_clusters_tema_macro([], "Cumbre del G7") == 0
     assert marcar_clusters_tema_macro([""], "Cumbre del G7") == 0
@@ -151,6 +151,6 @@ def test_listado_de_piezas_expone_posible_duplicado(cliente):
 
 
 def _columnas_base() -> tuple[str, ...]:
-    from keni_consola.db_noticias.clusters import _COLS_NOTICIA_CLUSTER
+    from keni_consola.db.noticias.clusters import _COLS_NOTICIA_CLUSTER
 
     return _COLS_NOTICIA_CLUSTER

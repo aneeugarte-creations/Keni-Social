@@ -41,7 +41,7 @@ from starlette.routing import Route
 from .. import autogen_redactar, config, generaciones, redes, repos, rutas
 from .._http_json import leer_json
 from ..dominio import indicaciones, ingesta, jobspec, recibir_parse
-from ..dominio.frescura import estado_frescura, resolver_linea
+from ..produccion.frescura import estado_frescura, resolver_linea
 from ..seguridad import autor_de_peticion
 from ..tiempo import hoy_utc
 from ._guardas import redactar_apagado

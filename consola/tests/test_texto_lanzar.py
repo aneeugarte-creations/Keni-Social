@@ -12,7 +12,8 @@ import pytest
 from keni_shared import marcas
 
 from keni_consola import config, generaciones, libprompts
-from keni_consola.dominio import jobspec, prompts_lanzar
+from keni_consola.dominio import jobspec
+from keni_consola.produccion import prompts_lanzar
 
 _MARCA = marcas.opciones()[0][0]
 

@@ -16,7 +16,8 @@ from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ... import actividad, agentes, generaciones, repos
+from ...produccion import actividad, agentes
+from ... import generaciones, repos
 from ..._http_json import _entero_query, envoltura_paginacion
 from ...estados import CLASE_CONTENIDO, ORIGENES_AUTOGEN
 from ...pipeline_contenido import ORIGEN_PIPELINE

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from keni_consola import campanias
+from keni_consola.metricas import campanias
 
 
 def _crear(cli, **campos):

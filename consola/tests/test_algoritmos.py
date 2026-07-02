@@ -7,7 +7,7 @@ La ingesta end-to-end (descarga + persistencia) vive en `test_api_algoritmos.py`
 
 from __future__ import annotations
 
-from keni_consola import algoritmos
+from keni_consola.produccion import algoritmos
 from keni_consola.api import rss
 
 

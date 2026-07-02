@@ -9,7 +9,7 @@ Son funciones puras: no hay Postgres, asi que NO se saltan (corren siempre, tamb
 
 from __future__ import annotations
 
-from keni_consola.dominio import recurrencia
+from keni_consola.operacion import recurrencia
 
 # 2026-06-15 es LUNES; la semana 15..21 jun = L M X J V S D.
 

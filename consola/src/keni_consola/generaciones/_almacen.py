@@ -175,7 +175,7 @@ def _indexar(pub: dict[str, Any]) -> None:
     if not gen_id:
         return
     try:
-        from .. import db_jobs
+        from ..db import jobs as db_jobs
 
         db_jobs.indexar_generacion(
             gen_id,
@@ -196,7 +196,7 @@ def _desindexar(gen_id: str) -> None:
     if not isinstance(gen_id, str) or not gen_id:
         return
     try:
-        from .. import db_jobs
+        from ..db import jobs as db_jobs
 
         db_jobs.desindexar_generacion(gen_id)
     except Exception:  # noqa: BLE001 -- best-effort: el YAML ya se borro; el indice se auto-cura
@@ -212,7 +212,7 @@ def _asegurar_indice_poblado() -> None:
     escanear. Sin flag pegajoso (que rompe el aislamiento entre tests): el disparador es el
     propio estado "indice vacio + hay YAML", de modo que tambien AUTO-CURA un indice purgado.
     """
-    from .. import db_jobs
+    from ..db import jobs as db_jobs
 
     if not db_jobs.indice_generaciones_vacio():
         return
@@ -548,7 +548,7 @@ def listar(
     """
     try:
         _asegurar_indice_poblado()
-        from .. import db_jobs
+        from ..db import jobs as db_jobs
 
         return db_jobs.listar_indice_generaciones(
             marca=marca or None, limite=limite, desplazamiento=desplazamiento
@@ -573,7 +573,7 @@ def contar() -> int:
     """
     try:
         _asegurar_indice_poblado()
-        from .. import db_jobs
+        from ..db import jobs as db_jobs
 
         return db_jobs.contar_indice_generaciones()
     except Exception:  # noqa: BLE001 -- sin indice, conteo por escaneo YAML (correcto)
@@ -711,7 +711,7 @@ def purgar_indice_generaciones(
     )
     referencia = ahora if ahora is not None else datetime.now(timezone.utc).replace(tzinfo=None)
     corte = (referencia - timedelta(days=dias_ret)).isoformat(timespec="seconds")
-    from .. import db_jobs
+    from ..db import jobs as db_jobs
 
     podadas = db_jobs.purgar_indice_generaciones(corte, max_ret)
     if podadas:

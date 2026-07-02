@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from keni_consola.agentes._rutas import NombreAgenteInvalido, resolver_slug_agente
+from keni_consola.produccion.agentes._rutas import NombreAgenteInvalido, resolver_slug_agente
 
 
 def test_slug_limpio_resuelve_dentro_de_la_raiz(tmp_path):

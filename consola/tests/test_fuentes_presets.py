@@ -313,7 +313,7 @@ def test_backfill_idioma_fuente_rellena_desde_preset(cliente):  # noqa: ARG001
     """Una fuente ya creada SIN idioma cuya URL casa con un preset recibe el idioma declarado del
     catálogo al correr el backfill: las fuentes pre-existentes dejan de pasar por langdetect."""
     from keni_consola import repos
-    from keni_consola._db_comun import _conectar
+    from keni_consola.db._comun import _conectar
     from keni_consola._db_core.migraciones_columnas import _backfill_idioma_fuente
     from keni_consola.dominio import fuentes_presets
 
@@ -336,7 +336,7 @@ def test_consolidar_fuentes_duplicadas(cliente):  # noqa: ARG001
     """La misma url dada de alta en 3 marcas se funde en UNA multimarca: la más antigua reúne las
     marcas, los items históricos se re-apuntan a ella y las redundantes quedan desactivadas."""
     from keni_consola import repos
-    from keni_consola._db_comun import _conectar
+    from keni_consola.db._comun import _conectar
     from keni_consola._db_core.migraciones_columnas import _consolidar_fuentes_duplicadas
 
     url = "https://feeds.ej.com/world.xml"

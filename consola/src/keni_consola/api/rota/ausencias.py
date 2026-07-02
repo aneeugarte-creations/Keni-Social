@@ -11,7 +11,7 @@ from starlette.responses import JSONResponse, Response
 from ... import repos
 from ... import rota as dominio
 from ..._http_json import leer_json
-from ...dominio import notificaciones_turnos
+from ...operacion import notificaciones_turnos
 from ...estados import (
     TIPOS_AUSENCIA,
 )

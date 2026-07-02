@@ -15,7 +15,8 @@ from __future__ import annotations
 
 import pytest
 
-from keni_consola import agentes, ficheros, indice, repos
+from keni_consola.produccion import agentes
+from keni_consola import ficheros, indice, repos
 
 
 @pytest.fixture

@@ -6,7 +6,8 @@ contexto). Cada área (`docs`, `pieza`, `pipelines`, `lanzar`) los importa de aq
 
 from __future__ import annotations
 
-from ... import libprompts, prompts_contratos, prompts_procesos
+from ... import libprompts, prompts_contratos
+from ...produccion import prompts_procesos
 
 # Tope de tamano del bloque de contexto (texto pegado / leido de archivo / url) en chars.
 _MAX_TEXTO = 200_000

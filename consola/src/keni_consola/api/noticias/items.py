@@ -386,7 +386,7 @@ def _fila_stats(f: dict) -> dict:
     rendimiento es UN canal —el descubridor—, así que se nombra como tal, no por ese medio suelto.
     """
     from ...dominio import fuentes_pesos
-    from ...dominio import trends as dom_trends
+    from ...produccion import trends as dom_trends
 
     historias = int(f.get("historias") or 0)
     usadas = int(f.get("usadas") or 0)
@@ -429,7 +429,7 @@ async def descubrimiento_handler(request: Request) -> Response:
 
 
 def _descubrimiento(marca: str | None, dias: int) -> dict:
-    from ...dominio import trends as dom_trends
+    from ...produccion import trends as dom_trends
 
     stats = next(
         (
@@ -463,7 +463,7 @@ async def descubrimiento_terminos_handler(request: Request) -> Response:
 
 def _descubrimiento_terminos() -> dict:
     from ...dominio import http_feed
-    from ...dominio import trends as dom_trends
+    from ...produccion import trends as dom_trends
 
     geos = list(config.trends_geos())
     terminos: list[dict] = []

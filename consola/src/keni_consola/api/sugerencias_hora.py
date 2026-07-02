@@ -34,7 +34,7 @@ from starlette.routing import Route
 
 from .. import metricas_cache, redes, repos
 from .._http_json import leer_json
-from ..dominio import planificacion
+from ..operacion import planificacion
 from . import franjas as api_franjas
 
 

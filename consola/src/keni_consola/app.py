@@ -34,7 +34,7 @@ from starlette.responses import FileResponse, HTMLResponse, JSONResponse, PlainT
 from starlette.routing import Mount, Route, WebSocketRoute
 
 from . import api, config, db, seguridad
-from ._repos_comun import PiezaPublicadaInmutable
+from .repos._comun import PiezaPublicadaInmutable
 from .dominio.runner import ColaLlenaError
 from .observabilidad import NOMBRE_LOGGER, RegistroPeticiones, manejar_excepcion
 

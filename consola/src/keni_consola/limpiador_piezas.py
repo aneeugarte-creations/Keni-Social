@@ -20,7 +20,8 @@ import logging
 import time
 from typing import Any
 
-from . import config, db_purga_piezas, latidos
+from . import config, latidos
+from .db import purga_piezas as db_purga_piezas
 
 _log = logging.getLogger("keni_consola.limpiador_piezas")
 

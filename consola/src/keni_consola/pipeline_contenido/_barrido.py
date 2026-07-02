@@ -89,7 +89,7 @@ def _despertar_daemon(daemon: str) -> None:
     sigue siendo el FALLBACK. Best-effort: si el daemon nunca latió (sin fila), si la BD no está o
     si el loop está apagado, no pasa nada. NUNCA lanza (despertar es un extra, no parte del flujo)."""
     try:
-        from .. import db_latidos
+        from ..db import latidos as db_latidos
 
         db_latidos.solicitar_barrido(daemon)
     except Exception:  # noqa: BLE001 -- despertar es best-effort; el tick de 15s ya recoge igual

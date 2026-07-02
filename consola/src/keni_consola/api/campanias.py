@@ -18,7 +18,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, Response
 from starlette.routing import Route
 
-from .. import campanias
+from ..metricas import campanias
 from .._http_json import leer_json
 
 _MARCAS_IDS = {mid for mid, _ in marcas.opciones()}

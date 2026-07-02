@@ -11,7 +11,7 @@ from starlette.responses import JSONResponse, Response
 from ... import repos
 from ... import rota as dominio
 from ..._http_json import leer_json
-from ...dominio import recurrencia
+from ...operacion import recurrencia
 from ...estados import (
     PRIORIDADES_EVENTO,
     TIPOS_COBERTURA,

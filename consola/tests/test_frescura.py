@@ -9,7 +9,7 @@ No requiere BD (módulo puro).
 
 from __future__ import annotations
 
-from keni_consola.dominio.frescura import estado_frescura
+from keni_consola.produccion.frescura import estado_frescura
 
 # --------------------------------------------------------------------------- #
 # Parámetros de la función bajo prueba                                         #

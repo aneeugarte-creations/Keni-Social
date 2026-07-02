@@ -8,12 +8,10 @@ when:
   - event: [push, pull_request]
     path:
       include:
-        - "consola/src/keni_consola/api/publicaciones.py"
-        - "consola/src/keni_consola/api/aprobacion.py"
-        - "consola/src/keni_consola/api/franjas.py"
-        - "consola/src/keni_consola/api/rota.py"
+        - "consola/src/keni_consola/operacion/**"
         - "consola/src/keni_consola/rota.py"
-        - "consola/src/keni_consola/dominio/publicaciones.py"
+        - "consola/src/keni_consola/api/{aprobacion,franjas,sugerencias_hora,parrilla_import,etiquetas,colaboracion,webhooks}.py"
+        - "consola/src/keni_consola/api/{publicaciones,piezas,rota}/**"
         - "consola/src/keni_consola/apps/operacion.toml"
 
 services:

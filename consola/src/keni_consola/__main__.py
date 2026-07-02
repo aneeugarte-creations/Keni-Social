@@ -196,7 +196,7 @@ def main() -> int:
     # Asi la UI lee datos ya calculados (instantaneo) sin golpear las APIs externas en cada
     # apertura; el boton "Actualizar" dispara un refresco extra a demanda. Vive aqui (servidor
     # real), NO en `crear_app`, para no arrancarlo en los tests (igual que el programador).
-    from .metricas_refresco import iniciar_refresco_metricas
+    from .metricas.refresco_cuentas import iniciar_refresco_metricas
 
     iniciar_refresco_metricas()
 
@@ -205,7 +205,7 @@ def main() -> int:
     # desde Metricool cada N horas (def 4h, KENI_METRICAS_PIEZAS_REFRESCO_HORAS), para que el
     # tablero vea datos frescos sin lazy-fill en la apertura. Vive aqui
     # (servidor real), NO en `crear_app`, para no arrancarlo en los tests.
-    from .metricas_piezas_refresco import iniciar_refresco_piezas
+    from .metricas.refresco_piezas import iniciar_refresco_piezas
 
     iniciar_refresco_piezas()
 
@@ -235,7 +235,7 @@ def main() -> int:
     # oficiales/agregadores y mantiene al dia la pagina Algoritmos y el panel. SOLO LEE feeds
     # RSS publicos; no publica ni genera. SAFE BY DEFAULT: sin el flag no ingiere. Vive aqui
     # (servidor real), NO en `crear_app`, para no arrancarlo en los tests.
-    from .algoritmos_refresco import iniciar_refresco_algoritmos
+    from .produccion.refresco_algoritmos import iniciar_refresco_algoritmos
 
     iniciar_refresco_algoritmos()
 
@@ -262,7 +262,7 @@ def main() -> int:
     # `KENI_NOTICIAS_GC` (def OFF) que purga lo irrelevante de baja relevancia (historias `nuevo` de una
     # fuente, score bajo e inactivas + items sueltos viejos), conservando lo usado/corroborado/
     # reciente. SAFE BY DEFAULT: sin el flag no borra nada. Vive aquí (servidor real), no en tests.
-    from .noticias_gc_daemon import iniciar_noticias_gc
+    from .produccion.noticias_gc_daemon import iniciar_noticias_gc
 
     iniciar_noticias_gc()
 

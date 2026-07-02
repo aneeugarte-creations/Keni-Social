@@ -31,7 +31,7 @@ from .._http_json import leer_json
 # RE-EXPORTA aqui para no romper a quien la importe como `api.franjas.X` (en particular
 # `api/piezas.py` y `api/sugerencias_hora.py`, que hacen
 # `from . import franjas as api_franjas; api_franjas.proximo_hueco(...)`).
-from ..dominio.franjas import (  # noqa: F401  (re-export para compatibilidad)
+from ..operacion.franjas import (  # noqa: F401  (re-export para compatibilidad)
     franjas_aplicables,
     hora_valida,
     proximo_hueco,

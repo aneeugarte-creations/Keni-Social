@@ -15,7 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ...db_publicacion import ConflictoVersion
+from ...db.publicacion import ConflictoVersion
 from ...dominio import licencia_imagen
 from ._comun import (
     _MAX_TEXTO,

@@ -10,7 +10,7 @@ from starlette.responses import JSONResponse, Response
 
 from ... import auth, repos
 from ..._http_json import leer_json
-from ...dominio import notificaciones_turnos
+from ...operacion import notificaciones_turnos
 from ...estados import (
     ESTADO_SWAP_ACEPTADO,
     ESTADO_SWAP_CANCELADO,

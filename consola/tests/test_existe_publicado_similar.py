@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 
 from keni_consola import db, repos
-from keni_consola.db_publicacion import _contenido
+from keni_consola.db.publicacion import _contenido
 
 
 def _publicar(marca: str, titulo: str, *, url_fuente: str = "") -> str:
@@ -69,7 +69,7 @@ def test_fallo_de_bd_devuelve_false_pero_deja_warning(monkeypatch, caplog):
         raise RuntimeError("bd caída")
 
     monkeypatch.setattr(_contenido, "publicados_marca_cache", _boom)
-    with caplog.at_level(logging.WARNING, logger="keni_consola.db_publicacion.contenido"):
+    with caplog.at_level(logging.WARNING, logger="keni_consola.db.publicacion.contenido"):
         assert db.existe_publicado_similar("unotv", "lo que sea") is False
     assert any("dedup" in r.message.lower() for r in caplog.records)
 

@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from keni_consola import actividad, generaciones
+from keni_consola.produccion import actividad
+from keni_consola import generaciones
 
 # --------------------------------------------------------------------------- #
 # Datos de ejemplo                                                            #

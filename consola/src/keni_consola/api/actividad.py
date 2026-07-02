@@ -50,8 +50,6 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from .. import (
-    actividad,
-    agentes,
     ajustes_catalogo,
     config,
     gate_diario,
@@ -60,6 +58,7 @@ from .. import (
     presupuesto_ia,
     repos,
 )
+from ..produccion import actividad, agentes
 from .._http_json import _entero_query
 from ..tiempo import hoy_utc
 

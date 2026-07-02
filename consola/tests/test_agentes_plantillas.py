@@ -6,7 +6,7 @@ un id desconocido a la plantilla general.
 
 from __future__ import annotations
 
-from keni_consola.agentes import _plantillas
+from keni_consola.produccion.agentes import _plantillas
 
 
 def test_plantillas_disponibles_incluye_las_cinco():
