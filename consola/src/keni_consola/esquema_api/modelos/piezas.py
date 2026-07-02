@@ -201,6 +201,11 @@ class Pieza(TypedDict):
     # de publicación (la portada es la imagen compuesta de siempre). "" = sin slides / otro
     # formato. Opcional. Frontera API->frontend.
     carrusel: NotRequired[str]
+    # POSIBLE DUPLICADO (aviso de solo lectura, solo en el LISTADO `GET /api/piezas`): otra
+    # idea ACTIVA de la misma marca comparte macro-evento (`tema_macro`+`subtema`) con esta,
+    # así que probablemente cubren EL MISMO evento. La UI muestra un badge discreto; decide
+    # el humano. Opcional: el detalle y los productores legados no lo traen (= False).
+    posible_duplicado: NotRequired[bool]
 
 
 class RespuestaPiezas(TypedDict):

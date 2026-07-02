@@ -144,6 +144,32 @@ def piezas_vencidas(
     return vencidas
 
 
+def piezas_atrasadas(
+    programadas: list[dict[str, Any]], ahora: datetime
+) -> list[dict[str, Any]]:
+    """Subconjunto de `programadas` FUERA DE VENTANA: vencidas hace más de la ventana de
+    frescura y sin preparar (PURA, testeable).
+
+    Son el complemento silencioso de `piezas_vencidas`: el barrido NO las postea (frescura)
+    y nadie las reintenta — necesitan que el equipo las REPROGRAME a mano a un hueco futuro.
+    Esta lista las hace visibles (doctor `/api/estado` + indicador en la UI). Misma
+    normalización de fechas y mismo criterio de claim (`preparado_en`) que `piezas_vencidas`.
+    """
+    ahora = _a_utc(ahora)
+    atrasadas: list[dict[str, Any]] = []
+    for pub in programadas:
+        if pub.get("estado") != ESTADO_PROGRAMADO:
+            continue
+        if pub.get("preparado_en"):  # ya preparada/despachada: no necesita reprogramación
+            continue
+        fecha = _parsear_fecha(pub.get("fecha_programada") or "")
+        if fecha is None:
+            continue
+        if ahora - fecha > _VENTANA_PUBLICACION:
+            atrasadas.append(pub)
+    return atrasadas
+
+
 # --------------------------------------------------------------------------- #
 # Resolucion de credenciales Metricool por marca (pura, testeable)             #
 # --------------------------------------------------------------------------- #

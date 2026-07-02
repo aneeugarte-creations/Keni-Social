@@ -84,6 +84,72 @@ def test_subtema_persiste_desde_el_esquema_declarativo(entorno):  # noqa: ARG001
     assert repos.obtener_noticia_cluster("c2")["subtema"] == ""
 
 
+def test_grupos_duplicados_activos_detecta_mismo_evento(entorno):  # noqa: ARG001
+    """Dos temas ACTIVOS de la misma marca con el MISMO (tema_macro, subtema) son un grupo
+    de posible duplicado; una faceta distinta o un campo vacio NO agrupan.
+
+    Requiere Postgres (fixture `entorno`); lo ejecuta el CI, no el dev local.
+    """
+    from keni_consola import repos
+
+    a = repos.crear_publicacion(
+        titulo="A", marca="unotv", tema_macro="Mundial 2026", subtema="partidos"
+    )
+    b = repos.crear_publicacion(
+        titulo="B", marca="unotv", tema_macro="Mundial 2026", subtema="partidos"
+    )
+    faceta_distinta = repos.crear_publicacion(
+        titulo="C", marca="unotv", tema_macro="Mundial 2026", subtema="sedes"
+    )
+    sin_subtema = repos.crear_publicacion(titulo="D", marca="unotv", tema_macro="Mundial 2026")
+    for pub in (a, b, faceta_distinta, sin_subtema):
+        repos.crear_pieza_fila(publicacion_id=pub["id"], red="x")
+
+    grupos = repos.grupos_duplicados_activos()
+    assert ("unotv", "Mundial 2026", "partidos") in grupos
+    assert all(clave[2] != "sedes" for clave in grupos)  # faceta unica: no agrupa
+
+
+def test_grupos_duplicados_ignora_temas_ya_publicados(entorno):  # noqa: ARG001
+    """Un tema cuya unica pieza ya esta PUBLICADA no compite en la cola: no cuenta como
+    duplicado activo (queda un solo tema activo -> sin grupo).
+
+    Requiere Postgres (fixture `entorno`); lo ejecuta el CI, no el dev local.
+    """
+    from keni_consola import repos
+
+    a = repos.crear_publicacion(titulo="A", marca="unotv", tema_macro="Final", subtema="cronica")
+    b = repos.crear_publicacion(titulo="B", marca="unotv", tema_macro="Final", subtema="cronica")
+    repos.crear_pieza_fila(publicacion_id=a["id"], red="x")
+    plat_b = repos.crear_pieza_fila(publicacion_id=b["id"], red="x")
+    repos.actualizar_pieza_fila(plat_b["id"], {"estado": "publicado"})
+
+    assert ("unotv", "Final", "cronica") not in repos.grupos_duplicados_activos()
+
+
+def test_listado_de_piezas_expone_posible_duplicado(cliente):
+    """`GET /api/piezas` anade `posible_duplicado` a cada pieza: True solo en las activas
+    cuyo tema comparte macro-evento con OTRO tema activo de la marca."""
+    from keni_consola import repos
+
+    a = repos.crear_publicacion(
+        titulo="A", marca="unotv", tema_macro="Mundial 2026", subtema="partidos"
+    )
+    b = repos.crear_publicacion(
+        titulo="B", marca="unotv", tema_macro="Mundial 2026", subtema="partidos"
+    )
+    suelto = repos.crear_publicacion(titulo="C", marca="unotv")
+    ids_dup = set()
+    for pub in (a, b):
+        ids_dup.add(repos.crear_pieza_fila(publicacion_id=pub["id"], red="x")["id"])
+    id_suelto = repos.crear_pieza_fila(publicacion_id=suelto["id"], red="x")["id"]
+
+    piezas = cliente.get("/api/piezas").json()["piezas"]
+    por_id = {p["id"]: p for p in piezas}
+    assert por_id[id_suelto]["posible_duplicado"] is False
+    assert all(por_id[i]["posible_duplicado"] is True for i in ids_dup)
+
+
 def _columnas_base() -> tuple[str, ...]:
     from keni_consola.db_noticias.clusters import _COLS_NOTICIA_CLUSTER
 

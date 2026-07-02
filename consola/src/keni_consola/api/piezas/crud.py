@@ -423,6 +423,11 @@ def _listar(
         **filtros, limite=limite, desplazamiento=desplazamiento, cursor=cursor
     )
     total = repos.contar_piezas(**filtros)
+    # POSIBLE DUPLICADO (aviso de solo lectura): dos temas ACTIVOS de la misma marca con el
+    # mismo macro-evento (`tema_macro`+`subtema`, ambos no vacíos) cubren casi seguro EL MISMO
+    # evento. UNA consulta agregada por listado (sin N+1); el flag se añade solo a las piezas
+    # no terminales del grupo. El humano decide qué hacer (fusionar/descartar): esto solo avisa.
+    duplicados = repos.grupos_duplicados_activos() if pubs else set()
     # SEÑAL DE SIGUIENTE PÁGINA (solo modo feed/keyset, incluida la 1ª página): si la página vino
     # LLENA (tantas filas como `limite`), asumimos que puede haber más y emitimos el cursor de la
     # última fila vista (`<creado>|<id>`). Si vino corta (o vacía), es la última página y omitimos
@@ -435,11 +440,32 @@ def _listar(
     # antes (`limite = total`); si el cap recorto de verdad, se reporta el cap (honesto).
     limite_reportado = None if (sin_limite and not modo_feed and total <= limite) else limite
     return {
-        "piezas": [_publicacion_a_dict(p) for p in pubs],
+        "piezas": [_pieza_con_duplicado(p, duplicados) for p in pubs],
         "paginacion": envoltura_paginacion(
             total, limite_reportado, desplazamiento, cursor_siguiente=cursor_siguiente
         ),
     }
+
+
+def _pieza_con_duplicado(
+    pub: dict[str, Any], duplicados: set[tuple[str, str, str]]
+) -> dict[str, Any]:
+    """Serializa una pieza del listado añadiendo el aviso `posible_duplicado`.
+
+    True solo si la pieza está ACTIVA (no publicada), su tema trae macro-evento completo
+    (`tema_macro` + `subtema` no vacíos) y esa clave la comparten >=2 temas activos de la
+    marca (`grupos_duplicados_activos`). Solo en el LISTADO: el detalle no lo necesita.
+    """
+    d = _publicacion_a_dict(pub)
+    tema_macro = str(pub.get("tema_macro") or "")
+    subtema = str(pub.get("subtema") or "")
+    d["posible_duplicado"] = bool(
+        tema_macro
+        and subtema
+        and (pub.get("estado") or "") != ESTADO_PUBLICADO
+        and (str(pub.get("marca") or ""), tema_macro, subtema) in duplicados
+    )
+    return d
 
 
 def _crear(entrada: dict[str, Any], autor: dict[str, Any] | None) -> dict[str, Any]:

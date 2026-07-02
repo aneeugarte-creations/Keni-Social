@@ -15,7 +15,9 @@ notificar cuando pasa algo en una pieza. Reglas (acordadas con el equipo de rede
 Todo es BEST-EFFORT: un fallo aqui NUNCA debe tumbar la accion que lo provoco (comentar,
 aprobar, publicar). Cada entrada publica atrapa y loguea.
 
-TIPOS: `mencion` · `comentario` · `aprobacion` · `rechazo` · `pieza` · `asignacion`.
+TIPOS: `mencion` · `comentario` · `aprobacion` · `rechazo` · `pieza` · `asignacion`
+· `revision` (avisos AGREGADOS de la cola de revisión: piezas nuevas / piezas estancadas;
+van a los COORDINADORES de la marca, sin pieza concreta).
 """
 
 from __future__ import annotations
@@ -35,6 +37,7 @@ TIPOS: tuple[str, ...] = (
     "rechazo",
     "pieza",
     "asignacion",
+    "revision",
 )
 
 
@@ -279,3 +282,49 @@ def tras_asignacion(
         )
     except Exception:  # noqa: BLE001 -- notificar nunca rompe la asignación
         log.exception("Fallo notificando la asignación de %s.", contenido.get("id"))
+
+
+def _plural_piezas(n: int) -> str:
+    return "1 pieza nueva" if n == 1 else f"{n} piezas nuevas"
+
+
+def tras_avance_lote(marca_id: str, n: int) -> None:
+    """El AVANCE del pipeline movió `n` borradores de `marca_id` a la cola de revisión.
+
+    Aviso AGREGADO (uno por barrido y marca, con el conteo; jamás uno por pieza) a los
+    COORDINADORES de la marca — los mismos que reciben todo OK de su marca—, para que la
+    cola de revisión no se llene en silencio. Lo dispara el sistema (sin actor) y no
+    apunta a una pieza concreta: al pulsarla, el cajón lleva al feed. Best-effort: un
+    fallo aquí nunca frena el barrido de avance.
+    """
+    try:
+        if n <= 0 or not marca_id:
+            return
+        _repartir(
+            _coordinadores_de_marca(marca_id),
+            marca_id=marca_id,
+            tipo="revision",
+            resumen=f"{_plural_piezas(n)} en la cola de revisión",
+        )
+    except Exception:  # noqa: BLE001 -- notificar nunca rompe el avance
+        log.exception("Fallo notificando el avance a revisión de %r.", marca_id)
+
+
+def tras_revision_estancada(marca_id: str, n: int, horas: int) -> None:
+    """`n` piezas de `marca_id` llevan más de `horas` h en la cola de revisión sin decisión.
+
+    Aviso AGREGADO por marca (lo emite el barrido de alertas, ya deduplicado por día) a
+    los COORDINADORES de la marca. Best-effort: un fallo aquí nunca frena el barrido.
+    """
+    try:
+        if n <= 0 or not marca_id:
+            return
+        cuantas = "1 pieza lleva" if n == 1 else f"{n} piezas llevan"
+        _repartir(
+            _coordinadores_de_marca(marca_id),
+            marca_id=marca_id,
+            tipo="revision",
+            resumen=f"{cuantas} más de {horas} h esperando revisión",
+        )
+    except Exception:  # noqa: BLE001 -- notificar nunca rompe el barrido de alertas
+        log.exception("Fallo notificando la revisión estancada de %r.", marca_id)

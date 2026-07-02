@@ -922,3 +922,31 @@ describe("PostFeed · crédito de foto licenciada (AFP)", () => {
     expect(screen.queryByText("Crédito obligatorio:")).not.toBeInTheDocument();
   });
 });
+
+describe("avisos de cola: posible duplicado y fuera de ventana", () => {
+  it("pinta el badge 'Posible duplicado' cuando el backend lo señala", () => {
+    renderPost(pub({ posible_duplicado: true }));
+    expect(screen.getByText("Posible duplicado")).toBeInTheDocument();
+  });
+
+  it("sin señal del backend no hay badge de duplicado", () => {
+    renderPost(pub({ posible_duplicado: false }));
+    expect(screen.queryByText("Posible duplicado")).not.toBeInTheDocument();
+  });
+
+  it("una programada vencida hace >2 h sin preparar avisa 'Fuera de ventana — reprogramar'", () => {
+    const hace3h = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 16);
+    renderPost(
+      pub({ estado: "programado", etapa_ia: "programada", fecha_programada: hace3h, preparado_en: "" }),
+    );
+    expect(screen.getByText(/Fuera de ventana/)).toBeInTheDocument();
+  });
+
+  it("una programada al futuro NO lleva el aviso de fuera de ventana", () => {
+    const en2h = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().slice(0, 16);
+    renderPost(
+      pub({ estado: "programado", etapa_ia: "programada", fecha_programada: en2h, preparado_en: "" }),
+    );
+    expect(screen.queryByText(/Fuera de ventana/)).not.toBeInTheDocument();
+  });
+});

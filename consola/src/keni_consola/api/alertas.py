@@ -1,9 +1,10 @@
 """API Alertas de rendimiento (/api/alertas): bitacora EDITORIAL de lo que merece atencion.
 
 El daemon `alertas_rendimiento.py` emite a la bitacora de eventos internos
-(`db.eventos_internos`) dos tipos de aviso PROACTIVO sobre las piezas publicadas:
+(`db.eventos_internos`) los avisos PROACTIVOS del tablero:
 
   - `pieza.bajo_rendimiento`    una pieza publicada cae por debajo del umbral de engagement.
+  - `revision.estancada`        N piezas de una marca llevan >X h en la cola de revision.
 
 Los webhooks (`/api/webhooks`, SOLO ADMIN) tambien los exponen; este endpoint los expone al
 EQUIPO (cualquier usuario autenticado): es LECTURA de avisos del propio tablero, no
@@ -13,8 +14,8 @@ aqui no se relaja nada (igual que `/api/reciclaje` u otros endpoints de lectura)
   GET /api/alertas[?limite=N]  -> {"alertas": [{id, tipo, publicacion_id, pieza_id,
                                                 payload, creado}, ...]}
 
-Lee la bitacora (`repos.listar_eventos_internos`) y FILTRA a los dos tipos de alerta de
-rendimiento (los `TIPOS_ALERTA`), descartando el resto de eventos internos (aprobaciones,
+Lee la bitacora (`repos.listar_eventos_internos`) y FILTRA a los tipos de alerta
+(los `TIPOS_ALERTA`), descartando el resto de eventos internos (aprobaciones,
 piezas, vencimientos). `?limite=` acota cuantas filas se leen (def 50, max 200).
 
 Errores en espanol, sin tracebacks (contrato del paquete `api`).
@@ -29,11 +30,11 @@ from starlette.routing import Route
 
 from .. import repos
 
-# Tipos de evento interno que SON alertas de rendimiento (subconjunto de
+# Tipos de evento interno que SON alertas del barrido (subconjunto de
 # `dominio.eventos.TIPOS_EVENTO`). Se nombran aqui de forma explicita para no acoplar el
 # filtro al orden/contenido completo de `TIPOS_EVENTO`.
 TIPOS_ALERTA: frozenset[str] = frozenset(
-    {"pieza.bajo_rendimiento"}
+    {"pieza.bajo_rendimiento", "revision.estancada"}
 )
 
 _LIMITE_DEF = 50
@@ -61,7 +62,7 @@ def _listar(limite: int) -> dict:
 
 
 async def listar(request: Request) -> Response:
-    """GET /api/alertas[?limite=N]: alertas de rendimiento (bajo rendimiento).
+    """GET /api/alertas[?limite=N]: alertas del barrido (bajo rendimiento / revisión estancada).
 
     Lee la bitacora de eventos internos y FILTRA a los tipos de alerta. Para no perder
     alertas cuando la bitacora trae muchos eventos de otros tipos, leemos un poco mas que

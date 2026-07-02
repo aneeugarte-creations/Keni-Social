@@ -15,6 +15,7 @@
  */
 import { AtSign, Facebook, Instagram, Music2, Youtube, type LucideIcon } from "lucide-react";
 
+import { aInstante } from "@/lib/fecha";
 import type { EstadoPieza, LimiteRed, Veredicto } from "@/types";
 
 import { IconoX } from "./IconoX";
@@ -190,6 +191,28 @@ export function siguienteEstado(estado: string): EstadoPieza | null {
   const i = ORDEN_ESTADOS.indexOf(estado as EstadoPieza);
   if (i < 0 || i >= ORDEN_ESTADOS.length - 1) return null;
   return ORDEN_ESTADOS[i + 1];
+}
+
+/**
+ * Ventana de frescura del programador, ESPEJO de `_VENTANA_PUBLICACION` del backend (2 h):
+ * una pieza programada vencida hace más que esto ya NO se publica sola.
+ */
+const VENTANA_PUBLICACION_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * ¿La pieza programada quedó FUERA DE VENTANA? Venció hace más de 2 h sin prepararse
+ * (`preparado_en` vacío): el barrido del programador ya no la postea solo (frescura) y
+ * necesita que el equipo la REPROGRAME a un hueco futuro. Mismo juicio que
+ * `programador.piezas_atrasadas` del backend; la UI pinta el aviso «fuera de ventana».
+ */
+export function piezaFueraDeVentana(
+  p: { estado: string; fecha_programada: string; preparado_en: string },
+  ahora: Date = new Date(),
+): boolean {
+  if (p.estado !== "programado" || p.preparado_en) return false;
+  const fecha = aInstante(p.fecha_programada);
+  if (!fecha) return false;
+  return ahora.getTime() - fecha.getTime() > VENTANA_PUBLICACION_MS;
 }
 
 // --- Revisiones ---

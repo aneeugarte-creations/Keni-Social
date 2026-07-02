@@ -63,6 +63,7 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
     - KENI_ALERTAS_RENDIMIENTO_HORAS     barrido alertas rendim. (h) def 6   (min 1)
     - KENI_ALERTAS_RENDIMIENTO           apaga el barrido de alertas def ON
     - KENI_ALERTAS_UMBRAL_ENGAGEMENT     umbral bajo rendim. (%)     def 1.0
+    - KENI_ALERTAS_REVISION_HORAS        revision estancada (h)      def 24  (min 1)
 
   Imagen / secretos (`secretos`, `media`): la precedencia fichero>env vive en
   `secretos.py`; aqui se declaran solo los nombres (no hay accesor central porque el
@@ -582,6 +583,7 @@ from .config_produccion import (  # noqa: F401
 from .config_programadores import (  # noqa: F401
     alertas_rendimiento_activas,
     alertas_rendimiento_horas,
+    alertas_revision_horas,
     alertas_umbral_engagement,
     algoritmos_auto_activo,
     algoritmos_intervalo_horas,

@@ -15,6 +15,7 @@ import {
   AtSign,
   Bell,
   CalendarOff,
+  ClipboardList,
   Megaphone,
   MessageSquare,
   ThumbsUp,
@@ -46,6 +47,8 @@ const ICONO: Record<TipoNotificacion, React.ComponentType<{ className?: string }
   asignacion: UserPlus,
   cambio_turno: ArrowLeftRight,
   ausencia_descubierto: CalendarOff,
+  // Avisos agregados de la cola de revisión (piezas nuevas / estancadas).
+  revision: ClipboardList,
 };
 
 /** Ruta del feed: destino base al pulsar una notificación. */

@@ -46,6 +46,15 @@ def test_devuelve_alertas_de_rendimiento_filtradas(cliente):
     assert una["id"] and una["creado"]
 
 
+def test_revision_estancada_tambien_es_alerta(cliente):
+    _inicializar(
+        "revision.estancada",
+        payload={"resumen": "5 pieza(s) llevan más de 24 h esperando revisión · UnoTV"},
+    )
+    alertas = cliente.get("/api/alertas").json()["alertas"]
+    assert {a["tipo"] for a in alertas} == {"revision.estancada"}
+
+
 def test_sin_alertas_devuelve_lista_vacia(cliente):
     # Solo hay eventos de otros tipos: el endpoint no devuelve ninguno.
     _inicializar("contenido.vencido", publicacion_id="cx")

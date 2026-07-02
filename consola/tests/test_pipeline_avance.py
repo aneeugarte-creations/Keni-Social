@@ -141,6 +141,28 @@ def test_avance_no_tiene_exclusion_por_marca(entorno, monkeypatch):
     assert repos.obtener_pieza(pub["id"])["estado"] == "en_revision"
 
 
+def test_avance_notifica_agregado_por_marca(entorno, monkeypatch):
+    """El barrido avisa UNA vez por marca con el conteo (agregado, nunca una noti por pieza)."""
+    _encender(monkeypatch)
+    cli = _cli_usuario()
+    _crear_borrador(cli)
+    _crear_borrador(cli, titulo="T2")
+
+    avisos: list[tuple[str, int]] = []
+    monkeypatch.setattr(
+        "keni_consola.dominio.notificaciones.tras_avance_lote",
+        lambda marca, n: avisos.append((marca, n)),
+    )
+    enviadas = _avance.ejecutar_avance()
+    assert len(enviadas) == 2
+    assert avisos == [(_MARCA, 2)]
+
+    # Sin envíos nuevos, sin aviso (el silencio no genera ruido).
+    avisos.clear()
+    assert _avance.ejecutar_avance() == []
+    assert avisos == []
+
+
 def test_avance_gateado_solo_por_maquina(entorno, monkeypatch):
     """El único gate es el maestro general `KENI_MAQUINA`: con la máquina OFF no corre; ON sí."""
     pub = _crear_borrador(_cli_usuario())

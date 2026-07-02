@@ -193,3 +193,91 @@ def test_evento_bajo_rendimiento_en_catalogo_y_resumen():
     assert "Resumen del día" in payload["resumen"]
     assert "0.4%" in payload["resumen"]
     assert "Instagram" in payload["resumen"]
+
+
+def test_evento_revision_estancada_en_catalogo_y_resumen():
+    assert "revision.estancada" in eventos.TIPOS_EVENTO
+    payload = eventos.construir_payload(
+        "revision.estancada",
+        {"marca": "unotv", "marca_nombre": "UnoTV", "n": 5, "horas": 24},
+    )
+    assert "5 pieza(s)" in payload["resumen"]
+    assert "24 h" in payload["resumen"]
+    assert "UnoTV" in payload["resumen"]
+
+
+# --------------------------------------------------------------------------- #
+# 4. Cola de revisión estancada: conteo puro por marca + emisión agregada      #
+# --------------------------------------------------------------------------- #
+
+
+def _pieza_en_revision(marca: str, enviado: str, actualizado: str = "") -> dict:
+    return {
+        "marca": marca,
+        "enviado_a_revision_en": enviado,
+        "fecha_actualizacion": actualizado,
+    }
+
+
+def test_estancadas_por_marca_cuenta_solo_las_que_superan_el_umbral():
+    from keni_consola.alertas_rendimiento import estancadas_por_marca
+
+    ahora = datetime.fromisoformat("2026-07-01T12:00:00")
+    pubs = [
+        _pieza_en_revision("unotv", "2026-06-29T10:00:00"),   # ~50 h: estancada
+        _pieza_en_revision("unotv", "2026-07-01T09:00:00"),   # 3 h: fresca
+        _pieza_en_revision("claro-sports", "2026-06-30T11:00:00"),  # 25 h: estancada
+        _pieza_en_revision("", "2026-06-01T00:00:00"),        # sin marca: se ignora
+        _pieza_en_revision("unotv", "no-es-fecha"),           # ilegible: no cuenta
+        # Legada sin sello de envío: cae a `fecha_actualizacion` (28 h -> estancada).
+        _pieza_en_revision("unotv", "", "2026-06-30T08:00:00"),
+    ]
+    conteo = estancadas_por_marca(pubs, ahora=ahora, horas=24)
+    assert conteo == {"unotv": 2, "claro-sports": 1}
+
+
+def test_emitir_revision_estancada_agrega_por_marca_y_avisa(monkeypatch):
+    from keni_consola import alertas_rendimiento as ar
+
+    pubs = [
+        _pieza_en_revision("unotv", "2026-01-01T00:00:00"),
+        _pieza_en_revision("unotv", "2026-01-01T00:00:00"),
+    ]
+    monkeypatch.setattr(ar.repos, "listar_piezas", lambda **_k: pubs)
+    emitidos: list[tuple] = []
+    avisos: list[tuple] = []
+    monkeypatch.setattr(
+        ar.eventos,
+        "emitir",
+        lambda tipo, datos, **kw: emitidos.append((tipo, datos, kw)) or True,
+    )
+    monkeypatch.setattr(
+        ar.notificaciones,
+        "tras_revision_estancada",
+        lambda marca, n, horas: avisos.append((marca, n, horas)),
+    )
+
+    assert ar._emitir_revision_estancada("2026-07-01", 24) == 1
+    # UN evento agregado por marca, con clave idempotente marca+día.
+    tipo, datos, kw = emitidos[0]
+    assert tipo == "revision.estancada"
+    assert datos["marca"] == "unotv" and datos["n"] == 2 and datos["horas"] == 24
+    assert kw["clave_idempotencia"] == "revision.estancada:unotv:2026-07-01"
+    # Y UN aviso in-app agregado (solo cuando el evento es NUEVO).
+    assert avisos == [("unotv", 2, 24)]
+
+
+def test_emitir_revision_estancada_ya_emitido_no_reavisa(monkeypatch):
+    from keni_consola import alertas_rendimiento as ar
+
+    pubs = [_pieza_en_revision("unotv", "2026-01-01T00:00:00")]
+    monkeypatch.setattr(ar.repos, "listar_piezas", lambda **_k: pubs)
+    monkeypatch.setattr(ar.eventos, "emitir", lambda *_a, **_k: False)  # ya emitido hoy
+    avisos: list[tuple] = []
+    monkeypatch.setattr(
+        ar.notificaciones,
+        "tras_revision_estancada",
+        lambda *a: avisos.append(a),
+    )
+    assert ar._emitir_revision_estancada("2026-07-01", 24) == 0
+    assert avisos == []

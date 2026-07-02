@@ -6,7 +6,9 @@ export type TipoEventoInterno =
   | "pieza.publicada"
   | "contenido.vencido"
   // Fase 3 auto-operativa: alertas proactivas del barrido `alertas_rendimiento`.
-  | "pieza.bajo_rendimiento";
+  | "pieza.bajo_rendimiento"
+  // Cola de revisión estancada: N piezas de una marca llevan >X h esperando decisión.
+  | "revision.estancada";
 
 /** Forma del payload del POST saliente: `generico` (evento crudo) | `slack` (`{text}`). */
 export type FormatoWebhook = "generico" | "slack";
@@ -93,7 +95,10 @@ export type TipoNotificacion =
   // Ciclo de vida de un CAMBIO DE TURNO (swap): te lo proponen, falta tu OK, o el desenlace.
   | "cambio_turno"
   // Una AUSENCIA dejó turnos sin cubrir: aviso al admin para resolver el descubierto.
-  | "ausencia_descubierto";
+  | "ausencia_descubierto"
+  // Aviso AGREGADO de la cola de revisión (a los coordinadores de la marca): «N piezas
+  // nuevas en la cola» (avance del pipeline) o «N piezas llevan >X h esperando revisión».
+  | "revision";
 
 /** Una notificación del buzón de un usuario sobre una pieza. */
 export interface Notificacion {
@@ -133,8 +138,8 @@ export interface RespuestaMencionesCandidatos {
   usuarios: MencionCandidato[];
 }
 
-/** Tipo de alerta de rendimiento (subconjunto de eventos internos de la bitácora). */
-export type TipoAlerta = "pieza.bajo_rendimiento";
+/** Tipo de alerta del barrido (subconjunto de eventos internos de la bitácora). */
+export type TipoAlerta = "pieza.bajo_rendimiento" | "revision.estancada";
 
 /**
  * Una alerta de rendimiento leída de la bitácora (`GET /api/alertas`): aviso proactivo

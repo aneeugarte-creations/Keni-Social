@@ -141,6 +141,11 @@ def contar_piezas(
     )
 
 
+def grupos_duplicados_activos() -> set[tuple[str, str, str]]:
+    # Claves (marca, tema_macro, subtema) con >=2 temas ACTIVOS: aviso de posible duplicado.
+    return db.grupos_duplicados_activos()
+
+
 def obtener_pieza(pieza_id: str) -> dict[str, Any] | None:
     return db.obtener_pieza(pieza_id)
 

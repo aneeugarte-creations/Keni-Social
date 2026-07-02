@@ -28,6 +28,7 @@ TIPOS DE EVENTO (estables; el frontend y los webhooks se suscriben por nombre):
   - `pieza.publicada`   una fila por plataforma pasa a `publicado`.
   - `contenido.vencido` un contenido pasa su `fecha_entrega` sin estar cerrado.
   - `pieza.bajo_rendimiento`    una pieza publicada cae por debajo del umbral de engagement.
+  - `revision.estancada`        N piezas de una marca llevan >X h en la cola de revisión.
 """
 
 from __future__ import annotations
@@ -52,6 +53,9 @@ TIPOS_EVENTO: tuple[str, ...] = (
     "contenido.vencido",
     # Fase 3 auto-operativa: alertas proactivas del barrido `alertas_rendimiento`.
     "pieza.bajo_rendimiento",
+    # Cola de revisión ESTANCADA: N piezas de una marca llevan >X h en `en_revision` sin
+    # decisión. AGREGADO por marca (un aviso al día); lo emite el mismo barrido de alertas.
+    "revision.estancada",
 )
 
 # Formatos de payload del POST saliente. `generico` = el evento crudo (`{tipo, datos, ...}`).
@@ -87,6 +91,12 @@ def _resumen_humano(tipo: str, datos: dict[str, Any]) -> str:
         red = datos.get("red_nombre") or datos.get("red") or ""
         en_red = f" en {red}" if red else ""
         return f"📉 Bajo rendimiento{en_red}: «{titulo}»{cifra}{cola}"
+    if tipo == "revision.estancada":
+        n = datos.get("n")
+        horas = datos.get("horas")
+        cuantas = f"{n} pieza(s)" if isinstance(n, int) else "Hay piezas que"
+        umbral = f" más de {horas} h" if isinstance(horas, (int, float)) else " demasiado"
+        return f"⏳ {cuantas} llevan{umbral} esperando revisión{cola}"
     return f"{tipo}: «{titulo}»{cola}"
 
 

@@ -18,7 +18,7 @@ from starlette.testclient import TestClient
 
 from keni_consola import app as app_modulo
 from keni_consola import programador, repos
-from keni_consola.programador import piezas_vencidas, preparar_vencidas
+from keni_consola.programador import piezas_atrasadas, piezas_vencidas, preparar_vencidas
 
 from .conftest import TOKEN_PRUEBA
 
@@ -113,6 +113,26 @@ def test_piezas_vencidas_pura(entorno):
         [vencida, futura, ya_prep, otro_estado, sin_fecha, muy_atrasada], ahora
     )
     assert [p["id"] for p in vencidas] == ["a"]
+
+
+def test_piezas_atrasadas_pura(entorno):
+    """`piezas_atrasadas` es el COMPLEMENTO de la ventana de frescura: solo las programadas
+    vencidas hace MAS de 2 h y sin preparar (las que ya no saldran solas y hay que
+    reprogramar). Ni las frescas, ni las preparadas, ni otros estados."""
+    ahora = datetime(2026, 5, 27, 12, 0)
+    fresca = {"id": "a", "estado": "programado", "fecha_programada": "2026-05-27T11:00", "preparado_en": ""}
+    futura = {"id": "b", "estado": "programado", "fecha_programada": "2026-05-27T13:00", "preparado_en": ""}
+    atrasada = {"id": "f", "estado": "programado", "fecha_programada": "2026-05-27T08:00", "preparado_en": ""}
+    atrasada_prep = {
+        "id": "g", "estado": "programado",
+        "fecha_programada": "2026-05-27T07:00", "preparado_en": "2026-05-27T07:01",
+    }
+    otro_estado = {"id": "h", "estado": "publicado", "fecha_programada": "2026-05-27T07:00", "preparado_en": ""}
+    sin_fecha = {"id": "i", "estado": "programado", "fecha_programada": "", "preparado_en": ""}
+    atrasadas = piezas_atrasadas(
+        [fresca, futura, atrasada, atrasada_prep, otro_estado, sin_fecha], ahora
+    )
+    assert [p["id"] for p in atrasadas] == ["f"]
 
 
 def test_preparar_vencidas_marca_dry_run_sin_publicar(entorno):

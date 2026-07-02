@@ -432,6 +432,7 @@ from .db_piezas import (  # noqa: F401
     crear_publicaciones,
     duplicar_evento_rota,
     existe_cadena_aprobacion,
+    grupos_duplicados_activos,
     listar_piezas,
     obtener_pieza,
     reclamar_preparacion,

@@ -231,9 +231,54 @@ def _chequeo_daemons() -> dict:
     return _chequeo("maquina:daemons", "Daemons de fondo", "ok", detalle, admin=False)
 
 
+def _programadas_atrasadas() -> list[dict]:
+    """Sonda: piezas `programado` FUERA DE VENTANA (vencidas >2 h, sin preparar).
+
+    El barrido del programador NO las postea (ventana de frescura) y nadie las reintenta:
+    necesitan reprogramación MANUAL. Fuente única del juicio: `programador.piezas_atrasadas`
+    (la misma ventana que usa el barrido). Los tests la parchean aquí.
+    """
+    from datetime import UTC, datetime
+
+    from .. import programador, repos
+    from ..estados import ESTADO_PROGRAMADO
+
+    programadas = repos.listar_piezas(estado=ESTADO_PROGRAMADO)
+    return programador.piezas_atrasadas(programadas, datetime.now(UTC))
+
+
+def _chequeo_programadas() -> dict:
+    """Piezas programadas fuera de ventana: aviso con conteo (el silencio era el problema)."""
+    try:
+        atrasadas = _programadas_atrasadas()
+    except Exception:  # noqa: BLE001 -- sonda defensiva
+        return _chequeo(
+            "maquina:programadas", "Piezas programadas", "aviso",
+            "No se pudieron consultar las piezas programadas.",
+            admin=False,
+            siguiente_paso="Comprueba que la base de datos responde y recarga el diagnóstico.",
+        )
+    if atrasadas:
+        n = len(atrasadas)
+        detalle = (
+            f"{n} pieza(s) programada(s) quedaron fuera de ventana (vencieron hace más de "
+            "2 h sin publicarse): no saldrán solas."
+        )
+        return _chequeo(
+            "maquina:programadas", "Piezas programadas", "aviso", detalle,
+            admin=False,
+            siguiente_paso="Reprográmalas a un hueco futuro en Programa → Programación (o despublícalas).",
+        )
+    return _chequeo(
+        "maquina:programadas", "Piezas programadas", "ok",
+        "Sin piezas programadas fuera de ventana.",
+        admin=False,
+    )
+
+
 def _chequeos_maquina() -> list[dict]:
-    """Chequeos de la maquina de contenido (cola, presupuesto, pausa, daemons)."""
-    return [_chequeo_cola(), *_chequeos_presupuesto(), _chequeo_daemons()]
+    """Chequeos de la maquina de contenido (cola, presupuesto, pausa, daemons, programadas)."""
+    return [_chequeo_cola(), *_chequeos_presupuesto(), _chequeo_daemons(), _chequeo_programadas()]
 
 
 # --------------------------------------------------------------------------- #

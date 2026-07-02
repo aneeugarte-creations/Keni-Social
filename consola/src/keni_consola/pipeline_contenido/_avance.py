@@ -153,6 +153,7 @@ def ejecutar_avance() -> list[dict[str, Any]]:
 
     Incondicional bajo el único maestro `KENI_MAQUINA` (sin toggle propio ni exclusión por
     marca). Best-effort: un fallo por pieza se loguea y se sigue. Devuelve las piezas enviadas.
+    Al cerrar el barrido avisa in-app (agregado por marca) de cuántas entraron a la cola.
 
     VERIFICACIÓN DE CALIDAD (ADVISORY, gateada POR MARCA por `KENI_PIPELINE_REVISAR`, def OFF): si la
     etapa está ON para la marca de la pieza, ANTES de moverla se valida la CALIDAD de su copy (voz de marca + coherencia
@@ -185,4 +186,22 @@ def ejecutar_avance() -> list[dict[str, Any]]:
                 pub.get("id", ""),
                 pub.get("marca", ""),
             )
+    _notificar_avance(enviadas)
     return enviadas
+
+
+def _notificar_avance(enviadas: list[dict[str, Any]]) -> None:
+    """Aviso in-app AGREGADO del avance: UNO por barrido y marca con el conteo (nunca uno
+    por pieza), a los coordinadores de la marca (`notificaciones.tras_avance_lote`). El
+    equipo ve «N piezas nuevas en la cola de revisión» sin vigilar el feed. Best-effort."""
+    if not enviadas:
+        return
+    por_marca: dict[str, int] = {}
+    for pub in enviadas:
+        marca = str(pub.get("marca") or "")
+        if marca:
+            por_marca[marca] = por_marca.get(marca, 0) + 1
+    from ..dominio import notificaciones
+
+    for marca, n in por_marca.items():
+        notificaciones.tras_avance_lote(marca, n)

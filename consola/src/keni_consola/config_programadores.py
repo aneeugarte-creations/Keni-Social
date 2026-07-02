@@ -4,10 +4,12 @@ from __future__ import annotations
 from ._config_comun import (
     _VERDADEROS,
     ALERTAS_INTERVALO_HORAS_DEF,
+    ALERTAS_REVISION_HORAS_DEF,
     ALERTAS_UMBRAL_ENGAGEMENT_DEF,
     ALGORITMOS_INTERVALO_HORAS_DEF,
     ENV_ALERTAS_ACTIVAS,
     ENV_ALERTAS_INTERVALO_HORAS,
+    ENV_ALERTAS_REVISION_HORAS,
     ENV_ALERTAS_UMBRAL_ENGAGEMENT,
     ENV_ALGORITMOS_AUTO,
     ENV_ALGORITMOS_INTERVALO_HORAS,
@@ -102,6 +104,15 @@ def alertas_umbral_engagement() -> float:
     except ValueError:
         return ALERTAS_UMBRAL_ENGAGEMENT_DEF
     return valor if valor > 0 else ALERTAS_UMBRAL_ENGAGEMENT_DEF
+
+
+def alertas_revision_horas() -> int:
+    """Horas de espera en la cola de revisión sin decisión que marcan una pieza ESTANCADA.
+
+    `KENI_ALERTAS_REVISION_HORAS`, def 24, min 1. Lo consume el barrido de alertas para el
+    aviso agregado por marca «N piezas llevan >X h esperando revisión».
+    """
+    return _entero(ENV_ALERTAS_REVISION_HORAS, ALERTAS_REVISION_HORAS_DEF, minimo=1)
 
 
 def publicar_real() -> bool:

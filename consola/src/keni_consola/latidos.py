@@ -335,9 +335,11 @@ DESCRIPCION: dict[str, str] = {
         "no se tocan jamás."
     ),
     "alertas_rendimiento": (
-        "Vigilancia de rendimiento. Compara el engagement de cada pieza publicada contra el "
-        "umbral y emite una alerta interna cuando una rinde por debajo (idempotente por día). "
-        "Solo lee y emite eventos; no cambia contenido."
+        "Vigilancia de rendimiento y de la cola de revisión. Compara el engagement de cada "
+        "pieza publicada contra el umbral y emite una alerta interna cuando una rinde por "
+        "debajo; también avisa (agregado por marca) cuando hay piezas atascadas en la cola "
+        "de revisión sin decisión. Idempotente por día. Solo lee y emite eventos; no cambia "
+        "contenido."
     ),
     "comercial": (
         "Captura comercial. Toma snapshots periódicos de las interacciones/visualizaciones de las "

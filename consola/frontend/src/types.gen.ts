@@ -712,6 +712,7 @@ export interface Pieza {
   foto_encuadre?: string;
   fotos?: string;
   carrusel?: string;
+  posible_duplicado?: boolean;
 }
 /**
  * Listado de `GET /api/piezas` con el envelope de paginacion.

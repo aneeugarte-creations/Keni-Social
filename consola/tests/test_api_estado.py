@@ -24,7 +24,13 @@ from .conftest import _cliente
 _CLAVES_CHEQUEO = {"id", "estado", "nombre", "detalle", "icono", "admin", "siguiente_paso"}
 
 # Ids de los chequeos por dominio.
-_IDS_MAQUINA = {"maquina:cola", "maquina:presupuesto", "maquina:pausa", "maquina:daemons"}
+_IDS_MAQUINA = {
+    "maquina:cola",
+    "maquina:presupuesto",
+    "maquina:pausa",
+    "maquina:daemons",
+    "maquina:programadas",
+}
 _IDS_INFRA = {"infra:disco", "infra:backups", "infra:s3"}
 _IDS_METRICAS = {"metricas:metricool"}
 
@@ -96,6 +102,8 @@ def sondas_sanas(monkeypatch):
     monkeypatch.setattr(
         api_conexiones, "estado_marcas_metricool", _metricool_todo_conectado
     )
+    # Sin piezas programadas fuera de ventana (la sonda no toca la BD del runner).
+    monkeypatch.setattr(api_estado, "_programadas_atrasadas", lambda: [])
 
 
 def _chequeos(datos: dict) -> dict[str, dict]:
@@ -318,6 +326,30 @@ def test_chequeo_daemons_barrido_en_error_avisa(entorno, sondas_sanas, monkeypat
     ch = _chequeos(_cliente().get("/api/estado").json())["maquina:daemons"]
     assert ch["estado"] == "aviso"
     assert "alertas" in ch["detalle"]
+
+
+def test_chequeo_programadas_fuera_de_ventana_avisa(entorno, sondas_sanas, monkeypatch):
+    """Piezas programadas que vencieron >2 h sin publicarse: aviso con conteo y paso claro.
+
+    El barrido del programador las salta en silencio (ventana de frescura); el doctor
+    es el sitio donde ese silencio se vuelve visible."""
+    atrasadas = [{"id": "p1"}, {"id": "p2"}, {"id": "p3"}]
+    monkeypatch.setattr(api_estado, "_programadas_atrasadas", lambda: atrasadas)
+    ch = _chequeos(_cliente().get("/api/estado").json())["maquina:programadas"]
+    assert ch["estado"] == "aviso"
+    assert ch["admin"] is False
+    assert "3" in ch["detalle"] and "fuera de ventana" in ch["detalle"]
+    assert "Reprográmalas" in ch["siguiente_paso"]
+
+
+def test_chequeo_programadas_degrada_si_bd_cae(entorno, sondas_sanas, monkeypatch):
+    def _explota():
+        raise RuntimeError("bd caída")
+
+    monkeypatch.setattr(api_estado, "_programadas_atrasadas", _explota)
+    ch = _chequeos(_cliente().get("/api/estado").json())["maquina:programadas"]
+    assert ch["estado"] == "aviso"
+    assert ch["siguiente_paso"]
 
 
 # --------------------------------------------------------------------------- #

@@ -37,7 +37,7 @@ import type { Pieza } from "@/types";
 
 import { CLAVE_PIEZAS } from "./claves";
 import { BadgeEstado, EtiquetaRed } from "./insignias";
-import { formatearFechaHoraOperativa } from "./meta";
+import { formatearFechaHoraOperativa, piezaFueraDeVentana } from "./meta";
 
 /**
  * Visibilidad del kebab "⋮" según el puntero. En TÁCTIL (puntero grueso) no hay hover, así
@@ -259,16 +259,28 @@ function TarjetaPieza({
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{pieza.titulo}</span>
               <BadgeEstado estado={pieza.estado} />
-              {estaVencida(pieza.estado, pieza.fecha_programada) && (
-                <Badge
-                  variant="error"
-                  className="gap-1"
-                  title="Pasada de su hora y sin publicar. Publícala ya o revisa por qué no salió."
-                >
-                  <AlertTriangle className="h-3 w-3" />
-                  Sin publicar
-                </Badge>
-              )}
+              {/* Vencida hace poco: el barrido aún puede publicarla sola. FUERA DE VENTANA
+                  (>2 h): el barrido ya NO la postea (frescura) — reprogramarla a mano. */}
+              {estaVencida(pieza.estado, pieza.fecha_programada) &&
+                (piezaFueraDeVentana(pieza) ? (
+                  <Badge
+                    variant="error"
+                    className="gap-1"
+                    title="Venció hace más de 2 h sin publicarse: ya no saldrá sola. Reprográmala a un hueco futuro."
+                  >
+                    <AlertTriangle className="h-3 w-3" />
+                    Fuera de ventana — reprogramar
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="error"
+                    className="gap-1"
+                    title="Pasada de su hora y sin publicar. Publícala ya o revisa por qué no salió."
+                  >
+                    <AlertTriangle className="h-3 w-3" />
+                    Sin publicar
+                  </Badge>
+                ))}
               {pieza.id_post_metricool && (
                 <Badge
                   variant="info"

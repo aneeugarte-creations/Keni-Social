@@ -68,6 +68,7 @@ _SELECT_PUBLICACION = (
     "c.url_fuente AS url_fuente, c.fuente_nombre AS fuente_nombre, "
     "c.tipo_contenido AS tipo_contenido, c.categoria AS categoria, "
     "c.formato AS formato, c.espejo AS espejo, "
+    "c.tema_macro AS tema_macro, c.subtema AS subtema, "
     # Hashtags de la LÍNEA: salen de la etiqueta categoria cuyo id ES la `categoria` del contenido.
     # `categoria` es la ÚNICA fuente de verdad operativa (filtros, programación, aprobación,
     # métricas, hashtags); el tema (tag del clasificador) es solo metadata y no alimenta nada de
@@ -159,6 +160,12 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         # Categoría del PLAN (p.ej. 'breaking'): la usa el feed para avisar de "última hora"
         # (rayo rojo) — esa pieza, al aprobarla, se programa de inmediato sin esperar franja.
         "categoria": f["categoria"] or "",
+        # MACRO-EVENTO del contenido padre (copiado del cluster al promover): `tema_macro` es
+        # el gran acontecimiento ("Mundial 2026") y `subtema` su faceta ("partidos"). Los usa
+        # el aviso de POSIBLE DUPLICADO del listado (dos temas activos de la misma marca con
+        # el mismo par cubren, casi seguro, el mismo evento). "" si el tema no los trae.
+        "tema_macro": f["tema_macro"] or "",
+        "subtema": f["subtema"] or "",
         "imagen": f["imagen"] or "",
         # Asset de VIDEO (Ola VIDEO): clave del media (`videos/<sha256>.<ext>`) y su checklist,
         # espejo de `imagen`/`falta_imagen`. Lo usa el programador para publicar `TipoMedia.video`.
@@ -360,6 +367,9 @@ def _publicacion_de_filas(
             "responsable_id": padre.get("responsable_id"),
             "responsable_nombre": padre.get("responsable_nombre"),
             "origen": padre["origen"], "categoria": padre.get("categoria"),
+            # Macro-evento del padre: una pieza recién creada no suele traerlo (se copia del
+            # cluster al promover) -> `.get` => None, que `_fila_a_publicacion` resuelve a "".
+            "tema_macro": padre.get("tema_macro"), "subtema": padre.get("subtema"),
             "ccreado": padre["creado"],
             "fecha_fuente": padre["fecha_fuente"],
             "url_fuente": padre["url_fuente"], "fuente_nombre": padre["fuente_nombre"],
@@ -656,6 +666,32 @@ def contar_piezas(
     finally:
         con.close()
     return int(fila["n"]) if fila is not None else 0
+
+
+def grupos_duplicados_activos() -> set[tuple[str, str, str]]:
+    """Claves `(marca, tema_macro, subtema)` con DOS o más temas ACTIVOS que las comparten.
+
+    Dos temas (`contenido` distintos) de la misma marca con el mismo macro-evento y la misma
+    faceta cubren, casi seguro, EL MISMO evento: el listado de piezas lo señala como POSIBLE
+    DUPLICADO (aviso de solo lectura; decide el humano). "Activo" = el tema tiene al menos
+    una pieza NO publicada (lo terminal ya salió y no compite en la cola). Solo pares con
+    ambos campos NO vacíos. UNA consulta agregada apoyada en `idx_publicacion_tema_macro`.
+    """
+    sql = (
+        "SELECT c.marca AS marca, c.tema_macro AS tema_macro, c.subtema AS subtema "
+        "FROM publicacion c JOIN pieza cp ON cp.publicacion_id = c.id "
+        "WHERE c.clase = 'contenido' AND c.marca != '' "
+        "AND c.tema_macro != '' AND c.subtema != '' "
+        "AND (cp.estado IS NULL OR cp.estado != 'publicado') "
+        "GROUP BY c.marca, c.tema_macro, c.subtema "
+        "HAVING COUNT(DISTINCT c.id) >= 2"
+    )
+    con = _conectar()
+    try:
+        filas = con.execute(sql).fetchall()
+    finally:
+        con.close()
+    return {(f["marca"], f["tema_macro"], f["subtema"]) for f in filas}
 
 
 def obtener_pieza(pieza_id: str) -> dict[str, Any] | None:

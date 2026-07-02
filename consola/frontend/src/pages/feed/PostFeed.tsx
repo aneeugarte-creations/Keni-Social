@@ -24,12 +24,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bot,
   CalendarClock,
+  CopyCheck,
   GitBranch,
   MessageSquare,
   Sparkles,
   ThumbsDown,
   ThumbsUp,
   Trash2,
+  TriangleAlert,
   Zap,
 } from "lucide-react";
 import * as React from "react";
@@ -43,6 +45,7 @@ import { DistintivoRed } from "@/components/comunes/DistintivoRed";
 import { Comentarios } from "@/components/contenido/Comentarios";
 import { BadgeStock } from "@/components/media/OverlaySinLicencia";
 import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -75,7 +78,7 @@ import {
   remplazarPiezaEnCaches,
 } from "@/pages/piezas/claves";
 import { DialogoEditar } from "@/pages/piezas/DialogoEditar";
-import { tiempoRelativo } from "@/pages/piezas/meta";
+import { piezaFueraDeVentana, tiempoRelativo } from "@/pages/piezas/meta";
 import type { Pieza, RespuestaPieza } from "@/types";
 
 import { elegibilidadOK, esDislikeDecisivo } from "./aprobacion";
@@ -785,6 +788,26 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
               </span>
             </span>
           ))}
+        {/* FUERA DE VENTANA: la pieza programada venció hace >2 h sin publicarse; el barrido
+            del programador ya no la postea solo (ventana de frescura) — hay que REPROGRAMARLA
+            a un hueco futuro. Aviso sutil pero en rojo: sin él, la pieza moría en silencio. */}
+        {etapa === "programada" && piezaFueraDeVentana(pieza) && (
+          <span className="inline-flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
+            <TriangleAlert className="h-3.5 w-3.5" aria-hidden="true" />
+            Fuera de ventana — reprogramar
+          </span>
+        )}
+        {/* POSIBLE DUPLICADO (aviso de solo lectura del backend): otra idea ACTIVA de la misma
+            marca comparte macro-evento (tema + faceta) con esta — casi seguro cubren el mismo
+            evento. Solo informa al revisar; el humano decide cuál sigue. */}
+        {pieza.posible_duplicado && (
+          <Tooltip label="Otra idea activa de esta marca cubre el mismo evento (mismo tema y faceta)">
+            <Badge variant="outline" className="gap-1 font-normal text-muted-foreground">
+              <CopyCheck className="h-3 w-3" aria-hidden="true" />
+              Posible duplicado
+            </Badge>
+          </Tooltip>
+        )}
         {/* En estados cerrados el botón de like NO se pinta (sería un falso affordance): el
             dato del último OK se conserva aquí, como metadato legible (truncado: en celdas
             estrechas un nombre largo no debe desbordar la tarjeta). */}

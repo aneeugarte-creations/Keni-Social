@@ -197,6 +197,9 @@ ENV_ALERTAS_ACTIVAS = "KENI_ALERTAS_RENDIMIENTO"
 # Umbral (% engagement) por debajo del cual una pieza publicada se considera "bajo
 # rendimiento" y dispara una alerta. Def 1.0 (muy por debajo del ~2-3% tipico del piloto).
 ENV_ALERTAS_UMBRAL_ENGAGEMENT = "KENI_ALERTAS_UMBRAL_ENGAGEMENT"
+# Horas que una pieza puede esperar en la cola de revision sin decision antes de que el
+# barrido de alertas la cuente como ESTANCADA (aviso agregado por marca, def 24).
+ENV_ALERTAS_REVISION_HORAS = "KENI_ALERTAS_REVISION_HORAS"
 
 # Pieza real via Metricool (gate de seguridad; def OFF = dry-run).
 # `KENI_PUBLICAR_REAL=1` activa el posteo real al scheduler de Metricool en el
@@ -703,6 +706,8 @@ METRICAS_HISTORICO_RETENCION_DIAS_DEF = 90
 ALERTAS_INTERVALO_HORAS_DEF = 6
 # Umbral de engagement (%) por debajo del cual una pieza dispara alerta de bajo rendimiento.
 ALERTAS_UMBRAL_ENGAGEMENT_DEF = 1.0
+# Horas de espera en la cola de revision sin decision antes de contar una pieza como estancada.
+ALERTAS_REVISION_HORAS_DEF = 24
 
 # Auto-refresco de Algoritmos: intervalo holgado (def 6h); los blogs de plataforma no
 # cambian a cada minuto y no conviene martillear los feeds.
@@ -951,6 +956,7 @@ def gate_maquina(accesor: Callable[[], bool]) -> Callable[[], bool]:
 __all__ = [
     'ADMIN_USER_DEF',
     'ALERTAS_INTERVALO_HORAS_DEF',
+    'ALERTAS_REVISION_HORAS_DEF',
     'ALERTAS_UMBRAL_ENGAGEMENT_DEF',
     'ALGORITMOS_INTERVALO_HORAS_DEF',
     'AUTOGEN_ARTE_MAX_DEF',
@@ -976,6 +982,7 @@ __all__ = [
     'ENV_AJUSTES',
     'ENV_ALERTAS_ACTIVAS',
     'ENV_ALERTAS_INTERVALO_HORAS',
+    'ENV_ALERTAS_REVISION_HORAS',
     'ENV_ALERTAS_UMBRAL_ENGAGEMENT',
     'ENV_ALGORITMOS_AUTO',
     'ENV_ALGORITMOS_INTERVALO_HORAS',
