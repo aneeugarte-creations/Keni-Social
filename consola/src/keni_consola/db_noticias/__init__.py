@@ -73,6 +73,8 @@ from .fuentes_rss import (
     marcar_item,
     obtener_fuente_rss,
     purgar_pool_irrelevante,
+    purgar_rss_vistos,
+    purgar_usados_huerfanos,
     registrar_salud_fuente_rss,
     vaciar_clusters,
 )
@@ -127,6 +129,8 @@ __all__ = [
     "marcar_item",
     "obtener_fuente_rss",
     "purgar_pool_irrelevante",
+    "purgar_rss_vistos",
+    "purgar_usados_huerfanos",
     "registrar_salud_fuente_rss",
     "vaciar_clusters",
     # noticias_items

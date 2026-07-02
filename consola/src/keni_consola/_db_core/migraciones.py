@@ -38,6 +38,7 @@ from .migraciones_columnas import (
     _backfill_gasto_ia_proceso,
     _backfill_idioma_fuente,
     _backfill_pesos_fuente,
+    _backfill_rss_vistos_visto_en,
     _forzar_reset_password_existentes,
     _materializar_passkey_requerido_existentes,
     _migrar_clase_vertical_a_categoria,
@@ -621,6 +622,11 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # fundacion) se funden en UNA multimarca; re-apunta items históricos y desactiva las redundantes.
     # Corre tras 0070 (que ya backfilleó `marcas`). Idempotente y no destructiva.
     Migracion("0071-consolidar-fuentes-duplicadas", _consolidar_fuentes_duplicadas),
+    # RETENCION de `rss_items_vistos`: sella `visto_en` en las filas legadas (creadas antes de
+    # que la columna existiera) con el instante de la migracion, para que la purga por edad
+    # (`purgar_rss_vistos`) las pueda envejecer. La columna la trae el DDL; las filas nuevas la
+    # escriben en `marcar_item`. One-shot e idempotente (solo filas con `visto_en = ''`).
+    Migracion("0072-backfill-rss-vistos-fecha", _backfill_rss_vistos_visto_en),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

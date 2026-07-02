@@ -218,3 +218,102 @@ def test_caducar_pool_retencion_cero_no_borra_lapidas(entorno):
     assert repos.obtener_noticia_cluster("caducada") is None
     items, _ = repos.listar_noticias_items(limite=500)
     assert {it["clave"] for it in items} == {"k1"}  # la lápida sigue ahí
+
+
+# --------------------------------------------------------------------------- #
+# Purga de lo USADO huérfano (`db_noticias.purgar_usados_huerfanos`)           #
+# --------------------------------------------------------------------------- #
+
+
+def _cluster_usado(cid, *, publicacion_id, ultimo_visto=_VIEJO):
+    _cluster(cid, estado="usado", publicacion_id=publicacion_id, ultimo_visto=ultimo_visto)
+    repos.crear_noticias_items([
+        {"fuente_id": "f", "titulo": f"Item {cid}", "clave": f"k-{cid}",
+         "cluster_id": cid, "capturado_en": _VIEJO},
+    ])
+    repos.marcar_items_cluster_usados(cid, publicacion_id)
+    return cid
+
+
+def test_purgar_usados_huerfanos_borra_lo_ligado_a_temas_borrados(entorno):
+    """Una historia `usado` vieja cuya publicación ya NO existe se purga; sus items quedan
+    lápida `descartado` sin cluster ni publicación (los borra luego la retención normal)."""
+    vivo = repos.crear_publicacion(clase="contenido", titulo="Tema vivo", marca="unotv")
+    _cluster_usado("huerfana", publicacion_id="pub-borrada")
+    _cluster_usado("con-tema", publicacion_id=vivo["id"])
+    _cluster_usado("huerfana-reciente", publicacion_id="pub-borrada-2", ultimo_visto=_ahora())
+
+    resumen = repos.purgar_usados_huerfanos(60)
+
+    assert resumen["historias"] == 1
+    assert repos.obtener_noticia_cluster("huerfana") is None
+    # Lo usado con publicación VIVA y lo huérfano RECIENTE no se tocan.
+    assert repos.obtener_noticia_cluster("con-tema")["estado"] == "usado"
+    assert repos.obtener_noticia_cluster("huerfana-reciente")["estado"] == "usado"
+    it = _item_por_clave("k-huerfana")
+    assert it["estado"] == "descartado"
+    assert it["cluster_id"] == "" and it["publicacion_id"] == ""
+    assert _item_por_clave("k-con-tema")["estado"] == "usado"
+
+
+def test_purgar_usados_huerfanos_alapida_items_sueltos(entorno):
+    """Un item `usado` SUELTO (sin cluster vivo) con publicación borrada y viejo pasa a lápida."""
+    repos.crear_noticias_items([
+        {"fuente_id": "f", "titulo": "Suelto usado", "clave": "k-suelto",
+         "cluster_id": "", "capturado_en": _VIEJO},
+    ])
+    it = _item_por_clave("k-suelto")
+    repos.actualizar_noticia_item(it["id"], estado="usado", publicacion_id="pub-borrada")
+
+    resumen = repos.purgar_usados_huerfanos(60)
+
+    assert resumen["items"] == 1
+    it = _item_por_clave("k-suelto")
+    assert it["estado"] == "descartado" and it["publicacion_id"] == ""
+
+
+def test_purgar_usados_huerfanos_cero_es_noop(entorno):
+    _cluster_usado("huerfana", publicacion_id="pub-borrada")
+    assert repos.purgar_usados_huerfanos(0) == {"historias": 0, "items": 0}
+    assert repos.obtener_noticia_cluster("huerfana")["estado"] == "usado"
+
+
+# --------------------------------------------------------------------------- #
+# Retención de `rss_items_vistos` (`db_noticias.purgar_rss_vistos`)            #
+# --------------------------------------------------------------------------- #
+
+
+def _envejecer_vista(fuente_id, clave, visto_en):
+    from keni_consola import db_jobs
+
+    con = db_jobs._conectar()
+    try:
+        con.execute(
+            "UPDATE rss_items_vistos SET visto_en = ? WHERE fuente_id = ? AND clave = ?",
+            (visto_en, fuente_id, clave),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def test_purgar_rss_vistos_borra_lo_viejo_y_conserva_lo_reciente(entorno):
+    repos.marcar_item("f1", "k-viejo", True)
+    repos.marcar_item("f1", "k-reciente", True)
+    _envejecer_vista("f1", "k-viejo", "2020-01-01T00:00:00")
+
+    assert repos.purgar_rss_vistos(180) == 1
+    assert repos.claves_vistas("f1") == {"k-reciente"}
+
+
+def test_purgar_rss_vistos_respeta_filas_sin_fecha_y_cero(entorno):
+    """Sin `visto_en` no hay evidencia de edad (no se purga); `dias=0` es no-op."""
+    repos.marcar_item("f1", "k-sin-fecha", True)
+    _envejecer_vista("f1", "k-sin-fecha", "")
+    repos.marcar_item("f1", "k-viejo", True)
+    _envejecer_vista("f1", "k-viejo", "2020-01-01T00:00:00")
+
+    assert repos.purgar_rss_vistos(0) == 0
+    assert repos.claves_vistas("f1") == {"k-sin-fecha", "k-viejo"}
+    assert repos.purgar_rss_vistos(180) == 1
+    assert repos.claves_vistas("f1") == {"k-sin-fecha"}

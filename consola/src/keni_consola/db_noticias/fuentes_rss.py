@@ -441,6 +441,62 @@ def caducar_pool(
         con.close()
 
 
+def purgar_usados_huerfanos(dias: int) -> dict[str, int]:
+    """GC de lo USADO cuyo tema ya NO existe: purga historias/items `usado` huérfanos y viejos.
+
+    `caducar_pool` nunca toca `usado` (una historia ligada al tablero se conserva mientras su
+    publicación viva: el detalle del tema pinta sus fuentes), así que al borrar la publicación
+    la historia usada quedaba en el archivo PARA SIEMPRE. Esto cierra ese hueco, CONSERVADOR:
+      - clusters `estado='usado'` cuyo `publicacion_id` NO resuelve a ninguna fila de
+        `publicacion` (borrada; o '' = nunca ligada, inconsistente) y sin actividad en `dias`
+        (`ultimo_visto`, o `creado` si nunca vieron item) se BORRAN; sus items quedan LÁPIDA
+        `descartado` sin cluster ni publicación (mismo idiom que la caducidad: bloquean la
+        re-ingesta y los borra después la retención normal del pool).
+      - items `usado` SUELTOS (sin cluster vivo) con publicación inexistente y `capturado_en`
+        más viejo que `dias` pasan igualmente a lápida.
+    Una historia `usado` cuya publicación EXISTE no se toca jamás, tenga la edad que tenga.
+    `dias <= 0` = no-op. Devuelve `{historias, items}` (clusters borrados, items alapidados).
+    """
+    if int(dias) <= 0:
+        return {"historias": 0, "items": 0}
+    corte = iso_utc(datetime.now(UTC) - timedelta(days=int(dias)))
+    cond_clusters = (
+        "estado = 'usado' "
+        "AND (publicacion_id = '' OR publicacion_id NOT IN (SELECT id FROM publicacion)) "
+        "AND ((ultimo_visto <> '' AND ultimo_visto < ?) "
+        "     OR (ultimo_visto = '' AND creado <> '' AND creado < ?))"
+    )
+    con = _conectar()
+    try:
+        # Items de las historias que se van: lápida ANTES del DELETE (el UPDATE usa la
+        # pertenencia al cluster), sueltan cluster y publicación para entrar en la retención.
+        cur_items = con.execute(  # noqa: S608 -- condición estática; valores parametrizados
+            "UPDATE noticias_items SET estado = 'descartado', cluster_id = '', "
+            "publicacion_id = '' WHERE cluster_id IN "
+            f"(SELECT id FROM noticias_clusters WHERE {cond_clusters})",
+            (corte, corte),
+        )
+        items = cur_items.rowcount or 0
+        cur_cl = con.execute(  # noqa: S608 -- idem
+            f"DELETE FROM noticias_clusters WHERE {cond_clusters}", (corte, corte)
+        )
+        # Items `usado` sueltos (su cluster ya no existe) con publicación borrada y viejos.
+        cur_sueltos = con.execute(
+            "UPDATE noticias_items SET estado = 'descartado', cluster_id = '', "
+            "publicacion_id = '' "
+            "WHERE estado = 'usado' "
+            "AND (publicacion_id = '' OR publicacion_id NOT IN (SELECT id FROM publicacion)) "
+            "AND (cluster_id = '' OR cluster_id NOT IN (SELECT id FROM noticias_clusters)) "
+            "AND capturado_en <> '' AND capturado_en < ?",
+            (corte,),
+        )
+        items += cur_sueltos.rowcount or 0
+        con.commit()
+        return {"historias": cur_cl.rowcount or 0, "items": items}
+    finally:
+        con.close()
+
+
 def borrar_noticia_cluster(cluster_id: str) -> bool:
     """Borra la fila de un cluster (historia). True si existía. Best-effort, sin cascada.
 
@@ -526,15 +582,17 @@ def marcar_item(fuente_id: str, clave: str, usado: bool) -> None:
     """Marca/desmarca un item de una fuente como usado (idempotente).
 
     NO exige que la fuente exista (paridad con el file-backed): es una tabla de claves
-    vistas sin FK. `usado=True` inserta (ON CONFLICT DO NOTHING); `usado=False` borra.
+    vistas sin FK. `usado=True` inserta (ON CONFLICT DO NOTHING; la primera marca fija
+    `visto_en`, la fecha con que la retencion `purgar_rss_vistos` la envejece);
+    `usado=False` borra.
     """
     con = _conectar()
     try:
         if usado:
             con.execute(
-                "INSERT INTO rss_items_vistos (fuente_id, clave) VALUES (?, ?) "
+                "INSERT INTO rss_items_vistos (fuente_id, clave, visto_en) VALUES (?, ?, ?) "
                 "ON CONFLICT DO NOTHING",
-                (fuente_id, clave),
+                (fuente_id, clave, ahora_iso()),
             )
         else:
             con.execute(
@@ -556,3 +614,27 @@ def claves_vistas(fuente_id: str) -> set[str]:
     finally:
         con.close()
     return {f["clave"] for f in filas}
+
+
+def purgar_rss_vistos(dias: int) -> int:
+    """Borra las marcas de `rss_items_vistos` con `visto_en` mas viejo que `dias`. Devuelve cuantas.
+
+    Retencion por edad de la tabla de «item de feed ya convertido a copy» (una fila por copy
+    RSS exitoso, ver `dominio.jobspec`), que crecia sin techo. SEGURO: ningun camino de
+    produccion la relee (la dedup contra re-ingesta vive en UNIQUE(fuente_id, clave) de
+    `noticias_items` y sus lapidas), y un item de feed no reaparece meses despues en la ventana
+    de su fuente. Solo borra filas CON fecha (`visto_en <> ''`: sin fecha no hay evidencia de
+    edad); las legadas las sella la migracion 0072. `dias <= 0` = no-op.
+    """
+    if int(dias) <= 0:
+        return 0
+    corte = iso_utc(datetime.now(UTC) - timedelta(days=int(dias)))
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "DELETE FROM rss_items_vistos WHERE visto_en <> '' AND visto_en < ?", (corte,)
+        )
+        con.commit()
+        return cur.rowcount or 0
+    finally:
+        con.close()

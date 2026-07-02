@@ -137,6 +137,9 @@ ENV_GENERACION_PAUSADA = "KENI_GENERACION_PAUSADA"
 ENV_GATE_METER_STALE_H = "KENI_GATE_METER_STALE_H"
 # Tope de INTENTOS de ejecucion de un job de la cola (anti crash-loop del re-reclamo).
 ENV_JOBS_MAX_INTENTOS = "KENI_JOBS_MAX_INTENTOS"
+# Retencion (dias) de las filas CRUDAS del ledger `gasto_ia`: lo mas viejo se compacta en el
+# agregado diario `gasto_ia_diario` y se borra del crudo (ver `db_jobs.purgar_gasto_ia`).
+ENV_GASTO_IA_RETENCION_DIAS = "KENI_GASTO_IA_RETENCION_DIAS"
 # Economia de CONTEXTO: tope duro y umbral de aviso del tamano del prompt por generacion.
 ENV_PROMPT_MAX_CHARS = "KENI_PROMPT_MAX_CHARS"
 ENV_PROMPT_AVISO_CHARS = "KENI_PROMPT_AVISO_CHARS"
@@ -678,6 +681,10 @@ GATE_METER_STALE_H_DEF = 6
 # Intentos maximos de ejecucion de un job (el normal + re-reclamos de suelto). 3 da dos
 # reintentos automaticos tras muertes del worker sin permitir un crash-loop infinito.
 JOBS_MAX_INTENTOS_DEF = 3
+# Retencion de las filas CRUDAS de `gasto_ia` (dias). 90 cubre con holgura el horizonte de
+# TODOS los lectores del crudo (presupuesto = HOY; Economia <= 31 dias; monitor 14): mas alla
+# solo leen los promedios historicos, que ademas suman el agregado `gasto_ia_diario`.
+GASTO_IA_RETENCION_DIAS_DEF = 90
 # Tope DURO del prompt por generacion (chars; ~4 chars = 1 token). 200k chars ~ 50k tokens:
 # muy por encima de cualquier prompt legitimo de copy; corta los patologicos (saturación de
 # feeds concatenados). 0 = sin tope. El AVISO (warning + visible) salta mucho antes.
@@ -1093,6 +1100,7 @@ __all__ = [
     'ENV_PRESUPUESTO_USD_DIA',
     'ENV_GENERACION_PAUSADA',
     'ENV_GATE_METER_STALE_H',
+    'ENV_GASTO_IA_RETENCION_DIAS',
     'ENV_JOBS_MAX_INTENTOS',
     'ENV_PROMPT_MAX_CHARS',
     'ENV_PROMPT_AVISO_CHARS',
@@ -1164,6 +1172,7 @@ __all__ = [
     'INGESTA_MAX_ITEMS_DEF',
     'INGESTA_WORKERS_DEF',
     'LOG_LEVEL_DEF',
+    'GASTO_IA_RETENCION_DIAS_DEF',
     'JOBS_MAX_INTENTOS_DEF',
     'PROMPT_MAX_CHARS_DEF',
     'PROMPT_AVISO_CHARS_DEF',

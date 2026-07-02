@@ -47,6 +47,7 @@ _TABLAS = (
     "campanias",
     "vistas_metricas",
     "gasto_ia",
+    "gasto_ia_diario",
     "metricas_pieza_snapshots",
     "rota_turnos",
     "rota_franjas",

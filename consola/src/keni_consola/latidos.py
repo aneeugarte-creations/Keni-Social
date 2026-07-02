@@ -90,6 +90,7 @@ GRUPO_INFRA = frozenset({
     "patrones",
     "noticias_gc",
     "limpiador",
+    "caducidad",
 })
 
 # Daemons que ENCOLAN/EJECUTAN `claude -p` y por tanto GASTAN tokens. El resto opera sin
@@ -126,6 +127,7 @@ _CLASE_MOTOR: dict[str, tuple[str, str | None]] = {
     "trends": ("maquina", "investigacion"),
     "algoritmos": ("maquina", "investigacion"),
     "noticias_gc": ("maquina", "investigacion"),
+    "caducidad": ("maquina", "investigacion"),
     "limpiador": ("sistema", None),
     "media_gc": ("sistema", None),
     "metricas": ("sistema", None),
@@ -231,6 +233,7 @@ ETIQUETA = {
     "trends": "Tendencias",
     "algoritmos": "Algoritmos de plataforma",
     "noticias_gc": "GC de noticias",
+    "caducidad": "Caducidad del pool",
     "comercial": "Comercial",
     "metricas": "Métricas",
     "metricas_piezas": "Métricas de piezas",
@@ -311,6 +314,13 @@ DESCRIPCION: dict[str, str] = {
         "score bajo, inactivas y nunca llevadas al tablero (más items sueltos viejos). Es "
         "ortogonal a la caducidad por antigüedad (esa la hace Recolección). Conservador: con su "
         "interruptor apagado no borra nada."
+    ),
+    "caducidad": (
+        "El RELOJ del pool de noticias (corre dentro del barrido de Recolección, ~cada 15 min). "
+        "Caduca por edad las historias `nuevo` sin actividad (sus artículos quedan como lápida "
+        "anti-reaparición), purga del todo las lápidas y sueltos que superan la retención y "
+        "retira las historias usadas cuyo tema ya no existe. Es el único freno siempre-activo "
+        "del tamaño del pool; si su fila deja de latir, el pool crece sin techo."
     ),
     "media_gc": (
         "Limpieza de media suelta en el almacén (S3/Garage). Borra los objetos de imagen que "

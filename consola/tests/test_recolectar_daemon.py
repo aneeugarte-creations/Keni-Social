@@ -978,24 +978,92 @@ def test_paso_fusionar_semantica_gateado_off_no_corre(monkeypatch):
 
 def test_paso_caducidad_llama_con_los_umbrales_vivos(monkeypatch):
     llamadas = []
+    huerfanos = []
     monkeypatch.setattr(recolectar_daemon.repos, "caducar_pool",
                         lambda **kw: llamadas.append(kw) or {"caducadas": 2, "purgadas": 1, "items_purgados": 3})
+    monkeypatch.setattr(recolectar_daemon.repos, "purgar_usados_huerfanos",
+                        lambda dias: huerfanos.append(dias) or {"historias": 1, "items": 4})
     monkeypatch.setattr(recolectar_daemon.config, "noticias_ttl_horas", lambda: 48)
     monkeypatch.setattr(recolectar_daemon.config, "noticias_retencion_horas", lambda: 240)
+    monkeypatch.setattr(recolectar_daemon.config, "noticias_usados_retencion_dias", lambda: 45)
 
     resumen = recolectar_daemon.paso_caducidad(forzar=True)
 
-    assert resumen == {"caducadas": 2, "purgadas": 1, "items_purgados": 3}
+    assert resumen == {
+        "caducadas": 2, "purgadas": 1, "items_purgados": 3,
+        "usados_purgados": 1, "items_usados": 4,
+    }
     assert llamadas == [{"ttl_horas": 48, "retencion_horas": 240}]
+    assert huerfanos == [45]
+
+
+def test_paso_caducidad_fallo_de_usados_no_invalida_la_caducidad(monkeypatch):
+    """La purga de usados huérfanos es aditiva: si falla, la caducidad ya hecha se devuelve igual."""
+    monkeypatch.setattr(recolectar_daemon.repos, "caducar_pool",
+                        lambda **kw: {"caducadas": 1, "purgadas": 0, "items_purgados": 0})
+
+    def _explota(dias):
+        raise RuntimeError("bd caida")
+
+    monkeypatch.setattr(recolectar_daemon.repos, "purgar_usados_huerfanos", _explota)
+
+    resumen = recolectar_daemon.paso_caducidad(forzar=True)
+
+    assert resumen["caducadas"] == 1
+    assert resumen["usados_purgados"] == 0 and resumen["items_usados"] == 0
 
 
 def test_paso_caducidad_va_throttled(monkeypatch):
     llamadas = []
     monkeypatch.setattr(recolectar_daemon.repos, "caducar_pool",
                         lambda **kw: llamadas.append(kw) or {"caducadas": 0, "purgadas": 0, "items_purgados": 0})
+    monkeypatch.setattr(recolectar_daemon.repos, "purgar_usados_huerfanos",
+                        lambda dias: {"historias": 0, "items": 0})
     recolectar_daemon.paso_caducidad(forzar=True)   # corre y sella el throttle
     recolectar_daemon.paso_caducidad()              # dentro del intervalo: no corre
     assert len(llamadas) == 1
+
+
+def test_paso_caducidad_late_como_pseudo_daemon(monkeypatch):
+    """Cada pasada REAL deja su latido `caducidad` (ok/error + resumen); la throttled no late."""
+    latidos_reg = []
+    monkeypatch.setattr(
+        recolectar_daemon.pasos.caducidad.latidos, "barrido",
+        lambda daemon, **kw: latidos_reg.append((daemon, kw.get("ok"), kw.get("resumen", ""))),
+    )
+    monkeypatch.setattr(recolectar_daemon.repos, "caducar_pool",
+                        lambda **kw: {"caducadas": 2, "purgadas": 0, "items_purgados": 1})
+    monkeypatch.setattr(recolectar_daemon.repos, "purgar_usados_huerfanos",
+                        lambda dias: {"historias": 0, "items": 0})
+
+    recolectar_daemon.paso_caducidad(forzar=True)
+    recolectar_daemon.paso_caducidad()  # throttled: sin latido extra
+
+    assert len(latidos_reg) == 1
+    daemon, ok, resumen = latidos_reg[0]
+    assert daemon == "caducidad" and ok is True
+    assert "2 historia(s) caducada(s)" in resumen
+
+
+def test_paso_caducidad_late_el_error(monkeypatch):
+    """Un fallo de `caducar_pool` deja latido de ERROR (antes era un log tragado) y re-lanza."""
+    import pytest
+
+    latidos_reg = []
+    monkeypatch.setattr(
+        recolectar_daemon.pasos.caducidad.latidos, "barrido",
+        lambda daemon, **kw: latidos_reg.append((daemon, kw.get("ok"), kw.get("error", ""))),
+    )
+
+    def _explota(**kw):
+        raise RuntimeError("bd caida")
+
+    monkeypatch.setattr(recolectar_daemon.repos, "caducar_pool", _explota)
+
+    with pytest.raises(RuntimeError):
+        recolectar_daemon.paso_caducidad(forzar=True)
+
+    assert latidos_reg == [("caducidad", False, "bd caida")]
 
 
 def test_registrar_actividad_ia_sella_metricas_acumuladas(entorno):

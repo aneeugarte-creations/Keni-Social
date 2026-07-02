@@ -133,6 +133,29 @@ def ejecutar_barrido() -> int:
             _log.info("Limpiador de generaciones: %d job(s) terminado(s) antiguo(s) purgado(s).", p)
     except Exception:  # noqa: BLE001 -- best-effort: una purga fallida no debe tumbar el barrido
         _log.warning("Limpiador de generaciones: fallo la purga de jobs terminados.", exc_info=True)
+    # Retención del ledger `gasto_ia`: compacta lo más viejo que la ventana en el agregado
+    # diario (`gasto_ia_diario`) y lo borra del crudo. El día vivo (freno de presupuesto) y
+    # toda la ventana de los paneles quedan intactos; ver `db_jobs.purgar_gasto_ia`.
+    try:
+        from . import db_jobs
+
+        g = db_jobs.purgar_gasto_ia()
+        if g:
+            _log.info(
+                "Limpiador de generaciones: %d fila(s) del ledger de gasto compactada(s) al agregado diario.", g
+            )
+    except Exception:  # noqa: BLE001 -- best-effort: una purga fallida no debe tumbar el barrido
+        _log.warning("Limpiador de generaciones: fallo la retención del ledger de gasto.", exc_info=True)
+    # Retención de `rss_items_vistos` (marcas «item de feed ya convertido a copy»): borra las
+    # más viejas que la ventana. Solo-escritura en producción; ver `config.rss_vistos_retencion_dias`.
+    try:
+        from . import repos
+
+        v = repos.purgar_rss_vistos(config.rss_vistos_retencion_dias())
+        if v:
+            _log.info("Limpiador de generaciones: %d marca(s) de item RSS visto purgada(s).", v)
+    except Exception:  # noqa: BLE001 -- best-effort: una purga fallida no debe tumbar el barrido
+        _log.warning("Limpiador de generaciones: fallo la purga de items RSS vistos.", exc_info=True)
     # Tercera reparación: lotes de cajones COLGADOS atascados en `parseando`. Si el worker muere
     # entre el INSERT de los ítems y el UPDATE del lote, el lote queda `parseando` para siempre
     # (spinner "Procesando con Haiku…" eterno en el SPA + lote no borrable). Mismo TTL que las

@@ -677,6 +677,75 @@ def registrar_gasto_ia(
         con.close()
 
 
+# Piso de filas `tipo='imagen'` (con coste) que la purga del ledger NUNCA toca, igual al tope
+# de muestras de `coste_medio_imagen` (limite <= 500): la estimacion del coste por imagen sigue
+# viendo exactamente las mismas filas crudas aunque sean mas viejas que la retencion.
+_GASTO_IA_IMAGENES_PISO = 500
+
+# Condicion de purga del ledger crudo (compartida por el rollup y el DELETE para que agreguen
+# y borren EXACTAMENTE las mismas filas): mas viejas que el corte y fuera del piso de imagenes.
+_GASTO_IA_WHERE_PURGA = (
+    "dia IS NOT NULL AND dia < ? "
+    "AND gen_id NOT IN ("
+    "SELECT gen_id FROM gasto_ia WHERE tipo = 'imagen' AND coste_usd > 0 "
+    "ORDER BY actualizado DESC LIMIT ?)"
+)
+
+
+def purgar_gasto_ia(dias: int | None = None) -> int:
+    """Compacta en `gasto_ia_diario` y BORRA las filas crudas de `gasto_ia` mas viejas que
+    `dias`. Devuelve cuantas filas crudas borro.
+
+    `dias` (def `config.gasto_ia_retencion_dias()`: 90, piso 35; 0 = no-op) cuenta sobre la
+    columna `dia` (dia CDMX del cierre). En UNA transaccion: (1) agrega lo purgable por
+    (dia, proceso, tipo, etapa, marca) con UPSERT ACUMULATIVO sobre el agregado (un re-cierre
+    tardio re-purgado SUMA, no pisa) y (2) borra esas mismas filas del crudo. GARANTIAS:
+      - El dia vivo y toda la ventana quedan intactos: el freno de presupuesto
+        (`gasto_ia_del_dia`), la Economia (<= 31 dias) y el monitor (14 dias) no cambian.
+      - Los promedios historicos (`tokens_promedio_por_etapa`/`coste_promedio_por_etapa`)
+        suman crudo + agregado: mismas sumas y conteos, mismos promedios.
+      - Las ultimas `_GASTO_IA_IMAGENES_PISO` filas de imagen con coste NUNCA se purgan
+        (son la muestra de `coste_medio_imagen`), asi la estimacion por imagen tampoco cambia.
+    """
+    if dias is None:
+        dias = config.gasto_ia_retencion_dias()
+    if int(dias) <= 0:
+        return 0
+    corte = (hoy_cdmx() - timedelta(days=int(dias))).isoformat()
+    ahora = ahora_iso()
+    con = _conectar()
+    try:
+        con.execute(
+            "INSERT INTO gasto_ia_diario (dia, proceso, tipo, etapa, marca, generaciones, "
+            "tokens_in, tokens_out, coste_usd, prompt_chars, cache_read, cache_creation, "
+            "actualizado) "
+            "SELECT dia, proceso, tipo, etapa, marca, COUNT(*), "
+            "COALESCE(SUM(tokens_in), 0), COALESCE(SUM(tokens_out), 0), "
+            "COALESCE(SUM(coste_usd), 0), COALESCE(SUM(prompt_chars), 0), "
+            "COALESCE(SUM(cache_read), 0), COALESCE(SUM(cache_creation), 0), ? "
+            f"FROM gasto_ia WHERE {_GASTO_IA_WHERE_PURGA} "
+            "GROUP BY dia, proceso, tipo, etapa, marca "
+            "ON CONFLICT (dia, proceso, tipo, etapa, marca) DO UPDATE SET "
+            "generaciones = gasto_ia_diario.generaciones + EXCLUDED.generaciones, "
+            "tokens_in = gasto_ia_diario.tokens_in + EXCLUDED.tokens_in, "
+            "tokens_out = gasto_ia_diario.tokens_out + EXCLUDED.tokens_out, "
+            "coste_usd = gasto_ia_diario.coste_usd + EXCLUDED.coste_usd, "
+            "prompt_chars = gasto_ia_diario.prompt_chars + EXCLUDED.prompt_chars, "
+            "cache_read = gasto_ia_diario.cache_read + EXCLUDED.cache_read, "
+            "cache_creation = gasto_ia_diario.cache_creation + EXCLUDED.cache_creation, "
+            "actualizado = EXCLUDED.actualizado",
+            (ahora, corte, _GASTO_IA_IMAGENES_PISO),
+        )
+        cur = con.execute(
+            f"DELETE FROM gasto_ia WHERE {_GASTO_IA_WHERE_PURGA}",
+            (corte, _GASTO_IA_IMAGENES_PISO),
+        )
+        con.commit()
+        return cur.rowcount or 0
+    finally:
+        con.close()
+
+
 def coste_medio_imagen(modelo: str = "", limite: int = 50) -> dict[str, Any]:
     """Coste medio por IMAGEN (USD) de las ultimas `limite` generaciones tipo `imagen`.
 
@@ -863,13 +932,16 @@ def etapa_economia(proceso: str, tipo: str) -> str:
 
 
 def tokens_promedio_por_etapa() -> dict[str, int]:
-    """Promedio historico de tokens (in+out) por ETAPA del ledger `gasto_ia`.
+    """Promedio historico de tokens (in+out) por ETAPA del ledger `gasto_ia` + su agregado.
 
     A-priori para el Monitor: cuanto SUELE costar en tokens un job de cada etapa, para estimar
     lo que gastara uno que aun ESPERA (no hay metricas en vivo hasta que corre). La etapa se
     resuelve igual que en el resto de la economia: la `etapa` EXPLICITA de la fila si la trae, si
-    no la derivada de `proceso`+`tipo` (`etapa_economia`). Devuelve `{etapa: tokens_medios}` (media
-    entera por generacion), omitiendo las etapas sin muestras."""
+    no la derivada de `proceso`+`tipo` (`etapa_economia`). SUMA el crudo (`gasto_ia`) y el
+    agregado diario (`gasto_ia_diario`, lo compactado por la retencion): son conjuntos DISJUNTOS
+    (la purga borra del crudo lo que agrega), asi el promedio es identico al del crudo entero.
+    Devuelve `{etapa: tokens_medios}` (media entera por generacion), omitiendo las etapas sin
+    muestras."""
     con = _conectar()
     try:
         filas = con.execute(
@@ -877,10 +949,16 @@ def tokens_promedio_por_etapa() -> dict[str, int]:
             "COALESCE(SUM(tokens_in), 0) + COALESCE(SUM(tokens_out), 0) AS tokens, "
             "COUNT(*) AS n FROM gasto_ia GROUP BY proceso, tipo, etapa"
         ).fetchall()
+        agregadas = con.execute(
+            "SELECT proceso, tipo, etapa, "
+            "COALESCE(SUM(tokens_in), 0) + COALESCE(SUM(tokens_out), 0) AS tokens, "
+            "COALESCE(SUM(generaciones), 0) AS n "
+            "FROM gasto_ia_diario GROUP BY proceso, tipo, etapa"
+        ).fetchall()
     finally:
         con.close()
     acc: dict[str, list[int]] = {}  # etapa -> [tokens_acumulados, generaciones]
-    for f in filas:
+    for f in list(filas) + list(agregadas):
         etapa = str(f["etapa"] or "") or etapa_economia(
             str(f["proceso"] or ""), str(f["tipo"] or "")
         )
@@ -891,12 +969,13 @@ def tokens_promedio_por_etapa() -> dict[str, int]:
 
 
 def coste_promedio_por_etapa() -> dict[str, float]:
-    """Promedio historico de coste USD por ETAPA del ledger `gasto_ia`.
+    """Promedio historico de coste USD por ETAPA del ledger `gasto_ia` + su agregado.
 
     Analogo en dinero a `tokens_promedio_por_etapa`: cuanto SUELE costar en USD un job de cada
     etapa, para estimar a-priori lo que gastara uno que aun ESPERA. La etapa se resuelve igual que
     en el resto de la economia: la `etapa` EXPLICITA de la fila si la trae, si no la derivada de
-    `proceso`+`tipo` (`etapa_economia`). Devuelve `{etapa: coste_medio_usd}` (media por generacion),
+    `proceso`+`tipo` (`etapa_economia`). Suma crudo + agregado diario (conjuntos disjuntos, ver
+    `tokens_promedio_por_etapa`). Devuelve `{etapa: coste_medio_usd}` (media por generacion),
     omitiendo las etapas sin muestras."""
     con = _conectar()
     try:
@@ -905,10 +984,16 @@ def coste_promedio_por_etapa() -> dict[str, float]:
             "COALESCE(SUM(coste_usd), 0) AS coste, "
             "COUNT(*) AS n FROM gasto_ia GROUP BY proceso, tipo, etapa"
         ).fetchall()
+        agregadas = con.execute(
+            "SELECT proceso, tipo, etapa, "
+            "COALESCE(SUM(coste_usd), 0) AS coste, "
+            "COALESCE(SUM(generaciones), 0) AS n "
+            "FROM gasto_ia_diario GROUP BY proceso, tipo, etapa"
+        ).fetchall()
     finally:
         con.close()
     acc: dict[str, list[float]] = {}  # etapa -> [coste_acumulado, generaciones]
-    for f in filas:
+    for f in list(filas) + list(agregadas):
         etapa = str(f["etapa"] or "") or etapa_economia(
             str(f["proceso"] or ""), str(f["tipo"] or "")
         )

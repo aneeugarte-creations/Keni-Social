@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from ._config_comun import (
     _VERDADEROS,
+    ENV_GASTO_IA_RETENCION_DIAS,
     ENV_GATE_METER_STALE_H,
     ENV_GENERACION_PAUSADA,
     ENV_JOBS_MAX_INTENTOS,
@@ -18,6 +19,7 @@ from ._config_comun import (
     ENV_WORKER_CARRILES,
     ENV_WORKER_EXTERNO,
     ENV_WORKER_SONDEO_SEGUNDOS,
+    GASTO_IA_RETENCION_DIAS_DEF,
     GATE_METER_STALE_H_DEF,
     JOBS_MAX_INTENTOS_DEF,
     MAX_JOBS_DEF,
@@ -148,6 +150,30 @@ def jobs_max_intentos() -> int:
     bug del runner) no debe convertirse en un crash-loop que ademas consume tokens en cada iteracion.
     """
     return _entero(ENV_JOBS_MAX_INTENTOS, JOBS_MAX_INTENTOS_DEF, minimo=1)
+
+
+# Piso de la retencion del ledger crudo cuando esta encendida: el lector de MAYOR horizonte
+# sobre el crudo es la pagina Economia (el endpoint clampa a 31 dias); 35 deja margen para que
+# ningun panel pierda dias por una retencion mal configurada.
+GASTO_IA_RETENCION_DIAS_MIN = 35
+
+
+def gasto_ia_retencion_dias() -> int:
+    """Dias que las filas CRUDAS del ledger `gasto_ia` se conservan tal cual
+    (`KENI_GASTO_IA_RETENCION_DIAS`, def 90; 0 = sin purga).
+
+    Mas alla de la ventana, `db_jobs.purgar_gasto_ia` COMPACTA lo viejo en el agregado diario
+    `gasto_ia_diario` (mismas sumas y conteos por dia/proceso/tipo/etapa/marca) y borra el crudo.
+    Los lectores del dia vivo (freno de presupuesto, tarjeta de Economia), la pagina Economia
+    (<= 31 dias) y el monitor (14 dias) leen SIEMPRE dentro de la ventana; los promedios
+    historicos por etapa suman crudo + agregado, asi que sus numeros no cambian. Un valor > 0
+    se eleva al piso `GASTO_IA_RETENCION_DIAS_MIN` (35) para que ninguna configuracion agresiva
+    recorte lo que los paneles muestran.
+    """
+    dias = _entero(ENV_GASTO_IA_RETENCION_DIAS, GASTO_IA_RETENCION_DIAS_DEF, minimo=0)
+    if dias == 0:
+        return 0
+    return max(dias, GASTO_IA_RETENCION_DIAS_MIN)
 
 
 def prompt_max_chars() -> int:

@@ -900,6 +900,31 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # `tipo='pipeline'` y por eso no se distinguirian solo por su tipo. Vacio (la mayoria) => la
     # economia DERIVA la etapa de `tipo`+`proceso` (`etapa_economia`). Idempotente.
     "ALTER TABLE gasto_ia ADD COLUMN IF NOT EXISTS etapa TEXT NOT NULL DEFAULT ''",
+    # AGREGADO DIARIO del ledger de gasto (retencion): `db_jobs.purgar_gasto_ia` compacta aqui
+    # las filas crudas mas viejas que la ventana de retencion (SUMas + conteo por dia/proceso/
+    # tipo/etapa/marca) y las borra del crudo, asi `gasto_ia` queda acotada sin perder historia
+    # agregada. Los promedios historicos por etapa (`tokens_promedio_por_etapa`/
+    # `coste_promedio_por_etapa`) suman crudo + este agregado y devuelven exactamente lo mismo
+    # que con el crudo entero. El UPSERT del rollup ACUMULA (suma sobre lo ya agregado): un
+    # re-cierre tardio de una generacion vieja re-purgada no pisa el agregado previo del dia.
+    """
+    CREATE TABLE IF NOT EXISTS gasto_ia_diario (
+        dia            date NOT NULL,
+        proceso        TEXT NOT NULL DEFAULT '',
+        tipo           TEXT NOT NULL DEFAULT '',
+        etapa          TEXT NOT NULL DEFAULT '',
+        marca          TEXT NOT NULL DEFAULT '',
+        generaciones   BIGINT NOT NULL DEFAULT 0,
+        tokens_in      BIGINT NOT NULL DEFAULT 0,
+        tokens_out     BIGINT NOT NULL DEFAULT 0,
+        coste_usd      DOUBLE PRECISION NOT NULL DEFAULT 0,
+        prompt_chars   BIGINT NOT NULL DEFAULT 0,
+        cache_read     BIGINT NOT NULL DEFAULT 0,
+        cache_creation BIGINT NOT NULL DEFAULT 0,
+        actualizado    TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY (dia, proceso, tipo, etapa, marca)
+    )
+    """,
     # INDICE de GENERACIONES (ADR 0012, rendimiento): el registro de cada generacion vive en un
     # YAML (fuente de verdad del DETALLE: prompt/razonamiento/stream). Listar Actividad IA /
     # Pipelines parseaba TODOS los ~2000 YAML por peticion. Este indice replica los campos LIGEROS
@@ -1290,9 +1315,14 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     CREATE TABLE IF NOT EXISTS rss_items_vistos (
         fuente_id  TEXT NOT NULL,
         clave      TEXT NOT NULL,
+        visto_en   TEXT NOT NULL DEFAULT '',
         PRIMARY KEY (fuente_id, clave)
     )
     """,
+    # Instante (ISO canon) en que se marco la fila, para la retencion por edad
+    # (`purgar_rss_vistos`). Las filas legadas (creadas sin la columna) quedan '' y las sella
+    # con la fecha de migracion la 0072 (sin fecha no hay evidencia de edad: no se purgan).
+    "ALTER TABLE rss_items_vistos ADD COLUMN IF NOT EXISTS visto_en TEXT NOT NULL DEFAULT ''",
     # TALLER EVERGREEN / BRAINSTORMING: ideas de contenido EVERGREEN propuestas (por IA o a mano)
     # que el equipo aprueba o descarta ANTES de generar nada. La IA NO redacta a ciegas: primero
     # PROPONE ideas (`origen='ia'`, `estado='propuesta'`); una persona las marca `aprobada` o

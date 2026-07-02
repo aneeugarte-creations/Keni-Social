@@ -103,6 +103,14 @@ def caducar_pool(*, ttl_horas: int, retencion_horas: int = 0) -> dict[str, int]:
     return db.caducar_pool(ttl_horas=ttl_horas, retencion_horas=retencion_horas)
 
 
+def purgar_usados_huerfanos(dias: int) -> dict[str, int]:
+    return db.purgar_usados_huerfanos(dias)
+
+
+def purgar_rss_vistos(dias: int) -> int:
+    return db.purgar_rss_vistos(dias)
+
+
 def marcar_item(fuente_id: str, clave: str, usado: bool) -> None:
     return db.marcar_item(fuente_id, clave, usado)
 

@@ -1660,6 +1660,24 @@ def _backfill_gasto_ia_proceso(con: Any) -> None:
     )
 
 
+def _backfill_rss_vistos_visto_en(con: Any) -> None:
+    """Backfill ONE-SHOT de `rss_items_vistos.visto_en` en las filas legadas (idempotente).
+
+    La columna nace '' (la trae el DDL con DEFAULT ''); las filas creadas antes de que
+    `marcar_item` la escribiera quedan sin fecha y la retencion por edad
+    (`purgar_rss_vistos`) NO las tocaria jamas (sin fecha no hay evidencia). Este backfill
+    las sella con el instante de la migracion: desde ese momento envejecen con la ventana
+    normal. Idempotente: solo toca filas con `visto_en = ''`.
+    """
+    if not _tabla_existe(con, "rss_items_vistos"):
+        return
+    from ..tiempo import ahora_iso
+
+    con.execute(
+        "UPDATE rss_items_vistos SET visto_en = ? WHERE visto_en = ''", (ahora_iso(),)
+    )
+
+
 def _resanear_traduccion_envenenada(con: Any) -> None:
     """Resanea clusters ENVENENADOS por el bug de traducción: los que quedaron `traducido=1` con el
     título extranjero pegado en `titulo_es` (idéntico al `titulo` original) porque Haiku falló y el

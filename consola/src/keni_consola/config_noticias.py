@@ -553,6 +553,48 @@ def noticias_retencion_horas() -> int:
     return _entero(ENV_NOTICIAS_RETENCION_H, NOTICIAS_RETENCION_H_DEF, minimo=0)
 
 
+# Retención de lo USADO cuyo tema ya NO existe: la caducidad de arriba nunca toca `usado`
+# (lo ligado al tablero se conserva mientras su publicación viva), pero si la publicación se
+# borró, la historia usada queda huérfana para siempre y el archivo crece sin techo.
+ENV_NOTICIAS_USADOS_RETENCION_DIAS = "KENI_NOTICIAS_USADOS_RETENCION_DIAS"
+NOTICIAS_USADOS_RETENCION_DIAS_DEF = 60  # 2 meses de margen para auditar temas ya borrados
+# Retención de `rss_items_vistos` (marcas «item de feed ya convertido a copy»). Hoy NINGÚN
+# camino de producción la relee (la dedup de re-ingesta vive en UNIQUE(fuente_id, clave) de
+# `noticias_items` + lápidas), así que la ventana solo acota una tabla de solo-escritura.
+ENV_RSS_VISTOS_RETENCION_DIAS = "KENI_RSS_VISTOS_RETENCION_DIAS"
+RSS_VISTOS_RETENCION_DIAS_DEF = 180
+
+
+def noticias_usados_retencion_dias() -> int:
+    """Días tras los que una historia `usado` HUÉRFANA (su publicación ya no existe) se purga
+    (`KENI_NOTICIAS_USADOS_RETENCION_DIAS`, def 60; 0 = no purgar nunca).
+
+    CONSERVADOR: solo toca clusters/items `usado` cuyo `publicacion_id` NO resuelve a ninguna
+    fila de `publicacion` (el detalle del tema y la mesa navegan siempre desde la publicación:
+    mientras exista, sus fuentes se conservan intactas). Los items purgables quedan como lápida
+    `descartado` (anti-reaparición) y los borra después la retención normal del pool
+    (`KENI_NOTICIAS_RETENCION_H`), el mismo camino que lo caducado. Ver
+    `db_noticias.purgar_usados_huerfanos`.
+    """
+    return _entero(
+        ENV_NOTICIAS_USADOS_RETENCION_DIAS, NOTICIAS_USADOS_RETENCION_DIAS_DEF, minimo=0
+    )
+
+
+def rss_vistos_retencion_dias() -> int:
+    """Días que se conserva cada marca de `rss_items_vistos` antes de purgarla
+    (`KENI_RSS_VISTOS_RETENCION_DIAS`, def 180; 0 = no purgar nunca).
+
+    La tabla anota «este item del feed ya generó copy» (una fila por copy RSS exitoso) y hoy
+    es de SOLO ESCRITURA en producción: la dedup contra re-ingesta vive en
+    UNIQUE(fuente_id, clave) de `noticias_items` y sus lápidas, no aquí. 180 días es margen
+    sobradísimo frente a la ventana real de vida de un item de feed (horas/días). Solo se
+    purgan filas CON fecha (`visto_en`); las legadas sin fecha las sella la migración 0072.
+    Ver `db_noticias.purgar_rss_vistos`.
+    """
+    return _entero(ENV_RSS_VISTOS_RETENCION_DIAS, RSS_VISTOS_RETENCION_DIAS_DEF, minimo=0)
+
+
 # --------------------------------------------------------------------------- #
 # Perfil editorial por marca (Haiku desde libprompts) — Fase 2                    #
 # --------------------------------------------------------------------------- #
