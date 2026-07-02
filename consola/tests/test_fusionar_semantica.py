@@ -457,6 +457,20 @@ def test_fusionar_marca_ancla_manda_sobre_reaglomerado_de_haiku(entorno, monkeyp
     assert (repos.obtener_noticia_cluster("c2") or {}).get("tema_macro") == "Portugal vs Uzbekistán"
 
 
+def test_fusionar_marca_sella_fusion_vista_del_lote(entorno):
+    """Tras la pasada, el executor SELLA el lote como visto (`fusion_vista`): el barrido incremental
+    no re-dispara la fusión hasta que la ventana gane clusters sin sellar. Postgres (CI)."""
+    _inicializar("c1", fuente_id="medioA", url="https://a.com/1")
+    _inicializar("c2", fuente_id="medioB", url="https://b.com/1")
+
+    fusionar_semantica.fusionar_marca(
+        "unotv", _recientes(), salida_principal='{"grupos": []}', ejecutor=_ej([]),
+    )
+
+    assert (repos.obtener_noticia_cluster("c1") or {}).get("fusion_vista")
+    assert (repos.obtener_noticia_cluster("c2") or {}).get("fusion_vista")
+
+
 def test_fusionar_marca_menos_de_dos_no_hace_nada(entorno):
     """Con <2 historias no hay nada que fundir (el executor sale temprano)."""
     _inicializar("c1")
@@ -534,6 +548,47 @@ def test_proponer_fusiones_payload_id_titulo_tema_macro_sin_resumen():
         {"id": "b", "titulo": "Titular B", "tema_macro": ""},
     ]
     assert all("resumen" not in it for it in capt["items"])
+
+
+def test_construir_prompt_fusion_incremental_nuevas_completas_y_contexto_compacto():
+    """El prompt DELTA manda las historias NUEVAS con el payload completo (id/titulo/tema_macro) y lo
+    YA VISTO comprimido: una entrada por familia (etiqueta + conteo + representantes acotados, sin la
+    lista completa de miembros ni resúmenes) + las previas sueltas como {id, titulo}."""
+    nuevos = [{"id": "n1", "titulo": "Titular nuevo", "resumen": "no debe viajar"}]
+    vistos = (
+        [{"id": f"m{i}", "titulo": f"Miembro {i}", "resumen": "no debe viajar",
+          "tema_macro": "Mundial 2026"} for i in range(5)]
+        + [{"id": "s1", "titulo": "Suelta previa"}]
+    )
+
+    prompt = fusionar_semantica.construir_prompt_fusion_incremental(nuevos, vistos)
+
+    assert prompt
+    assert "{{" not in prompt  # placeholders resueltos (HISTORIAS + CONTEXTO + contrato)
+    # Historias nuevas: payload completo, como la pasada de siempre.
+    assert '{"id": "n1", "titulo": "Titular nuevo", "tema_macro": ""}' in prompt
+    # Contexto compacto: la familia va como UNA entrada con conteo y representantes acotados.
+    inicio = prompt.index('{"familias"')
+    contexto, _ = json.JSONDecoder().raw_decode(prompt[inicio:])
+    assert len(contexto["familias"]) == 1
+    familia = contexto["familias"][0]
+    assert familia["tema_macro"] == "Mundial 2026"
+    assert familia["n_historias"] == 5
+    assert len(familia["representantes"]) == 3  # acotados, NO la lista completa de miembros
+    assert contexto["historias_previas"] == [{"id": "s1", "titulo": "Suelta previa"}]
+    assert "no debe viajar" not in prompt  # nunca resúmenes
+    assert "grupos" in prompt and "familias" in prompt  # mismo contrato de salida
+
+
+def test_construir_prompt_fusion_incremental_sin_nuevas_o_sin_pareja_devuelve_vacio():
+    """Sin historias nuevas no hay pasada (el delta existe para eso); una nueva sin NADA contra lo
+    que agrupar (ni vistas ni otra nueva) tampoco."""
+    visto = [{"id": "v1", "titulo": "Ya vista"}]
+    assert fusionar_semantica.construir_prompt_fusion_incremental([], visto) == ""
+    solo_una = [{"id": "n1", "titulo": "Nueva"}]
+    assert fusionar_semantica.construir_prompt_fusion_incremental(solo_una, []) == ""
+    # Una nueva + una vista SÍ alcanza (la nueva puede fundirse con la vista).
+    assert fusionar_semantica.construir_prompt_fusion_incremental(solo_una, visto) != ""
 
 
 def test_ejecutar_haiku_es_no_agentico(monkeypatch):

@@ -158,6 +158,7 @@ from ._config_comun import (  # noqa: F401
     ENV_FUSION_INTERVALO_SEG,
     ENV_FUSION_MIN_SCORE,
     ENV_FUSION_COTEJAR,
+    ENV_FUSION_INCREMENTAL,
     ENV_SUBTEMA_INCREMENTAL,
     ENV_SUBTEMA_MODELO,
     ENV_GENERACION_PAUSADA,
@@ -401,6 +402,7 @@ from .config_auth import (  # noqa: F401
 from .config_contenido import (  # noqa: F401
     copy_modelo,
     decisor_modelo,
+    fusion_incremental_activo,
     fusion_modelo,
     hashtags_modelo,
     insumos_modelo,

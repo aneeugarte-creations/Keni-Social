@@ -174,6 +174,90 @@ def test_paso_encola_por_marca(monkeypatch):
     assert res == {"encolados": 2, "marcas": 1, "candidatos": 2}
 
 
+def test_paso_sin_novedad_no_encola(monkeypatch):
+    """DELTA-AWARE (def ON): si TODOS los candidatos de la marca ya fueron vistos por la fusión
+    (`fusion_vista` sellada), la pasada se salta («sin novedad»): 0 jobs, 0 llamadas al LLM."""
+    monkeypatch.setattr(recolectar_daemon.config, "fusionar_semantica_activo", lambda: True)
+    recientes = [dict(c, estado="nuevo", fusion_vista="2026-07-01T00:00:00+00:00") for c in _CLUSTERS]
+    monkeypatch.setattr(recolectar_daemon.repos, "clusters_recientes",
+                        lambda ventana_h, *a, **k: [dict(c) for c in recientes])
+    monkeypatch.setattr(fs, "fusion_en_curso", lambda *a, **k: False)
+    encolados: list[str] = []
+    monkeypatch.setattr(paso, "_encolar_fusion", lambda m, c, **k: encolados.append(m) or True)
+
+    res = recolectar_daemon.paso_fusionar_semantica(forzar=True)
+    assert encolados == []
+    assert res == {"encolados": 0, "marcas": 0, "candidatos": 2}
+
+
+def test_paso_sin_novedad_con_flag_off_encola_legacy(monkeypatch):
+    """Con `KENI_FUSION_INCREMENTAL=0` vuelve el camino previo: el lote ya visto se re-encola igual."""
+    monkeypatch.setenv("KENI_FUSION_INCREMENTAL", "0")
+    monkeypatch.setattr(recolectar_daemon.config, "fusionar_semantica_activo", lambda: True)
+    recientes = [dict(c, estado="nuevo", fusion_vista="2026-07-01T00:00:00+00:00") for c in _CLUSTERS]
+    monkeypatch.setattr(recolectar_daemon.repos, "clusters_recientes",
+                        lambda ventana_h, *a, **k: [dict(c) for c in recientes])
+    monkeypatch.setattr(fs, "fusion_en_curso", lambda *a, **k: False)
+    encolados: list[tuple[str, int]] = []
+    monkeypatch.setattr(paso, "_encolar_fusion",
+                        lambda m, c, **k: encolados.append((m, len(c))) or True)
+
+    res = recolectar_daemon.paso_fusionar_semantica(forzar=True)
+    assert encolados == [("unotv", 2)]
+    assert res == {"encolados": 2, "marcas": 1, "candidatos": 2}
+
+
+def test_paso_con_novedad_encola_nuevos_primero(monkeypatch):
+    """Con novedad parcial la marca SÍ se encola y el lote va NUEVOS-primero: el tope del lote nunca
+    deja una historia sin ver fuera por contexto ya visto, y el lote del worker coincide con el prompt."""
+    monkeypatch.setattr(recolectar_daemon.config, "fusionar_semantica_activo", lambda: True)
+    recientes = [
+        dict(_CLUSTERS[0], estado="nuevo", fusion_vista="2026-07-01T00:00:00+00:00"),  # ya vista
+        dict(_CLUSTERS[1], estado="nuevo"),                                            # sin ver
+    ]
+    monkeypatch.setattr(recolectar_daemon.repos, "clusters_recientes",
+                        lambda ventana_h, *a, **k: [dict(c) for c in recientes])
+    monkeypatch.setattr(fs, "fusion_en_curso", lambda *a, **k: False)
+    lotes: list[list[str]] = []
+    monkeypatch.setattr(paso, "_encolar_fusion",
+                        lambda m, c, **k: lotes.append([x["id"] for x in c]) or True)
+
+    res = recolectar_daemon.paso_fusionar_semantica(forzar=True)
+    assert lotes == [["c2", "c1"]]  # la nueva (c2) primero; la vista (c1) queda como contexto
+    assert res["marcas"] == 1
+
+
+def test_encolar_fusion_delta_manda_nuevas_y_contexto_compacto(monkeypatch):
+    """Con parte del lote ya visto, el job se encola con el prompt DELTA (nuevas completas + contexto
+    compacto) y el spec lleva el lote ENTERO (el worker valida/funde contra los mismos ids)."""
+    capt = _capturar_encolado(monkeypatch)
+    monkeypatch.setattr(fs, "marcar_fusion_encolada", lambda m, **k: None)
+    clusters = [
+        {"id": "n1", "titulo": "Historia nueva", "marca": "unotv", "n_fuentes": 1, "score": 0.5},
+        {"id": "v1", "titulo": "Historia ya vista", "marca": "unotv", "n_fuentes": 2, "score": 0.6,
+         "fusion_vista": "2026-07-01T00:00:00+00:00", "tema_macro": "Mundial 2026"},
+    ]
+
+    assert paso._encolar_fusion("unotv", clusters, ahora=datetime.now(UTC)) is True
+    _gid, spec, _kw = capt["encolados"][0]
+    prompt = capt["creados"][0]["prompt"]
+    assert prompt == fs.construir_prompt_fusion_incremental([clusters[0]], [clusters[1]])
+    assert "historias_previas" in prompt      # contexto compacto embebido
+    assert "Historia nueva" in prompt         # la nueva viaja completa
+    assert [r["id"] for r in spec["procesar"]["recientes"]] == ["n1", "v1"]  # lote entero al worker
+
+
+def test_encolar_fusion_todo_nuevo_usa_pasada_completa(monkeypatch):
+    """Un lote SIN nada visto aún (p. ej. tras un arranque) usa el prompt completo de siempre,
+    también con el delta activo (no hay contexto que comprimir)."""
+    capt = _capturar_encolado(monkeypatch)
+    monkeypatch.setattr(fs, "marcar_fusion_encolada", lambda m, **k: None)
+
+    assert paso._encolar_fusion("unotv", list(_CLUSTERS), ahora=datetime.now(UTC)) is True
+    prompt = capt["creados"][0]["prompt"]
+    assert prompt == fs.construir_prompt_fusion(list(_CLUSTERS))
+
+
 def test_paso_filtra_clusters_bajo_min_score(monkeypatch):
     """El candidato a Fusionar excluye los clusters con `score` por debajo de `KENI_FUSION_MIN_SCORE`.
     SALVAGUARDA: si tras el filtro la marca queda con <2, no se encola ese ciclo; con un umbral más

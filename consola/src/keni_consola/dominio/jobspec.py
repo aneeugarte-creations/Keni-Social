@@ -532,8 +532,8 @@ def construir_fusionar(*, marca: str, recientes: list[dict[str, Any]]) -> dict[s
     """Spec del post-procesado del JOB de fusión semántica por marca: ancla + funde + etiqueta.
 
     `marca` es la marca cuyas historias se fusionan; `recientes` es el lote de historias `nuevo`
-    recientes de la marca (id/titulo/tema_macro/n_fuentes/score + texto para el ancla de agenda) sobre
-    el que se construyó el prompt principal. El worker corre `claude -p` (Haiku) con la pasada
+    recientes de la marca (id/titulo/tema_macro/subtema/n_fuentes/score + texto para el ancla de
+    agenda) sobre el que se construyó el prompt principal. El worker corre `claude -p` (Haiku) con la pasada
     principal; `dominio.fusionar_semantica.construir_procesar_fusionar` orquesta la fusión y persiste.
     """
     return {"kind": PROC_FUSIONAR, "marca": marca or "", "recientes": list(recientes or [])}

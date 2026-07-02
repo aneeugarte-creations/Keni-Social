@@ -5,6 +5,7 @@ from ._config_comun import (
     _FALSOS,
     ENV_COPY_MODELO,
     ENV_DECISOR_MODELO,
+    ENV_FUSION_INCREMENTAL,
     ENV_FUSION_MODELO,
     ENV_HASHTAGS_MODELO,
     ENV_INSUMOS_MODELO,
@@ -63,6 +64,21 @@ def subtema_modelo() -> str:
     if raw is None:
         return "haiku"
     return raw.strip()
+
+
+def fusion_incremental_activo() -> bool:
+    """True si Fusionar es DELTA-AWARE: solo dispara con clusters aún no vistos (`KENI_FUSION_INCREMENTAL`).
+
+    Con ON (def) una pasada de fusión solo se encola cuando hay clusters que la fusión no vio aún
+    (`fusion_vista` vacía) y el prompt manda las historias NUEVAS completas + lo YA VISTO como
+    contexto compacto (familias con etiqueta/representantes/conteo) — evita re-pagar la ventana
+    entera cuando casi nada cambió. Con OFF vuelve al camino previo (re-envía el lote completo en
+    cada pasada). Idiom default-ON (vacío → True).
+    """
+    crudo = _crudo(ENV_FUSION_INCREMENTAL).lower()
+    if not crudo:
+        return True
+    return crudo not in _FALSOS
 
 
 def subtema_incremental_activo() -> bool:

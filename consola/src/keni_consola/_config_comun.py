@@ -462,6 +462,13 @@ ENV_FUSION_MIN_SCORE = "KENI_FUSION_MIN_SCORE"
 # Verificación por grupo («Cotejar»): con OFF (def) los grupos propuestos por la pasada principal se
 # aceptan tal cual (0 sub-llamadas de cotejo); con ON se re-pregunta cada grupo antes de fundir.
 ENV_FUSION_COTEJAR = "KENI_FUSION_COTEJAR"
+# Fusión INCREMENTAL (delta-aware): con ON (def) una pasada de Fusionar solo se dispara si hay
+# clusters que la fusión aún no vio (`fusion_vista` vacía); el prompt manda las historias NUEVAS
+# completas + lo YA VISTO como contexto COMPACTO (familias con etiqueta/representantes/conteo), en
+# vez de re-enviar la ventana entera en cada pasada. Con OFF vuelve al camino previo (lote completo
+# cada vez). Ver `recolectar_daemon/pasos/fusionar_semantica.py` y
+# `dominio/fusionar_semantica.py::construir_prompt_fusion_incremental`.
+ENV_FUSION_INCREMENTAL = "KENI_FUSION_INCREMENTAL"
 # Subtema INCREMENTAL: con ON (def) una familia que YA tiene subtemas asignados y recibe historias
 # nuevas manda a Haiku SOLO las nuevas (con las etiquetas existentes como contexto a reutilizar), en
 # vez de re-partir la familia entera cada vez. Con OFF vuelve al camino previo (re-envía todo). Ver
@@ -999,6 +1006,7 @@ __all__ = [
     'ENV_FUSION_INTERVALO_SEG',
     'ENV_FUSION_MIN_SCORE',
     'ENV_FUSION_COTEJAR',
+    'ENV_FUSION_INCREMENTAL',
     'ENV_SUBTEMA_MODELO',
     'ENV_SUBTEMA_INCREMENTAL',
     'ENV_FFMPEG_BIN',

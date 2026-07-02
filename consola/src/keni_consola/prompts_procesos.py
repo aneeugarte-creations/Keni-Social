@@ -29,6 +29,9 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
     "prompt/fusionar": [
         "Recolectar noticias · Fusionar historias del mismo hecho y etiquetar familias de macro-evento",
     ],
+    "prompt/fusionar-incremental": [
+        "Recolectar noticias · Fusionar SOLO las historias nuevas contra lo ya agrupado (fusión incremental)",
+    ],
     "prompt/fusionar-verificar": [
         "Recolectar noticias · Verificar cada grupo propuesto antes de fusionar",
     ],

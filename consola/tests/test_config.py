@@ -655,6 +655,14 @@ def test_subtema_modelo_default_haiku(limpio, store_aislado):
     assert config.subtema_modelo() == "sonnet"
 
 
+def test_fusion_incremental_default_on(limpio, store_aislado):
+    """La fusión delta-aware va ON por defecto; `KENI_FUSION_INCREMENTAL=0` la apaga."""
+    store_aislado.delenv(config.ENV_FUSION_INCREMENTAL, raising=False)
+    assert config.fusion_incremental_activo() is True
+    store_aislado.setenv(config.ENV_FUSION_INCREMENTAL, "0")
+    assert config.fusion_incremental_activo() is False
+
+
 def test_subtema_incremental_default_on(limpio, store_aislado):
     """Subtema incremental va ON por defecto; `KENI_SUBTEMA_INCREMENTAL=0` lo apaga."""
     store_aislado.delenv(config.ENV_SUBTEMA_INCREMENTAL, raising=False)

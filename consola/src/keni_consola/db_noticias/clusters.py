@@ -57,6 +57,7 @@ _COLS_NOTICIA_CLUSTER: tuple[str, ...] = (
     "verificar_hallazgos",
     "tema_macro",
     "subtema",
+    "fusion_vista",
     "creado",
     "actualizado",
 )
@@ -123,6 +124,9 @@ def _fila_a_noticia_cluster(fila: Any) -> dict[str, Any]:
         # SUBTEMA (faceta) dentro del macro-evento: gobierna el carrusel coherente y la cadencia
         # por subtema. "" = sin subtema asignado (aún por partir, o el evento no se partió).
         "subtema": fila["subtema"] or "",
+        # FUSIÓN INCREMENTAL: ISO UTC de la última pasada de Fusionar que vio este cluster ("" =
+        # aún no visto). Coordina el delta del encolado, no es público para la UI.
+        "fusion_vista": fila["fusion_vista"] or "",
         "creado": fila["creado"] or "",
         "actualizado": fila["actualizado"] or "",
     }
@@ -199,6 +203,9 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
         # SUBTEMA: valor del ALTA; en conflicto NO se pisa (`_NO_PISAR`), lo sella aparte
         # `marcar_clusters_subtema` — como `tema_macro`.
         "subtema": cluster.get("subtema") or "",
+        # FUSIÓN VISTA: valor del ALTA; en conflicto NO se pisa (`_NO_PISAR`), lo sella aparte
+        # `marcar_clusters_fusion_vista` — como `tema_macro`/`subtema`.
+        "fusion_vista": cluster.get("fusion_vista") or "",
         "creado": cluster.get("creado") or ahora,
         "actualizado": ahora,
     }
@@ -211,7 +218,7 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
         "id", "creado", "titulo_es", "resumen_es", "titulo_original", "idioma", "traducido",
         "traduccion_encolada",
         "estado", "publicacion_id", "verificacion_fuente", "verificar_hallazgos",
-        "tema_macro", "subtema",
+        "tema_macro", "subtema", "fusion_vista",
     )
     actualizables = [c for c in _COLS_NOTICIA_CLUSTER if c not in _NO_PISAR]
     set_clause = ", ".join(f"{c} = excluded.{c}" for c in actualizables)
@@ -685,6 +692,31 @@ def marcar_clusters_subtema(ids: list[str], subtema: str) -> int:
             f"UPDATE noticias_clusters SET subtema = ?, actualizado = ? "  # noqa: S608 -- marcadores parametrizados
             f"WHERE id IN ({marcadores})",
             (subtema or "", ahora_iso(), *pedidos),
+        )
+        con.commit()
+        return cur.rowcount or 0
+    finally:
+        con.close()
+
+
+def marcar_clusters_fusion_vista(ids: list[str]) -> int:
+    """Sella el lote de clusters como YA VISTO por una pasada de Fusionar (ISO ahora). Devuelve nº filas.
+
+    Con la fusión INCREMENTAL (`KENI_FUSION_INCREMENTAL`) el encolado solo dispara una pasada si hay
+    clusters con `fusion_vista` vacía; los ya sellados viajan como contexto compacto. Aparte del
+    upsert (la columna está en `_NO_PISAR`) para que un recalc del daemon no re-abra un cluster ya
+    visto. Idempotente: re-sellar solo avanza el timestamp. `ids` vacío -> 0 sin tocar BD.
+    """
+    pedidos = [i for i in dict.fromkeys(ids) if i]
+    if not pedidos:
+        return 0
+    marcadores = ",".join("?" for _ in pedidos)
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE noticias_clusters SET fusion_vista = ?, actualizado = ? "  # noqa: S608 -- marcadores parametrizados
+            f"WHERE id IN ({marcadores})",
+            (ahora_iso(), ahora_iso(), *pedidos),
         )
         con.commit()
         return cur.rowcount or 0

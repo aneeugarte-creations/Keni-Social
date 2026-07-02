@@ -1518,6 +1518,11 @@ _COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # SUBTEMA (faceta) dentro del macro-evento ("Partidos", "Espectáculo"…): un carrusel por
     # subtema. Lo escribe `marcar_clusters_subtema` y NO lo pisa un recalc del daemon.
     ("subtema", "TEXT NOT NULL DEFAULT ''"),
+    # FUSIÓN INCREMENTAL: ISO UTC de la última pasada de Fusionar que VIO este cluster ("" = aún
+    # no visto). Con `KENI_FUSION_INCREMENTAL` la pasada solo se dispara si hay clusters sin ver y
+    # los ya vistos viajan como contexto compacto. Lo escribe `marcar_clusters_fusion_vista` y NO
+    # lo pisa un recalc del daemon.
+    ("fusion_vista", "TEXT NOT NULL DEFAULT ''"),
 )
 
 def _migrar_columnas_noticias_clusters(con: Any) -> None:

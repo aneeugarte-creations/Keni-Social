@@ -361,6 +361,10 @@ def marcar_clusters_subtema(ids: list[str], subtema: str) -> int:
     return db.marcar_clusters_subtema(ids, subtema)
 
 
+def marcar_clusters_fusion_vista(ids: list[str]) -> int:
+    return db.marcar_clusters_fusion_vista(ids)
+
+
 def contar_clusters_admision_verificacion(marca: str, estados: tuple[str, ...]) -> int:
     return db.contar_clusters_admision_verificacion(marca, estados)
 

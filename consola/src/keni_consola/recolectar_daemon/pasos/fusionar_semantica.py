@@ -25,11 +25,18 @@ from .._comun import _log
 _FUSION_ENCOLADA_TTL_MIN = 30
 
 # Campos de cada historia que VIAJAN en el spec del job (el resto los re-lee el worker de repos al
-# fundir). Bastan para el ancla de agenda (textos), el lote/por_id (id/titulo/tema_macro) y elegir la
-# canónica (n_fuentes/score). El texto se manda SIN truncar aquí: `procesar_fusiones` lo acota.
+# fundir). Bastan para el ancla de agenda (textos), el lote/por_id (id/titulo/tema_macro/subtema, que
+# gobierna el Subtema incremental) y elegir la canónica (n_fuentes/score). El texto se manda SIN
+# truncar aquí: `procesar_fusiones` lo acota.
 _CAMPOS_SPEC = (
-    "id", "titulo", "titulo_es", "resumen", "resumen_es", "tema_macro", "n_fuentes", "score", "marca",
+    "id", "titulo", "titulo_es", "resumen", "resumen_es", "tema_macro", "subtema",
+    "n_fuentes", "score", "marca",
 )
+
+
+def _sin_ver_por_fusion(cluster: dict[str, Any]) -> bool:
+    """True si NINGUNA pasada de Fusionar vio aún este cluster (`fusion_vista` vacía)."""
+    return not str(cluster.get("fusion_vista") or "").strip()
 
 
 def _fresco_para_fusion(cluster: dict[str, Any], corte: datetime) -> bool:
@@ -72,8 +79,12 @@ def paso_fusionar_semantica(
 
     Throttle: como mucho una pasada por `config.fusion_intervalo_seg()` (no re-evaluar la ventana en
     cada tick de 30s); `forzar=True` lo salta (tests). Skip-if-unchanged: si el conjunto candidato no
-    cambió desde la última pasada, no hay nada nuevo que encolar. `recientes` (opcional): los clusters
-    de la ventana YA cargados por el paso de agrupar del MISMO barrido (evita re-leer la BD).
+    cambió desde la última pasada, no hay nada nuevo que encolar. DELTA-AWARE
+    (`config.fusion_incremental_activo()`, def ON): una marca cuyos candidatos ya fueron TODOS
+    vistos por la fusión (`fusion_vista`) se salta («sin novedad») aunque la huella cambie; con
+    novedad, el prompt manda solo lo nuevo completo + lo visto como contexto compacto. `recientes`
+    (opcional): los clusters de la ventana YA cargados por el paso de agrupar del MISMO barrido
+    (evita re-leer la BD).
 
     IDEMPOTENCIA: el marcador PERSISTIDO `fusion_en_curso` (sello por marca con TTL en un JSON bajo el
     dir de datos) impide re-encolar una marca cuyo job sigue en vuelo y sobrevive a reinicios; el
@@ -129,6 +140,7 @@ def paso_fusionar_semantica(
     for c in nuevos:
         por_marca.setdefault(c.get("marca") or "", []).append(c)
 
+    incremental = config.fusion_incremental_activo()
     encolados = 0
     marcas_encoladas = 0
     candidatos = 0
@@ -140,6 +152,21 @@ def paso_fusionar_semantica(
         if marca_f and not config.etapa_activa(config.ENV_PIPELINE_FUSIONAR, marca_f):
             continue
         candidatos += len(clusters)
+        # DELTA-AWARE (`KENI_FUSION_INCREMENTAL`, def ON): la pasada solo se dispara si la ventana
+        # tiene clusters que la fusión aún no vio (`fusion_vista` vacía). Sin novedad no hay nada
+        # nuevo que agrupar: skip SIN llamar al LLM. El lote se reordena NUEVOS-primero para que el
+        # tope (`fusion_semantica_max`) nunca deje una historia nueva fuera por contexto ya visto,
+        # y para que el lote del worker (`recientes[:max]`) coincida con lo que fue al prompt.
+        if incremental:
+            sin_ver = [c for c in clusters if _sin_ver_por_fusion(c)]
+            if not sin_ver:
+                _log.info(
+                    "recolectar_daemon: fusionar semántico: %s sin novedad "
+                    "(%d historia(s) ya vistas por la fusión).",
+                    marca_f or "sin marca", len(clusters),
+                )
+                continue
+            clusters = sin_ver + [c for c in clusters if not _sin_ver_por_fusion(c)]
         # IDEMPOTENCIA: no re-encolar una marca cuya fusión sigue EN VUELO (marcador persistido).
         if fusionar_semantica.fusion_en_curso(
             marca_f, ahora=ahora, ttl_min=_FUSION_ENCOLADA_TTL_MIN
@@ -179,9 +206,21 @@ def _encolar_fusion(marca: str, clusters: list[dict[str, Any]], *, ahora: dateti
 
     maximo = config.fusion_semantica_max()
     lote = clusters[:maximo]
-    prompt = fusionar_semantica.construir_prompt_fusion(lote)
+    # DELTA-AWARE: con la fusión incremental y parte del lote YA VISTO, el prompt manda solo las
+    # historias nuevas completas + lo visto como contexto compacto (familias/previas). Con todo el
+    # lote nuevo (o el flag OFF) el prompt es la pasada completa de siempre. El spec del job lleva
+    # el lote ENTERO (nuevos-primero) en ambos casos: el worker valida/funde contra los mismos ids.
+    if config.fusion_incremental_activo():
+        nuevos = [c for c in lote if _sin_ver_por_fusion(c)]
+        vistos = [c for c in lote if not _sin_ver_por_fusion(c)]
+        if vistos:
+            prompt = fusionar_semantica.construir_prompt_fusion_incremental(nuevos, vistos)
+        else:
+            prompt = fusionar_semantica.construir_prompt_fusion(lote)
+    else:
+        prompt = fusionar_semantica.construir_prompt_fusion(lote)
     if not prompt:
-        return False  # <2 historias válidas: nada que fundir
+        return False  # <2 historias válidas (o sin nuevas en el camino incremental): nada que fundir
 
     # IDEMPOTENCIA: marca la fusión en curso ANTES de encolar; si la admisión la rechaza más abajo,
     # se re-abre. Mismo orden que Traducir/Perfil (marcar -> encolar -> limpiar si se rechaza).

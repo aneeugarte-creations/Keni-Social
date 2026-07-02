@@ -27,6 +27,11 @@ Cotejar usan `config.fusion_modelo()` (sonnet); Subtema usa `config.subtema_mode
 es INCREMENTAL (def ON): una familia que ya tiene facetas asignadas y recibe historias nuevas solo
 manda ESAS a Haiku (con las etiquetas existentes como contexto); solo re-parte todo si es enteramente
 nueva.
+
+La FUSIÓN también es INCREMENTAL (`KENI_FUSION_INCREMENTAL`, def ON): cada pasada sella los clusters
+que vio (`fusion_vista`) y el barrido solo re-encola cuando la ventana gana clusters SIN sellar; el
+prompt delta (`construir_prompt_fusion_incremental`) manda las nuevas completas + lo ya visto como
+contexto compacto. Con el flag OFF se re-envía la ventana entera (camino previo).
 """
 
 from __future__ import annotations
@@ -65,11 +70,16 @@ _MAX_CHARS_ITEM = 240        # recorte del titulo por historia
 # JSON de historias se inserta en `{{HISTORIAS}}`. Si el store fallara, la red es la INICIAL del
 # paquete (fuente única, sin texto duplicado aquí).
 _PROMPT_ID = "prompt/fusionar"
+_PROMPT_INCREMENTAL_ID = "prompt/fusionar-incremental"
 _PROMPT_VERIFICACION_ID = "prompt/fusionar-verificar"
 _PROMPT_SUBTEMA_ID = "prompt/fusionar-subtema"
 _PROMPT_SUBTEMA_INCREMENTAL_ID = "prompt/fusionar-subtema-incremental"
 _MARCA_HISTORIAS = "{{HISTORIAS}}"
+_MARCA_CONTEXTO = "{{CONTEXTO}}"
 _MARCA_SUBTEMAS_EXISTENTES = "{{SUBTEMAS_EXISTENTES}}"
+
+# Contexto COMPACTO de la fusión incremental: representantes por familia ya etiquetada.
+_MAX_REPRESENTANTES_FAMILIA = 3
 
 
 def _plantilla(prompt_id: str = _PROMPT_ID) -> str:
@@ -150,6 +160,70 @@ def construir_prompt_fusion(clusters: list[dict[str, Any]]) -> str:
     if len(validos) < 2:
         return ""
     return _construir_prompt(json.dumps(payload, ensure_ascii=False))
+
+
+def _contexto_compacto(vistos: list[dict[str, Any]]) -> dict[str, Any]:
+    """Contexto COMPACTO de lo YA VISTO por la fusión, para el prompt incremental. PURO.
+
+    Comprime los clusters ya evaluados en pasadas anteriores en dos vistas baratas:
+      - `familias`: una entrada por `tema_macro` con el conteo de miembros y hasta
+        `_MAX_REPRESENTANTES_FAMILIA` representantes `{id, titulo}` (NO la lista completa de
+        miembros ni resúmenes) — bastan para que el modelo sume una historia nueva a la familia
+        (etiqueta verbatim + id de un representante).
+      - `historias_previas`: los vistos SIN familia, cada uno `{id, titulo}` (siguen siendo
+        candidatos a fundirse con una historia nueva del mismo hecho).
+    """
+    validos, payload = _payload_clusters(vistos)
+    por_tema: dict[str, list[dict[str, Any]]] = {}
+    sueltas: list[dict[str, Any]] = []
+    for q in payload:
+        tema = str(q.get("tema_macro") or "").strip()
+        if tema:
+            por_tema.setdefault(tema, []).append(q)
+        else:
+            sueltas.append({"id": q["id"], "titulo": q["titulo"]})
+    familias = [
+        {
+            "tema_macro": tema,
+            "n_historias": len(miembros),
+            "representantes": [
+                {"id": m["id"], "titulo": m["titulo"]}
+                for m in miembros[:_MAX_REPRESENTANTES_FAMILIA]
+            ],
+        }
+        for tema, miembros in por_tema.items()
+    ]
+    return {"familias": familias, "historias_previas": sueltas}
+
+
+def construir_prompt_fusion_incremental(
+    nuevos: list[dict[str, Any]], vistos: list[dict[str, Any]]
+) -> str:
+    """Prompt DELTA de la fusión: historias NUEVAS completas + lo YA VISTO como contexto compacto.
+
+    Complemento incremental de `construir_prompt_fusion` (`KENI_FUSION_INCREMENTAL`, def ON): en vez
+    de re-enviar la ventana entera en cada pasada, manda el lote de clusters que la fusión aún no
+    vio (payload completo `{id, titulo, tema_macro}`, como hoy) + el contexto compacto de los ya
+    vistos (`_contexto_compacto`: familias con etiqueta/representantes/conteo + previas sueltas).
+    El contrato de salida es EL MISMO que la pasada completa (`{"grupos": ..., "familias": ...}`),
+    así el parseo/fusión del worker no cambia. "" si no hay nuevas válidas o si nuevas+vistas no
+    llegan a 2 (nada contra lo que agrupar). PURO.
+    """
+    validos_nuevos, payload_nuevos = _payload_clusters(nuevos)
+    validos_vistos, _ = _payload_clusters(vistos)
+    if not validos_nuevos or (len(validos_nuevos) + len(validos_vistos)) < 2:
+        return ""
+    contexto = _contexto_compacto(vistos)
+    plantilla = _plantilla(_PROMPT_INCREMENTAL_ID).replace(
+        _MARCA_CONTEXTO, json.dumps(contexto, ensure_ascii=False)
+    )
+    payload_json = json.dumps(payload_nuevos, ensure_ascii=False)
+    if _MARCA_HISTORIAS in plantilla:
+        return plantilla.replace(_MARCA_HISTORIAS, payload_json)
+    return (
+        f"{plantilla}\n\nContexto ya agrupado:\n{json.dumps(contexto, ensure_ascii=False)}"
+        f"\n\nHistorias nuevas:\n{payload_json}"
+    )
 
 
 def procesar_fusiones(
@@ -867,6 +941,15 @@ def fusionar_marca(
             resultado["familias"] += 1
         if _falta_subtema(ids, por_id):
             _partir_en_subtemas(tema, ids, por_id, ejecutor=ejecutor, al_ejecutar=al_ejecutar_subtema)
+
+    # SELLA el lote como YA VISTO por la fusión (`fusion_vista`): con la fusión INCREMENTAL el
+    # barrido solo vuelve a disparar una pasada cuando la ventana gana clusters sin sellar, y los
+    # sellados viajan como contexto compacto. Best-effort e idempotente (ids absorbidos/borrados no
+    # cuentan); un fallo del sello no deshace la fusión ya persistida.
+    try:
+        repos.marcar_clusters_fusion_vista([str(c["id"]) for c in lote])
+    except Exception:  # noqa: BLE001 -- el sello es coordinación del encolado, no parte de la fusión
+        _log.warning("fusionar_semantica: no se pudo sellar fusion_vista del lote.", exc_info=True)
 
     if resultado["grupos"] or resultado["fusionadas"]:
         _log.info(
