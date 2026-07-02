@@ -183,6 +183,15 @@ def ejecutar_barrido() -> int:
             )
     except Exception:  # noqa: BLE001 -- reparación aditiva; un fallo no debe tumbar el barrido
         _log.warning("Limpiador de generaciones: fallo la reparación de verificación en_curso.", exc_info=True)
+    # Purga de borradores MUERTOS del tablero (política de retención del dueño: un tema
+    # auto-generado sin NINGUNA huella humana se borra a los `KENI_PIEZAS_PURGA_DIAS` días;
+    # 0 = apagada). Criterio, borrado y latido propio viven en `limpiador_piezas`.
+    try:
+        from . import limpiador_piezas
+
+        limpiador_piezas.ejecutar_purga()
+    except Exception:  # noqa: BLE001 -- best-effort: una purga fallida no debe tumbar el barrido
+        _log.warning("Limpiador de generaciones: fallo la purga de borradores muertos.", exc_info=True)
     return n
 
 

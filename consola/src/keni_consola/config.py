@@ -578,6 +578,7 @@ from .config_produccion import (  # noqa: F401
     media_gc_antiguedad_horas,
     media_gc_intervalo_horas,
     limpiador_intervalo_seg,
+    piezas_purga_dias,
     uso_muestreo_intervalo_seg,
 )
 from .config_programadores import (  # noqa: F401

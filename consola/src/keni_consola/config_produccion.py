@@ -17,11 +17,13 @@ from ._config_comun import (
     ENV_MEDIA_GC_ANTIGUEDAD_HORAS,
     ENV_MEDIA_GC_INTERVALO_HORAS,
     ENV_LIMPIADOR_INTERVALO_MIN,
+    ENV_PIEZAS_PURGA_DIAS,
     ENV_USO_MUESTREO_MIN,
     GENERACIONES_TTL_HORAS_DEF,
     MEDIA_GC_ANTIGUEDAD_HORAS_DEF,
     MEDIA_GC_INTERVALO_HORAS_DEF,
     LIMPIADOR_INTERVALO_MIN_DEF,
+    PIEZAS_PURGA_DIAS_DEF,
     USO_MUESTREO_MIN_DEF,
     _crudo,
     _entero,
@@ -72,6 +74,17 @@ def media_gc_activo() -> bool:
     hilo arranca SIEMPRE pero, gateado, solo actua cuando el flag esta activo.
     """
     return _crudo(ENV_MEDIA_GC).lower() in _VERDADEROS
+
+
+def piezas_purga_dias() -> int:
+    """Retencion (dias) de un borrador MUERTO del tablero antes de purgarlo (`KENI_PIEZAS_PURGA_DIAS`).
+
+    Politica de retencion DELIBERADA (aprobada por el dueño), no un GC tecnico: un tema
+    auto-generado (pipeline/portal/historia) sin NINGUNA huella humana se borra pasados N dias;
+    lo publicado o tocado por una persona se conserva PARA SIEMPRE (las señales de "tocado"
+    viven en `db_purga_piezas`). Def 90; 0 (o negativo -> clamp a 0) APAGA la purga.
+    """
+    return _entero(ENV_PIEZAS_PURGA_DIAS, PIEZAS_PURGA_DIAS_DEF, minimo=0)
 
 
 def media_gc_intervalo_horas() -> int:

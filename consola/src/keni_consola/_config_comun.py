@@ -452,6 +452,12 @@ ENV_NOTICIAS_GC_INTERVALO_HORAS = "KENI_NOTICIAS_GC_INTERVALO_HORAS"
 ENV_NOTICIAS_GC_SCORE_UMBRAL = "KENI_NOTICIAS_GC_SCORE_UMBRAL"
 ENV_NOTICIAS_GC_INACTIVIDAD_HORAS = "KENI_NOTICIAS_GC_INACTIVIDAD_HORAS"
 
+# Purga de borradores MUERTOS del tablero (politica de retencion del dueño, no un GC tecnico):
+# un tema auto-generado (pipeline/portal/historia) SIN NINGUNA huella humana se borra pasados
+# N dias; lo publicado o tocado por una persona se conserva PARA SIEMPRE. 0 = purga apagada.
+# La definicion exacta de "sin huella humana" vive en `db_purga_piezas`.
+ENV_PIEZAS_PURGA_DIAS = "KENI_PIEZAS_PURGA_DIAS"
+
 # Perfil editorial por marca (Fase 2): un agente Haiku extrae las keywords/temas de la línea
 # editorial (página texto) y la priorización las usa como relevancia de marca (reemplaza el diccionario
 # hardcodeado). GATEADO por `KENI_PRIORIZAR_PERFIL_IA` (def OFF): sin el flag se usa el vocabulario
@@ -832,6 +838,9 @@ NOTICIAS_GC_INTERVALO_HORAS_DEF = 6
 NOTICIAS_GC_SCORE_UMBRAL_DEF = 0.15
 NOTICIAS_GC_INACTIVIDAD_HORAS_DEF = 48
 
+# Purga de borradores muertos: retencion de 90 dias (politica aprobada por el dueño).
+PIEZAS_PURGA_DIAS_DEF = 90
+
 # Perfil editorial: se re-extrae con Haiku cada 24h (o si cambia la línea editorial).
 PERFIL_EDITORIAL_TTL_HORAS_DEF = 24
 
@@ -1084,6 +1093,7 @@ __all__ = [
     'ENV_NOTICIAS_GC_INACTIVIDAD_HORAS',
     'ENV_NOTICIAS_GC_INTERVALO_HORAS',
     'ENV_NOTICIAS_GC_SCORE_UMBRAL',
+    'ENV_PIEZAS_PURGA_DIAS',
     'ENV_ORIGENES',
     'ENV_PRIORIZAR_PERFIL_IA',
     'ENV_PATRONES_AUTO',
@@ -1200,6 +1210,7 @@ __all__ = [
     'NOTICIAS_GC_INACTIVIDAD_HORAS_DEF',
     'NOTICIAS_GC_INTERVALO_HORAS_DEF',
     'NOTICIAS_GC_SCORE_UMBRAL_DEF',
+    'PIEZAS_PURGA_DIAS_DEF',
     'PERFIL_EDITORIAL_TTL_HORAS_DEF',
     'PIPELINE_MAX_DEF',
     'PIPELINE_EN_PROCESO_MAX_DEF',
