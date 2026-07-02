@@ -211,7 +211,7 @@ def generacion_pausada() -> bool:
 # --------------------------------------------------------------------------- #
 #
 # Cada marca puede llevar su PROPIO tope de coste USD/día y su PROPIA parada de emergencia, sobre
-# la misma maquinaria de overrides por-marca de las etapas (`config_produccion.clave_por_marca`,
+# la misma maquinaria de overrides por-marca de las etapas (`config.produccion.clave_por_marca`,
 # clave `KENI_*::<marca>` en el store). Son INDEPENDIENTES del control global: el corte efectivo de
 # un job de la marca es el MÁS restrictivo entre su control de marca y el global (ver
 # `presupuesto_ia`). Sin override la marca no añade límite (solo aplica el global).
