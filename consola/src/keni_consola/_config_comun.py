@@ -369,6 +369,13 @@ ENV_PIPELINE_TRADUCIR = "KENI_PIPELINE_TRADUCIR"
 # Recolectar (admite solo si Recolectar Y Admitir están encendidas para la marca).
 ENV_PIPELINE_ADMITIR = "KENI_PIPELINE_ADMITIR"
 
+# Canal PORTAL — copy AUTOMÁTICO (`KENI_PORTAL_COPY_AUTO`). Def OFF: un tema `origen='portal'`
+# nace con su pieza mecánica (foto del artículo descargada + titular como copy-in) y CERO IA;
+# el copy se genera SOLO cuando un humano pulsa «Generar» en su tarjeta del feed Portal. Con
+# un valor verdadero (legado), la producción redacta los temas del Portal sola, como el resto
+# del pipeline. Se lee vía `_crudo` (precedencia store > env > defecto: editable en caliente).
+ENV_PORTAL_COPY_AUTO = "KENI_PORTAL_COPY_AUTO"
+
 # Etapa de Revisar del COPY del pipeline: "Revisar" (`KENI_PIPELINE_REVISAR`, toggle de etapa).
 # ANTES de que un borrador completo avance solo a la cola de revisión (etapa AVANCE), la IA "hacia
 # adentro" revisa el copy generado: verificación de VOZ contra los patrones medidos de
@@ -971,6 +978,7 @@ __all__ = [
     'ENV_PIPELINE_DECISOR',
     'ENV_PIPELINE_TRADUCIR',
     'ENV_PIPELINE_ADMITIR',
+    'ENV_PORTAL_COPY_AUTO',
     'ENV_AUTOGEN_ARTE_MAX',
     'ENV_AUTOGEN_COPY_MAX',
     'ENV_RITMO',

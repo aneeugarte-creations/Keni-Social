@@ -85,6 +85,8 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_PROMOVER_MIN_SCORE,
         # Tope de slides del carrusel automático (panel editorial, Redactar → Decisor=carrusel).
         config.ENV_CARRUSEL_MAX_SLIDES,
+        # Copy automático del canal Portal (legado; OFF = «Generar» a demanda desde el feed).
+        config.ENV_PORTAL_COPY_AUTO,
         # Esfuerzo de razonamiento de la generación (palanca calidad/coste, se edita en Economía).
         config.ENV_ESFUERZO,
         # Ritmo de producción global (%): dial gradual del gasto que escala los caps de auto-producción.
@@ -227,6 +229,7 @@ def test_noticias_reparto_en_secciones(store):
         "noticias_produccion": {
             config.ENV_PROMOVER_MIN_SCORE,
             config.ENV_CARRUSEL_MAX_SLIDES,
+            config.ENV_PORTAL_COPY_AUTO,
         },
     }
     for gid, esperadas in reparto.items():

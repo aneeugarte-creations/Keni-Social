@@ -60,6 +60,9 @@ __all__ = [
     "_fetch_og_image_real",
     "_fetch_html_validado",
     "_extraer_og_image",
+    # foto original del Portal (preview mecánica sin IA)
+    "_DESCARGAR_FOTO_PORTAL",
+    "_descargar_foto_portal_real",
     # cuerpo del artículo + limpieza del snippet (enriquecer la nota de origen)
     "_FETCH_ARTICULO",
     "_fetch_articulo_real",
@@ -300,6 +303,30 @@ def _extraer_og_image(html: str) -> str:
 
 # Seam inyectable (los tests lo parchean): NO se llama a la red en tests.
 _FETCH_OG_IMAGE = _fetch_og_image_real
+
+
+def _descargar_foto_portal_real(
+    url: str, *, marca: str, titulo: str, origen_fuente_id: str = ""
+) -> str:
+    """Descarga la foto ORIGINAL de un artículo del Portal a media y devuelve su key ("" si falla).
+
+    Reusa el MISMO camino que el post-procesado del copy (`dominio.copy.
+    descargar_original_a_biblioteca`): la foto se baja, se promueve a su carpeta de procedencia
+    `portal` y se registra en el catálogo (tipo `original`, visible en la Biblioteca; el GC no
+    la borra). NUNCA lanza. Es el punto INYECTABLE: los tests lo parchean para no tocar la red.
+    """
+    from ..dominio import copy as dom_copy
+
+    try:
+        return dom_copy.descargar_original_a_biblioteca(
+            url, marca=marca, titulo=titulo, autor=None, origen_fuente_id=origen_fuente_id
+        )
+    except Exception:  # noqa: BLE001 -- la foto es un extra; nunca rompe la admisión del Portal
+        return ""
+
+
+# Seam inyectable (los tests lo parchean): NO se llama a la red en tests.
+_DESCARGAR_FOTO_PORTAL = _descargar_foto_portal_real
 
 
 # --------------------------------------------------------------------------- #

@@ -661,6 +661,19 @@ def _construir_catalogo() -> list[Ajuste]:
             minimo=2,
             maximo=_MAX_SLIDES_CARRUSEL,
         ),
+        # Canal PORTAL — copy AUTOMÁTICO (legado). OFF: los temas del Portal nacen con su pieza
+        # mecánica (foto del artículo + titular como copy-in) y el copy lo lanza un humano con
+        # «Generar» desde el feed Portal. ON: la producción los redacta sola (como antes).
+        Ajuste(
+            clave=config.ENV_PORTAL_COPY_AUTO,
+            tipo="bool",
+            etiqueta="Copy automático del Portal",
+            ayuda="Redactar en automático los temas del canal Portal (fuente propia). Apagado, "
+            "la tarjeta del Portal nace con la foto del artículo y su titular, y el copy se "
+            "genera solo al pulsar «Generar».",
+            grupo="noticias_produccion",
+            defecto=False,
+        ),
         # (KENI_PROMOVER_MADURACION_MIN —minutos de maduración antes de producir— se DEGRADÓ a
         # solo-env. El VOLUMEN lo gobierna el PLAN EDITORIAL DIARIO por marca (`KENI_PLAN_DIA::marca`,
         # gate de auto-producción): se edita en Programación → «Plan y horarios», no aquí. Sin plan

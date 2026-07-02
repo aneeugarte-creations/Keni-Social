@@ -26,6 +26,7 @@ import {
   CalendarClock,
   GitBranch,
   MessageSquare,
+  Sparkles,
   ThumbsDown,
   ThumbsUp,
   Trash2,
@@ -105,6 +106,12 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
   // La IA aún redacta el copy: la tarjeta es SOLO VISUAL (no se abre el editor, sin acciones), con
   // el rótulo de etapa centrado sobre la imagen. Nada que tocar hasta que haya copy.
   const generandoCopy = etapa === "generando_copy";
+  // PORTAL a demanda: una pieza del canal Portal SIN copy aún no está "generándose" — nació
+  // mecánica (foto del artículo + titular como copy-in) y espera al humano. La tarjeta enseña
+  // un botón «Generar» centrado sobre la imagen; el resto sigue inerte hasta que haya copy.
+  const portalPendiente = generandoCopy && (pieza.origen ?? "") === "portal";
+  // Tarjeta 100% inerte (la IA está redactando de verdad): todo sin puntero, sin acciones.
+  const soloVisual = generandoCopy && !portalPendiente;
   // Autogenerada por la IA: sin autor humano (las piezas de la pipeline —pipeline/rss/radar— no
   // tienen autor; las que postea el equipo SÍ). En ese caso la firma es "IA", no "desconocido".
   const generadaPorIA = !pieza.autor_nombre?.trim();
@@ -263,6 +270,19 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
     },
     onError,
   });
+  // GENERAR (Portal a demanda): encola la generación NORMAL del copy del tema con prioridad
+  // manual; el borrador rellenará estas mismas filas preview. El feed se refresca al terminar
+  // (invalidación + el polling natural de los conteos); mientras el job corre, el doble clic
+  // es inocuo (clave de idempotencia en el back).
+  const generar = useMutation({
+    mutationFn: () => api.generarCopyTema(pieza.publicacion_id),
+    onSuccess: () => {
+      toast.success("Copy en marcha: la tarjeta se actualizará al terminar.");
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS });
+    },
+    onError,
+  });
+
   const onBorrar = async () => {
     const ok = await confirmar({
       titulo: `Quitar de ${pieza.red_nombre}`,
@@ -510,14 +530,17 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
     // a naranja de marca como pista de que la tarjeta es accionable.
     <article
       aria-label={pieza.titulo}
-      aria-busy={generandoCopy || undefined}
+      aria-busy={soloVisual || undefined}
       onClick={generandoCopy ? undefined : onClickTarjeta}
       className={cn(
         "rounded-xl border border-border bg-card text-left text-card-foreground shadow-sm transition-colors",
-        generandoCopy
+        soloVisual
           ? // Solo visual: sin pista de clic y sin interacción en ningún hijo.
             "select-none [&_*]:pointer-events-none"
-          : "cursor-pointer hover:border-keni-300 focus-within:border-keni-300",
+          : portalPendiente
+            ? // Portal a demanda: la tarjeta no abre nada; SOLO el botón «Generar» es interactivo.
+              "select-none"
+            : "cursor-pointer hover:border-keni-300 focus-within:border-keni-300",
       )}
     >
       {/* Cabecera EN UNA SOLA LÍNEA (orden del rediseño aprobado): distintivo de FORMATO + RED
@@ -621,7 +644,28 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
         onAlternarCaption={() => setCaptionExpandido((v) => !v)}
         variante="limpia"
         overlayImagen={
-          generandoCopy ? (
+          portalPendiente ? (
+            // Portal a demanda: el «feed square» nació mecánico (foto + titular) y el copy se
+            // lanza SOLO al pulsar este botón centrado. Nada más de la tarjeta es interactivo.
+            <div className="absolute inset-0 z-10 flex items-center justify-center">
+              <Button
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  generar.mutate();
+                }}
+                disabled={generar.isPending}
+                aria-label="Generar copy de esta pieza"
+              >
+                {generar.isPending ? (
+                  <Spinner className="h-4 w-4" />
+                ) : (
+                  <Sparkles className="h-4 w-4" aria-hidden="true" />
+                )}
+                Generar
+              </Button>
+            </div>
+          ) : generandoCopy ? (
             // Velo gris sobre la imagen + el MISMO rótulo de etapa centrado encima (nítido): la
             // pieza se está generando, aún no hay nada que revisar.
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-muted/70 backdrop-grayscale">

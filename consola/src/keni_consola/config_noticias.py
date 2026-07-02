@@ -48,6 +48,7 @@ from ._config_comun import (
     ENV_PIPELINE_DECISOR,
     ENV_PIPELINE_TRADUCIR,
     ENV_PIPELINE_ADMITIR,
+    ENV_PORTAL_COPY_AUTO,
     ENV_PIPELINE_SUGERIR_HASHTAGS,
     ENV_PIPELINE_REVISAR,
     ENV_PIPELINE_REDACTAR,
@@ -913,6 +914,18 @@ def admitir_activo() -> bool:
     if not crudo:
         return True
     return crudo in _VERDADEROS
+
+
+def portal_copy_auto() -> bool:
+    """True si el canal PORTAL debe redactar copy AUTOMÁTICO (`KENI_PORTAL_COPY_AUTO`, legado).
+
+    Def OFF: un tema `origen='portal'` nace con su pieza mecánica (foto del artículo + titular
+    como copy-in) y CERO `claude -p`; el copy lo lanza un humano con «Generar» desde el feed
+    Portal. Con un valor verdadero, la producción vuelve a redactar los temas del Portal sola
+    (decisor + copy + hashtags), como antes. Lee vía `_crudo` (store > env > defecto): editable
+    en caliente desde la API admin.
+    """
+    return _crudo(ENV_PORTAL_COPY_AUTO).lower() in _VERDADEROS
 
 
 def sugerir_hashtags_activo() -> bool:

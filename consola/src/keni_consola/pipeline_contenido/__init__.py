@@ -82,6 +82,8 @@ from ._barrido import (
 from ._comun import (
     _BACKOFF_ETAPA_SEG,
     _DEFAULT_VERIFICACION_CRITERIOS,
+    _DESCARGAR_FOTO_PORTAL,
+    _descargar_foto_portal_real,
     _DIAS_DEDUP,
     _FETCH_ARTICULO,
     _FETCH_OG_IMAGE,
@@ -149,6 +151,7 @@ from ._admitir import (
     caducar_verificacion_clusters_en_curso,
     clusters_para_promover,
     clusters_pendientes_verificar,
+    crear_preview_portal,
     crear_tema_de_cluster,
     caducar_temas_viejos,
     promover_clusters_marca,
@@ -215,6 +218,9 @@ __all__ = [
     "_FETCH_OG_IMAGE",
     "_fetch_og_image_real",
     "_extraer_og_image",
+    # foto original del Portal (seam inyectable): preview mecánica sin IA
+    "_DESCARGAR_FOTO_PORTAL",
+    "_descargar_foto_portal_real",
     # cuerpo del artículo + limpieza del snippet (seam inyectable + puras)
     "_FETCH_ARTICULO",
     "_fetch_articulo_real",
@@ -239,6 +245,7 @@ __all__ = [
     "_AVISO_SIN_CATEGORIA",
     "_auto_etiquetar_linea",
     "crear_tema_de_cluster",
+    "crear_preview_portal",
     "clusters_para_promover",
     "clusters_pendientes_verificar",
     "promover_clusters_marca",

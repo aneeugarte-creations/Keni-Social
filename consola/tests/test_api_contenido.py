@@ -1268,3 +1268,85 @@ def test_aceptar_inexistente_404(entorno):
     c = _cli("ana")
     r = c.post("/api/publicaciones/fantasma/aceptar", headers=_ORIGIN)
     assert r.status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# Copy A DEMANDA de un tema (botón «Generar» del feed Portal)                   #
+# --------------------------------------------------------------------------- #
+
+
+def _tema_portal_preview(titulo="Nota del portal", *, con_copy=False):
+    """Tema `origen='portal'` con su pieza preview mecánica (titular como copy-in, sin copy)."""
+    import json
+
+    tema = repos.crear_publicacion(
+        clase="contenido",
+        titulo=titulo,
+        marca="unotv",
+        origen="portal",
+        verificacion_fuente="saltada",
+        copy_pendiente=json.dumps({"nota": "Nota base del artículo", "redes_ids": ["x"]}),
+    )
+    repos.crear_pieza_fila(
+        publicacion_id=tema["id"], red="x", estado="borrador",
+        falta_copy=not con_copy, copy="Copy ya listo." if con_copy else "",
+        copy_in=titulo, es_publicacion=True,
+    )
+    return tema
+
+
+def _mock_lanzar_copy_dom(monkeypatch):
+    """Captura `dominio.generar.lanzar_copy` (el lanzador real de claude -p) sin encolar nada."""
+    from keni_consola.dominio import generar as gen_dom
+
+    llamadas: list[dict] = []
+
+    def fake(**kw):
+        llamadas.append(kw)
+        return {"id": f"gen-{len(llamadas)}"}
+
+    monkeypatch.setattr(gen_dom, "lanzar_copy", fake)
+    return llamadas
+
+
+def test_generar_copy_lanza_la_generacion_normal_en_manual(entorno, monkeypatch):
+    """POST /generar-copy encola la generación NORMAL del tema (copy_pendiente) con prioridad
+    MANUAL: el mismo camino del pipeline, disparado por una persona."""
+    llamadas = _mock_lanzar_copy_dom(monkeypatch)
+    c = _cli()
+    tema = _tema_portal_preview()
+
+    r = c.post(f"/api/publicaciones/{tema['id']}/generar-copy", headers=_ORIGIN)
+
+    assert r.status_code == 200, r.text
+    cuerpo = r.json()
+    assert cuerpo["copy_en_proceso"] is True
+    assert cuerpo["generacion_id"] == "gen-1"
+    assert len(llamadas) == 1
+    kw = llamadas[0]
+    assert kw["manual"] is True                      # prioridad manual: no lo corta el presupuesto
+    assert kw["publicacion_id"] == tema["id"]        # el borrador rellenará las filas preview
+    assert kw["contexto"] == "Nota base del artículo"
+
+
+def test_generar_copy_404_si_no_existe_y_409_si_ya_tiene_copy(entorno, monkeypatch):
+    llamadas = _mock_lanzar_copy_dom(monkeypatch)
+    c = _cli()
+    assert c.post("/api/publicaciones/fantasma/generar-copy", headers=_ORIGIN).status_code == 404
+    tema = _tema_portal_preview(titulo="Ya redactado", con_copy=True)
+    r = c.post(f"/api/publicaciones/{tema['id']}/generar-copy", headers=_ORIGIN)
+    assert r.status_code == 409, r.text
+    assert llamadas == []
+
+
+def test_generar_copy_409_con_redactar_apagada(entorno, monkeypatch):
+    """La MISMA guarda que el resto de botones manuales: con «Redactar» apagada para la marca,
+    el 409 explica cómo encenderla y no se encola nada."""
+    llamadas = _mock_lanzar_copy_dom(monkeypatch)
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "0")
+    c = _cli()
+    tema = _tema_portal_preview()
+    r = c.post(f"/api/publicaciones/{tema['id']}/generar-copy", headers=_ORIGIN)
+    assert r.status_code == 409, r.text
+    assert r.json()["etapa_apagada"] == "redactar"
+    assert llamadas == []

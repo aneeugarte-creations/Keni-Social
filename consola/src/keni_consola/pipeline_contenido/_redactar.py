@@ -16,6 +16,7 @@ from ..estados import CLASE_CONTENIDO, ORIGENES_AUTOGEN
 from ._comun import (
     _FORMATO_PIPELINE,
     ETAPA_REDACTAR,
+    ORIGEN_PORTAL,
     VERIFICACION_SALTADA,
     TIPO_PIPELINE,
     VERIFICACION_VERIFICADO,
@@ -42,7 +43,9 @@ _REVISION_PIEZA_VERIFICADA = "listo"
 _REVISION_PIEZA_SIN_VERIFICAR = "no_verificado"
 
 
-def lanzar_redactar_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | None) -> dict[str, Any] | None:
+def lanzar_redactar_de_tema(
+    tema: dict[str, Any], *, autor: dict[str, str] | None, manual: bool = False
+) -> dict[str, Any] | None:
     """CD — lanza la generación de copy de UN tema cuya verificación de la fuente salió `verificado`.
 
     Reutiliza el lanzador PROBADO `dominio.generar.lanzar_copy` con los parámetros que CI guardó
@@ -50,6 +53,10 @@ def lanzar_redactar_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | Non
     cuelga del tema (`publicacion_id`) y hereda su origen. Para marca PROPIA con `og:image`, la
     pieza nace con esa imagen (`tipo_contenido='fuente'`). Registra la etapa CD. None si se
     omite (sin parámetros / marca inválida).
+
+    `manual` (def False): el lanzamiento lo dispara una PERSONA (botón «Generar» del feed
+    Portal), no el barrido: el copy va con prioridad MANUAL (no lo corta el nivel SOLO_MANUAL
+    del presupuesto ni cede el paso en la cola).
 
     DEDUP AL ÉXITO (no al lanzar): `copy_pendiente` lo limpia el POST-PROCESADO del copy al
     completar con éxito (`limpiar_pendiente=True`), no este lanzador. Mientras el job está en
@@ -95,6 +102,7 @@ def lanzar_redactar_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | Non
         # `pipeline`: la generación REAL (claude -p) queda etiquetada como pipeline y reporta
         # sus tokens/coste/tiempo en Actividad IA (el resto del flujo —CI/verificación— no cuesta).
         tipo=TIPO_PIPELINE,
+        manual=manual,
         marca=marca,
         contexto=nota,
         redes_ids=redes_ids,
@@ -142,9 +150,17 @@ def temas_para_redactar(marca: str | None = None) -> list[dict[str, Any]]:
     un tema cuyo copy ya se lanzó no se relanza aunque su `copy_pendiente` no se hubiera limpiado.
     Un tema con verificación `saltada` (fuente propia, sin verificar por IA) fluye a CD igual que uno
     `verificado`; `requiere_humano`/`rechazado` sí bloquean.
+
+    PORTAL a demanda (`KENI_PORTAL_COPY_AUTO` OFF, el default): los temas `origen='portal'`
+    quedan FUERA de esta selección —ni Decisor ni copy automático—; su copy lo lanza el botón
+    «Generar» del feed Portal (`lanzar_redactar_de_tema(manual=True)` vía la API). Con el flag
+    verdadero (legado), fluyen a CD como cualquier tema del pipeline.
     """
+    portal_auto = config.portal_copy_auto()
     listos: list[dict[str, Any]] = []
     for tema in temas_pipeline(marca):
+        if not portal_auto and (tema.get("origen") or "") == ORIGEN_PORTAL:
+            continue
         if (tema.get("verificacion_fuente") or "") not in (VERIFICACION_VERIFICADO, VERIFICACION_SALTADA):
             continue
         if not (tema.get("copy_pendiente") or "").strip():

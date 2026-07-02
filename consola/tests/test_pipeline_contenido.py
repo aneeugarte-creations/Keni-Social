@@ -299,7 +299,7 @@ def _fake_repos_familia(monkeypatch, *, familia, items_por_cid):
 
     from keni_consola.pipeline_contenido import _admitir
 
-    reg: dict = {"crear": [], "actualizar": [], "marcar_items": []}
+    reg: dict = {"crear": [], "actualizar": [], "marcar_items": [], "piezas": []}
 
     def crear_publicacion(**kw):
         reg["crear"].append(kw)
@@ -311,6 +311,10 @@ def _fake_repos_familia(monkeypatch, *, familia, items_por_cid):
 
     def marcar_items_cluster_usados(cid, publicacion_id):
         reg["marcar_items"].append((cid, publicacion_id))
+
+    def crear_pieza_fila(**kw):
+        reg["piezas"].append(kw)
+        return dict(kw)
 
     fake = SimpleNamespace(
         clusters_por_tema_macro=lambda tema, marca, *, solo_nuevos=True: list(familia),
@@ -325,8 +329,11 @@ def _fake_repos_familia(monkeypatch, *, familia, items_por_cid):
         crear_publicacion=crear_publicacion,
         actualizar_noticia_cluster=actualizar_noticia_cluster,
         marcar_items_cluster_usados=marcar_items_cluster_usados,
+        crear_pieza_fila=crear_pieza_fila,
     )
     monkeypatch.setattr(_admitir, "repos", fake)
+    # La preview del Portal descarga la foto del artículo: sin red en tests (seam inyectable).
+    monkeypatch.setattr(pc, "_DESCARGAR_FOTO_PORTAL", lambda url, **kw: "portal/foto-test.png")
     monkeypatch.setattr(_admitir.marcas, "es_marca", lambda m: True)
     monkeypatch.setattr(_admitir.redes, "redes_de_formato", lambda formato: ["x"])
     monkeypatch.setattr(_admitir, "_auto_etiquetar_linea", lambda *a, **k: None)
@@ -468,7 +475,9 @@ def _cluster_portal(cid):
 
 
 def test_portal_con_foto_propia_crea_el_tema(monkeypatch):
-    """Un cluster del Portal CON foto propia se materializa (origen='portal')."""
+    """Un cluster del Portal CON foto propia se materializa (origen='portal') y, con el copy
+    automático APAGADO (default), nace con su PIEZA PREVIEW mecánica: titular como copy-in,
+    foto del artículo descargada y SIN copy (cero IA)."""
     from keni_consola.pipeline_contenido import _admitir
 
     c = _cluster_portal("c1")
@@ -484,6 +493,53 @@ def test_portal_con_foto_propia_crea_el_tema(monkeypatch):
     kw = reg["crear"][0]
     assert kw["origen"] == _admitir.ORIGEN_PORTAL
     assert kw["copy_pendiente"]  # lleva la foto propia en copy_pendiente
+    # PIEZA PREVIEW mecánica (una por red del formato foto; el fake acota redes a ["x"]):
+    # titular como copy-in, foto descargada, sin copy y visible en el feed.
+    assert len(reg["piezas"]) == 1
+    fila = reg["piezas"][0]
+    assert fila["publicacion_id"] == "tema-macro-1"
+    assert fila["copy_in"] == "Nota propia"
+    assert fila["foto"] == "portal/foto-test.png"
+    assert fila["falta_copy"] is True and fila["falta_imagen"] is False
+    assert fila["es_publicacion"] is True
+
+
+def test_portal_con_copy_auto_no_crea_preview(monkeypatch):
+    """LEGADO (`KENI_PORTAL_COPY_AUTO=1`): el tema del Portal nace SIN pieza preview — el copy
+    automático de producción nidará sus propias piezas, como siempre."""
+    from keni_consola.pipeline_contenido import _admitir
+
+    monkeypatch.setenv("KENI_PORTAL_COPY_AUTO", "1")
+    c = _cluster_portal("c1")
+    items = [_item_propio("c1")]
+    reg = _fake_repos_familia(monkeypatch, familia=[c], items_por_cid={"c1": items})
+
+    tema = _admitir.crear_tema_de_cluster(
+        c, items, claves_vistas=set(), portal=True, eventos_titulos=set()
+    )
+
+    assert tema == {"id": "tema-macro-1"}
+    assert reg["piezas"] == []  # sin preview: el copy automático crea las piezas
+
+
+def test_portal_preview_sin_descarga_queda_sin_foto(monkeypatch):
+    """Si la foto del artículo no se puede descargar, la preview nace SIN foto (falta_imagen)
+    y con la URL de referencia en `imagen_fuente`; no hay fallback de IA."""
+    from keni_consola.pipeline_contenido import _admitir
+
+    c = _cluster_portal("c1")
+    items = [_item_propio("c1")]
+    reg = _fake_repos_familia(monkeypatch, familia=[c], items_por_cid={"c1": items})
+    monkeypatch.setattr(pc, "_DESCARGAR_FOTO_PORTAL", lambda url, **kw: "")
+
+    _admitir.crear_tema_de_cluster(
+        c, items, claves_vistas=set(), portal=True, eventos_titulos=set()
+    )
+
+    assert len(reg["piezas"]) == 1
+    fila = reg["piezas"][0]
+    assert fila["foto"] == "" and fila["falta_imagen"] is True
+    assert fila["imagen_fuente"] == "https://casa.test/c1.jpg"
 
 
 def test_portal_sin_foto_propia_no_crea_el_tema(monkeypatch):
@@ -821,9 +877,16 @@ def test_verificar_clusters_omite_fuente_propia(entorno, monkeypatch):
 
 def test_portal_admite_fuente_propia_directo(entorno, monkeypatch):
     """Canal PORTAL: admite DIRECTO la historia de fuente PROPIA como tema `origen='portal'`/`saltada`
-    aunque su score sea muy BAJO (sin umbral ni verificación); la AJENA no entra al Portal."""
+    aunque su score sea muy BAJO (sin umbral ni verificación); la AJENA no entra al Portal.
+
+    Con el copy automático del Portal APAGADO (default), el tema nace con su PIEZA PREVIEW
+    mecánica (titular como copy-in, sin copy) y NO encola NINGÚN `claude -p`: ni Decisor ni
+    Redactar lo eligen, y tampoco ocupa el gate serial de la admisión."""
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    monkeypatch.setattr(pc, "_DESCARGAR_FOTO_PORTAL", lambda url, **kw: "")
+    llamadas = _mock_lanzar_copy(monkeypatch)
     propia = repos.crear_fuente_rss("Portal propio", _URL_OK, marca="unotv", propia=True)
     ajena = repos.crear_fuente_rss("Tercero", "https://otro.test/feed.xml", marca="unotv")
     _inicializar_cluster("c-propia", titulo="Nota del portal", score=0.05, primera_fuente=propia["id"])
@@ -840,6 +903,21 @@ def test_portal_admite_fuente_propia_directo(entorno, monkeypatch):
     # La propia queda `usado` (no se re-admite); la ajena sigue en el pool.
     assert repos.obtener_noticia_cluster("c-propia")["estado"] == "usado"
     assert repos.obtener_noticia_cluster("c-ajena")["estado"] == "nuevo"
+    # PIEZA PREVIEW mecánica: una fila por red del formato foto, con el titular como copy-in
+    # y SIN copy (la tarjeta del feed Portal se ve real sin gastar un token).
+    filas = repos.listar_piezas_fila(tema["id"])
+    assert len(filas) == len(redes.redes_de_formato("foto"))
+    assert all(f["copy_in"] == "Nota del portal" and not (f["copy"] or "").strip() for f in filas)
+    # CERO IA automática: la producción NO redacta este tema (ni Decisor ni copy)...
+    assert pc.temas_para_redactar() == []
+    assert pc.ejecutar_redactar(autor=None) == []
+    assert llamadas == []
+    # ...ni ocupa el gate serial de la admisión (espera al humano, no a la IA).
+    assert pc.temas_en_proceso("unotv") == 0
+    # LEGADO (`KENI_PORTAL_COPY_AUTO=1`): el tema vuelve a fluir a la producción automática.
+    monkeypatch.setenv("KENI_PORTAL_COPY_AUTO", "1")
+    assert [t["id"] for t in pc.temas_para_redactar()] == [tema["id"]]
+    assert pc.temas_en_proceso("unotv") == 1
 
 
 def test_portal_admite_cluster_con_item_propio_aunque_primera_fuente_ajena(entorno, monkeypatch):
@@ -849,6 +927,7 @@ def test_portal_admite_cluster_con_item_propio_aunque_primera_fuente_ajena(entor
     UnoTV también la cubrió, el cluster SIGUE siendo del Portal: lo decide tener un item propio."""
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    monkeypatch.setattr(pc, "_DESCARGAR_FOTO_PORTAL", lambda url, **kw: "")
     _mock_og_image(monkeypatch, "https://casa.test/og.jpg")
     propia = repos.crear_fuente_rss("Portal propio", _URL_OK, marca="unotv", propia=True)
     ajena = repos.crear_fuente_rss("Agencia", "https://otro.test/feed.xml", marca="unotv")
@@ -907,6 +986,7 @@ def test_portal_readmite_titular_recurrente_fuera_de_ventana_corta(entorno, monk
 
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    monkeypatch.setattr(pc, "_DESCARGAR_FOTO_PORTAL", lambda url, **kw: "")
     propia = repos.crear_fuente_rss("Portal propio", _URL_OK, marca="unotv", propia=True)
     # Ya publicado hace 30 días: dentro de los 60 generales, fuera de la ventana corta del Portal.
     repos.crear_publicacion(

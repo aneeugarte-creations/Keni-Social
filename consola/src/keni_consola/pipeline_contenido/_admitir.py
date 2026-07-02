@@ -39,6 +39,7 @@ __all__ = [
     "_auto_etiquetar_linea",
     "asegurar_cluster_es",
     "crear_tema_de_cluster",
+    "crear_preview_portal",
     "clusters_para_promover",
     "clusters_pendientes_verificar",
     "categoria_efectiva",
@@ -788,6 +789,12 @@ def crear_tema_de_cluster(
         _log.warning("pipeline: no se pudo crear el tema de la historia (%s)", marca, exc_info=True)
         return None
     _auto_etiquetar_linea(tema, titulo, resumen, linea_feed=_linea_de_feed(items))
+    # PORTAL SIN COPY AUTOMÁTICO (def): la tarjeta del feed nace MECÁNICA —foto del artículo
+    # descargada + titular como copy-in— con CERO `claude -p`; el copy lo lanza un humano con
+    # «Generar». Con `KENI_PORTAL_COPY_AUTO` verdadero (legado), la producción la redacta sola
+    # y no hace falta preview (el copy nidará sus propias piezas).
+    if portal and not config.portal_copy_auto():
+        crear_preview_portal(tema, titulo=titulo, imagen=imagen, origen_fuente_id=origen_fuente_id)
     if claves_vistas is not None:
         claves_vistas.add(dedup.clave(titulo))
     if cid:
@@ -797,6 +804,50 @@ def crear_tema_de_cluster(
         except Exception:  # noqa: BLE001 -- el marcado es dedup; un fallo no rompe el barrido
             _log.warning("pipeline: no se pudo marcar la historia usada (%s)", cid, exc_info=True)
     return tema
+
+
+def crear_preview_portal(
+    tema: dict[str, Any], *, titulo: str, imagen: str, origen_fuente_id: str = ""
+) -> list[dict[str, Any]]:
+    """Crea la PIEZA PREVIEW mecánica de un tema del Portal (SIN IA): foto + titular como copy-in.
+
+    Descarga la foto del artículo a media/Biblioteca (seam `_DESCARGAR_FOTO_PORTAL`) y crea una
+    fila `pieza` VACÍA de copy por cada red del formato foto, con el TITULAR como `copy_in`
+    (texto sobre la imagen) y la foto cruda como `foto` — la tarjeta del feed Portal se ve como
+    un post real sin gastar un token. Si la descarga falla, la fila queda sin foto (la URL de
+    referencia viaja en `imagen_fuente`); no hay fallback de IA. Cuando un humano pulse
+    «Generar», el copy real RELLENA estas mismas filas (`dominio.piezas.crear_borrador_en`
+    deposita en la fila vacía de cada red y conserva su media). Best-effort por red; devuelve
+    las filas creadas.
+    """
+    tema_id = (tema.get("id") or "").strip()
+    if not tema_id:
+        return []
+    foto = ""
+    if imagen:
+        foto = (_ref._DESCARGAR_FOTO_PORTAL(
+            imagen, marca=tema.get("marca") or "", titulo=titulo,
+            origen_fuente_id=origen_fuente_id,
+        ) or "").strip()
+    filas: list[dict[str, Any]] = []
+    for red in redes.redes_de_formato(_FORMATO_PIPELINE):
+        try:
+            filas.append(repos.crear_pieza_fila(
+                publicacion_id=tema_id,
+                red=red,
+                estado="borrador",
+                falta_copy=True,
+                falta_imagen=not foto,
+                copy_in=titulo,
+                foto=foto,
+                imagen_fuente=imagen,
+                es_publicacion=True,
+            ))
+        except Exception:  # noqa: BLE001 -- una red fallida no aborta la preview del Portal
+            _log.warning(
+                "portal: no se pudo crear la pieza preview (%s, %s)", tema_id, red, exc_info=True
+            )
+    return filas
 
 
 def _crear_carrusel_de_familia(
@@ -904,11 +955,17 @@ def _temas_en_proceso_de(marca: str) -> list[dict[str, Any]]:
     En proceso = pendiente de verificación (verificacion ''/'en_curso') O verificado-apto/saltado pero SIN copy aún.
     Compartido por el gate SERIAL (cuenta) y la CADUCIDAD (caduca los que superan el TTL): una
     sola definición de "en proceso" para ambos.
+
+    PORTAL a demanda (`KENI_PORTAL_COPY_AUTO` OFF): un tema `origen='portal'` NO está "en
+    proceso" — espera al humano («Generar»), no a la IA—, así que ni ocupa el gate serial de la
+    admisión ni caduca por TTL. Con el flag verdadero (copy automático legado) cuenta como hoy.
     """
     try:
         temas = temas_pipeline(marca)
     except Exception:  # noqa: BLE001 -- sin temas legibles, no bloqueamos la promoción
         return []
+    if not config.portal_copy_auto():
+        temas = [t for t in temas if (t.get("origen") or "") != ORIGEN_PORTAL]
     if not temas:
         return []
     try:

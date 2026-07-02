@@ -21,6 +21,7 @@ from starlette.routing import Route
 
 from .aportar import aportar
 from .etiquetas import asignar_etiqueta, quitar_etiqueta
+from .generar import generar_copy
 from .importar import importar
 from .metricas import metricas
 from .plataformas import (
@@ -56,6 +57,7 @@ __all__ = [
     "metricas",
     "aportar",
     "crear_post_directo",
+    "generar_copy",
     "importar",
     "adaptar_imagen",
     "agregar_plataforma",
@@ -81,6 +83,9 @@ RUTAS = [
     Route("/api/publicaciones/{publicacion_id}/soltar", soltar, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/asignar", asignar, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/aceptar", aceptar, methods=["POST"]),
+    # Copy A DEMANDA (botón «Generar» del feed Portal): encola la generación NORMAL del tema
+    # con prioridad manual. Ver `generar.py`.
+    Route("/api/publicaciones/{publicacion_id}/generar-copy", generar_copy, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/plataformas", agregar_plataforma, methods=["POST"]),
     Route(
         "/api/publicaciones/{publicacion_id}/plataformas/{pieza_id}",

@@ -213,6 +213,45 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     expect(screen.queryByRole("button", { name: /^abrir/i })).not.toBeInTheDocument();
   });
 
+  it("pieza del PORTAL sin copy: botón «Generar» centrado que encola el copy del tema", async () => {
+    const fetchMock = vi.fn(
+      async (_url: string | URL) =>
+        new Response(JSON.stringify({ copy_en_proceso: true, generacion_id: "g1" }), {
+          status: 200,
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderPost(
+      pub({
+        origen: "portal",
+        etapa_ia: "generando_copy",
+        contenido: "",
+        copy_in: "Titular de la nota",
+      }),
+    );
+    const boton = screen.getByRole("button", { name: "Generar copy de esta pieza" });
+    // El resto de la tarjeta sigue inerte: sin acciones sociales ni opener del editor.
+    expect(screen.queryByRole("button", { name: /^abrir/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Comentar" })).not.toBeInTheDocument();
+    fireEvent.click(boton);
+    // El copy se pide para el TEMA (publicacion_id), por el endpoint de copy a demanda.
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([u]) => String(u).includes("/publicaciones/c1/generar-copy")),
+      ).toBe(true),
+    );
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/copy en marcha/i)),
+    );
+  });
+
+  it("pieza del PIPELINE sin copy: sin botón «Generar» (la IA ya la está redactando)", () => {
+    renderPost(pub({ etapa_ia: "generando_copy", contenido: "" }));
+    expect(
+      screen.queryByRole("button", { name: "Generar copy de esta pieza" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("«Me gusta» cuando NO toca no aprueba: avisa con un toast (falta la imagen) con acción 'Abrir'", () => {
     renderPost(pub({ etapa_ia: "generando_arte" }));
     fireEvent.click(screen.getByRole("button", { name: "Me gusta: no disponible" }));

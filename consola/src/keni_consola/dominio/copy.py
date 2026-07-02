@@ -229,7 +229,7 @@ TIPO_ARTE_ORIGINAL = "original"
 _MIN_LADO_FOTO_ORIGINAL = 320
 
 
-def _descargar_original_a_biblioteca(
+def descargar_original_a_biblioteca(
     imagen_fuente: str, *, marca: str, titulo: str, autor: dict[str, str] | None,
     origen_fuente_id: str = "",
 ) -> str:
@@ -389,7 +389,7 @@ def crear_publicaciones_desde_piezas(
     # `imagen_descargada` queda "" y la pieza cae a `imagen_url`=`imagen_fuente`.
     imagen_descargada = ""
     if imagen_fuente:
-        imagen_descargada = _descargar_original_a_biblioteca(
+        imagen_descargada = descargar_original_a_biblioteca(
             imagen_fuente, marca=marca, titulo=titulo, autor=autor,
             origen_fuente_id=origen_fuente_id,
         )

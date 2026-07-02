@@ -57,6 +57,16 @@ export const apiPiezas = {
       metodo: "POST",
     }),
   /**
+   * Copy A DEMANDA de un TEMA del tablero (botón «Generar» de las tarjetas del feed Portal):
+   * encola la generación NORMAL del pipeline con prioridad manual; el borrador rellena las
+   * filas preview del tema. Idempotente frente al doble clic (clave de idempotencia del back).
+   */
+  generarCopyTema: (publicacionId: string) =>
+    peticion<{ copy_en_proceso: boolean; generacion_id: string }>(
+      `/publicaciones/${encodeURIComponent(publicacionId)}/generar-copy`,
+      { metodo: "POST" },
+    ),
+  /**
    * Integra una FOTO subida dentro de la plantilla de marca de la publicación (logo + copy-in +
    * pleca). Composición DETERMINISTA y SÍNCRONA en el backend (~<1s). Devuelve la imagen
    * resultante `{imagen, imagen_url}` para fijarla y guardarla con el resto de la edición. Para

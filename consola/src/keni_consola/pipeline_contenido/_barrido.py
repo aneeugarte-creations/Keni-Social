@@ -151,7 +151,9 @@ def _ejecutar_portal() -> dict[str, Any]:
 
     Por marca con Recolectar activo, admite las historias de fuente PROPIA del pool como temas
     `origen='portal'`/`saltada` (cross-marca: TODO el contenido propio va al Portal, sin pasar por
-    verificación). Best-effort por marca. Despierta producción si admitió algo. Devuelve `{temas}`.
+    verificación). Best-effort por marca. Con el copy automático del Portal
+    (`KENI_PORTAL_COPY_AUTO`, legado) despierta producción si admitió algo; a demanda (default)
+    el tema nace con su pieza mecánica y espera al «Generar» humano. Devuelve `{temas}`.
     """
     temas: list[dict[str, Any]] = []
     maximo = config.pipeline_max()
@@ -165,8 +167,8 @@ def _ejecutar_portal() -> dict[str, Any]:
             temas.extend(_admitir.promover_portal(marca, maximo=maximo))
         except Exception:  # noqa: BLE001 -- una marca problemática no aborta el barrido del Portal
             _log.exception("portal: fallo admitiendo la marca %s", marca)
-    if temas:
-        _despertar_daemon(_DAEMON_PRODUCCION)  # hay copy nuevo que redactar
+    if temas and config.portal_copy_auto():
+        _despertar_daemon(_DAEMON_PRODUCCION)  # hay copy nuevo que redactar (modo legado)
     return {"temas": temas}
 
 
