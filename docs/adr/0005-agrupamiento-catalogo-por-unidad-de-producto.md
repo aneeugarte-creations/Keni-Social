@@ -39,7 +39,9 @@ Existe un conjunto cerrado de cruces directos legítimos, codificado como **allo
 explícita** en el lint de fronteras (`SEAMS_PERMITIDOS` en
 `consola/tests/test_fronteras.py`) y verificado en CI por contrato. La allowlist es la fuente
 de verdad de los cruces vigentes; cualquier import entre apps que no esté en ella hace caer el
-lint. Hoy se reduce a tres seams legítimos, todos patrones estables:
+lint (que resuelve tanto los imports relativos como los absolutos del paquete, incluida la
+forma `importlib.import_module("keni_consola…")` con string literal). Hoy se reduce a cuatro
+seams legítimos, todos patrones estables:
 
 - **Handoff A → C** (`historial → piezas`): una generación de copy deposita un *borrador* de
   pieza vía el contrato de C (`dominio.piezas.crear_borrador`), no importando su interior.
@@ -47,6 +49,10 @@ lint. Hoy se reduce a tres seams legítimos, todos patrones estables:
   el próximo hueco por red con la MISMA función del encolado/auto-programación. Solo lectura.
 - **Doctor de salud transversal** (`estado → actividad`): el health-check del shell lee el
   snapshot de la cola de operación. Solo lectura, le importa a todo el equipo.
+- **Efecto de config de marca sobre la cadena de aprobación** (`marcas → colaboracion`,
+  shell → C): bajar el umbral de likes de una marca resetea a `pendiente` los OK humanos de
+  sus piezas en revisión, usando las primitivas de `dominio.colaboracion`. Es el efecto
+  intrínseco de cambiar el umbral, acotado a ese único disparo.
 
 La **cola de jobs `generaciones` NO es un seam**: es infra transversal y vive en el shell
 (`shell.toml`), así que sus consumidores (media, parrilla_import, publicaciones, sugerencias)

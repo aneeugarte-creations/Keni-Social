@@ -7,10 +7,15 @@ contratos del gateway / `keni-shared`, no importando las tripas unas de otras.
 Cómo lo verifica este test, SIN red ni BD (AST puro):
   1. Mapea cada ROUTER (`api/<X>.py` que exporta `RUTAS`) a su app/unidad vía los
      manifests (`apps/<app>.toml`), usando `registro.modulo_a_app()`.
-  2. Parsea los imports relativos de cada router y los resuelve al módulo "dueño":
-     `from ..dominio.<Y>`, `from ..api.<Y>`, `from .. import <Y>` y `from ..<Y>`
-     apuntan al módulo base `<Y>`; si `<Y>` es un módulo declarado por OTRA unidad,
-     es un cruce de frontera.
+  2. Parsea los imports de cada router y los resuelve al módulo "dueño":
+       - relativos: `from ..dominio.<Y>`, `from ..api.<Y>`, `from .. import <Y>`,
+         `from ..<Y>`;
+       - absolutos dentro del paquete: `from keni_consola.dominio.<Y> import ...`,
+         `import keni_consola.api.<Y>` y `importlib.import_module("keni_consola...")`
+         con string literal (las tres formas evadirían el lint si solo mirara los
+         relativos).
+     Todos apuntan al módulo base `<Y>`; si `<Y>` es un módulo declarado por OTRA
+     unidad, es un cruce de frontera.
   3. CLASIFICA el cruce:
        - app → SHELL  : SIEMPRE permitido. El shell es la capa transversal/base que
                         ofrece servicios a A/B/C (auth, config, media, secretos…),
@@ -116,8 +121,9 @@ def _routers() -> dict[str, str]:
     """Routers (módulos `api/<X>.py` con `RUTAS`) -> id de su unidad (app o shell).
 
     Solo los módulos que exportan `RUTAS` son routers; los helpers de `api/` (sin
-    `RUTAS`) se ignoran (no se les asigna app). `api/catalogo.py` es del shell pero
-    no figura en un manifest: se trata como shell para no marcarlo suelto.
+    `RUTAS`) se ignoran (no se les asigna app). Un router fuera de todo manifest cae
+    a "shell" SOLO para clasificar sus cruces; que exista es un fallo aparte
+    (`test_cada_router_mapea_a_una_unica_app` + el invariante de `api.descubrir`).
     """
     mapa_modulos = registro.modulo_a_app()
     routers: dict[str, str] = {}
@@ -132,7 +138,6 @@ def _routers() -> dict[str, str]:
             continue
         if getattr(modulo, "RUTAS", None) is None:
             continue  # helper, no es router
-        # `catalogo` es del shell (lo sirve el shell) aunque no esté en un manifest.
         routers[info.name] = mapa_modulos.get(info.name, "shell")
     return routers
 
@@ -155,37 +160,105 @@ def _fuentes_router(nombre: str) -> list[Path]:
     return []
 
 
-def _modulos_destino(node: ast.ImportFrom) -> set[str]:
-    """Devuelve los nombres de módulo base referenciados por un import relativo.
+# Paquete raíz de la consola: los imports ABSOLUTOS que empiezan por él también son
+# imports del propio paquete y cuentan para el lint (los de keni_shared, keni_metricas,
+# starlette… nunca son módulos de una app).
+_PAQUETE_RAIZ = "keni_consola"
 
-    Resuelve los patrones de import del repo a un nombre de módulo base `<Y>`:
-      - `from ..dominio.<Y> import ...`  -> {<Y>}
-      - `from ..api.<Y> import ...`      -> {<Y>}
-      - `from ..dominio import <Y>, <Z>` -> {<Y>, <Z>}   (submódulos importados)
-      - `from ..api import <Y>, <Z>`     -> {<Y>, <Z>}
-      - `from ..<Y> import ...`          -> {<Y>}
-      - `from .. import <Y>, <Z>`        -> {<Y>, <Z>}
-    Los imports absolutos (keni_shared, keni_metricas, starlette…) se ignoran: no son
-    relativos a `keni_consola`, por tanto nunca son módulos de una app.
+
+def _resolver_partes(partes: list[str], nombres: list[str]) -> set[str]:
+    """Resuelve un camino de módulo (ya RELATIVO a `keni_consola`) al módulo base `<Y>`.
+
+    `partes` son los segmentos del módulo tras quitar el prefijo (`..` o `keni_consola.`);
+    `nombres` son los símbolos importados (`import <Y>, <Z>`), que en las formas
+    "paquete import submódulo" SON los módulos:
+      - ["dominio", <Y>, ...] / ["api", <Y>, ...] -> {<Y>}
+      - ["dominio"] / ["api"] + nombres           -> set(nombres)   (submódulos importados)
+      - [<Y>, ...]                                -> {<Y>}
+      - [] + nombres                              -> set(nombres)
 
     OJO con `from ..dominio import <Y>` (forma "paquete import submódulo"): el módulo
     cruzado es `<Y>` (un submódulo de `dominio/`), NO el paquete `dominio`. Resolverlo
     a `dominio` dejaba escapar cruces reales (p.ej. `from ..dominio import piezas`
     desde un router de otra app); por eso aquí los NOMBRES importados son los módulos.
     """
-    if node.level < 1:
-        return set()  # import absoluto: fuera del paquete, nunca es de una app
-    mod = node.module or ""
-    partes = mod.split(".") if mod else []
     if partes and partes[0] in ("dominio", "api"):
         if len(partes) >= 2:
-            return {partes[1]}  # from ..dominio.<Y> import ...
-        # from ..dominio import <Y>, <Z>: los submódulos importados son los módulos.
-        return {n.name for n in node.names}
+            return {partes[1]}  # ..dominio.<Y> / keni_consola.api.<Y>
+        return set(nombres)  # from ..dominio import <Y>, <Z>
     if partes:
         return {partes[0]}
-    # `from .. import a, b` (sin módulo): los nombres SON los módulos.
-    return {n.name for n in node.names}
+    return set(nombres)  # `from .. import a, b` / `from keni_consola import a, b`
+
+
+def _modulos_destino(node: ast.ImportFrom) -> set[str]:
+    """Nombres de módulo base referenciados por un `from ... import ...`.
+
+    Cubre los imports RELATIVOS (`from ..dominio.<Y>`, `from ..api import <Y>`, …) y los
+    ABSOLUTOS dentro del paquete (`from keni_consola.dominio.<Y> import ...`), que
+    resuelven a lo mismo. Los absolutos de OTROS paquetes (keni_shared, starlette…) se
+    ignoran: nunca son módulos de una app.
+    """
+    mod = node.module or ""
+    partes = mod.split(".") if mod else []
+    nombres = [n.name for n in node.names]
+    if node.level < 1:
+        if not partes or partes[0] != _PAQUETE_RAIZ:
+            return set()  # absoluto de otro paquete: nunca es de una app
+        return _resolver_partes(partes[1:], nombres)
+    return _resolver_partes(partes, nombres)
+
+
+def _modulos_destino_import(node: ast.Import) -> set[str]:
+    """Módulos base referenciados por un `import keni_consola.api.<Y>` (forma absoluta)."""
+    destinos: set[str] = set()
+    for alias in node.names:
+        partes = alias.name.split(".")
+        if partes[0] != _PAQUETE_RAIZ or len(partes) < 2:
+            continue
+        destinos |= _resolver_partes(partes[1:], [])
+    return destinos
+
+
+def _modulos_destino_importlib(node: ast.Call) -> set[str]:
+    """Módulos base de un `importlib.import_module("keni_consola...")` con string LITERAL.
+
+    Solo el primer argumento literal: un nombre construido dinámicamente no es resoluble
+    por AST (y no es un patrón del repo). Acepta tanto `importlib.import_module(...)`
+    como `import_module(...)` importado suelto.
+    """
+    func = node.func
+    es_import_module = (
+        isinstance(func, ast.Attribute) and func.attr == "import_module"
+    ) or (isinstance(func, ast.Name) and func.id == "import_module")
+    if not es_import_module or not node.args:
+        return set()
+    arg = node.args[0]
+    if not isinstance(arg, ast.Constant) or not isinstance(arg.value, str):
+        return set()
+    partes = arg.value.split(".")
+    if partes[0] != _PAQUETE_RAIZ or len(partes) < 2:
+        return set()
+    return _resolver_partes(partes[1:], [])
+
+
+def _destinos_de_nodo(node: ast.AST, *, es_subpaquete: bool = False) -> set[str]:
+    """Módulos base referenciados por un nodo AST cualquiera (o set() si no importa nada).
+
+    Unifica las tres formas que vigila el lint: `from ... import` (relativo y absoluto),
+    `import keni_consola...` y `importlib.import_module("keni_consola...")` literal. En un
+    router-PAQUETE (`es_subpaquete`), los `from . import`/`from .sub import` de nivel 1 son
+    hermanos del propio paquete (misma app) y no cuentan.
+    """
+    if isinstance(node, ast.ImportFrom):
+        if es_subpaquete and node.level == 1:
+            return set()
+        return _modulos_destino(node)
+    if isinstance(node, ast.Import):
+        return _modulos_destino_import(node)
+    if isinstance(node, ast.Call):
+        return _modulos_destino_importlib(node)
+    return set()
 
 
 def _cruces() -> list[tuple[str, str, str, str]]:
@@ -212,11 +285,7 @@ def _cruces() -> list[tuple[str, str, str, str]]:
             es_subpaquete = ruta.parent != _RAIZ_API
             arbol = ast.parse(fuente)
             for node in ast.walk(arbol):
-                if not isinstance(node, ast.ImportFrom):
-                    continue
-                if es_subpaquete and node.level == 1:
-                    continue  # hermano del propio paquete-router: misma app
-                for destino in _modulos_destino(node):
+                for destino in _destinos_de_nodo(node, es_subpaquete=es_subpaquete):
                     app_destino = mapa_modulos.get(destino)
                     if app_destino is None or app_destino == app_origen:
                         continue  # infra compartida o mismo dueño: permitido
@@ -236,9 +305,7 @@ def test_cada_router_mapea_a_una_unica_app():
     """Todo router (`api/<X>.py` con RUTAS) pertenece a EXACTAMENTE una unidad."""
     mapa = registro.modulo_a_app()
     routers = _routers()
-    sin_unidad = [
-        n for n, u in routers.items() if n != "catalogo" and n not in mapa
-    ]
+    sin_unidad = [n for n in routers if n not in mapa]
     assert not sin_unidad, (
         f"Routers sin app declarada en ningún manifest: {sin_unidad}. "
         "Añádelos a su `apps/<app>.toml` (modulos_backend)."
@@ -300,18 +367,34 @@ def test_el_lint_detecta_una_violacion_sintetica():
     assert mapa.get("metricas") == "metricas"
     assert mapa.get("piezas") == "operacion"
 
-    # Las DOS formas de import deben resolverse a `piezas` (la dotada y la
-    # "paquete import submódulo", que antes evadía el resolver y dejaba escapar cruces).
+    # TODAS las formas de import deben resolverse a `piezas`: las relativas (dotada y
+    # "paquete import submódulo") Y las absolutas (`from keni_consola...`, `import
+    # keni_consola...`, `importlib.import_module("keni_consola...")` literal).
     for fragmento in (
         "from ..dominio.piezas import pieza_a_dict\n",
         "from ..dominio import piezas\n",
+        "from keni_consola.dominio.piezas import pieza_a_dict\n",
+        "from keni_consola.dominio import piezas\n",
+        "import keni_consola.dominio.piezas\n",
+        "import importlib\nimportlib.import_module('keni_consola.dominio.piezas')\n",
+        "from importlib import import_module\nimport_module('keni_consola.dominio.piezas')\n",
     ):
         arbol = ast.parse(fragmento)
-        node = next(n for n in ast.walk(arbol) if isinstance(n, ast.ImportFrom))
-        destinos = _modulos_destino(node)
+        destinos: set[str] = set()
+        for node in ast.walk(arbol):
+            destinos |= _destinos_de_nodo(node)
         assert "piezas" in destinos, (
             f"el resolver no detectó el módulo importado en: {fragmento!r}"
         )
+    # Y los absolutos de OTROS paquetes siguen sin contar (nunca son de una app).
+    for fragmento in (
+        "from keni_shared.marcas import opciones\n",
+        "import starlette.routing\n",
+        "importlib.import_module('keni_shared.marcas')\n",
+    ):
+        arbol = ast.parse(fragmento)
+        for node in ast.walk(arbol):
+            assert not _destinos_de_nodo(node), f"falso positivo en: {fragmento!r}"
 
     app_origen = "metricas"
     cruce_prohibido = any(
