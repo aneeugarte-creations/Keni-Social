@@ -31,9 +31,10 @@ import { INTERVALO_RECURSOS_MS } from "./lib";
 const PESO_ESTADO: Record<EstadoDaemon, number> = {
   atrasado: 0,
   error: 1,
-  ok: 2,
-  en_espera: 3,
-  inactivo: 4,
+  sin_datos: 2,
+  ok: 3,
+  en_espera: 4,
+  inactivo: 5,
 };
 
 /** Intervalo legible ("90 s", "15 min", "4 h"). Exportado para las tarjetas de agente IA. */

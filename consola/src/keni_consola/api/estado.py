@@ -202,6 +202,9 @@ def _chequeo_daemons() -> dict:
     # "en_espera" = interruptor propio ON pero la máquina apagada: no corre, pero NO es un fallo
     # (igual que "inactivo", se menciona como información en el ok, no dispara aviso/error).
     en_espera = sum(1 for d in daemons if d.get("estado") == "en_espera")
+    # "sin_datos" = registrado en `daemons_registro` pero sin latido todavía (BD recién
+    # migrada o daemons aún arrancando): se informa en el ok, no dispara aviso/error.
+    sin_datos = sum(1 for d in daemons if d.get("estado") == "sin_datos")
     if atrasados:
         return _chequeo(
             "maquina:daemons", "Daemons de fondo", "error",
@@ -219,7 +222,7 @@ def _chequeo_daemons() -> dict:
             admin=False,
             siguiente_paso="Mira el detalle del barrido en el panel Sistema (sección Daemons).",
         )
-    activos = len(daemons) - inactivos - en_espera
+    activos = len(daemons) - inactivos - en_espera - sin_datos
     if not daemons:
         detalle = "Sin daemons registrados todavía (ninguno ha latido)."
     else:
@@ -228,6 +231,8 @@ def _chequeo_daemons() -> dict:
             detalle += f" {inactivos} apagado(s) por ajuste (no es un problema)."
         if en_espera:
             detalle += f" {en_espera} en espera de la máquina (no es un problema)."
+        if sin_datos:
+            detalle += f" {sin_datos} sin latir todavía (registrado(s), a la espera de su primer latido)."
     return _chequeo("maquina:daemons", "Daemons de fondo", "ok", detalle, admin=False)
 
 

@@ -15,7 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ... import ajustes_catalogo, db, latidos
+from ... import ajustes_catalogo, daemons_registro, db, latidos
 from ..._http_json import _entero_query
 from ...tiempo import ahora_iso
 from ._comun import _es_admin, _logger, _rechazo_no_admin
@@ -85,8 +85,10 @@ def sonda_daemons() -> dict:
     un `estado` listo para pintar: "ok" (late y su ultimo barrido fue bien), "error"
     (late pero su ultimo barrido fallo), "inactivo" (apagado por su toggle/gate), "en_espera"
     (su interruptor PROPIO esta ON pero el maestro de la maquina esta OFF: no corre, pero no es
-    un fallo ni esta apagado) o "atrasado" (deberia estar corriendo y no late: hilo muerto,
-    proceso daemons caido o BD inaccesible para el). CRITERIO: el estado se juzga con DOS
+    un fallo ni esta apagado), "atrasado" (deberia estar corriendo y no late: hilo muerto,
+    proceso daemons caido o BD inaccesible para el) o "sin_datos" (registrado en
+    `daemons_registro` pero SIN fila de latido todavia: BD recien migrada o hilo que nunca
+    llego a arrancar; ver `_sin_datos`). CRITERIO: el estado se juzga con DOS
     señales — `gate_activo` (el flag PROPIO configurado, lo que refleja el switch) y `activo`
     (efectivo: flag propio AND la maquina). Con el flag propio OFF -> "inactivo"; con el flag ON
     pero sin correr -> "en_espera" (enmascarado por la maquina); solo un daemon que deberia estar
@@ -171,7 +173,59 @@ def sonda_daemons() -> dict:
                 "ajustes": _ajustes_de(f["daemon"]),
             }
         )
+    salida.extend(_sin_datos({f["daemon"] for f in filas}))
     return {"daemons": salida, "error": None}
+
+
+def _sin_datos(presentes: set[str]) -> list[dict]:
+    """Filas sintéticas para los daemons REGISTRADOS (`daemons_registro`) sin fila de latido.
+
+    `daemon_latidos` solo conoce a quien YA latió: un hilo que murió al arrancar o una BD
+    recién migrada serían invisibles para el panel. El registro declarativo dice qué DEBE
+    existir, y a lo registrado-pero-mudo se le pinta estado "sin_datos" — distinto de
+    "inactivo" (apagado a propósito: su bucle late igualmente con activo=0) y de
+    "atrasado" (llegó a latir y dejó de). Misma FORMA que una fila real (el front no
+    distingue), con los campos de latido vacíos, `barrible` False (sin bucle confirmado
+    vivo, nadie consumiría la solicitud) y el gate evaluado igual que en una fila real.
+    """
+    salida: list[dict] = []
+    for nombre in daemons_registro.esperados():
+        if nombre in presentes or nombre in latidos.RETIRADOS:
+            continue
+        clave_gate = latidos.clave_gate_de(nombre)
+        salida.append(
+            {
+                "daemon": nombre,
+                "visto": "",
+                "activo": False,
+                "intervalo_seg": 0.0,
+                "tick_seg": 0.0,
+                "ultimo_barrido": "",
+                "ultimo_ok": "",
+                "ultimo_error": "",
+                "error_txt": "",
+                "duracion_ms": 0,
+                "barridos": 0,
+                "errores": 0,
+                "barrido_solicitado": "",
+                "ultimo_resumen": "",
+                "edad_seg": None,
+                "umbral_atraso_seg": 0.0,
+                "estado": "sin_datos",
+                "barrible": False,
+                "grupo": latidos.grupo_de(nombre),
+                "gasta_tokens": latidos.gasta_tokens(nombre),
+                "clase": latidos.clase_de(nombre),
+                "motor": latidos.motor_de(nombre),
+                "etiqueta": latidos.etiqueta_de(nombre),
+                "descripcion": latidos.descripcion_de(nombre),
+                "prompts": latidos.prompts_de(nombre),
+                "clave_gate": clave_gate,
+                "gate_activo": _gate_configurado(clave_gate),
+                "ajustes": _ajustes_de(nombre),
+            }
+        )
+    return salida
 
 
 async def daemons_latidos(request: Request) -> Response:
@@ -190,7 +244,10 @@ def _barridos(daemon: str, limite: int) -> tuple[int, dict]:
     except Exception as e:  # noqa: BLE001 -- BD caida: degradar legible, no 500 crudo
         _logger.warning("No se pudieron leer los latidos para el historial de barridos: %s", e)
         return 503, {"error": "No se pudo consultar el registro de daemons."}
-    if daemon not in registrados or daemon in latidos.RETIRADOS:
+    # Conocidos = quien YA late + lo declarado en el registro (un daemon registrado sin
+    # latido aún responde con historial vacío, no 404: su detalle debe poder abrirse).
+    conocidos = registrados | set(daemons_registro.esperados())
+    if daemon not in conocidos or daemon in latidos.RETIRADOS:
         return 404, {"error": f"No hay ningún daemon registrado con el nombre {daemon!r}."}
     return 200, {"daemon": daemon, "barridos": db.listar_barridos(daemon, limite)}
 

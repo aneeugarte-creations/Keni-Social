@@ -87,6 +87,9 @@ const ESTADO_DAEMON: Record<EstadoDaemon, Aspecto> = {
   en_espera: { variant: "info", texto: "En espera (máquina apagada)" },
   // El gate del daemon está apagado por su ajuste (mismo lenguaje que el 409 de «Barrer ahora»).
   inactivo: { variant: "outline", clase: "bg-muted text-muted-foreground", texto: "Apagado por ajuste" },
+  // Registrado en el arranque pero sin ningún latido todavía (BD recién migrada o hilo que
+  // nunca llegó a arrancar): no es «apagado» (eso late con activo=0) ni «atrasado» (eso latió).
+  sin_datos: { variant: "outline", clase: "bg-muted text-muted-foreground", texto: "Sin datos" },
 };
 
 export function ChipEstadoDaemon({ estado, className }: { estado: EstadoDaemon; className?: string }) {

@@ -320,6 +320,25 @@ def test_chequeo_daemons_en_espera_no_es_problema(entorno, sondas_sanas, monkeyp
     assert ch["siguiente_paso"] is None
 
 
+def test_chequeo_daemons_sin_datos_no_es_problema(entorno, sondas_sanas, monkeypatch):
+    """Un daemon registrado que aún no ha latido (`sin_datos`: BD recién migrada o daemons
+    arrancando) NO es un fallo: el chequeo queda ok, lo menciona como información y no lo
+    cuenta entre los que laten con normalidad."""
+    sonda = {
+        "daemons": [
+            {"daemon": "trends", "estado": "sin_datos"},
+            {"daemon": "programador", "estado": "ok"},
+        ],
+        "error": None,
+    }
+    monkeypatch.setattr(api_sistema, "sonda_daemons", lambda: sonda)
+    ch = _chequeos(_cliente().get("/api/estado").json())["maquina:daemons"]
+    assert ch["estado"] == "ok"
+    assert "1 daemon(s) latiendo" in ch["detalle"]
+    assert "sin latir todavía" in ch["detalle"]
+    assert ch["siguiente_paso"] is None
+
+
 def test_chequeo_daemons_barrido_en_error_avisa(entorno, sondas_sanas, monkeypatch):
     sonda = {"daemons": [{"daemon": "alertas", "estado": "error"}], "error": None}
     monkeypatch.setattr(api_sistema, "sonda_daemons", lambda: sonda)

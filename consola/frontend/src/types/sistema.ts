@@ -791,8 +791,10 @@ export interface RespuestaProbarS3 {
 // ya juzga el `estado` (umbral de atraso incluido); el front solo pinta.
 
 /** Estado agregado de un daemon, calculado por el back. `en_espera` = su interruptor propio
- *  está ON pero la máquina de contenido está apagada (no corre, pero no es un fallo). */
-export type EstadoDaemon = "ok" | "error" | "inactivo" | "atrasado" | "en_espera";
+ *  está ON pero la máquina de contenido está apagada (no corre, pero no es un fallo).
+ *  `sin_datos` = registrado en el arranque pero sin ningún latido todavía (BD recién migrada
+ *  o hilo que nunca llegó a arrancar): distinto de apagado a propósito y de atrasado. */
+export type EstadoDaemon = "ok" | "error" | "inactivo" | "atrasado" | "en_espera" | "sin_datos";
 
 /** Grupo (motor/papel) de un daemon para el dashboard de Workers, calculado por el back. */
 export type GrupoDaemon = "investigacion" | "produccion" | "flujo" | "infra";
