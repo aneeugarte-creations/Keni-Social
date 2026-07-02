@@ -596,11 +596,20 @@ def registrar_cierre(registro: dict[str, Any]) -> None:
     from .generaciones import proceso_de
 
     proceso = proceso_de(registro)
+    tipo = str(registro.get("tipo") or "")
+    # ETAPA: la explicita del registro si la trae (fases inline del pool, que comparten
+    # tipo='pipeline'); si no, se DERIVA aqui de proceso+tipo con la MISMA regla que la economia
+    # (`etapa_economia`), para que el ledger guarde ya la fase (Redactar/Verificar/Decisor/
+    # Carrusel/Keywords…) en vez de dejarla en '' para el resto de tipos de `claude -p`. Un tipo
+    # vacio no se rellena (sin fase que nombrar).
+    etapa = str(registro.get("etapa") or "")
+    if not etapa and tipo:
+        etapa = repos.etapa_economia(proceso, tipo)
     try:
         repos.registrar_gasto_ia(
             gen_id,
             dia=dia,
-            tipo=str(registro.get("tipo") or ""),
+            tipo=tipo,
             marca=str(registro.get("marca") or ""),
             tokens_in=tokens_in,
             tokens_out=tokens_out,
@@ -610,9 +619,7 @@ def registrar_cierre(registro: dict[str, Any]) -> None:
             cache_creation=cache_creation,
             modelo=modelo,
             proceso=proceso,
-            # ETAPA explicita si el registro la trae (fases inline del pool, que comparten
-            # tipo='pipeline'); vacio => la economia la deriva de tipo/proceso.
-            etapa=str(registro.get("etapa") or ""),
+            etapa=etapa,
         )
     except Exception:  # noqa: BLE001 -- el ledger nunca debe romper el cierre de un job
         _log.warning("presupuesto_ia: fallo al registrar el gasto de %s", gen_id, exc_info=True)

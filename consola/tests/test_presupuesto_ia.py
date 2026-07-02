@@ -149,6 +149,60 @@ def test_hook_cierre_sella_proceso_produccion(entorno):
     assert _proceso_de_gasto(gen_id) == "produccion"
 
 
+def _etapa_de_gasto(gen_id: str) -> str | None:
+    """Lee la columna `etapa` de la fila del ledger (sin reader publico)."""
+    from keni_consola._db_comun import _conectar
+
+    con = _conectar()
+    try:
+        fila = con.execute(
+            "SELECT etapa FROM gasto_ia WHERE gen_id = ?", (gen_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return fila["etapa"] if fila else None
+
+
+def test_hook_cierre_sella_etapa_derivada_del_tipo(entorno):
+    """Sin etapa explicita, el cierre DERIVA la fase de proceso+tipo y la sella en el ledger
+    (antes quedaba '' para copy/decisor/hashtags/carrusel)."""
+    copy_id = _gen(tipo="copy")
+    _cerrar(copy_id, tokens_in=100, tokens_out=50, coste=0.1)
+    assert _etapa_de_gasto(copy_id) == "Redactar"
+
+    decisor_id = _gen(tipo="decisor")
+    _cerrar(decisor_id, tokens_in=100, tokens_out=50, coste=0.1)
+    assert _etapa_de_gasto(decisor_id) == "Decisor"
+
+    hashtags_id = _gen(tipo="sugerir-hashtags")
+    _cerrar(hashtags_id, tokens_in=100, tokens_out=50, coste=0.1)
+    assert _etapa_de_gasto(hashtags_id) == "Keywords"
+
+    carrusel_id = _gen(tipo="carrusel")
+    _cerrar(carrusel_id, tokens_in=100, tokens_out=50, coste=0.1)
+    assert _etapa_de_gasto(carrusel_id) == "Carrusel"
+
+
+def test_hook_cierre_sella_etapa_verificar_por_proceso(entorno):
+    """La verificacion de fuente (tipo='pipeline' + etiqueta 'Verificar · …' -> investigacion)
+    sella la etapa 'Verificar', no 'Redactar' (la desambigua el proceso)."""
+    gen_id = generaciones.crear(
+        {"tipo": "pipeline", "marca": _MARCA, "etiqueta": "Verificar · fuente"}
+    )["id"]
+    _cerrar(gen_id, tokens_in=100, tokens_out=50, coste=0.1)
+    assert _etapa_de_gasto(gen_id) == "Verificar"
+
+
+def test_hook_cierre_respeta_etapa_explicita(entorno):
+    """Si el registro ya trae una etapa explicita (fase inline del pool), el cierre la respeta
+    y NO la re-deriva del tipo."""
+    gen_id = generaciones.crear(
+        {"tipo": "pipeline", "marca": _MARCA, "etiqueta": "X", "etapa": "Subtema"}
+    )["id"]
+    _cerrar(gen_id, tokens_in=100, tokens_out=50, coste=0.1)
+    assert _etapa_de_gasto(gen_id) == "Subtema"
+
+
 def test_hook_sin_consumo_no_deja_fila(entorno):
     """Un terminal sin metricas de tokens (imagen/proceso/fallo temprano) no ensucia el ledger."""
     gen_id = _gen(tipo="imagen")

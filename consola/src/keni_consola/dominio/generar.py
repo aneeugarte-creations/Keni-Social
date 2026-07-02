@@ -933,6 +933,13 @@ def lanzar_copy(
 
     endurecer = dict(endurecer or {})
     endurecer.setdefault("modelo", config.copy_modelo())
+    # El copy es JSON-in/JSON-out: parte del CONTEXTO adjunto y emite el bloque de piezas, sin
+    # abrir URLs ni ficheros (el prompt trabaja en dry-run, no hace peticiones de red y el
+    # catálogo de fotos es una lista numerada de títulos que asigna el equipo). `sin_tools` lo
+    # corre con `--tools ""`: no expone NINGÚN esquema de herramienta en el system (~17k tokens
+    # menos por llamada) y cierra el acceso a web/filesystem que `--dangerously-skip-permissions`
+    # dejaba abierto. Un caller que ya fije `sin_tools` se respeta.
+    endurecer.setdefault("sin_tools", True)
     # Defensivo: solo propagamos fuente_id/clave si AMBOS vienen (un caso parcial no debe
     # marcar el item del feed). Reparamos y enviamos ambos o ninguno.
     fuente = fuente_id.strip() if isinstance(fuente_id, str) and fuente_id.strip() else None
@@ -973,6 +980,5 @@ def lanzar_copy(
         procesar_spec=procesar_spec, dir_temporal=dir_temporal, autor=autor,
         endurecer=endurecer, clave_idem=clave_estable, publicacion_id=publicacion_id or "",
         # Copy = SALIDA ESTRUCTURADA (se parsea a piezas/revision; el usuario no ve la salida
-        # cruda) y el prompt auto-verifica: puede necesitar la web para corroborar datos. No se
-        # veta la web por-callsite; queda la veta global `Bash Write Edit`.
+        # cruda). Corre `sin_tools` (ver arriba): cero herramientas para ESTE run.
     )

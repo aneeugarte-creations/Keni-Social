@@ -237,9 +237,9 @@ def test_lanzar_prompt_piezas_con_redes_crea_spec_copy(encolado):
     assert "máx 25000 caracteres" in encolado["prompt"]
     # La política de emojis vive en el prompt de copy + editorial, NO en un hardcode del lanzamiento.
     assert "No uses emojis en el copy." not in encolado["prompt"]
-    # El camino COPY (piezas) es SALIDA ESTRUCTURADA (se parsea a piezas por red; el usuario no
-    # ve la salida cruda), así que NO veta la web por-callsite. El `endurecer` del spec solo rutea
-    # el modelo de copy (sonnet); la veta de herramientas es la GLOBAL `Bash Write Edit` (en `_argv_claude`).
+    # MODO PIEZAS de la biblioteca (`prompts_lanzar`) lanza por `generar.lanzar` directo (no por
+    # `lanzar_copy`) y admite prompts ad-hoc: NO endurece las herramientas por-callsite. El
+    # `endurecer` del spec solo rutea el modelo de copy (sonnet); la veta es la GLOBAL en `_argv_claude`.
     assert "disallowed_tools" not in encolado["spec"]["endurecer"]
 
 
@@ -422,6 +422,30 @@ def test_lanzar_copy_manual_usa_sonnet(encolado):
         titulo="Tema X", titulo_dado="Tema X", tipo="copy",
     )
     assert encolado["spec"]["endurecer"]["modelo"] == config.copy_modelo()
+
+
+def test_lanzar_copy_corre_sin_tools(encolado):
+    """`lanzar_copy` es JSON-in/JSON-out: corre `sin_tools` (cero herramientas, `--tools ""`),
+    así no expone el esquema de tools (~17k tokens) ni abre web/filesystem para ese run."""
+    from keni_consola.dominio import generar
+
+    generar.lanzar_copy(
+        marca=_MARCA, contexto="La nota de origen.", redes_ids=["x"],
+        titulo="Tema X", titulo_dado="Tema X", tipo="copy",
+    )
+    assert encolado["spec"]["endurecer"]["sin_tools"] is True
+
+
+def test_lanzar_copy_respeta_sin_tools_explicito(encolado):
+    """Un `endurecer["sin_tools"]` explícito del caller se respeta (setdefault, no override)."""
+    from keni_consola.dominio import generar
+
+    generar.lanzar_copy(
+        marca=_MARCA, contexto="La nota de origen.", redes_ids=["x"],
+        titulo="Tema X", titulo_dado="Tema X", tipo="copy",
+        endurecer={"sin_tools": False},
+    )
+    assert encolado["spec"]["endurecer"]["sin_tools"] is False
 
 
 def test_lanzar_copy_respeta_modelo_explicito(encolado):
