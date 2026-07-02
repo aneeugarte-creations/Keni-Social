@@ -787,7 +787,7 @@ def pipeline_en_proceso_max(marca: str = "") -> int:
     from . import produccion  # perezoso: evita el ciclo entre submódulos de config
 
     base = _entero(ENV_PIPELINE_EN_PROCESO_MAX, PIPELINE_EN_PROCESO_MAX_DEF, minimo=1)
-    return max(1, round(base * config_produccion.ritmo(marca) / 100))
+    return max(1, round(base * produccion.ritmo(marca) / 100))
 
 
 def pipeline_fetch_fuente() -> bool:
