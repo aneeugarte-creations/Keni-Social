@@ -39,13 +39,15 @@ describe("ProgresoGeneracion", () => {
     expect(screen.getByText(/Hola mundo en vivo/)).toBeInTheDocument();
   });
 
-  it("pinta la etapa según la fase: Razonando… → Escribiendo… → Terminando…", () => {
+  it("pinta la etapa según la fase: Razonando… → Escribiendo… → Guardando… → Terminando…", () => {
     const { rerender } = render(
       <ProgresoGeneracion generacion={base({ fase: "razonando" })} />,
     );
     expect(screen.getByText("Razonando…")).toBeInTheDocument();
     rerender(<ProgresoGeneracion generacion={base({ fase: "generando", salida: "Hola" })} />);
     expect(screen.getByText("Escribiendo…")).toBeInTheDocument();
+    rerender(<ProgresoGeneracion generacion={base({ fase: "guardando", salida: "Hola" })} />);
+    expect(screen.getByText("Guardando…")).toBeInTheDocument();
     rerender(<ProgresoGeneracion generacion={base({ fase: "completado", salida: "Hola" })} />);
     expect(screen.getByText("Terminando…")).toBeInTheDocument();
   });

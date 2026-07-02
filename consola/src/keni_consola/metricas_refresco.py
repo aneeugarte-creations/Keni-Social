@@ -58,7 +58,9 @@ def iniciar_refresco_metricas(intervalo_segundos: float | None = None) -> thread
                     "metricas", ok=False, intervalo_seg=intervalo, tick_seg=intervalo,
                     duracion_ms=int((time.monotonic() - t0) * 1000), error=repr(e),
                 )
-            time.sleep(intervalo)
+            # Cadencia SIN deriva: se descuenta lo que duro el barrido, asi los ticks caen
+            # cada `intervalo` desde el arranque (y no `intervalo + duracion` acumulándose).
+            time.sleep(max(0.0, intervalo - (time.monotonic() - t0)))
 
     hilo = threading.Thread(target=bucle, name="refresco-metricas-daemon", daemon=True)
     hilo.start()

@@ -325,6 +325,48 @@ def _envejecer_claim(job_id: str) -> None:
         con.close()
 
 
+def test_suelto_con_post_procesado_a_medias_no_se_relanza(entorno):
+    """GUARDIA DEL POST-PROCESADO A MEDIAS: un suelto con fase `guardando` NO se re-ejecuta.
+
+    El finalizador sella fase `guardando` ANTES de correr `procesar` (que inserta borradores,
+    no idempotente). Si el worker muere entre ese marcador y el estado terminal, el registro
+    queda `ejecutando`+`guardando`: re-ejecutar el job entero duplicaria los borradores. El
+    re-reclamo debe cerrar el job SIN devolverlo y dejar el registro en error honesto.
+    """
+    gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})
+    cola.encolar(gen["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib()))
+    primero = cola.reclamar("w1")
+    assert primero is not None
+    # claude termino y el finalizador sello `guardando`; el worker murio ANTES del terminal.
+    generaciones.actualizar(gen["id"], {"fase": generaciones.FASE_GUARDANDO})
+    _envejecer_claim(primero["id"])
+
+    assert cola.reclamar("w2") is None  # no se relanza (el borrador pudo crearse)
+    g = generaciones.obtener(gen["id"])
+    assert g["estado"] == generaciones.ESTADO_ERROR
+    assert g["motivo"] == generaciones.MOTIVO_INTERRUMPIDO
+    assert "guardaba" in g["error"]
+    assert repos.contar_jobs_activos() == 0  # el job quedo `terminado` (cupo liberado)
+
+
+def test_suelto_sin_marcador_de_post_procesado_si_se_relanza(entorno):
+    """Un suelto `ejecutando` SIN fase `guardando` (murio DURANTE claude) SI se re-ejecuta.
+
+    Es el camino de recuperacion normal del re-reclamo: nada del post-procesado corrio, asi
+    que relanzar no duplica nada y el trabajo completa solo.
+    """
+    gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})
+    cola.encolar(gen["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib()))
+    primero = cola.reclamar("w1")
+    assert primero is not None
+    generaciones.actualizar(gen["id"], {"fase": generaciones.FASE_GENERANDO})
+    _envejecer_claim(primero["id"])
+
+    rereclamado = cola.reclamar("w2")
+    assert rereclamado is not None and rereclamado["id"] == primero["id"]
+    assert generaciones.obtener(gen["id"])["estado"] == generaciones.ESTADO_EJECUTANDO
+
+
 def test_suelto_agota_intentos_y_se_descarta(entorno, monkeypatch):
     """ANTI CRASH-LOOP: un job que mata repetidamente a su worker NO se re-reclama para siempre.
 

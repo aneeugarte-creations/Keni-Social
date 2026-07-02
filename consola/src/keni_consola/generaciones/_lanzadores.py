@@ -38,6 +38,7 @@ from ._comun import (
     ESTADO_EJECUTANDO,
     ESTADO_ERROR,
     FASE_COMPLETADO,
+    FASE_GUARDANDO,
     MOTIVO_CANCELADO,
     MOTIVO_TIMEOUT,
     Procesar,
@@ -534,6 +535,16 @@ def lanzar_job_claude(
                 })
                 return
             if acumulador.terminado:
+                # MARCADOR DURABLE pre-post-procesado: fase `guardando` ANTES de correr
+                # `procesar` (que hace escrituras NO idempotentes: crear borradores). Si el
+                # proceso muere entre `procesar` y el `completado` de abajo, el re-reclamo de
+                # la cola ve este marcador y NO re-ejecuta el job (duplicaria los borradores):
+                # lo cierra con un error honesto (`db_jobs._gen_post_procesado_iniciado`).
+                # Best-effort: sin el marcador se corre igual (la ventana queda como estaba).
+                try:
+                    actualizar(gen_id, {"fase": FASE_GUARDANDO})
+                except Exception:  # noqa: BLE001 -- el marcador nunca debe impedir el cierre
+                    _log.warning("%s: no se pudo sellar la fase 'guardando'", etq, exc_info=True)
                 try:
                     resultado = procesar(acumulador.texto, acumulador.final)
                 except Exception:  # noqa: BLE001 -- fallo del post-procesado -> error claro

@@ -41,6 +41,7 @@ __all__ = [
     "ESTADO_ERROR",
     "FASE_RAZONANDO",
     "FASE_GENERANDO",
+    "FASE_GUARDANDO",
     "FASE_COMPLETADO",
     "MOTIVO_TIMEOUT",
     "MOTIVO_COLA_LLENA",
@@ -75,6 +76,7 @@ ESTADO_ERROR = "error"
 # (`stream`), unica fuente. La UI las pinta ("Razonando…" → "Escribiendo…" → "Terminando…").
 FASE_RAZONANDO = stream.FASE_RAZONANDO
 FASE_GENERANDO = stream.FASE_GENERANDO
+FASE_GUARDANDO = stream.FASE_GUARDANDO
 FASE_COMPLETADO = stream.FASE_COMPLETADO
 # Motivos terminales (campo `motivo`): para que el llamante/UI distingan el porque.
 MOTIVO_TIMEOUT = "timeout"

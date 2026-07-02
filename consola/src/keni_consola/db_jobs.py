@@ -235,7 +235,11 @@ def reclamar_job(
     `reclamado`. Re-ejecutarlo DUPLICARIA el borrador. Por eso, al re-reclamar un job SIN DUEÑO,
     consultamos el registro de generaciones: si su `gen_id` YA esta en un estado TERMINAL
     (`completado`/`error`), NO se relanza: se marca el job `terminado` y se pasa al siguiente
-    (su trabajo ya se hizo). Solo afecta al re-reclamo de jobs sin dueño; un `pendiente` nunca corrio.
+    (su trabajo ya se hizo). Y si sigue `ejecutando` pero con fase `guardando` (el finalizador
+    sella ese marcador ANTES de correr el post-procesado), el worker murio con el post-procesado
+    a medias: tampoco se relanza (los borradores pudieron crearse); se cierra el job y el
+    registro queda en error honesto (`_marcar_error_post_procesado`). Solo afecta al re-reclamo
+    de jobs sin dueño; un `pendiente` nunca corrio.
 
     RENDIMIENTO (la lectura del YAML va FUERA del row-lock): la guardia anti-duplicado lee y
     parsea un fichero YAML (`_gen_ya_terminal` -> `generaciones.obtener`). Hacer ese I/O de disco
@@ -338,6 +342,18 @@ def reclamar_job(
                 )
                 con.commit()
                 continue
+            # GUARDIA DEL POST-PROCESADO A MEDIAS: el registro sigue `ejecutando` pero con fase
+            # `guardando` — el worker murio DESPUES de arrancar el post-procesado (que ya pudo
+            # insertar borradores) y ANTES de sellar el terminal. Re-ejecutar el job entero
+            # duplicaria los borradores (y re-gastaria tokens): se cierra el job y el registro
+            # queda en error honesto para que la UI resuelva y un humano decida si relanzar.
+            if es_suelto and _gen_post_procesado_iniciado(fila["gen_id"]):
+                con.execute(
+                    "UPDATE jobs SET estado = ? WHERE id = ?", (JOB_TERMINADO, fila["id"])
+                )
+                con.commit()
+                _marcar_error_post_procesado(fila["gen_id"])
+                continue
             return {"id": fila["id"], "gen_id": fila["gen_id"], "spec": fila["spec"]}
         con.commit()
         return None
@@ -370,6 +386,55 @@ def _marcar_error_reintentos(gen_id: str, intentos: int) -> None:
             "error": (
                 f"La generación se interrumpió {intentos} veces (el proceso que la ejecutaba "
                 "murió) y se descartó. Puedes relanzarla manualmente."
+            ),
+            "fecha_fin": ahora_iso(),
+        })
+    except Exception:  # noqa: BLE001 -- best-effort: el descarte del job ya esta hecho
+        pass
+
+
+def _gen_post_procesado_iniciado(gen_id: str) -> bool:
+    """True si el registro `gen_id` sigue `ejecutando` pero su POST-PROCESADO ya arranco.
+
+    Lee el marcador durable que el finalizador sella justo antes de correr `procesar`
+    (fase `guardando`, ver `generaciones._lanzadores`): claude termino con exito y las
+    escrituras no idempotentes (crear borradores) pudieron ejecutarse total o parcialmente.
+    Un job sin dueño en ese punto NO es re-ejecutable. Best-effort: ante un fallo de
+    lectura devuelve False (se re-ejecuta, el comportamiento previo al marcador).
+    """
+    try:
+        from . import generaciones
+
+        g = generaciones.obtener(gen_id)
+    except Exception:  # noqa: BLE001 -- sin lectura del registro, no bloqueamos el reclamo
+        return False
+    if g is None:
+        return False
+    return (
+        g.get("estado") == generaciones.ESTADO_EJECUTANDO
+        and g.get("fase") == generaciones.FASE_GUARDANDO
+    )
+
+
+def _marcar_error_post_procesado(gen_id: str) -> None:
+    """Cierra en ERROR claro el registro de un job descartado con el post-procesado a medias.
+
+    Import perezoso de `generaciones` (igual que `_gen_ya_terminal`) y best-effort: si el
+    registro no se puede escribir, el job igualmente quedo `terminado` (el recolector de
+    generaciones acabara marcando el `ejecutando` colgado como interrumpido).
+    """
+    try:
+        from . import generaciones
+
+        g = generaciones.obtener(gen_id)
+        if g is None or g.get("estado") != generaciones.ESTADO_EJECUTANDO:
+            return  # ya tiene un terminal honesto (o no existe): no pisar nada
+        generaciones.actualizar(gen_id, {
+            "estado": generaciones.ESTADO_ERROR,
+            "motivo": generaciones.MOTIVO_INTERRUMPIDO,
+            "error": (
+                "La generación terminó pero el proceso murió mientras guardaba el "
+                "resultado. Revisa si el borrador llegó a crearse antes de relanzarla."
             ),
             "fecha_fin": ahora_iso(),
         })

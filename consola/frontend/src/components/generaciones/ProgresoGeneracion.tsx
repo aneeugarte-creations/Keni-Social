@@ -72,6 +72,8 @@ function etiquetaFase(fase: string): string {
       return "Razonando…";
     case "generando":
       return "Escribiendo…";
+    case "guardando":
+      return "Guardando…";
     case "completado":
       return "Terminando…";
     default:

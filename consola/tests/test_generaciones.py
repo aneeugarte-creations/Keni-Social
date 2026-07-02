@@ -814,6 +814,34 @@ def test_reintento_respeta_el_tope(entorno, monkeypatch):
 
 @pytest.mark.timeout(30)
 @pytest.mark.skipif(os.name != "posix", reason="subproceso real")
+def test_post_procesado_corre_con_fase_guardando_sellada(entorno, monkeypatch):
+    """El finalizador sella fase `guardando` ANTES de correr `procesar` (y `completado` despues).
+
+    Ese marcador durable es el que permite al re-reclamo de la cola (`db_jobs.reclamar_job`)
+    distinguir un worker muerto DURANTE claude (re-ejecutable) de uno muerto GUARDANDO el
+    resultado (no re-ejecutable: los borradores pudieron crearse).
+    """
+    monkeypatch.setattr(generaciones.shutil, "which", lambda _n: "/usr/bin/claude")
+    llamadas = {"n": 0}
+    monkeypatch.setattr(
+        generaciones.runner, "lanzar_proc",
+        _fake_lanzar_factory_por_intento([[_OK_START, _OK_RESULT]], llamadas),
+    )
+    gid = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})["id"]
+    fases_en_procesar: list[str] = []
+
+    def _procesar(_salida, _metricas):  # noqa: ANN001
+        fases_en_procesar.append((generaciones.obtener(gid) or {}).get("fase", ""))
+        return {"ok": True}
+
+    _LANZAR_CLAUDE_REAL(gid, prompt="p", cwd=entorno, procesar=_procesar)
+    assert _esperar_terminal(gid, timeout=15) == generaciones.ESTADO_COMPLETADO
+    assert fases_en_procesar == [generaciones.FASE_GUARDANDO]
+    assert generaciones.obtener(gid)["fase"] == generaciones.FASE_COMPLETADO
+
+
+@pytest.mark.timeout(30)
+@pytest.mark.skipif(os.name != "posix", reason="subproceso real")
 def test_lanzar_job_claude_no_rechaza_por_tope_de_cola(entorno, monkeypatch):
     """La cola NO tiene tope (R-NO-LIMIT): `lanzar_job_claude` admite aunque ya haya muchos en proceso.
 

@@ -379,12 +379,19 @@ def parsear_resultado_json(stdout: str) -> tuple[str, MetricasRun | None]:
 #   - "razonando":  arranco, pero aun no llega texto VISIBLE del asistente (esta
 #                   pensando / usando herramientas / el thinking no cuenta como texto).
 #   - "generando":  ya llego el PRIMER token de texto visible (escribiendo el copy).
+#   - "guardando":  el stream cerro con exito y el POST-PROCESADO (crear borradores,
+#                   catalogar media) esta corriendo. La sella el finalizador ANTES de
+#                   ejecutar `procesar`: es el marcador durable que permite al re-reclamo
+#                   de la cola distinguir "murio durante claude" (re-ejecutable) de
+#                   "murio guardando el resultado" (NO re-ejecutable: duplicaria borradores).
 #   - "completado": el run termino (llego el `result`), con o sin texto.
-# El acumulador deriva la fase del propio stream; se persiste en el registro y la UI la
-# pinta ("Razonando…" → "Escribiendo…" → "Terminando…"). Registros viejos sin fase la
-# tratan como "" (la UI cae a su comportamiento previo).
+# El acumulador deriva las dos primeras del propio stream ("guardando" la fija el
+# finalizador); se persiste en el registro y la UI la pinta ("Razonando…" →
+# "Escribiendo…" → "Terminando…"). Registros viejos sin fase la tratan como "" (la UI
+# cae a su comportamiento previo).
 FASE_RAZONANDO = "razonando"
 FASE_GENERANDO = "generando"
+FASE_GUARDANDO = "guardando"
 FASE_COMPLETADO = "completado"
 
 # Tope de la cola de razonamiento (thinking) que retenemos para mostrar en vivo: el
