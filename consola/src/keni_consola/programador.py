@@ -50,8 +50,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
+from keni_shared import marcas
 
-from . import config, marcas, repos
+from . import config, repos
 from .dominio import licencia_imagen
 from .estados import ESTADO_PROGRAMADO
 from .tiempo import iso_utc

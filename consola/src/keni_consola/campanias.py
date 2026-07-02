@@ -26,8 +26,9 @@ from urllib.parse import urlsplit
 
 from keni_metricas import config as km_config
 from keni_metricas import ga4, servicio
+from keni_shared import marcas
 
-from . import marcas, metricas_cache, repos
+from . import metricas_cache, repos
 from .tiempo import ahora_iso
 
 _log = logging.getLogger("keni_consola.campanias")

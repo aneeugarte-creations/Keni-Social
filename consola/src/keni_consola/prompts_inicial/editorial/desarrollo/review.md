@@ -22,7 +22,7 @@ actualizado: 2026-06-18T00:00:00+00:00
 
 ## Checklist de seams y tests
 
-- Cada seam que tocaste tiene su OTRO lado propagado en el mismo commit (fachada de reexport: import + `__all__`; router: declarado/enrutado; forma observable: tests actualizados).
+- Cada seam que tocaste tiene su OTRO lado propagado en el mismo commit (barrel `repos`: auto-derivado; router: declarado/enrutado; forma observable: tests actualizados).
 - `grep` de consumidores hecho para toda firma de API, forma de respuesta, esquema de BD o contrato de fronteras que cambiaste.
 - Tests de comportamiento actualizados en el mismo commit. No dejes rojos huérfanos para el CI.
 

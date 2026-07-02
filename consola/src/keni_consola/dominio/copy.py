@@ -14,7 +14,9 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
-from .. import limites_plataforma, patrones_marca, redes, repos
+from keni_shared import limites_plataforma
+
+from .. import patrones_marca, redes, repos
 from . import piezas as contrato_publicaciones
 from . import stream
 

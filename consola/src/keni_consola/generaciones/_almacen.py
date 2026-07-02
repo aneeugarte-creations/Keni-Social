@@ -24,9 +24,9 @@ from typing import Any
 
 import yaml
 from keni_shared.esquema_yaml import migrar, sellar
+from keni_shared.io_atomico import bloqueo_archivo, escribir_atomico
 
 from .. import config, rutas
-from ..io_atomico import bloqueo_archivo, escribir_atomico
 from ._comun import (
     _ES_ID,
     _ESTADOS_TERMINALES,

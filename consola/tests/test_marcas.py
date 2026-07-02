@@ -4,16 +4,15 @@ Cubre: un solo catalogo (no dos) con 5 marcas (el golf NO es marca, es un
 sub-vertical editorial de Claro Sports), traduccion id canonico <-> id_metricas,
 y los helpers de la frontera con metricas.
 
-FUENTE UNICA: el catalogo canonico vive en `keni_shared.marcas`;
-`keni_consola.marcas` lo REEXPORTA y `keni_metricas` tambien lo importa.
-Estos tests verifican via el reexport de la consola (que es como lo usa su codigo)
-y que la fuente es UNICA de verdad: un cambio en keni_shared se ve en consola y
-en keni_metricas sin tocar espejos.
+FUENTE UNICA: el catalogo canonico vive en `keni_shared.marcas`; la consola y
+`keni_metricas` lo importan de ahi directamente. Estos tests verifican que la
+fuente es UNICA de verdad: un cambio en keni_shared se ve en consola y en
+keni_metricas sin tocar espejos.
 """
 
 from __future__ import annotations
 
-from keni_consola import marcas
+from keni_shared import marcas
 
 
 def test_catalogo_unico_sin_duplicados():
@@ -101,15 +100,6 @@ def test_caidas_a_id_cuando_desconocido():
 # --------------------------------------------------------------------------- #
 # La fuente es UNICA e IMPORTABLE (keni_shared), no espejada.                   #
 # --------------------------------------------------------------------------- #
-
-
-def test_la_fuente_es_keni_shared_no_un_espejo():
-    # `keni_consola.marcas` REEXPORTA `keni_shared.marcas`: es el MISMO objeto, no
-    # una copia. Un cambio en keni_shared se refleja en la consola sin tocar nada.
-    from keni_shared import marcas as ks_marcas
-
-    assert marcas.MARCAS is ks_marcas.MARCAS
-    assert marcas.id_metricas_de is ks_marcas.id_metricas_de
 
 
 def test_metricas_deriva_de_la_misma_fuente_unica():

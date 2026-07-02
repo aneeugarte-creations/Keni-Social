@@ -26,7 +26,9 @@ import re
 import unicodedata
 from typing import Any
 
-from .. import config, hashtags_biblioteca, marcas, repos
+from keni_shared import marcas
+
+from .. import config, hashtags_biblioteca, repos
 from . import generar, jobspec
 
 _log = logging.getLogger("keni_consola.sugerir_hashtags")

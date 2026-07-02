@@ -30,14 +30,15 @@ from __future__ import annotations
 
 import re
 
+from keni_shared import marcas
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import marcas, repos
-from ..bootstrap_categorias import slug_hashtag
+from .. import repos
 from .._http_json import leer_json
+from ..bootstrap_categorias import slug_hashtag
 from ..estados import (
     CADENCIA_LINEA_DEFECTO,
     CADENCIAS_LINEA,

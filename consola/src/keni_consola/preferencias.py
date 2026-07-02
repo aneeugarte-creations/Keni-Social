@@ -20,8 +20,9 @@ import os
 import tomllib
 from pathlib import Path
 
+from keni_shared.io_atomico import escribir_atomico
+
 from . import config, rutas
-from .io_atomico import escribir_atomico
 
 # Niveles validos de `claude --effort` (ver `claude --help`), de menor a mayor
 # esfuerzo. La UI respeta este orden al pintar el selector.

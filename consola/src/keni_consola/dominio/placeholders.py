@@ -27,7 +27,8 @@ from __future__ import annotations
 import re
 from datetime import date
 
-from .. import marcas
+from keni_shared import marcas
+
 from ..tiempo import hoy_utc
 
 # Variables soportadas y su explicacion humana (para el catalogo del frontend). El ORDEN

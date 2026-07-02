@@ -12,11 +12,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from keni_shared import marcas
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ... import autogen_redactar, config, marcas, repos
+from ... import autogen_redactar, config, repos
 from ..._http_json import leer_json
 from ...seguridad import autor_de_peticion
 from ...tiempo import hoy_utc

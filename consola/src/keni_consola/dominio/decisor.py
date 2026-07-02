@@ -19,7 +19,9 @@ import logging
 import re
 from typing import Any
 
-from .. import config, marcas, repos
+from keni_shared import marcas
+
+from .. import config, repos
 from . import generar, jobspec
 
 _log = logging.getLogger("keni_consola.decisor")

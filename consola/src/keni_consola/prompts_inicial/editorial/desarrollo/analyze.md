@@ -20,7 +20,7 @@ keni-social es un monorepo git (NO vive en el Drive; el Drive es solo contexto).
 - `consola/` — el producto. Backend Starlette/uvicorn (Python 3.11+) en `consola/src/keni_consola/`; frontend React+TS+Vite+shadcn en `consola/frontend/src/`. La generación de copy NO la corre el back: el back encola jobs y un servicio `worker` aparte ejecuta `claude -p`.
 - `mcp-metricas/` — MCP de LECTURA de métricas (FastMCP, stdio, local por persona). Solo lectura.
 - `mcp-tablero/` — MCP de ESCRITURA sobre el tablero (crear/mover/actualizar piezas vía la API HTTP de la consola).
-- `keni-shared/` — código compartido (p. ej. `marcas`). Es la FUENTE de varias fachadas de reexport.
+- `keni-shared/` — código compartido (p. ej. `marcas`). Es la FUENTE única que consola y MCPs importan directo.
 - `deploy/` — Docker Compose, Dockerfiles, Traefik, Woodpecker CI.
 - `docs/` — ADRs y documentación. Lee los ADR antes de cruzar fronteras.
 
@@ -44,7 +44,7 @@ keni-social es un monorepo git (NO vive en el Drive; el Drive es solo contexto).
 
 ## Señales de que un seam está cerca (anótalas para la fase plan)
 
-- Fachadas de reexport: `keni_consola.marcas` reexporta `keni_shared.marcas` (hay más). Un símbolo nuevo debe ir a la fuente Y al `__all__`/import de la fachada.
+- Fuentes únicas en keni-shared: `marcas`, `limites_plataforma`, `io_atomico` se importan directo de `keni_shared` (no hay fachadas en `keni_consola`). Un símbolo nuevo va a la fuente.
 - Routers nuevos que importan de otra app = CRUCE de frontera (ADR 0005).
 - Formas observables que un test fija: etapas de un daemon, contrato de salida de un prompt, claves u orden de una respuesta de API, el esquema o las restricciones de la base de datos.
 

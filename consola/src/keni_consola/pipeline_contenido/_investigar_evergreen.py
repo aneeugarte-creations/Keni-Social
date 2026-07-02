@@ -13,7 +13,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from .. import config, generaciones, libprompts, marcas, redes, repos
+from keni_shared import marcas
+
+from .. import config, generaciones, libprompts, redes, repos
 from ..dominio import generar as gen_dom
 from ..dominio import jobspec
 from ..estados import ESTADO_EVERGREEN_APROBADA, ESTADO_EVERGREEN_GENERADA

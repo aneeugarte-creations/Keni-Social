@@ -39,8 +39,9 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from keni_metricas import servicio
+from keni_shared import marcas
 
-from . import config, marcas, repos
+from . import config, repos
 
 _log = logging.getLogger("keni_consola.metricas_pieza")
 

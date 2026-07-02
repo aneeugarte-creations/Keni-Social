@@ -34,9 +34,9 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from keni_shared import marcas as cat_marcas
+from keni_shared.io_atomico import escribir_atomico
 
 from . import patrones_marca
-from .io_atomico import escribir_atomico
 
 _log = logging.getLogger("keni_consola.patrones_derivar")
 

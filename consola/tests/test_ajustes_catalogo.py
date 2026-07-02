@@ -554,7 +554,7 @@ def test_config_float_pasa_por_store(store):
 
 
 def _primera_marca() -> str:
-    from keni_consola import marcas
+    from keni_shared import marcas
 
     return marcas.opciones()[0][0]
 

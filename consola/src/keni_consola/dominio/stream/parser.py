@@ -13,7 +13,8 @@ from __future__ import annotations
 import json
 import re
 
-from ... import limites_plataforma
+from keni_shared import limites_plataforma
+
 from .texto import quitar_emojis
 
 # Bloque ```json ... ``` cercado (el ultimo de la salida es el de las piezas).

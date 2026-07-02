@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from . import limites_plataforma
+from keni_shared import limites_plataforma
 
 
 @dataclass(frozen=True)

@@ -67,10 +67,11 @@ from pathlib import Path  # noqa: F401
 from typing import Any  # noqa: F401
 
 import yaml  # noqa: F401
+from keni_shared import marcas  # noqa: F401
 from keni_shared.esquema_yaml import migrar, sellar  # noqa: F401
+from keni_shared.io_atomico import escribir_atomico  # noqa: F401
 
-from .. import indice, marcas, repos  # noqa: F401
-from ..io_atomico import escribir_atomico  # noqa: F401
+from .. import indice, repos  # noqa: F401
 from ._comun import (  # noqa: F401
     _ARCHIVO_MANIFIESTO,
     _DIR_CONTEXTO,
@@ -99,8 +100,8 @@ from ._comun import (  # noqa: F401
 )
 from ._contexto import (  # noqa: F401
     _dir_contexto,
-    _resolver_contexto,
     _reparar_nombre_contexto,
+    _resolver_contexto,
     borrar_contexto,
     guardar_claude_md,
     guardar_contexto,

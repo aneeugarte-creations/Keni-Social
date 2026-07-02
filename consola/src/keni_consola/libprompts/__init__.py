@@ -51,11 +51,11 @@ from datetime import datetime as datetime
 from pathlib import Path as Path
 
 import yaml as yaml
+from keni_shared.io_atomico import escribir_atomico as escribir_atomico
 
 from .. import config as config
 from .. import rutas as rutas
 from .. import versionado as versionado
-from ..io_atomico import escribir_atomico as escribir_atomico
 from ._comun import (
     _CARPETAS_GLOBALES,
     _CLASES_GLOBALES,
@@ -96,25 +96,6 @@ from ._editorial import (
     prompt_base_de,
     validacion_editorial,
 )
-from ._io import _leer, _parsear, _serializar, rev_documento
-from ._publicacion import (
-    ProduccionIlegibleError,
-    aplicar_produccion,
-    cuerpo_publicado,
-    estado_publicacion,
-    produccion_de,
-    producciones,
-    sha_actual,
-    shas_actuales,
-)
-from ._rutas import (
-    _carpeta_relativa,
-    _id_de_ruta,
-    _id_unico,
-    _ruta_de_id,
-    migrar_dir_legacy,
-    raiz,
-)
 from ._inicial import (
     asegurar_linea_base,
     cuerpo_efectivo,
@@ -140,7 +121,25 @@ from ._inicial import (
     publicar_linea_base,
     reformatear_prompts,
 )
-from ._variables import catalogo_variables
+from ._io import _leer, _parsear, _serializar, rev_documento
+from ._publicacion import (
+    ProduccionIlegibleError,
+    aplicar_produccion,
+    cuerpo_publicado,
+    estado_publicacion,
+    produccion_de,
+    producciones,
+    sha_actual,
+    shas_actuales,
+)
+from ._rutas import (
+    _carpeta_relativa,
+    _id_de_ruta,
+    _id_unico,
+    _ruta_de_id,
+    migrar_dir_legacy,
+    raiz,
+)
 from ._validacion import (
     _validar_clase,
     _validar_etiquetas,
@@ -149,6 +148,7 @@ from ._validacion import (
     _validar_prioridad,
     _validar_rol,
 )
+from ._variables import catalogo_variables
 from ._versiones import (
     descartar_borrador,
     fijar_version,

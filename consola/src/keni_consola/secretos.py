@@ -35,8 +35,9 @@ import os
 import tomllib
 from pathlib import Path
 
+from keni_shared.io_atomico import escribir_atomico
+
 from . import config, rutas
-from .io_atomico import escribir_atomico
 
 # Variables de entorno que pueden INYECTAR el secreto de imagen (ver docstring).
 # Nombres canonicos en `config` (fuente unica); re-exportados aqui (tests los referencian).

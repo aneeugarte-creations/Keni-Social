@@ -20,7 +20,8 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
-from .. import marcas
+from keni_shared import marcas
+
 from ._comun import (
     _ARCHIVO_MANIFIESTO,
     _DIR_KENI,

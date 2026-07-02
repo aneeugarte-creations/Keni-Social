@@ -34,11 +34,12 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from keni_shared import marcas
 from keni_shared.esquema_yaml import migrar, sellar
+from keni_shared.io_atomico import escribir_atomico
 
-from . import config, indice, marcas, rutas
+from . import config, indice, rutas
 from .estados import ESTADOS_PIEZA, ESTADOS_TAREA  # re-export para la fachada
-from .io_atomico import escribir_atomico
 from .tiempo import hoy_utc, iso_utc
 
 _log = logging.getLogger("keni_consola.ficheros")

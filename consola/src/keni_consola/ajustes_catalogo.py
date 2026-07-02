@@ -20,7 +20,9 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from . import ajustes, config, marcas, preferencias
+from keni_shared import marcas
+
+from . import ajustes, config, preferencias
 from .dominio.agrupar import UMBRAL_MIN_SCORE_DEF as _UMBRAL_MIN_SCORE_DEF
 from .dominio.generar import MAX_SLIDES_CARRUSEL as _MAX_SLIDES_CARRUSEL
 

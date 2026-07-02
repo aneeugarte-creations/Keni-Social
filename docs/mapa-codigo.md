@@ -77,13 +77,11 @@ Cada uno exporta un `iniciar_*`; casi todos GATEADOS por env var (OFF por defect
 - `indice.py` — índice REGENERABLE del backend de ficheros (NO es la fuente de verdad).
 - `texto.py` — almacén ÚNICO: PROMPTS + LÍNEA EDITORIAL (files-as-truth).
 - `plantillas_marca.py` — store EDITABLE de la "Plantilla de marca" del Estudio.
-- `io_atomico.py` — escritura atómica de texto (REEXPORTA `keni_shared.io_atomico`).
 
 ## Catálogo / datos de referencia
-- `marcas.py` — catálogo de marca (REEXPORTA `keni_shared.marcas`).
 - `redes.py` — fuente ÚNICA de las redes destino de copy.
+- Catálogo de marcas, límites de caracteres y escritura atómica: viven en `keni_shared` (`marcas`, `limites_plataforma`, `io_atomico`); la consola los importa directo, sin fachadas.
 - `estados.py` — constantes neutras de DOMINIO (allowlists de estados/métricas).
-- `limites_plataforma.py` — límites de caracteres (REEXPORTA `keni_shared.limites_plataforma`).
 - `agentes.py` — dominio AGENTES: el conjunto ABIERTO de agentes.
 - `agencias.py` — adaptadores de agencias de noticias (Reuters/AFP) como fuentes.
 - `bootstrap_lineas.py` — inicial idempotente de LÍNEAS de contenido y orígenes.

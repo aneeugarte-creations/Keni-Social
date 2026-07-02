@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from keni_shared import marcas
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ... import marcas, repos
+from ... import repos
 from ..._http_json import _entero_query
 from ...pipeline_contenido import (
     ORIGEN_PIPELINE,

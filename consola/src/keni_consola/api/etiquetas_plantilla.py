@@ -13,12 +13,13 @@ El catálogo de rótulos POR DEFECTO (y la lista de categorías presentes) vive 
 """
 from __future__ import annotations
 
+from keni_shared import marcas
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import marcas, repos
+from .. import repos
 from .._http_json import leer_json
 from .plantillas_diseno import _normalizar_categoria as _normalizar_slug
 

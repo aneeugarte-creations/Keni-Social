@@ -14,12 +14,12 @@ import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from keni_shared import marcas
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ... import bootstrap_categorias, marcas, permisos, redes, repos
-from ...dominio import licencia_imagen
+from ... import bootstrap_categorias, permisos, redes, repos
 from ..._http_json import (
     cursor_query,
     envoltura_paginacion,
@@ -27,6 +27,7 @@ from ..._http_json import (
     paginacion_query,
     tope_listado,
 )
+from ...dominio import licencia_imagen
 from ...estados import (
     ESTADO_BORRADOR,
     ESTADO_EN_REVISION,

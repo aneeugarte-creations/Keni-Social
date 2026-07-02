@@ -18,11 +18,12 @@ Solo SESIÓN admin/superadmin (el reparto gobierna el gasto de toda la operació
 
 from __future__ import annotations
 
+from keni_shared import marcas
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ... import marcas, ruteo_cuentas
+from ... import ruteo_cuentas
 from ...dominio import jobspec
 from ._comun import _es_admin, _rechazo_no_admin
 

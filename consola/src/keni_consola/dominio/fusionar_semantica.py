@@ -763,7 +763,7 @@ def _guardar_encolado(data: dict[str, Any]) -> None:
     if ruta is None:
         return
     try:
-        from ..io_atomico import escribir_atomico
+        from keni_shared.io_atomico import escribir_atomico
 
         ruta.parent.mkdir(parents=True, exist_ok=True)
         escribir_atomico(ruta, json.dumps(data, ensure_ascii=False, indent=2))
@@ -854,7 +854,9 @@ def fusionar_marca(
     gasto de esas sub-llamadas bajo su propia etapa («Cotejar»/«Subtema»), que de otro modo quedaría
     huérfano (el job solo registra el coste de la pasada principal, etapa «Fusionar»).
     """
-    from .. import config, marcas, repos
+    from keni_shared import marcas
+
+    from .. import config, repos
     from . import agrupar
 
     ref = ahora or datetime.now(UTC)
@@ -987,7 +989,8 @@ def construir_procesar_fusionar(marca: str, recientes: list[dict[str, Any]]):  #
     terminar limpia el marcador de fusión en curso de la marca. Devuelve `{grupos, fusionadas,
     familias, anclas}`.
     """
-    from .. import marcas
+    from keni_shared import marcas
+
     from . import actividad_pool, traducir
 
     etiqueta_marca = marcas.etiqueta_de(marca) if marca else "sin marca"

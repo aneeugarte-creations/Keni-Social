@@ -1,7 +1,7 @@
 """Tests de la API Limites (/api/limites) y de la fuente unica de los topes.
 
-Los limites de caracteres por red viven SOLO en `limites_plataforma`; el
-endpoint los expone y `redes.py` los consume sin redefinirlos. OFFLINE, sin red.
+Los limites de caracteres por red viven SOLO en `keni_shared.limites_plataforma`;
+el endpoint los expone y `redes.py` los consume sin redefinirlos. OFFLINE, sin red.
 
 Guard CRUZADO backend <-> frontend. La inicial `_LIMITES_BASE` de
 `consola/frontend/.../meta.ts` (espejo del backend, usado antes de hidratar desde
@@ -17,8 +17,9 @@ import re
 from pathlib import Path
 
 import pytest
+from keni_shared import limites_plataforma
 
-from keni_consola import limites_plataforma, redes
+from keni_consola import redes
 
 # Raiz del monorepo: consola/tests/test_api_limites.py -> parents[2].
 _REPO = Path(__file__).resolve().parents[2]
@@ -43,14 +44,6 @@ def test_redes_consume_la_fuente_unica_de_limites():
     # `redes.REDES.limite` NO se redefine: es exactamente `limites_plataforma`.
     for r in redes.REDES:
         assert r.limite == limites_plataforma.limite_de(r.id)
-
-
-def test_la_fuente_de_limites_es_keni_shared_no_un_espejo():
-    # `keni_consola.limites_plataforma` REEXPORTA `keni_shared`. Es la MISMA
-    # tabla: un cambio en keni_shared se ve en la consola sin tocar nada.
-    from keni_shared import limites_plataforma as ks_limites
-
-    assert limites_plataforma.LIMITES is ks_limites.LIMITES
 
 
 def test_tiktok_reconciliado_a_4000():

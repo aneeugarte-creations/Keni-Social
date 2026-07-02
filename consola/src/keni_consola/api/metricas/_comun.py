@@ -13,12 +13,12 @@ import logging
 from collections.abc import Iterable
 
 from keni_metricas import servicio
+from keni_shared import marcas
 from keni_shared.metricas import engagement_pct
 from starlette.requests import Request
 from starlette.responses import Response
 
 from ... import (
-    marcas,
     metricas_cache,
     metricas_categoria,
     metricas_pieza,

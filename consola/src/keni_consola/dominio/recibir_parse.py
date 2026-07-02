@@ -27,7 +27,9 @@ import tempfile
 from collections.abc import Callable
 from typing import Any
 
-from .. import config, marcas
+from keni_shared import marcas
+
+from .. import config
 from . import json_llm
 
 _log = logging.getLogger("keni_consola.dominio.recibir_parse")

@@ -39,13 +39,14 @@ superficie pública (mismo nombre de import `keni_consola.recolectar_daemon`):
 
 from __future__ import annotations
 
+from keni_shared import marcas  # noqa: F401  (re-export de superficie pública)
+
 from .. import (  # noqa: F401  (re-export de superficie pública)
     agencias,
     config,
     daemon_util,
     db,
     generaciones,
-    marcas,
     noticias_umbral,
     repos,
 )
@@ -88,8 +89,8 @@ from ._comun import (  # noqa: F401
 
 # Pasos (parcheables sobre el facade: el orquestador los invoca vía `_pkg.paso_*`).
 from .pasos.agencias import paso_agencias  # noqa: F401
-from .pasos.caducidad import paso_caducidad  # noqa: F401
 from .pasos.agrupar import paso_agrupar  # noqa: F401
+from .pasos.caducidad import paso_caducidad  # noqa: F401
 from .pasos.etiquetas import paso_etiquetas  # noqa: F401
 from .pasos.fusionar_semantica import paso_fusionar_semantica  # noqa: F401
 from .pasos.rescore import paso_rescore  # noqa: F401

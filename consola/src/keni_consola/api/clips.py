@@ -32,12 +32,13 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from keni_shared import marcas
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import generaciones, marcas, redes, repos
+from .. import generaciones, redes, repos
 from .._http_json import leer_json
 from ..dominio import generar as gen_dom
 from ..estados import FLUJO_IMPORTANTE, ORIGEN_CLIPS

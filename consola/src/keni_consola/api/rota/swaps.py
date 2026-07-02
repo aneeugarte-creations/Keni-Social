@@ -3,11 +3,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from keni_shared import marcas
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ... import auth, marcas, repos
+from ... import auth, repos
 from ..._http_json import leer_json
 from ...dominio import notificaciones_turnos
 from ...estados import (

@@ -15,12 +15,12 @@ from __future__ import annotations
 import logging
 
 from keni_metricas import servicio
+from keni_shared import marcas
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import marcas
 from ..tiempo import ahora_iso
 
 _log = logging.getLogger("keni_consola.api.inbox")

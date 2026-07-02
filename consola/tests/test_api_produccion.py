@@ -158,7 +158,8 @@ def test_produccion_dia_marca_invalida_400(entorno):
 # Backlog de la CADENA (`GET /api/produccion/backlog`): embalse por marca×etapa #
 # --------------------------------------------------------------------------- #
 
-from keni_consola import marcas  # noqa: E402 -- import local para los tests del backlog
+from keni_shared import marcas  # noqa: E402 -- import local para los tests del backlog
+
 from keni_consola.api import produccion as produccion_api  # noqa: E402
 
 

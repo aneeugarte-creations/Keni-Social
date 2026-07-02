@@ -19,6 +19,7 @@ COMPONE/RENDERIZA de forma determinista (plantilla de marca + documento de capas
 # pública Y privada (consumidores hacen `estudio_imagen.X`, incluido `estudio_imagen._privado`).
 
 from __future__ import annotations
+
 import copy
 import json
 import os
@@ -28,12 +29,13 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from keni_shared import marcas
+
 from ... import (
     formatos_red,
     generaciones,
     libprompts,
     marca_assets,
-    marcas,
     media,
     plantillas_marca,
     repos,

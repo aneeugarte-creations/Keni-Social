@@ -43,6 +43,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+from keni_shared import marcas
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -55,7 +56,6 @@ from .. import (
     config,
     gate_diario,
     generaciones,
-    marcas,
     permisos,
     presupuesto_ia,
     repos,

@@ -13,7 +13,9 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from ... import marcas, media, plantillas_marca, repos
+from keni_shared import marcas
+
+from ... import media, plantillas_marca, repos
 from ...motores.estudio_imagen import documento as doc_capas
 from . import _ref
 from ._comun import (

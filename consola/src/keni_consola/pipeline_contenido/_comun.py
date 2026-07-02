@@ -14,7 +14,9 @@ import logging
 import re
 from typing import Any
 
-from .. import config, generaciones, marcas, redes, repos
+from keni_shared import marcas
+
+from .. import config, generaciones, redes, repos
 from ..dominio import http_feed
 from ..dominio import verificar_fuente as dom_verificar
 

@@ -26,6 +26,7 @@ import json
 import logging
 from typing import AsyncIterator
 
+from keni_shared import marcas
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
@@ -37,7 +38,6 @@ from .. import (
     autogen_stock,
     fotos_tunel,
     libprompts,
-    marcas,
     media,
     repos,
     stock_fotos,

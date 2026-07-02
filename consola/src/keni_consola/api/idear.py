@@ -29,12 +29,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from keni_shared import marcas
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import generaciones, marcas, permisos, repos
+from .. import generaciones, permisos, repos
 from .._http_json import leer_json
 from ..dominio import idear as dom_idear
 from ..estados import (

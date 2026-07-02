@@ -16,9 +16,13 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-from .. import config, daemon_util, generaciones, marcas, repos
+from keni_shared import marcas
+
+from .. import config, daemon_util, generaciones, repos
 from ..tiempo import hoy_utc
 from . import _admitir, _intentos, _ref
+from ._admitir import clusters_pendientes_verificar, promover_clusters_marca
+from ._avance import ejecutar_avance
 from ._comun import (
     _MAX_INTENTOS_ETAPA,
     VERIFICACION_EN_CURSO,
@@ -29,9 +33,7 @@ from ._comun import (
     _log,
     marcar_fallo_etapa,
 )
-from ._avance import ejecutar_avance
 from ._redactar import lanzar_redactar_de_tema, temas_autogen_sin_copy, temas_para_redactar
-from ._admitir import clusters_pendientes_verificar, promover_clusters_marca
 from ._verificar import lanzar_verificar_cluster
 
 __all__ = [

@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import json
 
-from ... import marcas, redes
+from keni_shared import marcas
+
+from ... import redes
 from ...estados import ORIGENES_AUTOGEN
 from ...pipeline_contenido import (
     ORIGEN_PIPELINE,

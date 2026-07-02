@@ -39,13 +39,14 @@ from __future__ import annotations
 import json
 import logging
 
+from keni_shared import marcas
 from keni_shared import video as video_shared
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import db, generaciones, marcas, repos
+from .. import db, generaciones, repos
 from .._http_json import leer_json
 from ..dominio import jobspec
 
@@ -125,7 +126,7 @@ async def formatos(request: Request) -> Response:
     UI sugiera el formato segun el destino.
     """
     # Mapa preset -> redes que lo usan (por el aspecto sugerido de cada red).
-    from ..limites_plataforma import VIDEO_SPECS  # shell: catalogo de specs de video por red
+    from keni_shared.limites_plataforma import VIDEO_SPECS  # shell: catalogo de specs de video por red
 
     redes_por_preset: dict[str, list[str]] = {nombre: [] for nombre in video_shared.PRESETS_FORMATO}
     for red_id in VIDEO_SPECS:

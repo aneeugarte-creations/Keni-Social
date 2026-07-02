@@ -18,7 +18,9 @@ import secrets
 from pathlib import Path
 from typing import Any
 
-from .. import config, generaciones, libprompts, limites_plataforma, marcas, redes
+from keni_shared import limites_plataforma, marcas
+
+from .. import config, generaciones, libprompts, redes
 from . import jobspec, prioridad
 from .placeholders import fecha_es
 

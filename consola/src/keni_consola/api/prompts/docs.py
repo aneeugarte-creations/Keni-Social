@@ -7,10 +7,11 @@ disponibles) que pueblan los selectores del SPA. Errores como JSON en español.
 
 from __future__ import annotations
 
+from keni_shared import marcas
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ... import libprompts, marcas
+from ... import libprompts
 from ..._http_json import leer_json
 from ._comun import _doc_json
 

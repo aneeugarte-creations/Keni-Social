@@ -21,7 +21,9 @@ import logging
 import re
 from typing import Any
 
-from .. import marcas, redes, repos
+from keni_shared import marcas
+
+from .. import redes, repos
 from . import copy as dom_copy
 from . import generar, jobspec
 

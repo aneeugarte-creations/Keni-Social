@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from .. import config, generaciones, libprompts, marcas, redes, repos
+from keni_shared import marcas
+
+from .. import config, generaciones, libprompts, redes, repos
 from ..dominio import generar as gen_dom
 from ..dominio import jobspec
 from ..dominio import verificar_fuente as dom_verificar
@@ -19,8 +21,8 @@ from ._comun import (
     _TITULO_VERIFICACION,
     ETAPA_VERIFICAR,
     PROMPT_VERIFICACION_ID,
-    VERIFICACION_EN_CURSO,
     TIPO_PIPELINE,
+    VERIFICACION_EN_CURSO,
     _log,
     registrar_etapa,
 )

@@ -24,12 +24,11 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+from keni_shared import marcas as _km
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
-
-from keni_shared import marcas as _km
 
 from .. import config, db, permisos, repos
 from .._http_json import leer_json
@@ -233,7 +232,9 @@ def _emitir_pieza_aprobada(pub: dict[str, Any]) -> None:
     Un fallo de notificación nunca tumba la aprobación ya registrada.
     """
     try:
-        from .. import marcas, redes
+        from keni_shared import marcas
+
+        from .. import redes
         from ..dominio import eventos
 
         marca = pub.get("marca", "") or ""

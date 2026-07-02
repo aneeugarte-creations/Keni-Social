@@ -14,7 +14,9 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from ... import config, generaciones, marcas, repos, ruteo_cuentas
+from keni_shared import marcas
+
+from ... import config, generaciones, repos, ruteo_cuentas
 from ...dominio import jobspec, traducir
 from ...tiempo import iso_utc
 from .._comun import _log

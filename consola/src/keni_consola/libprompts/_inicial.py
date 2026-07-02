@@ -9,7 +9,8 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from ..io_atomico import escribir_atomico
+from keni_shared.io_atomico import escribir_atomico
+
 from ._comun import (
     CLASES,
     ROLES_PROMPT,

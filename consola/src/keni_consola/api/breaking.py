@@ -32,18 +32,19 @@ from __future__ import annotations
 
 import logging
 
+from keni_shared import marcas
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import autogen_redactar, marcas, redes, repos
-from ._guardas import redactar_apagado
+from .. import autogen_redactar, redes, repos
 from .._http_json import leer_json
 from ..dominio import breaking as dom_breaking
 from ..estados import FLUJO_IMPORTANTE
 from ..seguridad import autor_de_peticion
 from ..tiempo import hoy_utc
+from ._guardas import redactar_apagado
 
 _log = logging.getLogger("keni_consola.api.breaking")
 

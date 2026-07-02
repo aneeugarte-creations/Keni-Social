@@ -31,19 +31,20 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
+from keni_shared import marcas
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import autogen_redactar, config, generaciones, marcas, redes, repos, rutas
-from ._guardas import redactar_apagado
+from .. import autogen_redactar, config, generaciones, redes, repos, rutas
 from .._http_json import leer_json
-from ..dominio import indicaciones, ingesta, recibir_parse, jobspec
+from ..dominio import indicaciones, ingesta, jobspec, recibir_parse
 from ..dominio.frescura import estado_frescura, resolver_linea
 from ..seguridad import autor_de_peticion
 from ..tiempo import hoy_utc
+from ._guardas import redactar_apagado
 
 _log = logging.getLogger("keni_consola.api.insumos")
 

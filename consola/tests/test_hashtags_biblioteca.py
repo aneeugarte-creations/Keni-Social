@@ -6,8 +6,9 @@ Tests PUROS: cargan los JSON semilla versionados, sin tocar BD.
 
 from __future__ import annotations
 
+from keni_shared import marcas
+
 import keni_consola.hashtags_biblioteca as hb
-from keni_consola import marcas
 
 # Cuántos sugerir por red, según `med.sql` sobre el historial anual (mediana entre quienes
 # etiquetan; 0 donde la red apenas usa hashtags).

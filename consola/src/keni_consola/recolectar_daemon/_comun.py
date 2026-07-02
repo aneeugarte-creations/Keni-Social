@@ -21,9 +21,11 @@ import logging
 from datetime import timedelta
 from typing import Any
 
+from keni_shared import marcas
+
 import keni_consola.recolectar_daemon as _pkg
 
-from .. import config, generaciones, marcas, noticias_umbral, repos
+from .. import config, generaciones, noticias_umbral, repos
 from ..dominio import fusionar_semantica, traducir
 from ..tiempo import ahora_iso, hoy_utc
 

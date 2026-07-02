@@ -9,10 +9,11 @@ endpoints en CI; aqui validamos el contrato HTTP de forma aislada.
 from __future__ import annotations
 
 import pytest
+from keni_shared import marcas
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
-from keni_consola import libprompts, generaciones, marcas
+from keni_consola import generaciones, libprompts
 from keni_consola.api import prompts as api_prompts
 
 _MARCA = marcas.opciones()[0][0]

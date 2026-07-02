@@ -18,12 +18,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from keni_shared import marcas
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import bootstrap_categorias, marcas, redes, repos
+from .. import bootstrap_categorias, redes, repos
 from .._http_json import leer_json
 
 # La logica de scheduling (PURA y testeable) vive en el dominio `dominio.franjas`. Se
@@ -32,9 +33,9 @@ from .._http_json import leer_json
 # `from . import franjas as api_franjas; api_franjas.proximo_hueco(...)`).
 from ..dominio.franjas import (  # noqa: F401  (re-export para compatibilidad)
     franjas_aplicables,
+    hora_valida,
     proximo_hueco,
 )
-from ..dominio.franjas import hora_valida
 
 # Marcas validas: TODAS las del catalogo unico (por su id canonico). Mismo criterio
 # que piezas.

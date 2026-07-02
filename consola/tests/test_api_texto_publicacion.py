@@ -16,10 +16,11 @@ from __future__ import annotations
 import shutil
 
 import pytest
+from keni_shared import marcas
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
-from keni_consola import generaciones, libprompts, marcas, versionado
+from keni_consola import generaciones, libprompts, versionado
 from keni_consola.api import prompts as api_prompts
 from keni_consola.dominio import generar
 

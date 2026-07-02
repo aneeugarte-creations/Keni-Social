@@ -37,13 +37,14 @@ from __future__ import annotations
 import json
 import logging
 
+from keni_shared import marcas
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import db, generaciones, marcas, media, repos, seguridad
+from .. import db, generaciones, media, repos, seguridad
 from .._http_json import leer_json
 from ..dominio import audio_artefactos, jobspec
 

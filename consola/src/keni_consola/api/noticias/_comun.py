@@ -12,7 +12,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from ... import marcas, redes
+from keni_shared import marcas
+
+from ... import redes
 
 # Paginación: defecto holgado (el archivo es un flujo continuo) y tope duro defensivo.
 _LIMITE_DEFECTO = 50

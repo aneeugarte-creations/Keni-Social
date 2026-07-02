@@ -7,10 +7,11 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from keni_shared import marcas
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ... import auth, marcas, permisos, repos
+from ... import auth, permisos, repos
 from ... import rota as dominio
 
 # Patron HH:MM con 00:00..24:00 (24:00 valido como FIN exclusivo de franja).

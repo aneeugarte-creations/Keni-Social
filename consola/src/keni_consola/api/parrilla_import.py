@@ -28,6 +28,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from keni_shared import marcas
 from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
@@ -35,7 +36,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import auth, generaciones, marcas, media, repos
+from .. import auth, generaciones, media, repos
 from .. import rota as dominio_rota
 from ..dominio import extraccion_url
 from ..dominio import parrilla_import as pi

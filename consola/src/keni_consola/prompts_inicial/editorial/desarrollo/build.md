@@ -32,7 +32,7 @@ Un comentario describe QUÉ hace el código HOY, no el historial de bugs. Prohib
 
 Casi todos los rojos recientes son el mismo patrón: un cambio aplicado a un lado de una frontera y no al otro. Antes de terminar, propaga la pareja de cada seam que tocaste:
 
-- **Fachada de reexport**: símbolo en la fuente (`keni_shared`) → añádelo al import Y al `__all__` de la fachada (`keni_consola.marcas`, etc.). Si falta, lo verás como `module '…' has no attribute 'X'` en montones de tests.
+- **Fuente única en keni-shared**: `marcas`, `limites_plataforma` e `io_atomico` viven SOLO en `keni_shared` y se importan de ahí (`from keni_shared import marcas`); no hay fachadas de reexport en `keni_consola`.
 - **Router nuevo**: autodescubierto bajo `api/`; si es top-level se declara en `apps/<app>.toml`; si cruza apps, enrútalo por keni-shared/gateway o añádelo a `SEAMS_PERMITIDOS` con justificación. Si declarar el `.toml` es propiedad del orquestador, déjalo en el informe.
 - **Forma observable**: actualiza los tests que fijan la forma, en este commit.
 

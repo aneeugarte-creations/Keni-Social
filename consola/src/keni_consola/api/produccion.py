@@ -37,12 +37,13 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from keni_shared import marcas
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import bootstrap_categorias, config, marcas, pipeline_estado, redes, repos
+from .. import bootstrap_categorias, config, pipeline_estado, redes, repos
 from ..tiempo import ahora_iso, inicio_dia_cdmx_iso_utc
 
 _log = logging.getLogger("keni_consola.api.produccion")

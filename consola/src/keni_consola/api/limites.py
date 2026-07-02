@@ -11,11 +11,12 @@ Solo lectura, sin estado: devuelve datos puros del catalogo de redes + su tope.
 
 from __future__ import annotations
 
+from keni_shared import limites_plataforma
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import limites_plataforma, redes
+from .. import redes
 
 
 async def listar(request: Request) -> Response:

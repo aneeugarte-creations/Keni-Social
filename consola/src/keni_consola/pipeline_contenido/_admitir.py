@@ -10,7 +10,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from .. import config, marcas, redes, repos
+from keni_shared import marcas
+
+from .. import config, redes, repos
 from ..dominio import dedup
 from ..dominio import generar as gen_dom
 from ..tiempo import hoy_utc
@@ -251,7 +253,8 @@ def traducir_par_ahora(titulo: str, resumen: str, *, marca: str = "") -> tuple[s
     traducción en el acto es una llamada Haiku real cuyo coste, antes, se descartaba —quedaba
     invisible en la economía—."""
     from .. import presupuesto_ia
-    from ..dominio import actividad_pool, traducir as _traducir
+    from ..dominio import actividad_pool
+    from ..dominio import traducir as _traducir
 
     # GATE de economía (mismo helper y criterio que el pre-check de la ingesta, `bloqueo_inline`):
     # esta traducción corre `claude` FUERA de la cola, así que sin esto se saltaría el kill switch,

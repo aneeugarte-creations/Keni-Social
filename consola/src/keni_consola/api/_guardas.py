@@ -9,7 +9,9 @@ auto (`KENI_MAQUINA`) NO se mira aquí: el botón es acción humana, solo respet
 
 from __future__ import annotations
 
-from .. import config, marcas
+from keni_shared import marcas
+
+from .. import config
 
 
 def redactar_apagado(marca: str) -> dict | None:

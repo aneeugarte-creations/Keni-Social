@@ -28,8 +28,9 @@ import threading
 import tomllib
 from pathlib import Path
 
+from keni_shared.io_atomico import escribir_atomico
+
 from . import rutas
-from .io_atomico import escribir_atomico
 
 # Nombre de la env var que sobreescribe la ruta del store (override de maxima prioridad;
 # tests y deploy multi-proceso). Se declara TAMBIEN en `config.ENV_AJUSTES` (fuente unica

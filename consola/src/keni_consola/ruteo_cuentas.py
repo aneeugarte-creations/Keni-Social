@@ -112,7 +112,7 @@ def marcas_de_cuenta(cuenta: str) -> list[str]:
     Recorre el catálogo vivo de marcas y se queda con las que `cuenta_de_marca` rutea a `cuenta`
     (incluye las que caen ahí por la cuenta por defecto). Base de la etiqueta legible del indicador.
     """
-    from . import marcas
+    from keni_shared import marcas
 
     return [m for m in marcas.ids() if cuenta_de_marca(m) == cuenta]
 
@@ -122,7 +122,7 @@ def etiqueta_de_cuenta(cuenta: str) -> str:
 
     P. ej. la cuenta B -> "UnoTV · Nación Gamer". Cadena vacía si la cuenta no sirve ninguna marca.
     """
-    from . import marcas
+    from keni_shared import marcas
 
     return " · ".join(marcas.etiqueta_de(m) for m in marcas_de_cuenta(cuenta))
 

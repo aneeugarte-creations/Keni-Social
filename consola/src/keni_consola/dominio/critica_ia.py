@@ -112,7 +112,7 @@ def _componer_prompt(*, pub: dict[str, Any], marca: str, red: str, ruta_arte: st
             "aparte). No puedes juzgar la imagen: evalúa solo el texto y, si esta red exige una "
             "foto real para publicar, anótalo como observación."
         )
-    from .. import marcas
+    from keni_shared import marcas
 
     sust = {
         "{{MARCA}}": marcas.etiqueta_de(marca) or marca or "la marca",
@@ -246,7 +246,7 @@ def _minimo_humano(
     Una cadena LEGADA mas larga que el umbral de su marca no pide mas OK que la marca (ni mas que
     niveles humanos tiene): la aprobacion se completa al alcanzar este minimo.
     """
-    from .. import marcas
+    from keni_shared import marcas
 
     return min(
         marcas.likes_aprobacion_de(str((pub or {}).get("marca") or "")),

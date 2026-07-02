@@ -6,8 +6,9 @@ import re
 import shutil
 from pathlib import Path
 
+from keni_shared.io_atomico import escribir_atomico
+
 from .. import versionado
-from ..io_atomico import escribir_atomico
 from ._comun import (
     _CLASES_GLOBALES,
     _PAPELERA,

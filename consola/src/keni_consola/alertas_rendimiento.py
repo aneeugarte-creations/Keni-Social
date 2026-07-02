@@ -14,7 +14,9 @@ import logging
 import threading
 from datetime import UTC, date, datetime, timedelta
 
-from . import config, daemon_util, marcas, metricas_pieza, redes, repos
+from keni_shared import marcas
+
+from . import config, daemon_util, metricas_pieza, redes, repos
 from .dominio import eventos, notificaciones
 from .estados import ESTADO_EN_REVISION
 from .tiempo import hoy_utc

@@ -26,7 +26,9 @@ def _validar_catalogo(caso: CasoEval) -> list[str]:
     """Errores de catálogo del caso (marca/red desconocidas). Reusa los catálogos canónicos."""
     errores: list[str] = []
     try:
-        from keni_consola import marcas, redes
+        from keni_shared import marcas
+
+        from keni_consola import redes
 
         if not marcas.es_marca(caso.marca):
             errores.append(f"marca desconocida: {caso.marca!r}")

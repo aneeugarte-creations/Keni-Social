@@ -22,10 +22,11 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from keni_shared import marcas
 from keni_shared.esquema_yaml import migrar, sellar
+from keni_shared.io_atomico import escribir_atomico
 
-from .. import marcas, repos
-from ..io_atomico import escribir_atomico
+from .. import repos
 from ..tiempo import ahora_iso
 from ._plantillas import PLANTILLAS, render_claude_md
 from ._rutas import NombreAgenteInvalido

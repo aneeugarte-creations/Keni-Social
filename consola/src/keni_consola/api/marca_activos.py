@@ -23,12 +23,13 @@ from __future__ import annotations
 import json
 import logging
 
+from keni_shared import marcas
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import almacen_media, marcas, media, repos
+from .. import almacen_media, media, repos
 from .._http_json import leer_json
 from ..seguridad import autor_de_peticion
 

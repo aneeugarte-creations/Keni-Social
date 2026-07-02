@@ -40,12 +40,13 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from keni_shared import marcas
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import marcas, redes, repos
+from .. import redes, repos
 from .._http_json import leer_json
 from ..dominio import fuentes_pesos, http_feed
 

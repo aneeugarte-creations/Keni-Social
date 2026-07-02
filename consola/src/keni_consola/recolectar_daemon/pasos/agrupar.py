@@ -6,9 +6,11 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from keni_shared import marcas
+
 import keni_consola.recolectar_daemon as _pkg
 
-from ... import config, marcas, repos
+from ... import config, repos
 from ...dominio import agrupar, perfil_editorial
 from ...tiempo import iso_utc
 from .._comun import (

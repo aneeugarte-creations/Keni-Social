@@ -75,10 +75,10 @@ from typing import Any  # noqa: F401
 
 import yaml  # noqa: F401
 from keni_shared.esquema_yaml import migrar, sellar  # noqa: F401
+from keni_shared.io_atomico import bloqueo_archivo, escribir_atomico  # noqa: F401
 
 from .. import config, preferencias, rutas  # noqa: F401
 from ..dominio import runner, stream  # noqa: F401
-from ..io_atomico import bloqueo_archivo, escribir_atomico  # noqa: F401
 from ..observabilidad import request_id_actual  # noqa: F401
 from ._almacen import (
     _RETENCION_DIAS_DEF,

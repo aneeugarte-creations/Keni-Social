@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 
+from keni_shared import marcas
 from starlette.requests import Request
 
 from ... import (
@@ -21,7 +22,6 @@ from ... import (
     config,
     generaciones,
     importador_calendario,
-    marcas,
     media,
     metricas_pieza,
     permisos,
@@ -34,8 +34,8 @@ from ..._http_json import leer_json
 from ...dominio import estudio_imagen, eventos, jobspec, placeholders
 from ...estados import (
     CLASES_PUBLICACION,
-    ESTADOS_PUBLICACION,
     ESTADOS_PIEZA,
+    ESTADOS_PUBLICACION,
     FLUJOS_CONTENIDO,
     ORIGEN_EQUIPO,
     PRIORIDADES_CONTENIDO,

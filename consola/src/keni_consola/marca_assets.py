@@ -25,7 +25,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from . import marcas, rutas
+from keni_shared import marcas
+
+from . import rutas
 
 # Tipos de asset de marca soportados (un PNG por tipo y marca).
 TIPO_LOGO = "logo"

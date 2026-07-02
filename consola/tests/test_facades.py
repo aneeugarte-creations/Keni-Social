@@ -117,44 +117,15 @@ def test_fachada_reenvia_parametros_de_db() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Contrato BARREL ⊇ FUENTE: las fachadas reexportan TODO lo público de su fuente.
+# Contrato BARREL ⊇ FUENTE: el barrel reexporta TODO lo público de su fuente.
 # --------------------------------------------------------------------------- #
 #
-# Otra clase de rojo histórico: una fachada-barrel mantenida a mano (lista de imports +
-# `__all__`) se queda atrás cuando la fuente gana un símbolo, y `from .facade import X`
-# revienta con ImportError/AttributeError en montones de tests no relacionados. Estas
-# fachadas son AUTO-DERIVADAS (delegan vía `__getattr__`/`__dir__`); estos tests fijan ese
-# contrato: si una deriva futura rompiera la derivación, lo caza AQUÍ (un test) en vez de
-# enrojecer pipelines ajenos.
-
-
-def test_marcas_fachada_reexporta_todo_lo_publico_de_keni_shared() -> None:
-    """`keni_consola.marcas` reexpone TODO lo público de `keni_shared.marcas` (su fuente).
-
-    `dir()` de la fuente NO incluye `MARCAS` (es vivo, vía PEP 562), así que se exige
-    explícitamente. El resto: nombres públicos DEFINIDOS en la fuente (funciones, clases),
-    no sus dependencias importadas (`os`, `Path`…)."""
-    fuente = importlib.import_module("keni_shared.marcas")
-    fachada = importlib.import_module("keni_consola.marcas")
-
-    publicos_fuente = {"MARCAS"}
-    for nombre in dir(fuente):
-        if nombre.startswith("_"):
-            continue
-        if getattr(getattr(fuente, nombre), "__module__", None) == fuente.__name__:
-            publicos_fuente.add(nombre)
-
-    expuestos = set(dir(fachada))
-    faltan = sorted(publicos_fuente - expuestos)
-    assert not faltan, (
-        "keni_consola.marcas NO reexpone símbolos públicos de keni_shared.marcas: "
-        f"{faltan}. La fachada es auto-derivada; revisa su `__getattr__`/`__dir__`."
-    )
-    # Y cada uno RESUELVE al MISMO objeto que la fuente (no una copia).
-    for nombre in sorted(publicos_fuente):
-        assert getattr(fachada, nombre) is getattr(fuente, nombre), (
-            f"keni_consola.marcas.{nombre} no es el mismo objeto que keni_shared.marcas.{nombre}"
-        )
+# Otra clase de rojo histórico: un barrel mantenido a mano (lista de imports +
+# `__all__`) se queda atrás cuando la fuente gana un símbolo, y `from .repos import X`
+# revienta con ImportError/AttributeError en montones de tests no relacionados. El barrel
+# es AUTO-DERIVADO (delega vía `__getattr__`/`__dir__`); este test fija ese contrato: si
+# una deriva futura rompiera la derivación, lo caza AQUÍ (un test) en vez de enrojecer
+# pipelines ajenos.
 
 
 def test_repos_barrel_reexporta_todo_lo_publico_de_los_submodulos() -> None:

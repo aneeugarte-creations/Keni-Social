@@ -55,27 +55,45 @@ import re
 import threading
 from typing import Any
 
-from .. import config, daemon_util, generaciones, libprompts, marcas, redes, repos
+from keni_shared import marcas
+
+from .. import config, daemon_util, generaciones, libprompts, redes, repos
 from ..dominio import dedup, jobspec
 from ..dominio import generar as gen_dom
 from ..dominio import verificar_fuente as dom_verificar
 from ..estados import CLASE_CONTENIDO, ORIGENES_AUTOGEN
+from ._admitir import (
+    _AVISO_SIN_CATEGORIA,
+    _auto_etiquetar_linea,
+    _claves_dedup_marca,
+    _copy_pendiente_de,
+    _fetch_cuerpo,
+    _nota_de_cluster,
+    caducar_temas_viejos,
+    caducar_verificacion_clusters_en_curso,
+    clusters_para_promover,
+    clusters_pendientes_verificar,
+    crear_preview_portal,
+    crear_tema_de_cluster,
+    promover_clusters_marca,
+    temas_en_proceso,
+)
 from ._barrido import (
     _ejecutar_barrido,
     _ejecutar_investigacion,
-    _ejecutar_produccion,
     _ejecutar_portal,
+    _ejecutar_produccion,
     _intervalo_investigacion_segundos,
-    _intervalo_produccion_segundos,
     _intervalo_portal_segundos,
+    _intervalo_produccion_segundos,
     _intervalo_segundos,
-    ejecutar_ilustrar,
     ejecutar_avance,
     ejecutar_barrido,
-    ejecutar_redactar,
+    ejecutar_ilustrar,
     ejecutar_investigacion,
-    ejecutar_produccion,
     ejecutar_portal,
+    ejecutar_produccion,
+    ejecutar_redactar,
     ejecutar_verificar_clusters,
     iniciar_pipeline,
 )
@@ -83,8 +101,8 @@ from ._comun import (
     _BACKOFF_ETAPA_SEG,
     _DEFAULT_VERIFICACION_CRITERIOS,
     _DESCARGAR_FOTO_PORTAL,
-    _descargar_foto_portal_real,
     _DIAS_DEDUP,
+    _ETIQUETA_VERIFICACION,
     _FETCH_ARTICULO,
     _FETCH_OG_IMAGE,
     _FORMATO_PIPELINE,
@@ -94,24 +112,25 @@ from ._comun import (
     _RE_CONTENT,
     _RE_OG_IMAGE,
     _TITULO_VERIFICACION,
-    _ETIQUETA_VERIFICACION,
+    ADMISION_VERIFICACION_ESTADOS,
+    ETAPA_ADMITIR,
     ETAPA_ILUSTRAR,
     ETAPA_REDACTAR,
-    ETAPA_ADMITIR,
     ETAPA_VERIFICAR,
     ORIGEN_PIPELINE,
     ORIGEN_PORTAL,
     PROMPT_VERIFICACION_ID,
-    VERIFICACION_EN_CURSO,
-    VERIFICACION_SALTADA,
-    VERIFICACION_CADUCADA,
     TIPO_ACTIVIDAD,
     TIPO_PIPELINE,
-    VERIFICACION_VERIFICADO,
-    VERIFICACION_REQUIERE_HUMANO,
+    VERIFICACION_CADUCADA,
+    VERIFICACION_EN_CURSO,
     VERIFICACION_RECHAZADO,
+    VERIFICACION_REQUIERE_HUMANO,
+    VERIFICACION_SALTADA,
+    VERIFICACION_VERIFICADO,
     _autor_pipeline,
     _copy_pendiente_leido,
+    _descargar_foto_portal_real,
     _extraer_og_image,
     _extraer_texto_articulo,
     _fetch_articulo_real,
@@ -119,20 +138,13 @@ from ._comun import (
     _limpiar_snippet,
     _log,
     _tiene_copy,
-    anotar_intento,
     admision_verificacion,
+    anotar_intento,
     en_backoff,
     intentos_de,
     marcar_fallo_etapa,
     registrar_etapa,
     temas_pipeline,
-    ADMISION_VERIFICACION_ESTADOS,
-)
-from ._revisar import (
-    avisos_calidad,
-    avisos_coherencia,
-    avisos_voz,
-    verificar_calidad_pieza,
 )
 from ._redactar import (
     encadenar_ilustrar_tras_redactar,
@@ -141,21 +153,11 @@ from ._redactar import (
     temas_autogen_sin_copy,
     temas_para_redactar,
 )
-from ._admitir import (
-    _AVISO_SIN_CATEGORIA,
-    _auto_etiquetar_linea,
-    _claves_dedup_marca,
-    _copy_pendiente_de,
-    _fetch_cuerpo,
-    _nota_de_cluster,
-    caducar_verificacion_clusters_en_curso,
-    clusters_para_promover,
-    clusters_pendientes_verificar,
-    crear_preview_portal,
-    crear_tema_de_cluster,
-    caducar_temas_viejos,
-    promover_clusters_marca,
-    temas_en_proceso,
+from ._revisar import (
+    avisos_calidad,
+    avisos_coherencia,
+    avisos_voz,
+    verificar_calidad_pieza,
 )
 from ._verificar import (
     _contexto_verificacion_fuente,

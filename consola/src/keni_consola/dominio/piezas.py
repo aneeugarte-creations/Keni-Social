@@ -30,7 +30,9 @@ import json
 import re
 from typing import Any
 
-from .. import hashtags_biblioteca, marcas, pipeline_estado, redes, repos
+from keni_shared import marcas
+
+from .. import hashtags_biblioteca, pipeline_estado, redes, repos
 from ..estados import ESTADO_EN_REVISION, ESTADO_PROGRAMADO
 
 # Un hashtag en el caption: '#' + caracteres de palabra (acentos/dígitos bajo re.UNICODE).

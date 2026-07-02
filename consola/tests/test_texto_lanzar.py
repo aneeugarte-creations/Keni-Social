@@ -9,10 +9,10 @@ y la validacion de marca.
 from __future__ import annotations
 
 import pytest
+from keni_shared import marcas
 
-from keni_consola import libprompts, generaciones, marcas
-from keni_consola import config
-from keni_consola.dominio import prompts_lanzar, jobspec
+from keni_consola import config, generaciones, libprompts
+from keni_consola.dominio import jobspec, prompts_lanzar
 
 _MARCA = marcas.opciones()[0][0]
 

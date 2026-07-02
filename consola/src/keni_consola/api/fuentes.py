@@ -26,12 +26,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from keni_shared import marcas
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import agencias, bootstrap_categorias, marcas, repos
+from .. import agencias, bootstrap_categorias, repos
 from .._http_json import leer_json
 from ..db_noticias import _TIPOS_FUENTE
 from ..dominio import fuentes_pesos, fuentes_presets, http_feed

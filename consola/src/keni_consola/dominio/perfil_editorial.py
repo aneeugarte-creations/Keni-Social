@@ -68,7 +68,7 @@ def _guardar(data: dict[str, Any]) -> None:
     if ruta is None:
         return
     try:
-        from ..io_atomico import escribir_atomico
+        from keni_shared.io_atomico import escribir_atomico
 
         ruta.parent.mkdir(parents=True, exist_ok=True)
         escribir_atomico(ruta, json.dumps(data, ensure_ascii=False, indent=2))

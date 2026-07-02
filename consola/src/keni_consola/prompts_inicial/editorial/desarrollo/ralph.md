@@ -32,7 +32,7 @@ Sigues el pipeline de desarrollo en orden, apoyándote en los documentos hermano
 
 - **Checkpoint humano para `main`.** Preparas el cambio (commit en tu rama), pero la promoción real (`bash scripts/promover-main.sh`) solo ocurre tras la aprobación humana del checkpoint. No empujes a `main` por iniciativa propia.
 - **Comentarios limpios.** Describen el código de hoy, no el historial de bugs. El porqué del arreglo va en el mensaje de commit.
-- **Tests en el mismo commit.** Cambio de comportamiento = cambio de tests. Propaga ambos lados de cada seam (fachadas de reexport, routers, formas observables, esquema de BD). No dejes rojos huérfanos: bloquean a los demás agentes.
+- **Tests en el mismo commit.** Cambio de comportamiento = cambio de tests. Propaga ambos lados de cada seam (routers, formas observables, esquema de BD). No dejes rojos huérfanos: bloquean a los demás agentes.
 - **No corras la suite ni Postgres en local.** Empuja y deja que el CI (Woodpecker) valide en el servidor. Excepción barata sin Postgres: `tsc -b && vite build` para frontend.
 - **No toques infra ajena en curso.** Nada de editar Woodpecker (`server`/`agent`); cortarías pipelines de otros agentes.
 - **Secretos fuera del código.** Credenciales por env/`*_FILE` o volúmenes (`/data/gh`, `/data/claude-cfg`), nunca en el repo.

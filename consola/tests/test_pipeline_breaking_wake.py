@@ -8,7 +8,9 @@ de 15s sigue de fallback. OFFLINE: la fase se stubea para no tocar feeds/red.
 
 from __future__ import annotations
 
-from keni_consola import db_latidos, marcas
+from keni_shared import marcas
+
+from keni_consola import db_latidos
 from keni_consola.pipeline_contenido import _barrido
 
 # --------------------------------------------------------------------------- #

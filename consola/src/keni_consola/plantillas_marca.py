@@ -36,8 +36,10 @@ import re
 from pathlib import Path
 from typing import Any
 
-from . import marcas, rutas
-from .io_atomico import escribir_atomico
+from keni_shared import marcas
+from keni_shared.io_atomico import escribir_atomico
+
+from . import rutas
 from .motores.estudio_imagen import spec_plantilla
 
 # Clave (en el JSON por marca) del SPEC de capas del editor visual. Convive con los campos

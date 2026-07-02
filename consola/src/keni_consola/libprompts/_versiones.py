@@ -16,8 +16,9 @@ Una VERSIÓN nace solo al PUBLICAR/SOLICITAR (`fijar_version`), no en cada autos
 
 from __future__ import annotations
 
+from keni_shared.io_atomico import escribir_atomico
+
 from .. import versionado
-from ..io_atomico import escribir_atomico
 from ._comun import (
     CLASES,
     ROLES_PROMPT,
