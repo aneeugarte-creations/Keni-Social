@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from ._config_comun import (
     _VERDADEROS,
+    ENV_GATE_METER_STALE_H,
     ENV_GENERACION_PAUSADA,
     ENV_JOBS_MAX_INTENTOS,
     ENV_MAX_JOBS,
@@ -17,6 +18,7 @@ from ._config_comun import (
     ENV_WORKER_CARRILES,
     ENV_WORKER_EXTERNO,
     ENV_WORKER_SONDEO_SEGUNDOS,
+    GATE_METER_STALE_H_DEF,
     JOBS_MAX_INTENTOS_DEF,
     MAX_JOBS_DEF,
     PRESUPUESTO_MARGEN_MANUAL_DEF,
@@ -113,6 +115,19 @@ def presupuesto_usd_dia() -> float:
     except ValueError:
         return PRESUPUESTO_USD_DIA_DEF
     return max(0.0, valor)
+
+
+def gate_medidor_caducidad_h() -> int:
+    """Horas de CADUCIDAD del medidor `/usage` para el gate diario (`KENI_GATE_METER_STALE_H`, def 6).
+
+    Si la ultima lectura VALIDA del medidor de una cuenta es mas vieja que este plazo, el gate
+    diario (`gate_diario.pausado_por_pct`) corta el FONDO de esa cuenta (fail-closed): sin medidor
+    fiable no hay forma de saber cuanto cupo queda, y seguir generando a ciegas puede agotar la
+    suscripcion. `0` = apagado (comportamiento legado: sin dato el gate no corta). La recuperacion
+    es automatica en cuanto el muestreo vuelve a dejar una lectura fresca. Editable en caliente
+    (store de ajustes > env > defecto).
+    """
+    return _entero(ENV_GATE_METER_STALE_H, GATE_METER_STALE_H_DEF, minimo=0)
 
 
 def presupuesto_margen_manual_pct() -> int:

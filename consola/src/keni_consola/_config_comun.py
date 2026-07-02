@@ -132,6 +132,9 @@ ENV_PRESUPUESTO_TOKENS_PRODUCCION_OUT_DIA = "KENI_PRESUPUESTO_TOKENS_PRODUCCION_
 ENV_PRESUPUESTO_USD_DIA = "KENI_PRESUPUESTO_USD_DIA"
 ENV_PRESUPUESTO_MARGEN_MANUAL = "KENI_PRESUPUESTO_MARGEN_MANUAL"
 ENV_GENERACION_PAUSADA = "KENI_GENERACION_PAUSADA"
+# Caducidad (horas) del medidor `/usage` para el gate diario por cuenta: sin lectura VALIDA mas
+# reciente que este plazo, el gate corta el FONDO de la cuenta (fail-closed). 0 = apagado.
+ENV_GATE_METER_STALE_H = "KENI_GATE_METER_STALE_H"
 # Tope de INTENTOS de ejecucion de un job de la cola (anti crash-loop del re-reclamo).
 ENV_JOBS_MAX_INTENTOS = "KENI_JOBS_MAX_INTENTOS"
 # Economia de CONTEXTO: tope duro y umbral de aviso del tamano del prompt por generacion.
@@ -651,6 +654,9 @@ PRESUPUESTO_USD_DIA_DEF = 0.0
 # Margen EXTRA (%) sobre el presupuesto que se concede SOLO a los lanzamientos manuales del
 # equipo cuando el fondo ya esta cortado. Al superarlo, corte TOTAL (tambien lo manual).
 PRESUPUESTO_MARGEN_MANUAL_DEF = 20
+# Horas sin lectura valida del medidor `/usage` tras las que el gate diario corta el fondo de
+# la cuenta (fail-closed). 6 h = varios barridos de muestreo fallidos seguidos, no un blip.
+GATE_METER_STALE_H_DEF = 6
 # Intentos maximos de ejecucion de un job (el normal + re-reclamos de suelto). 3 da dos
 # reintentos automaticos tras muertes del worker sin permitir un crash-loop infinito.
 JOBS_MAX_INTENTOS_DEF = 3
@@ -1065,6 +1071,7 @@ __all__ = [
     'ENV_PRESUPUESTO_TOKENS_PRODUCCION_OUT_DIA',
     'ENV_PRESUPUESTO_USD_DIA',
     'ENV_GENERACION_PAUSADA',
+    'ENV_GATE_METER_STALE_H',
     'ENV_JOBS_MAX_INTENTOS',
     'ENV_PROMPT_MAX_CHARS',
     'ENV_PROMPT_AVISO_CHARS',
@@ -1141,6 +1148,7 @@ __all__ = [
     'PROMPT_AVISO_CHARS_DEF',
     'MAX_JOBS_DEF',
     'PRESUPUESTO_MARGEN_MANUAL_DEF',
+    'GATE_METER_STALE_H_DEF',
     'PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA_DEF',
     'PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA_DEF',
     'PRESUPUESTO_TOKENS_PRODUCCION_IN_DIA_DEF',

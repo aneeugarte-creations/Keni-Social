@@ -434,6 +434,7 @@ from .config_hosted import (  # noqa: F401
     video_max_mb,
 )
 from .config_jobs import (  # noqa: F401
+    gate_medidor_caducidad_h,
     generacion_pausada,
     generacion_pausada_marca,
     jobs_max_intentos,

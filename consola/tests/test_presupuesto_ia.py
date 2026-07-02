@@ -17,6 +17,7 @@ TODO OFFLINE (nunca toca `claude` ni red). Cubre:
 
 from __future__ import annotations
 
+import time
 from datetime import date
 
 import pytest
@@ -1099,12 +1100,81 @@ def test_gate_fuente_none_no_corta(entorno, monkeypatch):
     assert est["consumo_hoy_pct"] is None and est["pausado_por_pct"] is False
 
 
+# --- Medidor CADUCADO (fail-closed, `KENI_GATE_METER_STALE_H`): sin lectura valida reciente, ----- #
+# --- el fondo de la cuenta se pausa; la recuperacion es automatica al volver el medidor. -------- #
+
+
+def _muestrear(cuenta: str, *, semana_pct: int, hace_horas: float) -> None:
+    """Deja un snapshot valido del medidor de `cuenta` con la lectura fechada hace N horas."""
+    repos.guardar_uso_cuenta(
+        cuenta=cuenta, conectada=True, semana_pct=semana_pct, sesion_5h_pct=5,
+        actualizado_ts=time.time() - hace_horas * 3600.0,
+    )
+
+
+def test_gate_medidor_fresco_no_cambia_el_comportamiento(entorno):
+    """Con una lectura valida dentro del plazo (def 6 h), el gate opera como siempre: por umbral."""
+    _muestrear(_CUENTA_A, semana_pct=30, hace_horas=0.0)  # primer muestreo: consumo de hoy = 0
+    assert gate_diario.medidor_caducado(_CUENTA_A) is False
+    assert gate_diario.pausado_por_pct(_CUENTA_A) is False
+    est = gate_diario.estado(_CUENTA_A)
+    assert est["medidor_caducado"] is False and est["pausado_por_pct"] is False
+
+
+def test_gate_medidor_caducado_pausa_el_fondo_fail_closed(entorno):
+    """Sin lectura valida en mas de 6 h (def), la cuenta queda pausada para el FONDO aunque el
+    consumo leido este muy por debajo del umbral: sin medidor fiable no se genera a ciegas. La
+    semantica es la del corte por % (SOLO_MANUAL: lo manual de las personas sigue)."""
+    _muestrear(_CUENTA_A, semana_pct=30, hace_horas=7.0)
+    assert gate_diario.consumo_semanal_hoy_pct(_CUENTA_A) == pytest.approx(0.0)  # bajo el umbral
+    assert gate_diario.medidor_caducado(_CUENTA_A) is True
+    assert gate_diario.pausado_por_pct(_CUENTA_A) is True
+    est = gate_diario.estado(_CUENTA_A)
+    assert est["medidor_caducado"] is True and est["pausado_por_pct"] is True
+    # Cae en la ADMISION igual que el corte por %: el fondo de una marca de A cede, lo manual pasa.
+    assert ruteo_cuentas.cuenta_de_marca("claro-sports") == _CUENTA_A
+    assert presupuesto_ia.nivel("claro-sports") == presupuesto_ia.NIVEL_SOLO_MANUAL
+    assert presupuesto_ia.bloqueo_inline("", "claro-sports", es_fondo=True) == presupuesto_ia.NIVEL_SOLO_MANUAL
+    assert presupuesto_ia.bloqueo_inline("", "claro-sports", es_fondo=False) is None
+    # La cuenta B (sin fila) mantiene el fallback legado: no corta.
+    assert gate_diario.pausado_por_pct(_CUENTA_B) is False
+
+
+def test_gate_medidor_caducado_flag_cero_mantiene_fail_open(entorno, monkeypatch):
+    """`KENI_GATE_METER_STALE_H=0` apaga la caducidad: comportamiento legado (nunca corta por
+    dato viejo, solo por umbral)."""
+    monkeypatch.setenv("KENI_GATE_METER_STALE_H", "0")
+    _muestrear(_CUENTA_A, semana_pct=30, hace_horas=48.0)
+    assert gate_diario.medidor_caducado(_CUENTA_A) is False
+    assert gate_diario.pausado_por_pct(_CUENTA_A) is False
+
+
+def test_gate_medidor_sin_fila_ni_timestamp_mantiene_fail_open(entorno):
+    """Sin snapshot (rollout / cuenta nunca muestreada) o sin timestamp no hay referencia
+    temporal: fallback legado, el gate no corta por caducidad."""
+    assert gate_diario.medidor_caducado(_CUENTA_A) is False
+    repos.guardar_uso_cuenta(cuenta=_CUENTA_A, conectada=True, semana_pct=30,
+                             sesion_5h_pct=5, actualizado_ts=None)
+    assert gate_diario.medidor_caducado(_CUENTA_A) is False
+    assert gate_diario.pausado_por_pct(_CUENTA_A) is False
+
+
+def test_gate_medidor_caducado_se_recupera_solo_con_lectura_fresca(entorno):
+    """La pausa por medidor caducado se levanta SOLA en cuanto el muestreo deja una lectura
+    valida fresca (sin intervencion humana)."""
+    _muestrear(_CUENTA_A, semana_pct=30, hace_horas=7.0)
+    assert gate_diario.pausado_por_pct(_CUENTA_A) is True
+    _muestrear(_CUENTA_A, semana_pct=31, hace_horas=0.0)  # el medidor vuelve
+    assert gate_diario.medidor_caducado(_CUENTA_A) is False
+    assert gate_diario.pausado_por_pct(_CUENTA_A) is False
+
+
 def test_gate_estado_forma(entorno, monkeypatch):
     _patch_consumo(monkeypatch, {_CUENTA_A: 9.5})
     est = gate_diario.estado(_CUENTA_A)
     assert set(est) == {
         "cuenta", "consumo_hoy_pct", "umbral_pct", "aceptados_hoy", "pausado_por_pct",
-        "base_umbral_pct", "paso_pct", "limite", "dia",
+        "medidor_caducado", "base_umbral_pct", "paso_pct", "limite", "dia",
     }
     assert est["cuenta"] == _CUENTA_A
     assert est["consumo_hoy_pct"] == pytest.approx(9.5)

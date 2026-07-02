@@ -14,7 +14,17 @@ cruzar el nuevo umbral, vuelve a pausar y pedir aceptar.
 FUENTE DEL % (seam, `consumo_semanal_hoy_pct(cuenta)`): el % real de cada cuenta lo persiste una
 FUNDACION aparte que muestrea el medidor POR CUENTA y guarda snapshots (incluida la base del dia
 `semana_pct_inicio_dia`). Este modulo NO muestrea: solo LEE, con fallback seguro (None => NO
-cortar). Mientras el medidor no tenga dato, el gate queda inerte (no corta).
+cortar). Mientras el medidor no tenga dato AUN (rollout: sin fila, sin timestamp), el gate queda
+inerte (no corta).
+
+MEDIDOR CADUCADO (fail-closed): si la ultima lectura VALIDA del medidor de una cuenta es mas
+vieja que `KENI_GATE_METER_STALE_H` horas (def 6; 0 = apagado), el gate PAUSA el FONDO de esa
+cuenta igual que un corte por % (lo manual sigue, misma semantica que `pausado_por_pct`): sin
+medidor fiable no se sabe cuanto cupo queda y generar a ciegas puede agotar la suscripcion. El
+timestamp de referencia es `actualizado_ts` del snapshot, que es el epoch de la ultima lectura
+BUENA de `/usage` (el cache de `cuenta_claude.uso()` lo congela cuando las lecturas fallan y el
+daemon caido deja de refrescarlo). La recuperacion es automatica: una lectura fresca del muestreo
+levanta la pausa. Entrada y salida del estado caducado se loguean (solo transiciones).
 
 ESTADO DIARIO (mutable, pequeno) POR CUENTA: por dia CDMX y por cuenta se persiste cuantos "+10%" se
 han aceptado, en el store de ajustes compartido (`ajustes.py`, TOML en /data: lo ven
@@ -35,6 +45,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from datetime import date, datetime
 
 from . import ajustes
@@ -118,6 +129,54 @@ def _consumo_de(fila: dict | None, k_pct: str, k_base: str) -> float | None:
     return max(0.0, float(actual) - float(base))
 
 
+# Ultimo estado de caducidad del medidor OBSERVADO por ESTE proceso, por cuenta: para loguear
+# SOLO las transiciones (entrar en pausa por medidor caducado / recuperarse), no cada consulta.
+_CADUCADO_VISTO: dict[str, bool] = {}
+
+
+def _medidor_caducado(fila: dict | None) -> bool:
+    """True si la ultima lectura VALIDA del medidor de la fila es mas vieja que el plazo de
+    caducidad (`config.gate_medidor_caducidad_h()`; 0 = apagado, nunca caduca).
+
+    `actualizado_ts` es el epoch de la ultima lectura BUENA de `/usage` (el cache de
+    `cuenta_claude.uso()` lo congela mientras las lecturas fallan; un daemon de muestreo caido
+    deja de refrescarlo). Sin fila o sin timestamp no hay referencia temporal: se mantiene el
+    fallback legado (no corta), que cubre el rollout y las cuentas nunca muestreadas.
+    """
+    from . import config  # perezoso: mismo idiom que el resto de dependencias de este modulo
+
+    horas = config.gate_medidor_caducidad_h()
+    if horas <= 0 or not fila:
+        return False
+    ts = fila.get("actualizado_ts")
+    if ts is None:
+        return False
+    return (time.time() - float(ts)) > horas * 3600.0
+
+
+def medidor_caducado(cuenta: str) -> bool:
+    """True si el medidor de `cuenta` esta CADUCADO (sin lectura valida dentro del plazo): el gate
+    pausa el FONDO de sus marcas (fail-closed) hasta que el muestreo deje una lectura fresca
+    (recuperacion automatica). Loguea SOLO las transiciones (entrar/salir del estado caducado)."""
+    caducado = _medidor_caducado(_leer_fila(cuenta))
+    previo = _CADUCADO_VISTO.get(cuenta)
+    _CADUCADO_VISTO[cuenta] = caducado
+    if caducado and previo is not True:
+        from . import config
+
+        _log.warning(
+            "gate_diario: medidor de la cuenta %s sin lectura valida en mas de %d h; "
+            "PAUSA del fondo de sus marcas (fail-closed) hasta recuperar el medidor",
+            cuenta, config.gate_medidor_caducidad_h(),
+        )
+    elif not caducado and previo:
+        _log.info(
+            "gate_diario: medidor de la cuenta %s recuperado; el gate vuelve a operar con dato fresco",
+            cuenta,
+        )
+    return caducado
+
+
 def _dias_hasta_reset(reset_iso: str, hoy: date) -> int:
     """Dias CDMX desde `hoy` (incluido) hasta el dia del reset semanal de la cuenta; minimo 1.
 
@@ -192,7 +251,12 @@ def umbral_vigente(cuenta: str) -> float:
 
 def pausado_por_pct(cuenta: str) -> bool:
     """True si el limite del dia que primero se agota en `cuenta` alcanza su umbral => PAUSA sus
-    marcas. Con la fuente del % en None (sin dato) devuelve False: NO cortar (fallback seguro)."""
+    marcas. Con la fuente del % en None (sin dato aun) devuelve False: NO cortar (fallback
+    seguro). EXCEPCION fail-closed: con el medidor CADUCADO (`medidor_caducado`, sin lectura
+    valida en mas de `KENI_GATE_METER_STALE_H` horas) devuelve True aunque el consumo leido no
+    alcance el umbral: sin medidor fiable no se genera fondo a ciegas."""
+    if medidor_caducado(cuenta):
+        return True
     _, consumo, umbral = _evaluar(cuenta)
     return consumo is not None and consumo >= umbral
 
@@ -219,23 +283,29 @@ def estado(cuenta: str) -> dict:
     """Snapshot del gate diario de UNA cuenta para el UI/los agentes (CONTRATO):
 
       {cuenta: str, consumo_hoy_pct: float|None, umbral_pct: float, aceptados_hoy: int,
-       pausado_por_pct: bool, base_umbral_pct: float, paso_pct: float, limite: str, dia: str}
+       pausado_por_pct: bool, medidor_caducado: bool, base_umbral_pct: float, paso_pct: float,
+       limite: str, dia: str}
 
     `limite` es siempre "semanal" (all-models); el campo se mantiene por compatibilidad con el
     contrato del frontend. `consumo_hoy_pct` es None mientras la fuente del % de esa cuenta no
     exista (rollout): con None el gate esta inerte y `pausado_por_pct` es False. `base_umbral_pct`
     es el cupo base del dia (lo que queda repartido entre los dias hasta el reset) y `umbral_pct`
     ese cupo + los +10% aceptados. El UI muestra "Aceptar continuar (+10%)" para la cuenta cuando
-    `pausado_por_pct`. `cuenta` rotula a quien pertenece el bloque.
+    `pausado_por_pct`. `medidor_caducado` marca la pausa FAIL-CLOSED por medidor sin lectura
+    valida (`KENI_GATE_METER_STALE_H`): con True, `pausado_por_pct` tambien es True aunque el
+    consumo no alcance el umbral (y aceptar +10% no la levanta; se levanta sola al volver el
+    medidor). `cuenta` rotula a quien pertenece el bloque.
     """
     limite, consumo, umbral = _evaluar(cuenta)
+    caducado = medidor_caducado(cuenta)
     base = umbral - aceptados_hoy(cuenta) * PASO_PCT
     return {
         "cuenta": cuenta,
         "consumo_hoy_pct": round(consumo, 1) if consumo is not None else None,
         "umbral_pct": round(umbral, 1),
         "aceptados_hoy": aceptados_hoy(cuenta),
-        "pausado_por_pct": consumo is not None and consumo >= umbral,
+        "pausado_por_pct": caducado or (consumo is not None and consumo >= umbral),
+        "medidor_caducado": caducado,
         "base_umbral_pct": round(base, 1),
         "paso_pct": PASO_PCT,
         "limite": limite,
