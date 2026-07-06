@@ -226,7 +226,11 @@ function Marco({
       <div className="flex h-full flex-col px-20 pb-12 pt-16">
         {!portada && (
           <header className="mb-9">
-            <p className={`${EYEBROW} ${TONO.topLabel}`}>{etiqueta}</p>
+            <p className={`${EYEBROW} ${TONO.topLabel}`}>
+              {etiqueta}
+              <span className="mx-2 text-neutral-300">·</span>
+              <span className="text-neutral-400">{periodo}</span>
+            </p>
             <h2 className={`mt-3 max-w-4xl text-balance text-[28px] font-light leading-tight tracking-[-0.01em] ${TONO.titulo}`}>
               {titulo}
             </h2>
@@ -251,37 +255,53 @@ function Marco({
 
 /**
  * Diapositiva-portada: la marca es la protagonista (logo sobre su color), con la caption del
- * periodo debajo. En "Todas las marcas" muestra el portfolio de logos sobre fondo neutro.
- * El `layout` (caja del logo + colocación de la caption) lo fija COVER_LAYOUT[marcaId]; se puede
- * pasar explícito para iterar variantes en una vista previa.
+ * periodo y el veredicto del mes debajo. En "Todas las marcas" muestra el portfolio de logos
+ * sobre fondo neutro. El `layout` (caja del logo + colocación de la caption) lo fija
+ * COVER_LAYOUT[marcaId]; se puede pasar explícito para iterar variantes en una vista previa.
  */
 export function PortadaSlide({
   marcaId,
   marcaLabel,
   esTodas,
   periodo,
+  titularMes,
   layout,
 }: {
   marcaId: string | null;
   marcaLabel: string;
   esTodas: boolean;
   periodo: string;
+  /** Veredicto del mes bajo la caption; ausente = solo caption (previews de layout). */
+  titularMes?: string;
   layout?: CoverLayout;
 }) {
   const coverBg = esTodas ? COVER_TODAS : marcaId ? COVER_BG[marcaId] : undefined;
   const lay = layout ?? (marcaId ? COVER_LAYOUT[marcaId] : undefined) ?? COVER_LAYOUT_DEFAULT;
   const anclada = lay.captionBottom != null;
+  const tintaCaption = coverBg ? lay.captionTinta ?? "text-white/90" : TONO.coverCaption;
   // Ancho completo (no encogido al texto): así el interletrado final nunca empuja la última
   // palabra a otra línea. Cabe en una sola; text-balance reparte en dos solo si el periodo fuera
-  // larguísimo.
+  // larguísimo. El veredicto viaja bajo la caption con su mismo tratamiento sobrio (blanco/85,
+  // sin badge): la portada responde "¿vamos bien o mal?" sin esperar a la lámina 2.
   const caption = (
-    <p
-      className={`w-full text-balance ${EYEBROW} ${coverBg ? lay.captionTinta ?? "text-white/90" : TONO.coverCaption}`}
-      style={{ letterSpacing: lay.captionTracking ?? "0.24em" }}
-    >
-      Informe de métricas · {esTodas ? "Todas las marcas · " : ""}
-      {periodo}
-    </p>
+    <div className="w-full">
+      <p
+        className={`w-full text-balance ${EYEBROW} ${tintaCaption}`}
+        style={{ letterSpacing: lay.captionTracking ?? "0.24em" }}
+      >
+        Informe de métricas · {esTodas ? "Todas las marcas · " : ""}
+        {periodo}
+      </p>
+      {titularMes && (
+        <p
+          className={`mx-auto mt-4 max-w-2xl text-balance text-sm font-light leading-snug ${
+            coverBg ? "text-white/85" : "text-neutral-600"
+          }`}
+        >
+          {titularMes}
+        </p>
+      )}
+    </div>
   );
   return (
     <Marco marca={marcaLabel} periodo={periodo} portada bg={coverBg}>
@@ -567,7 +587,15 @@ function diapositivas(data: InformeProps): Slide[] {
   // portada-portfolio: los 5 logos juntos sobre fondo oscuro neutro.
   slides.push({
     clave: "portada",
-    nodo: <PortadaSlide marcaId={marcaId} marcaLabel={marcaLabel} esTodas={esTodas} periodo={periodo} />,
+    nodo: (
+      <PortadaSlide
+        marcaId={marcaId}
+        marcaLabel={marcaLabel}
+        esTodas={esTodas}
+        periodo={periodo}
+        titularMes={titularMes}
+      />
+    ),
   });
 
   // 2 · Resumen ejecutivo — el TÍTULO es el titular del mes; debajo, 5 KPIs con su variación.

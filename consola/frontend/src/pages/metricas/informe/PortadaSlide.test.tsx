@@ -1,7 +1,7 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { PortadaSlide } from "./Informe";
+import { Informe, PortadaSlide } from "./Informe";
 import { desdeEntradas, type ContextoInforme } from "./desdeEntradas";
 import { LOGOS_MARCA } from "./logos";
 
@@ -37,5 +37,52 @@ describe("PortadaSlide · logo de marca", () => {
     expect(img?.getAttribute("alt")).toBe("Claro Sports");
     // El logo viaja incrustado (`?inline`): un data-URI no puede dar 404 al rasterizar.
     expect(img?.getAttribute("src")).toMatch(/^data:image\//);
+  });
+});
+
+describe("PortadaSlide · veredicto del mes", () => {
+  it("pinta el titular del mes bajo la caption cuando se pasa", () => {
+    const props = desdeEntradas([], CTX_PROD);
+    const { getByText } = render(
+      <PortadaSlide
+        marcaId={props.marcaId}
+        marcaLabel={props.marcaLabel}
+        esTodas={props.esTodas}
+        periodo={props.periodo}
+        titularMes={props.titularMes}
+      />,
+    );
+    expect(props.titularMes).toBeTruthy();
+    expect(getByText(props.titularMes)).toBeInTheDocument();
+  });
+
+  it("sin titularMes (preview de layout) la portada no lo pinta", () => {
+    const props = desdeEntradas([], CTX_PROD);
+    const { container } = render(
+      <PortadaSlide
+        marcaId={props.marcaId}
+        marcaLabel={props.marcaLabel}
+        esTodas={props.esTodas}
+        periodo={props.periodo}
+      />,
+    );
+    // Solo la caption del periodo; ningún segundo párrafo de veredicto.
+    expect(container.querySelectorAll("p")).toHaveLength(1);
+  });
+});
+
+describe("Marco · periodo en la cabecera de cada lámina", () => {
+  it("las láminas de contenido llevan el periodo en su eyebrow (autoexplicativas si se reenvían)", () => {
+    const props = desdeEntradas([], CTX_PROD);
+    const { container } = render(<Informe data={props} />);
+    // El eyebrow de cada lámina de contenido es el primer <p> de su <header> (etiqueta · periodo);
+    // el resumen es la primera lámina de contenido, así que al menos uno debe estar.
+    const eyebrows = Array.from(container.querySelectorAll("header")).map(
+      (h) => h.querySelector("p")?.textContent ?? "",
+    );
+    expect(eyebrows.length).toBeGreaterThan(0);
+    for (const texto of eyebrows) {
+      expect(texto).toContain(props.periodo);
+    }
   });
 });
