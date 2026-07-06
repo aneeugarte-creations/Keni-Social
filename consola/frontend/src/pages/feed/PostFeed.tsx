@@ -5,20 +5,17 @@
  *  1. Cabecera EN UNA LÍNEA: autor + marca + red (un solo logo) + formato + etapa IA en vivo.
  *  2. Copy generado por la IA: el cuerpo del post (`contenido`), dentro de una previa fiel de la
  *     red (`VistaPreviaRed`, variante limpia: sin chrome social falso ni cabecera duplicada).
- *  3. Acciones EN LÍNEA, iguales en TODA pieza (como un post): "Me gusta" (el OK humano),
- *     "No me gusta" (dislike), "Editar" (copy, copy-in, foto+plantilla, vía `DialogoEditar`) y
- *     "Comentar". Cada botón es un TOGGLE estándar de SU PROPIA reacción: un segundo like quita
- *     tu OK; un segundo dislike quita tu dislike; un like con dislike puesto lo retira primero.
- *     El "marcar OK" y el "marcar dislike" solo se habilitan cuando te toca decidir
- *     (`elegibilidadOK`); QUITAR tu propia reacción siempre puedes. Dos dislikes (dos personas)
- *     rechazan la pieza. El override de FORZAR vive como botón discreto al pie del panel de
- *     estado (no escondido en un toast).
+ *  3. Acciones EN LÍNEA, iguales en TODA pieza (como un post): dar el OK (✓, el visto bueno
+ *     humano), "Editar" (copy, copy-in, foto+plantilla, vía `DialogoEditar`), "Comentar" y
+ *     "Quitar". El OK es un TOGGLE de tu propia reacción: un segundo clic lo retira. Solo se
+ *     habilita cuando te toca decidir (`elegibilidadOK`); quitar tu OK siempre puedes. El
+ *     override de FORZAR vive como botón discreto al pie del panel de estado (no en un toast).
  *  4. Panel de ESTADO de la cadena (`CadenaAprobacion`, solo lectura): OK del equipo (cuántos y
  *     de quién) + lo que falta. Sin revision de IA (menos IA de cara al equipo). La acción vive en la fila.
  *
- * Like/dislike/deshacer van por `aprobar`/`rechazar`/`deshacer` de `api/aprobacion`, que
- * forwardean al nivel ACTUAL de la cadena multinivel (respetando "otro par de ojos" y "dos
- * dislikes para rechazar"); el gate lo decide el backend, `elegibilidadOK` solo habilita/explica.
+ * El OK y su deshacer van por `aprobar`/`deshacer` de `api/aprobacion`, que forwardean al nivel
+ * ACTUAL de la cadena multinivel (respetando "otro par de ojos"); el gate lo decide el backend,
+ * `elegibilidadOK` solo habilita/explica.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -29,7 +26,6 @@ import {
   GitBranch,
   MessageSquare,
   Sparkles,
-  ThumbsDown,
   Trash2,
   TriangleAlert,
   Zap,
@@ -81,10 +77,10 @@ import { DialogoEditar } from "@/pages/piezas/DialogoEditar";
 import { piezaFueraDeVentana, tiempoRelativo } from "@/pages/piezas/meta";
 import type { Pieza, RespuestaPieza } from "@/types";
 
-import { elegibilidadOK, esDislikeDecisivo } from "./aprobacion";
+import { elegibilidadOK } from "./aprobacion";
 import { CadenaAprobacion } from "./CadenaAprobacion";
 import { etapaDePieza } from "./etapa";
-import { TEXTO_AVISO, TEXTO_ERROR, TEXTO_OK } from "./formato";
+import { TEXTO_AVISO, TEXTO_OK } from "./formato";
 import { BadgeEtapa } from "./TarjetaEtapa";
 import { CadenasLoteContexto } from "./use-cadenas-lote";
 
@@ -211,28 +207,6 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
     },
     onError,
   });
-  const rechazar = useMutation({
-    mutationFn: () => api.rechazarPieza(pieza.id),
-    // Un dislike NO devuelve a borrador por sí solo: hacen falta dos (de dos personas). El back
-    // refleja el desenlace; el toast lo cuenta tal cual. "Deshacer" solo mientras la pieza siga
-    // en revisión (devuelta a redacción es otro estado: no se deshace desde un toast).
-    onSuccess: (res) => {
-      actualizarCaches(res);
-      if (res?.pieza?.estado === "borrador") {
-        // Rechazo definitivo: la tarjeta sale de la vista filtrada al instante; no se abre el
-        // hilo (el confirm previo ya invitó a comentar antes).
-        toast.success("Pieza rechazada: vuelve a redacción.");
-        return;
-      }
-      // Primer dislike: la objeción sin porqué no le sirve a quien arregla la pieza — se abre
-      // el hilo (hace scroll y deja el textarea a mano) para apuntar el motivo.
-      setComentariosAbierto(true);
-      toast.success("Dislike registrado; con un segundo dislike la pieza se rechaza.", {
-        action: { label: "Deshacer", onClick: () => deshacer.mutate(undefined) },
-      });
-    },
-    onError,
-  });
   // Retira TU decisión (quitar tu like o tu dislike): tu nivel vuelve a pendiente. El `origen`
   // afina el toast: "ok" = togglear tu like; "like" = pulsaste OK teniendo un dislike puesto
   // (explica el paso intermedio y ofrece completar el OK en un clic); sin origen, el genérico.
@@ -296,8 +270,7 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
     });
     if (ok) borrar.mutate();
   };
-  const ocupado =
-    aprobar.isPending || rechazar.isPending || forzar.isPending || deshacer.isPending;
+  const ocupado = aprobar.isPending || forzar.isPending || deshacer.isPending;
   // TU reacción en esta pieza, leída de la cadena: el nivel que TÚ decidiste (si lo hay). "like"
   // si lo aprobaste, "dislike" si lo rechazaste, "neutral" si aún no decidiste. Es lo que hace
   // el toggle: con un like puesto, el dislike lo quita; desde neutro, el dislike lo marca.
@@ -434,40 +407,6 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
     aprobar.mutate();
   };
 
-  // "No me gusta" (toggle de TU dislike): si ya está puesto, lo quita; desde neutro, si te toca,
-  // marca tu dislike (rechaza el nivel actual). Con tu LIKE puesto ya NO lo deshace (cada botón
-  // togglea solo su propia reacción): un toast te manda al "Me gusta" (con la acción directa de
-  // quitarlo, simétrica al "Dar OK" del camino inverso). Dos dislikes de dos personas rechazan
-  // la pieza (lo decide el backend). Marcar dislike NO depende de comentarios sin resolver (ese
-  // gate es para publicar, no para objetar). El dislike DECISIVO (el que rechaza y resetea la
-  // cadena: los OK dados se pierden) pide confirmación —es irreversible con un clic, igual que
-  // "Forzar"—; el primer dislike va directo (cero fricción en el caso común).
-  const onDislike = async () => {
-    if (miReaccion === "dislike") {
-      deshacer.mutate(undefined); // toggle off: quita tu dislike
-      return;
-    }
-    if (miReaccion === "like") {
-      toast("Tu OK está puesto; vuelve a pulsar «Me gusta» para quitarlo.", {
-        action: { label: "Quitar mi OK", onClick: () => deshacer.mutate("ok") },
-      });
-      return;
-    }
-    if (puedeDar) {
-      if (cadena && esDislikeDecisivo(cadena)) {
-        const ok = await confirmar({
-          titulo: "Rechazar la pieza",
-          mensaje:
-            "La pieza se rechaza y vuelve a redacción. ¿Continuar?",
-          textoConfirmar: "Rechazar",
-        });
-        if (!ok) return;
-      }
-      rechazar.mutate(); // "se marca con dislike"
-      return;
-    }
-    toast(motivoBloqueo);
-  };
 
   // Abre el editor. Una pieza YA PUBLICADA es inmutable: el editor abre en SOLO LECTURA (no hay
   // nada que perder ni que confirmar), así que se abre directo. Si aún no salió pero ya tiene
@@ -865,41 +804,6 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
                   <Spinner className="h-4 w-4" />
                 ) : (
                   <Check className="h-4 w-4" />
-                )}
-              </Button>
-            </Tooltip>
-          )}
-          {/* Dislike: SIEMPRE visible en piezas en revisión (fila estable, no baila entre
-              tarjetas); cuando no te toca, onDislike explica con un toast, igual que el like.
-              Dos dislikes de dos personas rechazan la pieza. */}
-          {enRevision && (
-            <Tooltip
-              label={
-                miReaccion === "like"
-                  ? "Tu OK está puesto"
-                  : miReaccion === "dislike"
-                    ? "Quitar tu dislike"
-                    : "No me gusta"
-              }
-            >
-              <Button
-                variant="ghost"
-                size="icon"
-                // Igual que el OK pero en ROJO: solo cuando TÚ ya marcaste tu dislike; si no, reposo.
-                className={cn(
-                  "h-10 w-10 text-muted-foreground hover:text-foreground sm:h-8 sm:w-8",
-                  miReaccion === "dislike" &&
-                    cn(TEXTO_ERROR, "hover:text-red-700 dark:hover:text-red-300"),
-                )}
-                onClick={() => void onDislike()}
-                disabled={ocupado}
-                aria-label={miReaccion === "dislike" ? "Quitar tu dislike" : "No me gusta"}
-                aria-pressed={miReaccion === "dislike"}
-              >
-                {rechazar.isPending || (deshacer.isPending && deshacer.variables === undefined) ? (
-                  <Spinner className="h-4 w-4" />
-                ) : (
-                  <ThumbsDown className="h-4 w-4" />
                 )}
               </Button>
             </Tooltip>

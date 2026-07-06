@@ -634,10 +634,9 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     // Etapa IA en vivo: en revisión → para revisar.
     expect(screen.getByText("Para revisar")).toBeInTheDocument();
     // El OK en línea está habilitado para el revisor elegible (nombre accesible derivado del
-    // estado real del toggle: "Dale tu OK"), con "No me gusta" (dislike) al lado.
+    // estado real del toggle: "Dale tu OK").
     const like = await screen.findByRole("button", { name: "Dale tu OK" });
     expect(like).toBeEnabled();
-    expect(screen.getByRole("button", { name: "No me gusta" })).toBeInTheDocument();
     // Panel de estado de la cadena (solo lectura): el recuento de OK (solo el conteo).
     expect(screen.getByText("0/1")).toBeInTheDocument();
   });
