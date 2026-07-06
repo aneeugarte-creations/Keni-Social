@@ -7,7 +7,6 @@ import type {
   AnalisisDiario,
   AnaliticaPiezas,
   CompararMetricas,
-  CorrelacionSeguidores,
   Crosstab,
   Demografia,
   DesgloseInteracciones,
@@ -102,11 +101,6 @@ export const apiMetricas = {
     params: { rango?: string; marca?: string; red?: string; formato?: string },
     signal?: AbortSignal,
   ) => peticion<Crosstab>(`/metricas/crosstab${query(params)}`, { signal }),
-  // Correlación seguidores ganados ↔ piezas publicadas por día (con la pieza estrella).
-  metricasCorrelacion: (
-    params: { rango?: string; marca?: string; red?: string; formato?: string },
-    signal?: AbortSignal,
-  ) => peticion<CorrelacionSeguidores>(`/metricas/correlacion${query(params)}`, { signal }),
   // Campañas de publicidad PAGADA del periodo (Meta/TikTok Ads): el inorgánico a nivel marca.
   metricasAds: (params: { rango?: string; marca?: string; red?: string }, signal?: AbortSignal) =>
     peticion<AdsMetricas>(`/metricas/ads${query(params)}`, { signal }),

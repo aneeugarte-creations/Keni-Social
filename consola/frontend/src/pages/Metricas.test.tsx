@@ -35,7 +35,6 @@ vi.mock("./metricas/PanoramaPiezas", () => ({ PanoramaPiezas: () => null }));
 vi.mock("./metricas/PiezasConsolidada", () => ({ PiezasConsolidada: () => null }));
 vi.mock("./metricas/CompararPeriodos", () => ({ CompararPeriodos: () => null }));
 vi.mock("./metricas/EvolucionRedes", () => ({ EvolucionRedes: () => null }));
-vi.mock("./metricas/Correlacion", () => ({ Correlacion: () => null }));
 vi.mock("./metricas/Crosstab", () => ({ Crosstab: () => null }));
 vi.mock("./metricas/DesgloseInteracciones", () => ({ DesgloseInteracciones: () => null }));
 vi.mock("./metricas/CrecimientoSeguidores", () => ({ CrecimientoSeguidores: () => null }));

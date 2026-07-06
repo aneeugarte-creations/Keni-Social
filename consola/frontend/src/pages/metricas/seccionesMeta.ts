@@ -54,7 +54,6 @@ export const GRUPOS_SECCIONES: GrupoSecciones[] = [
       { id: "desglose", etiqueta: "Desglose de interacciones" },
       { id: "crosstab", etiqueta: "Rendimiento por formato" },
       { id: "por-categoria", etiqueta: "Rendimiento por categoría" },
-      { id: "correlacion", etiqueta: "Seguidores frente a piezas" },
       { id: "ads", etiqueta: "Publicidad" },
     ],
   },

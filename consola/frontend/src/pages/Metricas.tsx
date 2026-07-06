@@ -28,7 +28,6 @@ import { SelectorRed, etiquetaRed } from "./metricas/SelectorRed";
 import { SelectorFormato, etiquetaFormato } from "./metricas/SelectorFormato";
 import { useVistaConfig } from "./metricas/vistaConfig";
 import { CoberturaRedes } from "./metricas/CoberturaRedes";
-import { Correlacion } from "./metricas/Correlacion";
 import { CrecimientoSeguidores } from "./metricas/CrecimientoSeguidores";
 import { Crosstab } from "./metricas/Crosstab";
 import { Demografia } from "./metricas/Demografia";
@@ -353,9 +352,6 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           </Bloque>
           <Bloque id="por-categoria">
             <MetricaPorCategoria marcaActual={marca} rangoActual={rango} />
-          </Bloque>
-          <Bloque id="correlacion">
-            <Correlacion marcas={marcas} marcaActual={marca} rangoActual={rango} />
           </Bloque>
           <Bloque id="ads">
             <SeccionAds marcaActual={marca} rangoActual={rango} />
