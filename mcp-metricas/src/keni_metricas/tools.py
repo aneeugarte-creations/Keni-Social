@@ -198,11 +198,15 @@ def registrar(mcp: FastMCP, fuente: FuenteMetricas, historico: Historico | None 
 
     @mcp.tool()
     def analisis_diario(rango: str = "semana", marca: str = "") -> dict:
-        """Lectura accionable del periodo: NO solo cifras, sino qué subió/bajó, la(s)
-        pieza(s) que lo explican y el siguiente paso ("pide copy/clip de lo que
-        rinde"). Ensambla comparar_periodos + picos + mejores_piezas en una
-        narrativa corta. Marca cuando los datos son de muestra. Responde el día a
-        día de '¿qué números tuvimos y por qué, y qué hago con eso?'."""
+        """Lectura MULTI-DIMENSIÓN del periodo: NO un solo dato, sino HALLAZGOS
+        jerarquizados que cubren dimensiones distintas —vistas por marca, red que
+        más empujó, formato que despunta, seguidores (con la señal de variación
+        representativa, no el ruido diario), engagement, pieza estrella y la
+        variación propia del periodo (semana ≠ mes)— más el siguiente paso ("pide
+        copy/clip de lo que rinde"). Ensambla reporte + picos + mejores_piezas +
+        las series ya calculadas. Marca cuando los datos son de muestra. Responde
+        '¿qué pasó y por qué, y qué hago con eso?'. (Este tool no inyecta las series
+        de seguidores/diaria; la Consola las añade vía la fachada `servicio`.)"""
         from .analisis_diario import construir_analisis
 
         try:

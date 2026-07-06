@@ -42,7 +42,7 @@ export type {
   TotalComparativa,
   CompararMetricas,
   PiezaAnalisis,
-  MovimientoAnalisis,
+  HallazgoAnalisis,
   SiguientePasoAnalisis,
   AnalisisDiario,
   EstadoMetricas,

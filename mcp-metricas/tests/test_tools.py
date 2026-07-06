@@ -149,7 +149,8 @@ async def test_analisis_diario_devuelve_narrativa_con_siguiente_paso():
     out = await _llamar(_mcp(FuenteMuestra()), "analisis_diario", rango="semana")
     assert out["rango"] == "semana"
     assert out["es_muestra"] is True  # marca datos de muestra
-    assert isinstance(out["movimientos"], list)
+    assert isinstance(out["hallazgos"], list)
+    assert out["hallazgos"]  # la muestra produce hallazgos multi-dimensión
     # cierra con un siguiente paso accionable (loop a la accion)
     assert out["siguiente_paso"] is not None
     assert "Pídele a Claude" in out["siguiente_paso"]["texto"]

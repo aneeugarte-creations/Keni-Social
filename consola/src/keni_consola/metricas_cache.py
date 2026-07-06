@@ -56,7 +56,7 @@ from .tiempo import ahora_iso, hoy_utc
 # que devuelve `keni_metricas.servicio` (campos nuevos en reporte/series/listados):
 # invalida toda la cache previa de golpe (las claves viejas dejan de leerse y la
 # purga del barrido las borra), en vez de servir el campo nuevo como 0/None.
-_VERSION_ESQUEMA = 3
+_VERSION_ESQUEMA = 4
 
 # Las entradas de rangos AD-HOC (`rango:AAAA-MM-DD_AAAA-MM-DD`, las genera el comparador
 # con fechas que se desplazan cada dia) caducan y se purgan pasado este margen: sus claves

@@ -27,7 +27,7 @@ __all__ = [
     "TotalComparativa",
     "CompararMetricas",
     "PiezaAnalisis",
-    "MovimientoAnalisis",
+    "HallazgoAnalisis",
     "SiguientePasoAnalisis",
     "AnalisisDiario",
     "EstadoMetricas",
@@ -219,7 +219,7 @@ class CompararMetricas(TypedDict):
 
 
 class PiezaAnalisis(TypedDict):
-    """Pieza que explica un movimiento (o que apuntala el siguiente paso)."""
+    """Pieza que explica un hallazgo (o que apuntala el siguiente paso)."""
 
     titulo: str
     plataforma: str
@@ -228,18 +228,21 @@ class PiezaAnalisis(TypedDict):
     url: str | None
 
 
-class MovimientoAnalisis(TypedDict):
-    """Un movimiento del periodo: qué se movió y la pieza que lo explica."""
+class HallazgoAnalisis(TypedDict):
+    """Un hallazgo del periodo: una lectura de UNA dimensión, en una frase completa.
 
-    marca_id: str
-    marca: str
-    variacion_vis_pct: float
-    # direccion: "sube" | "baja" | "estable" (se deriva del signo de la variación).
+    Los hallazgos vienen jerarquizados (lo más relevante primero) y cubren dimensiones
+    DISTINTAS del periodo, para no centrarse en un solo dato.
+    """
+
+    # dimension: "vistas" | "red" | "formato" | "seguidores" | "engagement" | "pieza" |
+    # "periodo" (clasifica el eje; la UI pinta el icono adecuado).
+    dimension: str
+    # texto: la lectura completa en es-MX, sin jerga (frase para el resumen ejecutivo).
+    texto: str
+    # direccion: "sube" | "baja" | "estable" (fija la flecha del hallazgo).
     direccion: str
-    visualizaciones: int
-    # engagement_pct: None si no es comparable entre plataformas.
-    engagement_pct: float | None
-    # pieza: None si la marca no tiene piezas que destacar.
+    # pieza: None salvo que el hallazgo apunte a una pieza concreta (enlazable).
     pieza: PiezaAnalisis | None
 
 
@@ -254,11 +257,12 @@ class SiguientePasoAnalisis(TypedDict):
 
 
 class AnalisisDiario(TypedDict):
-    """Respuesta de `GET /api/metricas/analisis`: lectura "qué cambió y por qué".
+    """Respuesta de `GET /api/metricas/analisis`: lectura multi-dimensión del periodo.
 
-    Capa narrativa sobre las métricas: top movimientos con la(s) pieza(s)
-    que los explican y un siguiente paso. `fuente` marca la procedencia de los
-    datos.
+    Capa de lectura sobre las métricas para un equipo NO técnico: hallazgos
+    jerarquizados que cubren dimensiones distintas (vistas por marca, red, formato,
+    seguidores, engagement, pieza estrella y la variación propia del periodo) + un
+    siguiente paso. `fuente` marca la procedencia de los datos.
     """
 
     rango: str
@@ -266,9 +270,8 @@ class AnalisisDiario(TypedDict):
     marca: str
     # Procedencia: nombre de la fuente de los datos (p. ej. "metricool").
     fuente: str
-    movimientos: list[MovimientoAnalisis]
-    movimientos_resto: int
-    marcas_estables: int
+    # hallazgos: la lectura multi-dimensión, jerarquizada (lo más relevante primero).
+    hallazgos: list[HallazgoAnalisis]
     # Marcas con cobertura parcial (nombres resueltos); la lectura puede estar
     # incompleta. Vacío = cobertura completa.
     cobertura_parcial: list[str]

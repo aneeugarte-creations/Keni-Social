@@ -1,13 +1,16 @@
 /**
- * Análisis narrativo del periodo: "qué cambió y por qué" + siguiente paso.
+ * Análisis del periodo: lectura multi-dimensión "qué pasó y por qué" + siguiente paso.
  *
  * Capa de lectura para un equipo de redes NO técnico sobre `GET /metricas/analisis`:
- * top movimientos (qué marca subió/bajó y la pieza que lo explica) y una sugerencia
- * accionable ya redactada por el backend. Es el resumen ejecutivo de la página: va en
- * el encuadre uniforme (`<Seccion>`) con su contenido en una Card, justo tras los KPIs.
+ * una lista de HALLAZGOS jerarquizados (lo más relevante primero) que cubren dimensiones
+ * distintas —vistas por marca, red que empujó, formato que despunta, seguidores (con la
+ * señal de variación representativa), engagement, pieza estrella y la variación propia del
+ * periodo (semana ≠ mes)— más una sugerencia accionable ya redactada por el backend. Es el
+ * resumen ejecutivo de la página: va en el encuadre uniforme (`<Seccion>`) con su contenido
+ * en una Card, justo tras los KPIs.
  *
- * Los textos se pintan con los formateadores es-MX de `@/lib/formato`; el backend
- * entrega nombres de marca ya resueltos y `siguiente_paso.texto` como frase completa.
+ * El backend entrega cada hallazgo como una frase completa en es-MX; aquí solo se pinta el
+ * icono de dirección y, si el hallazgo apunta a una pieza, su enlace.
  */
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -20,12 +23,11 @@ import {
 } from "lucide-react";
 
 import { marcaParam } from "@/components/comunes/selectores";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
-import { nombreRed, numeroCompacto, plural, porcentaje, variacion } from "@/lib/formato";
-import type { AnalisisDiario, MovimientoAnalisis } from "@/types";
+import { nombreRed, porcentaje } from "@/lib/formato";
+import type { AnalisisDiario, HallazgoAnalisis } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
 import { Seccion } from "./Seccion";
@@ -47,57 +49,35 @@ function EnlacePieza({ url, children }: { url: string; children: React.ReactNode
 }
 
 /**
- * Un movimiento del periodo: icono de dirección + lectura en una frase y, si la hay,
- * la pieza que lo explica. GUARDIA: el backend emite `variacion_vis_pct = 0.0` cuando
- * la base es 0 (división imposible); "subió 0.0 %" OCULTARÍA un arranque desde cero,
- * así que ese caso se redacta como castellano natural —«estrenó vistas (antes 0)»—
- * con la insignia "Nuevo" FUERA de la frase, al final de la línea (incrustar el badge
- * dentro de la oración se leía «subió [Nuevo] en vistas»).
+ * Un hallazgo del periodo: icono de dirección + la frase completa que redacta el backend
+ * y, si el hallazgo apunta a una pieza, la pieza enlazada con su red legible.
  */
-function Movimiento({ m }: { m: MovimientoAnalisis }) {
-  const sube = m.direccion === "sube";
-  const baja = m.direccion === "baja";
+function Hallazgo({ h }: { h: HallazgoAnalisis }) {
+  const sube = h.direccion === "sube";
+  const baja = h.direccion === "baja";
   const Icono = sube ? TrendingUp : baja ? TrendingDown : Minus;
   const claseIcono = sube
     ? "text-emerald-600 dark:text-emerald-400"
     : baja
       ? "text-red-600 dark:text-red-400"
       : "text-muted-foreground";
-  const esArranque = m.direccion !== "estable" && m.variacion_vis_pct === 0;
-  const verbo = sube ? "subió" : "bajó";
 
   return (
     <li className="flex items-start gap-3">
       <Icono className={`mt-0.5 h-4 w-4 shrink-0 ${claseIcono}`} aria-hidden="true" />
       <div className="min-w-0 space-y-0.5">
-        {/* div (no <p>): la insignia "Nuevo" es un <div> y anidarlo en <p> es HTML inválido. */}
-        <div className="text-sm">
-          <span className="font-medium">{m.marca}</span>{" "}
-          {!sube && !baja
-            ? "se mantuvo estable"
-            : esArranque
-              ? "estrenó vistas (antes 0)"
-              : `${verbo} ${variacion(m.variacion_vis_pct)} en vistas`}
-          {` · ${numeroCompacto(m.visualizaciones)} vistas en el periodo`}
-          {m.engagement_pct != null && ` · ${porcentaje(m.engagement_pct)} de engagement`}
-          {esArranque && (
-            <>
-              {" "}
-              <Badge variant="ok">Nuevo</Badge>
-            </>
-          )}
-        </div>
-        {m.pieza && (
+        <p className="text-sm">{h.texto}</p>
+        {h.pieza && (
           <p className="text-sm text-muted-foreground">
             {"La explica: "}
-            {m.pieza.url ? (
-              <EnlacePieza url={m.pieza.url}>
-                <span className="min-w-0">“{m.pieza.titulo}”</span>
+            {h.pieza.url ? (
+              <EnlacePieza url={h.pieza.url}>
+                <span className="min-w-0">“{h.pieza.titulo}”</span>
               </EnlacePieza>
             ) : (
-              <>“{m.pieza.titulo}”</>
+              <>“{h.pieza.titulo}”</>
             )}
-            {` — ${nombreRed(m.pieza.plataforma)} · ${porcentaje(m.pieza.engagement_pct)} de engagement`}
+            {` — ${nombreRed(h.pieza.plataforma)} · ${porcentaje(h.pieza.engagement_pct)} de engagement`}
           </p>
         )}
       </div>
@@ -105,40 +85,25 @@ function Movimiento({ m }: { m: MovimientoAnalisis }) {
   );
 }
 
-/** Cuerpo de la tarjeta con datos ya cargados: movimientos, pie, avisos y paso. */
+/** Cuerpo de la tarjeta con datos ya cargados: hallazgos, aviso de cobertura y paso. */
 function CuerpoAnalisis({ data }: { data: AnalisisDiario }) {
-  const sinMovimientos = data.movimientos.length === 0 && data.siguiente_paso === null;
-  if (sinMovimientos) {
+  const sinHallazgos = data.hallazgos.length === 0 && data.siguiente_paso === null;
+  if (sinHallazgos) {
     return (
       <p className="py-6 text-center text-sm text-muted-foreground">
-        Sin movimientos destacables en este periodo.
-        {data.marcas_estables > 0 &&
-          ` ${plural(data.marcas_estables, "marca estable", "marcas estables")}.`}
+        Sin datos suficientes para una lectura del periodo.
       </p>
     );
   }
 
-  const partesPie: string[] = [];
-  if (data.movimientos_resto > 0) {
-    partesPie.push(
-      `${plural(data.movimientos_resto, "movimiento menor", "movimientos menores")} más`,
-    );
-  }
-  if (data.marcas_estables > 0) {
-    partesPie.push(plural(data.marcas_estables, "marca estable", "marcas estables"));
-  }
-
   return (
     <div className="space-y-4">
-      {data.movimientos.length > 0 && (
+      {data.hallazgos.length > 0 && (
         <ul className="space-y-3">
-          {data.movimientos.map((m) => (
-            <Movimiento key={m.marca_id} m={m} />
+          {data.hallazgos.map((h, i) => (
+            <Hallazgo key={`${h.dimension}-${i}`} h={h} />
           ))}
         </ul>
-      )}
-      {partesPie.length > 0 && (
-        <p className="text-xs text-muted-foreground">{partesPie.join(" · ")}</p>
       )}
       {data.cobertura_parcial.length > 0 && (
         <p

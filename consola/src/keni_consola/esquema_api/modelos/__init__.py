@@ -56,10 +56,10 @@ from .metricas import (
     DistribucionBucket,
     EstadisticasNumericas,
     EstadoMetricas,
+    HallazgoAnalisis,
     HistoricoPieza,
     ItemCorrelacion,
     MarcaCobertura,
-    MovimientoAnalisis,
     OpcionesMetricas,
     PeriodoMetricas,
     PiezaAnalisis,
@@ -122,7 +122,7 @@ __all__ = [
     "TotalComparativa",
     "CompararMetricas",
     "PiezaAnalisis",
-    "MovimientoAnalisis",
+    "HallazgoAnalisis",
     "SiguientePasoAnalisis",
     "AnalisisDiario",
     "EstadoMetricas",
@@ -190,9 +190,9 @@ MODELOS = [
     ComparativaPorRed,
     TotalComparativa,
     CompararMetricas,
-    # Análisis diario con narrativa.
+    # Análisis multi-dimensión del periodo.
     PiezaAnalisis,
-    MovimientoAnalisis,
+    HallazgoAnalisis,
     SiguientePasoAnalisis,
     AnalisisDiario,
     # Estado del refresco de la cache de métricas (botón Actualizar + polling).

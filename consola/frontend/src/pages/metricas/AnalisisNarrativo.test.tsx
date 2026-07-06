@@ -13,14 +13,11 @@ const RESP: AnalisisDiario = {
   etiqueta_rango: "Últimos 7 días",
   marca: "",
   fuente: "metricool",
-  movimientos: [
+  hallazgos: [
     {
-      marca_id: "claro_sports",
-      marca: "Claro Sports",
-      variacion_vis_pct: 39,
+      dimension: "vistas",
+      texto: "Claro Sports subió +39.0% en vistas (4.400 en el periodo), con 1.8% de engagement.",
       direccion: "sube",
-      visualizaciones: 4400,
-      engagement_pct: 1.8,
       pieza: {
         titulo: "Final de la Liga MX",
         plataforma: "tiktok",
@@ -28,9 +25,20 @@ const RESP: AnalisisDiario = {
         url: "https://www.tiktok.com/@clarosports/video/1",
       },
     },
+    {
+      dimension: "red",
+      texto: "TikTok fue la red que más aportó: 62% de las vistas del periodo (18.500.000).",
+      direccion: "estable",
+      pieza: null,
+    },
+    {
+      dimension: "seguidores",
+      texto:
+        "El 15-jun Instagram perdió 12.400 seguidores, muy por encima del ritmo diario habitual del periodo.",
+      direccion: "baja",
+      pieza: null,
+    },
   ],
-  movimientos_resto: 2,
-  marcas_estables: 1,
   cobertura_parcial: [],
   siguiente_paso: {
     marca_id: "claro_sports",
@@ -53,24 +61,31 @@ function renderConProviders(ui: React.ReactElement) {
 }
 
 describe("AnalisisNarrativo", () => {
-  it("narra un movimiento al alza con la variación es-MX y la pieza con su red legible", async () => {
+  it("pinta los hallazgos multi-dimensión como frases completas del backend", async () => {
     vi.spyOn(api, "metricasAnalisis").mockResolvedValue(RESP);
     renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
 
     expect(await screen.findByText("Análisis del periodo")).toBeInTheDocument();
     // El título de sección se pinta durante la carga; espera al dato para el resto.
-    expect(await screen.findByText("Claro Sports")).toBeInTheDocument();
-    // Variación formateada con `variacion()` (signo explícito + 1 decimal, es-MX).
-    expect(screen.getByText(/subió \+39\.0 % en vistas/)).toBeInTheDocument();
-    expect(screen.getByText(/4\.4 k vistas en el periodo/)).toBeInTheDocument();
-    // La pieza que explica el movimiento, con su red LEGIBLE ("TikTok", no "tiktok").
-    expect(screen.getByText(/La explica:/)).toBeInTheDocument();
-    expect(screen.getByText(/TikTok · 6\.2 % de engagement/)).toBeInTheDocument();
-    expect(screen.queryByText("tiktok")).not.toBeInTheDocument();
-    // Pie con los movimientos menores y las marcas estables, pluralizados.
     expect(
-      screen.getByText(/2 movimientos menores más · 1 marca estable/),
+      await screen.findByText(/Claro Sports subió \+39\.0% en vistas/),
     ).toBeInTheDocument();
+    // Dimensión de red y de seguidores (señal representativa), tal cual las redacta el backend.
+    expect(screen.getByText(/TikTok fue la red que más aportó/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/El 15-jun Instagram perdió 12\.400 seguidores/),
+    ).toBeInTheDocument();
+  });
+
+  it("enlaza la pieza que explica un hallazgo, con su red legible", async () => {
+    vi.spyOn(api, "metricasAnalisis").mockResolvedValue(RESP);
+    renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
+
+    expect(await screen.findByText(/La explica:/)).toBeInTheDocument();
+    // Red LEGIBLE ("TikTok", no "tiktok").
+    expect(screen.getByText(/TikTok · 6\.2 % de engagement/)).toBeInTheDocument();
+    const enlace = screen.getByRole("link", { name: /Final de la Liga MX/i });
+    expect(enlace).toHaveAttribute("href", "https://www.tiktok.com/@clarosports/video/1");
   });
 
   it("pinta el siguiente paso tal cual lo redacta el backend, con enlace a la pieza", async () => {
@@ -85,48 +100,27 @@ describe("AnalisisNarrativo", () => {
     expect(enlace).toHaveAttribute("href", "https://www.tiktok.com/@clarosports/video/1");
   });
 
-  it("redacta el arranque desde cero en castellano natural, con el badge fuera de la frase", async () => {
+  it("dice con honestidad cuando no hay datos suficientes", async () => {
     vi.spyOn(api, "metricasAnalisis").mockResolvedValue({
       ...RESP,
-      movimientos: [
-        {
-          marca_id: "unotv",
-          marca: "UnoTV",
-          variacion_vis_pct: 0,
-          direccion: "sube",
-          visualizaciones: 250,
-          engagement_pct: null,
-          pieza: null,
-        },
-      ],
-      siguiente_paso: null,
-    });
-    renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
-
-    // Frase natural: «UnoTV estrenó vistas (antes 0) · 250 vistas en el periodo».
-    expect(await screen.findByText(/estrenó vistas \(antes 0\)/)).toBeInTheDocument();
-    expect(screen.getByText(/250 vistas en el periodo/)).toBeInTheDocument();
-    // El badge sigue existiendo pero FUERA de la frase (nada de «subió [Nuevo] en vistas»).
-    expect(screen.getByText("Nuevo")).toBeInTheDocument();
-    expect(screen.queryByText(/subió/)).not.toBeInTheDocument();
-    // Y nunca un «0.0 %» que oculte el arranque.
-    expect(screen.queryByText(/0\.0 %/)).not.toBeInTheDocument();
-  });
-
-  it("dice con honestidad cuando no hay movimientos destacables", async () => {
-    vi.spyOn(api, "metricasAnalisis").mockResolvedValue({
-      ...RESP,
-      movimientos: [],
-      movimientos_resto: 0,
-      marcas_estables: 2,
+      hallazgos: [],
       siguiente_paso: null,
     });
     renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
 
     expect(
-      await screen.findByText(/sin movimientos destacables en este periodo/i),
+      await screen.findByText(/sin datos suficientes para una lectura del periodo/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/2 marcas estables/)).toBeInTheDocument();
+  });
+
+  it("avisa de cobertura parcial sin romper", async () => {
+    vi.spyOn(api, "metricasAnalisis").mockResolvedValue({
+      ...RESP,
+      cobertura_parcial: ["UnoTV"],
+    });
+    renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
+
+    expect(await screen.findByText(/Datos parciales de: UnoTV/)).toBeInTheDocument();
   });
 
   it("avisa sin romper cuando la API falla", async () => {

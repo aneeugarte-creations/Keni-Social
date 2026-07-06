@@ -592,7 +592,7 @@
           ]
         }
       },
-      "description": "Pieza que explica un movimiento (o que apuntala el siguiente paso).",
+      "description": "Pieza que explica un hallazgo (o que apuntala el siguiente paso).",
       "required": [
         "titulo",
         "plataforma",
@@ -600,34 +600,18 @@
         "url"
       ]
     },
-    "MovimientoAnalisis": {
+    "HallazgoAnalisis": {
       "type": "object",
-      "title": "MovimientoAnalisis",
+      "title": "HallazgoAnalisis",
       "properties": {
-        "marca_id": {
+        "dimension": {
           "type": "string"
         },
-        "marca": {
+        "texto": {
           "type": "string"
-        },
-        "variacion_vis_pct": {
-          "type": "number"
         },
         "direccion": {
           "type": "string"
-        },
-        "visualizaciones": {
-          "type": "integer"
-        },
-        "engagement_pct": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ]
         },
         "pieza": {
           "anyOf": [
@@ -640,14 +624,11 @@
           ]
         }
       },
-      "description": "Un movimiento del periodo: qué se movió y la pieza que lo explica.",
+      "description": "Un hallazgo del periodo: una lectura de UNA dimensión, en una frase completa.\n\nLos hallazgos vienen jerarquizados (lo más relevante primero) y cubren dimensiones\nDISTINTAS del periodo, para no centrarse en un solo dato.",
       "required": [
-        "marca_id",
-        "marca",
-        "variacion_vis_pct",
+        "dimension",
+        "texto",
         "direccion",
-        "visualizaciones",
-        "engagement_pct",
         "pieza"
       ]
     },
@@ -710,17 +691,11 @@
         "fuente": {
           "type": "string"
         },
-        "movimientos": {
+        "hallazgos": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/MovimientoAnalisis"
+            "$ref": "#/$defs/HallazgoAnalisis"
           }
-        },
-        "movimientos_resto": {
-          "type": "integer"
-        },
-        "marcas_estables": {
-          "type": "integer"
         },
         "cobertura_parcial": {
           "type": "array",
@@ -742,15 +717,13 @@
           "type": "string"
         }
       },
-      "description": "Respuesta de `GET /api/metricas/analisis`: lectura \"qué cambió y por qué\".\n\nCapa narrativa sobre las métricas: top movimientos con la(s) pieza(s)\nque los explican y un siguiente paso. `fuente` marca la procedencia de los\ndatos.",
+      "description": "Respuesta de `GET /api/metricas/analisis`: lectura multi-dimensión del periodo.\n\nCapa de lectura sobre las métricas para un equipo NO técnico: hallazgos\njerarquizados que cubren dimensiones distintas (vistas por marca, red, formato,\nseguidores, engagement, pieza estrella y la variación propia del periodo) + un\nsiguiente paso. `fuente` marca la procedencia de los datos.",
       "required": [
         "rango",
         "etiqueta_rango",
         "marca",
         "fuente",
-        "movimientos",
-        "movimientos_resto",
-        "marcas_estables",
+        "hallazgos",
         "cobertura_parcial",
         "siguiente_paso",
         "generado_en"
@@ -2562,7 +2535,7 @@
       "$ref": "#/$defs/PiezaAnalisis"
     },
     {
-      "$ref": "#/$defs/MovimientoAnalisis"
+      "$ref": "#/$defs/HallazgoAnalisis"
     },
     {
       "$ref": "#/$defs/SiguientePasoAnalisis"

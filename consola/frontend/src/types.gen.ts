@@ -166,7 +166,7 @@ export interface CompararMetricas {
   generado_en: string;
 }
 /**
- * Pieza que explica un movimiento (o que apuntala el siguiente paso).
+ * Pieza que explica un hallazgo (o que apuntala el siguiente paso).
  */
 export interface PiezaAnalisis {
   titulo: string;
@@ -175,15 +175,15 @@ export interface PiezaAnalisis {
   url: string | null;
 }
 /**
- * Un movimiento del periodo: qué se movió y la pieza que lo explica.
+ * Un hallazgo del periodo: una lectura de UNA dimensión, en una frase completa.
+ *
+ * Los hallazgos vienen jerarquizados (lo más relevante primero) y cubren dimensiones
+ * DISTINTAS del periodo, para no centrarse en un solo dato.
  */
-export interface MovimientoAnalisis {
-  marca_id: string;
-  marca: string;
-  variacion_vis_pct: number;
+export interface HallazgoAnalisis {
+  dimension: string;
+  texto: string;
   direccion: string;
-  visualizaciones: number;
-  engagement_pct: number | null;
   pieza: PiezaAnalisis | null;
 }
 /**
@@ -197,20 +197,19 @@ export interface SiguientePasoAnalisis {
   texto: string;
 }
 /**
- * Respuesta de `GET /api/metricas/analisis`: lectura "qué cambió y por qué".
+ * Respuesta de `GET /api/metricas/analisis`: lectura multi-dimensión del periodo.
  *
- * Capa narrativa sobre las métricas: top movimientos con la(s) pieza(s)
- * que los explican y un siguiente paso. `fuente` marca la procedencia de los
- * datos.
+ * Capa de lectura sobre las métricas para un equipo NO técnico: hallazgos
+ * jerarquizados que cubren dimensiones distintas (vistas por marca, red, formato,
+ * seguidores, engagement, pieza estrella y la variación propia del periodo) + un
+ * siguiente paso. `fuente` marca la procedencia de los datos.
  */
 export interface AnalisisDiario {
   rango: string;
   etiqueta_rango: string;
   marca: string;
   fuente: string;
-  movimientos: MovimientoAnalisis[];
-  movimientos_resto: number;
-  marcas_estables: number;
+  hallazgos: HallazgoAnalisis[];
   cobertura_parcial: string[];
   siguiente_paso: SiguientePasoAnalisis | null;
   generado_en: string;

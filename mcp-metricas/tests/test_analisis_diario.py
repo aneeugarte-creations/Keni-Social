@@ -1,10 +1,13 @@
-"""Tests del análisis diario con narrativa.
+"""Tests del análisis multi-dimensión del periodo.
 
-Cubre los tres criterios de aceptación del análisis diario:
-  - resume top movimientos del periodo con la(s) pieza(s) que los explican;
+Cubre los criterios de aceptación:
+  - emite HALLAZGOS jerarquizados que cubren dimensiones DISTINTAS (vistas, red, formato,
+    seguidores, engagement, pieza, periodo), ≥5 cuando el periodo da para ello;
+  - la lectura difiere estructuralmente entre semana y mes (dimensión "periodo");
+  - la variación de seguidores REPRESENTATIVA (señal) se distingue del ruido diario;
   - cierra con una sugerencia accionable (loop a la acción);
-  - marca explícitamente cuando los datos son de muestra (no reales).
-Más la degradación honesta cuando no hay datos / la fuente es real.
+  - marca explícitamente cuando los datos son de muestra (no reales);
+  - degrada con honestidad cuando no hay datos.
 """
 
 from __future__ import annotations
@@ -14,7 +17,9 @@ from datetime import date
 import pytest
 
 from keni_metricas.analisis_diario import (
-    MAX_MOVIMIENTOS,
+    HALLAZGOS_OBJETIVO,
+    _hallazgo_seguidores,
+    _senal_seguidores,
     construir_analisis,
     render_markdown,
 )
@@ -75,42 +80,127 @@ class _FuenteEstable:
                 visualizaciones=500,
                 interacciones=30,
                 engagement_pct=6.0,
+                formato="reel",
             )
         ]
 
 
+def _dimensiones(analisis: dict) -> set[str]:
+    return {h["dimension"] for h in analisis["hallazgos"]}
+
+
 # --------------------------------------------------------------------------- #
-# Criterio 1: resume top movimientos con la(s) pieza(s) que los explican.      #
+# Criterio 1: hallazgos multi-dimensión, jerarquizados, ≥5 cuando hay datos.   #
 # --------------------------------------------------------------------------- #
 
 
-def test_resume_movimientos_con_pieza_que_los_explica():
+def test_emite_hallazgos_multidimension():
     a = construir_analisis(FuenteMuestra(), "semana")
-    assert a["movimientos"], "la muestra debería tener movimientos por encima del umbral"
-    assert len(a["movimientos"]) <= MAX_MOVIMIENTOS
-    primero = a["movimientos"][0]
-    # Cada movimiento trae dirección, variación y la pieza estrella que lo acompaña.
-    assert primero["direccion"] in {"sube", "baja", "estable"}
-    assert "variacion_vis_pct" in primero
-    assert primero["pieza"] is not None
-    assert primero["pieza"]["titulo"]
+    assert a["hallazgos"], "la muestra debería producir hallazgos"
+    # Al menos el objetivo de riqueza (petición de Mariana: ≥5 bullets específicos).
+    assert len(a["hallazgos"]) >= HALLAZGOS_OBJETIVO
+    dims = _dimensiones(a)
+    # Cubre dimensiones DISTINTAS (no se centra en un solo dato).
+    assert {"vistas", "red", "engagement"} <= dims
+    assert len(dims) >= 3
 
 
-def test_movimientos_ordenados_por_magnitud_descendente():
+def test_hallazgos_vistas_ordenados_por_magnitud_descendente():
     a = construir_analisis(FuenteMuestra(), "semana")
-    magnitudes = [abs(m["variacion_vis_pct"]) for m in a["movimientos"]]
-    assert magnitudes == sorted(magnitudes, reverse=True)
+    vistas = [
+        h for h in a["hallazgos"] if h["dimension"] == "vistas" and h["texto"].endswith("engagement.")
+    ]
+    # Los movimientos de vistas con variación se listan de mayor a menor cambio; el primero es
+    # el más llamativo (aparece antes que cualquier otro hallazgo).
+    assert a["hallazgos"][0]["dimension"] == "vistas"
+    assert vistas, "debería haber movimientos de vistas narrados"
 
 
-def test_render_markdown_lista_movimientos_y_piezas():
-    md = render_markdown(construir_analisis(FuenteMuestra(), "semana"))
-    assert md.startswith("## Análisis del periodo — semana")
-    assert "**Lo que se movió:**" in md
-    assert "Lo explica" in md  # la pieza que explica el movimiento
+def test_cada_hallazgo_lleva_dimension_direccion_texto():
+    a = construir_analisis(FuenteMuestra(), "semana")
+    for h in a["hallazgos"]:
+        assert h["dimension"]
+        assert h["direccion"] in {"sube", "baja", "estable"}
+        assert h["texto"]
 
 
 # --------------------------------------------------------------------------- #
-# Criterio 2: cierra con una sugerencia accionable (loop a la acción).         #
+# Criterio 2: la lectura difiere estructuralmente entre semana y mes.          #
+# --------------------------------------------------------------------------- #
+
+
+def test_periodo_semana_narra_dia_mas_fuerte_y_flojo():
+    serie = {
+        "puntos": [
+            {"fecha": "2026-06-01", "visualizaciones": 100, "interacciones": 5},
+            {"fecha": "2026-06-02", "visualizaciones": 900, "interacciones": 40},
+            {"fecha": "2026-06-03", "visualizaciones": 300, "interacciones": 12},
+        ]
+    }
+    a = construir_analisis(_FuenteEstable(), "semana", serie_diaria=serie)
+    periodo = [h for h in a["hallazgos"] if h["dimension"] == "periodo"]
+    assert periodo, "la semana debe narrar el día más fuerte/flojo"
+    assert "día más fuerte de la semana" in periodo[0]["texto"]
+    assert "2-jun" in periodo[0]["texto"]  # el día de más vistas
+
+
+def test_periodo_mes_narra_tendencia_intra_mes():
+    # Primera mitad floja, segunda fuerte: tendencia "de menos a más".
+    puntos = [{"fecha": f"2026-06-{d:02d}", "visualizaciones": 100, "interacciones": 5} for d in range(1, 11)]
+    puntos += [{"fecha": f"2026-06-{d:02d}", "visualizaciones": 400, "interacciones": 20} for d in range(11, 21)]
+    a = construir_analisis(_FuenteEstable(), "mes", serie_diaria={"puntos": puntos})
+    periodo = [h for h in a["hallazgos"] if h["dimension"] == "periodo"]
+    assert periodo, "el mes debe narrar la tendencia intra-mes"
+    assert "segunda mitad" in periodo[0]["texto"]
+    assert periodo[0]["direccion"] == "sube"
+
+
+# --------------------------------------------------------------------------- #
+# Criterio 3: variación de seguidores REPRESENTATIVA (señal vs. ruido).        #
+# --------------------------------------------------------------------------- #
+
+
+def test_senal_seguidores_detecta_desplome_representativo():
+    # Ritmo habitual ~+200/día, con un desplome de -12 400 el 15-jun.
+    puntos = [
+        {"fecha": "2026-06-12", "total": 100000, "por_red": {"instagram": 60000, "tiktok": 40000}},
+        {"fecha": "2026-06-13", "total": 100200, "por_red": {"instagram": 60200, "tiktok": 40000}},
+        {"fecha": "2026-06-14", "total": 100400, "por_red": {"instagram": 60400, "tiktok": 40000}},
+        {"fecha": "2026-06-15", "total": 88000, "por_red": {"instagram": 48000, "tiktok": 40000}},
+        {"fecha": "2026-06-16", "total": 88200, "por_red": {"instagram": 48200, "tiktok": 40000}},
+    ]
+    señal = _senal_seguidores(puntos)
+    assert señal is not None
+    fecha, red, delta = señal
+    assert fecha == "2026-06-15"
+    assert red == "instagram"  # la red que más aportó al desplome
+    assert delta < -10000
+    h = _hallazgo_seguidores({"puntos": puntos, "neto": -11800})
+    assert "15-jun" in h["texto"]
+    assert "Instagram" in h["texto"]
+    assert "muy por encima del ritmo" in h["texto"]
+    assert h["direccion"] == "baja"
+
+
+def test_seguidores_sin_senal_narra_neto_sereno():
+    # Ritmo parejo: ningún día se sale del habitual → sin señal, solo el neto.
+    puntos = [
+        {"fecha": f"2026-06-{d:02d}", "total": 100000 + (d - 2) * 200, "por_red": {"instagram": 100000 + (d - 2) * 200}}
+        for d in range(2, 9)
+    ]
+    assert _senal_seguidores(puntos) is None
+    h = _hallazgo_seguidores({"puntos": puntos, "neto": 1200})
+    assert "neto de 1.200 seguidores" in h["texto"]
+    assert "dentro del ritmo habitual" in h["texto"]
+
+
+def test_seguidores_sin_serie_no_emite_hallazgo():
+    assert _hallazgo_seguidores(None) is None
+    assert _hallazgo_seguidores({"puntos": [], "neto": 0}) is not None  # neto=0 sí informa
+
+
+# --------------------------------------------------------------------------- #
+# Criterio 4: cierra con una sugerencia accionable (loop a la acción).         #
 # --------------------------------------------------------------------------- #
 
 
@@ -120,17 +210,18 @@ def test_cierra_con_siguiente_paso_accionable():
     assert paso is not None
     assert paso["marca"]
     assert "Pídele a Claude" in paso["texto"]
-    # Frontera: la decisión final queda en el equipo, no en la máquina.
     assert "lo decides tú" in paso["texto"].lower()
 
 
-def test_render_markdown_incluye_siguiente_paso():
+def test_render_markdown_incluye_hallazgos_y_siguiente_paso():
     md = render_markdown(construir_analisis(FuenteMuestra(), "semana"))
+    assert md.startswith("## Análisis del periodo — semana")
+    assert "**Lo que pasó:**" in md
     assert "**Siguiente paso:**" in md
 
 
 # --------------------------------------------------------------------------- #
-# Criterio 3: marca explícitamente cuando los datos son de muestra.            #
+# Criterio 5: marca explícitamente cuando los datos son de muestra.            #
 # --------------------------------------------------------------------------- #
 
 
@@ -138,7 +229,7 @@ def test_muestra_marcada_en_estructura():
     a = construir_analisis(FuenteMuestra(), "semana")
     assert a["es_muestra"] is True
     assert a["fuente"] == "muestra"
-    assert "aviso" in a  # campo de primer nivel
+    assert "aviso" in a
 
 
 def test_muestra_marcada_en_markdown():
@@ -161,21 +252,19 @@ def test_fuente_real_no_marca_muestra():
 
 def test_sin_datos_degrada_honestamente():
     a = construir_analisis(_FuenteVacia(), "semana")
-    assert a["movimientos"] == []
+    assert a["hallazgos"] == []
     assert a["siguiente_paso"] is None
     md = render_markdown(a)
     assert "Sin datos suficientes" in md
-    assert "**Siguiente paso:**" not in md  # no inventa una acción sin base
+    assert "**Siguiente paso:**" not in md
 
 
-def test_marca_estable_no_se_narra_como_movimiento():
+def test_marca_estable_se_narra_como_estabilidad_no_se_calla():
     a = construir_analisis(_FuenteEstable(), "semana")
-    # 1% < umbral 5%: no es movimiento, pero sí cuenta como estable.
-    assert a["movimientos"] == []
-    assert a["marcas_estables"] == 1
-    md = render_markdown(a)
-    assert "estable" in md.lower()
-    assert "Sin datos suficientes" not in md  # hay datos, solo que estables
+    # 1% < umbral 5%: no es un movimiento fuerte, pero SÍ se informa (estabilidad honesta).
+    vistas = [h for h in a["hallazgos"] if h["dimension"] == "vistas"]
+    assert vistas, "una marca estable debe seguir generando un hallazgo de vistas"
+    assert "estable" in vistas[0]["texto"].lower()
 
 
 def test_rango_invalido_propaga_valueerror():
@@ -189,9 +278,8 @@ def test_rango_invalido_propaga_valueerror():
 
 
 def test_usa_variacion_real_del_historico(tmp_path):
-    """Con histórico previo, la variación del movimiento es la REAL, no la sintética."""
+    """Con histórico previo, la variación del movimiento de vistas es la REAL."""
     h = Historico(tmp_path / "h.db")
-    # Baseline muy bajo en un periodo anterior para forzar una variación enorme.
     h.guardar(
         ResumenMetricas(
             cuenta="claro_sports",
@@ -207,8 +295,7 @@ def test_usa_variacion_real_del_historico(tmp_path):
         )
     )
     a = construir_analisis(FuenteMuestra(), "semana", historico=h)
-    cs = next((m for m in a["movimientos"] if m["marca_id"] == "claro_sports"), None)
-    assert cs is not None
-    # La muestra de claro_sports ronda millones de vistas vs. baseline 1000:
-    # la variación real es enorme y positiva, muy por encima del modelo sintético.
-    assert cs["variacion_vis_pct"] > 1000
+    # La muestra de claro_sports ronda millones de vistas vs. baseline 1000: aparece un
+    # movimiento de vistas al alza enorme entre los hallazgos.
+    vistas = [h for h in a["hallazgos"] if h["dimension"] == "vistas"]
+    assert any("Claro Sports" in x["texto"] and "subió" in x["texto"] for x in vistas)

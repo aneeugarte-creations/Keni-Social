@@ -493,15 +493,22 @@ def test_comparar_acotado_a_una_marca_sigue_trayendo_fuente(cliente):
     assert r.json()["fuente"] == "muestra"
 
 
-def test_analisis_devuelve_narrativa_con_procedencia(cliente):
-    # Lectura "qué cambió y por qué" + siguiente paso. La procedencia de los
-    # datos viaja en `fuente` (en tests, la fuente offline del paquete).
+def test_analisis_devuelve_hallazgos_con_procedencia(cliente):
+    # Lectura multi-dimensión + siguiente paso. La procedencia de los datos viaja en
+    # `fuente` (en tests, la fuente offline del paquete).
     r = cliente.get("/api/metricas/analisis?rango=semana")
     assert r.status_code == 200
     data = r.json()
     assert data["fuente"] == "muestra"
     assert "es_muestra" not in data
-    assert isinstance(data["movimientos"], list)
+    assert isinstance(data["hallazgos"], list)
+    assert data["hallazgos"], "la muestra produce hallazgos multi-dimensión"
+    # Cada hallazgo lleva dimensión + frase + dirección; cubre dimensiones distintas.
+    for h in data["hallazgos"]:
+        assert h["dimension"]
+        assert h["texto"]
+        assert h["direccion"] in {"sube", "baja", "estable"}
+    assert len({h["dimension"] for h in data["hallazgos"]}) >= 3
     # cierra con un siguiente paso accionable (loop a la acción)
     assert data["siguiente_paso"] is not None
     assert "Pídele a Claude" in data["siguiente_paso"]["texto"]
@@ -512,8 +519,24 @@ def test_analisis_acotado_a_una_marca(cliente):
     assert r.status_code == 200
     data = r.json()
     assert data["marca"] == "claro_sports"
-    # acotado a una marca: los movimientos (si hay) son sólo de esa marca
-    assert all(m["marca_id"] == "claro_sports" for m in data["movimientos"])
+    # acotado a una marca: el siguiente paso (si hay) apunta a esa marca
+    if data["siguiente_paso"] is not None:
+        assert data["siguiente_paso"]["marca_id"] == "claro_sports"
+
+
+def test_analisis_acotado_a_una_red(cliente):
+    # `?red=` recomputa la lectura acotada a esa red (no cacheado): sigue trayendo
+    # hallazgos y procedencia, sin romper.
+    r = cliente.get("/api/metricas/analisis?rango=semana&red=tiktok")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["fuente"] == "muestra"
+    assert isinstance(data["hallazgos"], list)
+
+
+def test_analisis_red_desconocida_devuelve_400(cliente):
+    r = cliente.get("/api/metricas/analisis?rango=semana&red=telegram")
+    assert r.status_code == 400
 
 
 def test_analisis_rango_invalido_devuelve_400(cliente):

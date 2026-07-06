@@ -811,6 +811,77 @@ class FuenteScoped:
         return self._fuente.campanias_ads_desglose(cuenta_id, provider_campaign_id, rango)
 
 
+class FuenteRed:
+    """Envoltorio que limita una FuenteMetricas a un subconjunto de REDES (plataformas).
+
+    Espejo por-red de `FuenteScoped` (que acota por marca): cada `resumen` queda con las
+    métricas RE-SUMADAS solo de las redes en foco (su `por_plataforma` reducido a esas
+    redes; los totales de cuenta re-sumados sobre ellas), `mejores_piezas` reducido a las
+    piezas de esas redes y `serie_seguidores` reducida a esas redes en `por_red`. Se aplica
+    a CUALQUIER fuente, así que todo lo que va después (reporte, análisis) queda acotado a la
+    red. NO se toca `variacion_vs_anterior`: es una variación de CUENTA (el histórico no la
+    guarda por red), así que con foco de red se OMITE del resumen filtrado (no se inventa una
+    variación por red que no existe). El resto de capacidades opcionales se delegan tal cual.
+    """
+
+    def __init__(self, fuente: FuenteMetricas, redes: "set[str] | frozenset[str]"):
+        self._fuente = fuente
+        self._redes = {str(r) for r in redes}
+
+    @property
+    def nombre(self) -> str:
+        return self._fuente.nombre
+
+    def cuentas(self) -> list[Cuenta]:
+        return self._fuente.cuentas()
+
+    def resumen(self, cuenta_id: str, rango: str) -> ResumenMetricas:
+        r = self._fuente.resumen(cuenta_id, rango)
+        de_red = [m for m in r.por_plataforma if m.plataforma.value in self._redes]
+        vis = sum(m.visualizaciones for m in de_red)
+        impr = sum(m.impresiones for m in de_red)
+        inter = sum(m.interacciones for m in de_red)
+        alcs = [m.alcance for m in de_red if m.alcance is not None]
+        alc = sum(alcs) if alcs else None
+        # engagement de una sola red = el de esa red; con varias en foco queda None (bases
+        # heterogéneas), igual que el agregado del esquema.
+        eng = de_red[0].engagement_pct if len(de_red) == 1 else None
+        return r.model_copy(
+            update={
+                "visualizaciones": vis,
+                "impresiones": impr,
+                "interacciones": inter,
+                "alcance": alc,
+                "engagement_pct": eng,
+                "por_plataforma": de_red,
+                # Sin variación por red (el histórico es por cuenta): se omite en foco de red.
+                "variacion_vs_anterior": {},
+            }
+        )
+
+    def mejores_piezas(self, cuenta_id: str, rango: str, n: int) -> list[Pieza]:
+        piezas = self._fuente.mejores_piezas(cuenta_id, rango, n)
+        return [p for p in piezas if p.plataforma.value in self._redes]
+
+    def serie_seguidores(self, cuenta_id: str, rango: str):
+        if not hasattr(self._fuente, "serie_seguidores"):
+            raise AttributeError("la fuente envuelta no expone serie_seguidores")
+        puntos = self._fuente.serie_seguidores(cuenta_id, rango)
+        recortados = []
+        for punto in puntos:
+            por_red = {
+                red: v for red, v in (punto.get("por_red") or {}).items() if red in self._redes
+            }
+            recortados.append({**punto, "por_red": por_red})
+        return recortados
+
+    def __getattr__(self, nombre: str):
+        # Capacidades opcionales no acotadas por red (serie_diaria, demografia, inbox, ads…):
+        # se delegan tal cual a la fuente envuelta. El análisis por red que las necesita
+        # (serie diaria) las obtiene ya filtradas por otro camino (`construir_tendencia_diaria`).
+        return getattr(self._fuente, nombre)
+
+
 def _fuente_metricool(cfg: Config) -> FuenteMetricas:
     """Construye `FuenteMetricool` o, sin credenciales, una fuente Metricool VACÍA.
 

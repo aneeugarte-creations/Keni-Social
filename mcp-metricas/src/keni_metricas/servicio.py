@@ -284,15 +284,35 @@ def _historico_lectura():
         return None
 
 
-def construir_analisis_diario(rango: str = "semana", marca: str | None = None) -> dict:
-    """Análisis diario con narrativa como dict JSON-serializable.
+def construir_analisis_diario(
+    rango: str = "semana",
+    marca: str | None = None,
+    red: "str | tuple[str, ...] | list[str] | None" = None,
+) -> dict:
+    """Análisis multi-dimensión del periodo como dict JSON-serializable.
 
-    Lectura accionable del periodo: qué se movió, la(s) pieza(s) que lo explican y
-    el siguiente paso. Incluye `fuente`/`es_muestra` para que la UI marque cuando
-    los datos son de muestra. Propaga `ValueError` (rango inválido) y
-    `CuentaNoEncontrada` (marca fuera de alcance).
+    Lectura accionable: hallazgos jerarquizados (vistas por marca, red, formato,
+    seguidores con su señal de variación representativa, engagement, pieza estrella y la
+    variación propia del periodo) + siguiente paso. Inyecta al motor la serie de seguidores
+    y la serie diaria del periodo (saneadas aquí, en un solo sitio) para las dimensiones que
+    las necesitan. `red` (una o varias) acota TODO el análisis a esas redes (sin `red` =
+    todas). Incluye `fuente`/`es_muestra` para que la UI marque los datos de muestra.
+    Propaga `ValueError` (rango inválido) y `CuentaNoEncontrada` (marca fuera de alcance).
     """
-    return _analisis.construir_analisis(_fuente(marca), rango, marca, _historico_lectura())
+    fuente = _fuente(marca)
+    reds = {red} if isinstance(red, str) else set(red or ())
+    if reds:
+        fuente = _config.FuenteRed(fuente, reds)
+    serie_seguidores = serie_seguidores_desde_fuente(fuente, rango, marca)
+    serie_diaria = construir_tendencia_diaria(rango, marca, tuple(reds))
+    return _analisis.construir_analisis(
+        fuente,
+        rango,
+        marca,
+        _historico_lectura(),
+        serie_seguidores=serie_seguidores,
+        serie_diaria=serie_diaria,
+    )
 
 
 def analisis_diario_markdown(rango: str = "semana", marca: str | None = None) -> str:
