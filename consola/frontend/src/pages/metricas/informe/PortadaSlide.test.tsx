@@ -40,8 +40,8 @@ describe("PortadaSlide · logo de marca", () => {
   });
 });
 
-describe("PortadaSlide · veredicto del mes", () => {
-  it("pinta el titular del mes bajo la caption cuando se pasa", () => {
+describe("PortadaSlide · anatomía AIRE", () => {
+  it("el eyebrow arriba lleva el periodo", () => {
     const props = desdeEntradas([], CTX_PROD);
     const { getByText } = render(
       <PortadaSlide
@@ -49,16 +49,14 @@ describe("PortadaSlide · veredicto del mes", () => {
         marcaLabel={props.marcaLabel}
         esTodas={props.esTodas}
         periodo={props.periodo}
-        titularMes={props.titularMes}
       />,
     );
-    expect(props.titularMes).toBeTruthy();
-    expect(getByText(props.titularMes)).toBeInTheDocument();
+    expect(getByText(new RegExp(`Informe de métricas .* ${props.periodo}`))).toBeInTheDocument();
   });
 
-  it("sin titularMes (preview de layout) la portada no lo pinta", () => {
+  it("firma «keni» en el pie", () => {
     const props = desdeEntradas([], CTX_PROD);
-    const { container } = render(
+    const { getByText } = render(
       <PortadaSlide
         marcaId={props.marcaId}
         marcaLabel={props.marcaLabel}
@@ -66,8 +64,35 @@ describe("PortadaSlide · veredicto del mes", () => {
         periodo={props.periodo}
       />,
     );
-    // Solo la caption del periodo; ningún segundo párrafo de veredicto.
-    expect(container.querySelectorAll("p")).toHaveLength(1);
+    expect(getByText("keni")).toBeInTheDocument();
+  });
+
+  it("la portada NO pinta el veredicto del mes (gobierna la lámina de resumen, no la portada)", () => {
+    const props = desdeEntradas([], CTX_PROD);
+    const { queryByText } = render(
+      <PortadaSlide
+        marcaId={props.marcaId}
+        marcaLabel={props.marcaLabel}
+        esTodas={props.esTodas}
+        periodo={props.periodo}
+      />,
+    );
+    expect(props.titularMes).toBeTruthy();
+    expect(queryByText(props.titularMes)).toBeNull();
+  });
+
+  it("la portada-portfolio anuncia «Todas las marcas» en su eyebrow", () => {
+    const props = desdeEntradas([], { ...CTX_PROD, marca: "Todas las marcas", marcaId: undefined });
+    const { getByText } = render(
+      <PortadaSlide
+        marcaId={props.marcaId}
+        marcaLabel={props.marcaLabel}
+        esTodas={props.esTodas}
+        periodo={props.periodo}
+      />,
+    );
+    expect(props.esTodas).toBe(true);
+    expect(getByText(/Todas las marcas/)).toBeInTheDocument();
   });
 });
 

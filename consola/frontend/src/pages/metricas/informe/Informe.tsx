@@ -35,7 +35,6 @@ const TONO = {
   tablaHeader: "text-neutral-500",
   tablaCelda: "text-neutral-900",
   pie: "text-neutral-500",
-  coverCaption: "text-neutral-500",
 } as const;
 
 /** Overline / eyebrow ÚNICO del deck (mismo tracking en toda lámina). */
@@ -150,43 +149,24 @@ const COVER_TODAS = "#17181C";
 const MARCAS_PORTFOLIO = ["claro-sports", "unotv", "piso-15", "nacion-gamer", "fundacion"];
 
 /**
- * Caja del logo y colocación de la caption en la portada de una marca. Un mark ANCHO (UnoTV,
- * ratio 3) llena su caja de ancho y ancla con presencia; un lockup casi cuadrado (Claro Sports,
- * ratio 1.6) necesita más caja para igualar esa presencia, y la caption se ANCLA baja —desacoplada
- * del logo— para gobernar el aire inferior. Las marcas sin entrada caen al DEFAULT (look común).
+ * Caja del logo en la portada AIRE. El logo flota contenido en el centro del vacío con márgenes
+ * generosos; `logoNudgeX` lo centra ÓPTICAMENTE (no por su caja) cuando el lockup es asimétrico.
+ * Las marcas sin entrada caen al DEFAULT (caja uniforme).
  */
 type CoverLayout = {
   /** Caja máxima del logo (object-contain encaja dentro manteniendo proporción). */
   box: { h: number; w: number };
-  /** px que sube(−)/baja(+) el logo respecto al centro óptico del lienzo de portada. */
-  logoNudge?: number;
   /** px que mueve el logo a la izquierda(−)/derecha(+) para centrarlo ÓPTICAMENTE (no por su caja):
-   *  un lockup asimétrico (el destello de Claro sobresale a la derecha) no comparte eje con la
-   *  caption hasta corregir su centro de masa. */
+   *  un lockup asimétrico (el destello de Claro sobresale a la derecha) no comparte eje con el
+   *  centro del lienzo hasta corregir su centro de masa. */
   logoNudgeX?: number;
-  /** Modo por defecto: gap bajo el logo con el grupo (logo+caption) centrado. */
-  captionMt?: number;
-  /** Modo anclado: caption fijada a X px del borde inferior del lienzo (independiente del logo). */
-  captionBottom?: number;
-  /** Interletrado de la caption (em). */
-  captionTracking?: string;
-  /** Tinta de la caption sobre fondo de color (clase Tailwind); por defecto text-white/90. */
-  captionTinta?: string;
 };
-const COVER_LAYOUT_DEFAULT: CoverLayout = { box: { h: 140, w: 250 }, captionMt: 64, captionTracking: "0.24em" };
+const COVER_LAYOUT_DEFAULT: CoverLayout = { box: { h: 150, w: 300 } };
 /** Ajustes de portada por marca (sobre el DEFAULT). */
 const COVER_LAYOUT: Record<string, CoverLayout> = {
-  // ZÓCALO: logo +16% subido a su centro óptico (logoNudge), centrado horizontal por su masa
-  // (logoNudgeX corrige que el lockup parquea "sports" a la derecha) y caption anclada baja con el
-  // blanco asentado al 85% (sobre el rojo intenso vibra menos que el blanco puro).
-  "claro-sports": {
-    box: { h: 162, w: 285 },
-    logoNudge: -22,
-    logoNudgeX: -7,
-    captionBottom: 174,
-    captionTracking: "0.24em",
-    captionTinta: "text-white/85",
-  },
+  // El lockup de Claro parquea "sports" a la derecha: lo empujamos a la izquierda para que su
+  // centro de masa quede sobre el eje del lienzo.
+  "claro-sports": { box: { h: 150, w: 300 }, logoNudgeX: -6 },
 };
 
 /** Color de la dirección de una variación (verde sube, rojo baja, gris neutro). */
@@ -201,7 +181,7 @@ function flechaSigno(signo?: string): string {
 /** Espacio fino entre cifra y unidad (M / %) para que el dato lea como uno solo. */
 const finos = (s: string): string => s.replace(/ /g, "\u202f");
 
-/** Diapositiva 16:9: lienzo (gris claro, o color de marca en portada), etiqueta, título y pie. */
+/** Diapositiva 16:9 de contenido: lienzo gris claro, eyebrow (etiqueta · periodo), título y pie. */
 function Marco({
   marca,
   periodo,
@@ -209,8 +189,6 @@ function Marco({
   titulo,
   subtitulo,
   children,
-  portada = false,
-  bg,
 }: {
   marca: string;
   periodo: string;
@@ -218,107 +196,84 @@ function Marco({
   titulo?: string;
   subtitulo?: string;
   children?: React.ReactNode;
-  portada?: boolean;
-  bg?: string;
 }) {
   return (
-    <section className="informe-slide" style={bg ? { background: bg } : undefined}>
+    <section className="informe-slide">
       <div className="flex h-full flex-col px-20 pb-12 pt-16">
-        {!portada && (
-          <header className="mb-9">
-            <p className={`${EYEBROW} ${TONO.topLabel}`}>
-              {etiqueta}
-              <span className="mx-2 text-neutral-300">·</span>
-              <span className="text-neutral-400">{periodo}</span>
-            </p>
-            <h2 className={`mt-3 max-w-4xl text-balance text-[28px] font-light leading-tight tracking-[-0.01em] ${TONO.titulo}`}>
-              {titulo}
-            </h2>
-            {subtitulo && <p className={`mt-1.5 text-sm font-normal ${TONO.subtitulo}`}>{subtitulo}</p>}
-          </header>
-        )}
+        <header className="mb-9">
+          <p className={`${EYEBROW} ${TONO.topLabel}`}>
+            {etiqueta}
+            <span className="mx-2 text-neutral-300">·</span>
+            <span className="text-neutral-400">{periodo}</span>
+          </p>
+          <h2 className={`mt-3 max-w-4xl text-balance text-[28px] font-light leading-tight tracking-[-0.01em] ${TONO.titulo}`}>
+            {titulo}
+          </h2>
+          {subtitulo && <p className={`mt-1.5 text-sm font-normal ${TONO.subtitulo}`}>{subtitulo}</p>}
+        </header>
 
         <div className="min-h-0 flex-1">{children}</div>
 
-        {!portada && (
-          <footer className={`mt-8 flex items-center justify-between gap-6 border-t border-neutral-100 pt-4 text-[10px] ${TONO.pie}`}>
-            <span className="whitespace-nowrap uppercase tracking-[0.18em]">
-              {marca} · Todas las redes · {periodo}
-            </span>
-            <span className="shrink-0 uppercase tracking-[0.18em]">keni</span>
-          </footer>
-        )}
+        <footer className={`mt-8 flex items-center justify-between gap-6 border-t border-neutral-100 pt-4 text-[10px] ${TONO.pie}`}>
+          <span className="whitespace-nowrap uppercase tracking-[0.18em]">
+            {marca} · Todas las redes · {periodo}
+          </span>
+          <span className="shrink-0 uppercase tracking-[0.18em]">keni</span>
+        </footer>
       </div>
     </section>
   );
 }
 
 /**
- * Diapositiva-portada: la marca es la protagonista (logo sobre su color), con la caption del
- * periodo y el veredicto del mes debajo. En "Todas las marcas" muestra el portfolio de logos
- * sobre fondo neutro. El `layout` (caja del logo + colocación de la caption) lo fija
- * COVER_LAYOUT[marcaId]; se puede pasar explícito para iterar variantes en una vista previa.
+ * Diapositiva-portada AIRE: el lujo nace del vacío. Sobre el color de la marca, un eyebrow
+ * susurrado arriba con el periodo, el logo contenido flotando en el centro con márgenes
+ * generosos, y la firma «keni» en micrografía abajo tras una hairline finísima. Sin veredicto:
+ * el titular del mes gobierna la lámina de resumen, no la portada. En "Todas las marcas" el logo
+ * central cede al portfolio de las 5 marcas sobre fondo neutro. El `layout` (caja del logo) lo
+ * fija COVER_LAYOUT[marcaId]; se puede pasar explícito para iterar variantes en una vista previa.
  */
 export function PortadaSlide({
   marcaId,
   marcaLabel,
   esTodas,
   periodo,
-  titularMes,
   layout,
 }: {
   marcaId: string | null;
   marcaLabel: string;
   esTodas: boolean;
   periodo: string;
-  /** Veredicto del mes bajo la caption; ausente = solo caption (previews de layout). */
-  titularMes?: string;
   layout?: CoverLayout;
 }) {
   const coverBg = esTodas ? COVER_TODAS : marcaId ? COVER_BG[marcaId] : undefined;
   const lay = layout ?? (marcaId ? COVER_LAYOUT[marcaId] : undefined) ?? COVER_LAYOUT_DEFAULT;
-  const anclada = lay.captionBottom != null;
-  const tintaCaption = coverBg ? lay.captionTinta ?? "text-white/90" : TONO.coverCaption;
-  // Ancho completo (no encogido al texto): así el interletrado final nunca empuja la última
-  // palabra a otra línea. Cabe en una sola; text-balance reparte en dos solo si el periodo fuera
-  // larguísimo. El veredicto viaja bajo la caption con su mismo tratamiento sobrio (blanco/85,
-  // sin badge): la portada responde "¿vamos bien o mal?" sin esperar a la lámina 2.
-  const caption = (
-    <div className="w-full">
+  return (
+    <section className="informe-slide" style={coverBg ? { background: coverBg } : undefined}>
+      {/* Eyebrow arriba: micrografía blanca al 55% con tracking amplio, anclada al margen superior. */}
       <p
-        className={`w-full text-balance ${EYEBROW} ${tintaCaption}`}
-        style={{ letterSpacing: lay.captionTracking ?? "0.24em" }}
+        className="absolute font-medium uppercase text-[14px] text-white/55"
+        style={{ top: 88, left: 108, right: 108, letterSpacing: "0.42em" }}
       >
         Informe de métricas · {esTodas ? "Todas las marcas · " : ""}
         {periodo}
       </p>
-      {titularMes && (
-        <p
-          className={`mx-auto mt-4 max-w-2xl text-balance text-sm font-light leading-snug ${
-            coverBg ? "text-white/85" : "text-neutral-600"
-          }`}
-        >
-          {titularMes}
-        </p>
-      )}
-    </div>
-  );
-  return (
-    <Marco marca={marcaLabel} periodo={periodo} portada bg={coverBg}>
-      <div className="relative flex h-full flex-col items-center justify-center text-center">
+
+      {/* Logo contenido flotando en el centro del vacío (márgenes de 108px). */}
+      <div className="flex h-full items-center justify-center" style={{ padding: "0 108px" }}>
         {esTodas ? (
           // Portfolio: cada marca en una celda de tamaño UNIFORME (equilibra el peso óptico). Todas
           // en blanco plano: los 4 logos blancos vía grayscale, y Piso 15 como wordmark blanco (su
           // emblema es un disco para fondo oscuro y no admite calado a blanco sin perder el "15").
-          <div className="flex max-w-3xl flex-wrap items-center justify-center gap-x-12 gap-y-10">
+          <div className="flex max-w-[900px] flex-wrap items-center justify-center gap-x-[72px] gap-y-[52px]">
             {MARCAS_PORTFOLIO.filter((id) => LOGOS_MARCA[id]).map((id) => (
-              <div key={id} className="flex h-[92px] w-[224px] items-center justify-center">
+              <div key={id} className="flex h-[88px] w-[236px] items-center justify-center">
                 {id === "piso-15" ? (
                   <span
                     style={{
                       fontFamily: "'Montserrat'",
                       fontWeight: 800,
-                      fontSize: 52,
+                      fontSize: 50,
                       letterSpacing: "-0.02em",
                       color: "#fff",
                       lineHeight: 1,
@@ -330,7 +285,7 @@ export function PortadaSlide({
                   <img
                     src={LOGOS_MARCA[id]}
                     alt=""
-                    className="max-h-[64px] max-w-[210px] object-contain"
+                    className="max-h-[60px] max-w-[212px] object-contain"
                     style={{ filter: "grayscale(1)" }}
                   />
                 )}
@@ -338,28 +293,27 @@ export function PortadaSlide({
             ))}
           </div>
         ) : (
-          // Logo de la marca centrado: object-contain lo encaja sea cual sea su proporción; logoNudge
-          // lo recoloca en su centro óptico (no el geométrico).
-          <div
-            style={{
-              marginTop: lay.logoNudge ?? 0,
-              transform: lay.logoNudgeX ? `translateX(${lay.logoNudgeX}px)` : undefined,
-            }}
-          >
+          // Logo de la marca contenido: object-contain lo encaja sea cual sea su proporción;
+          // logoNudgeX lo centra en su eje óptico (no el geométrico).
+          <div style={lay.logoNudgeX ? { transform: `translateX(${lay.logoNudgeX}px)` } : undefined}>
             <LogoOWordmark id={marcaId} nombre={marcaLabel} box={lay.box} />
           </div>
         )}
-        {anclada ? (
-          <div className="absolute inset-x-0" style={{ bottom: lay.captionBottom }}>
-            {caption}
-          </div>
-        ) : (
-          <div className="w-full" style={{ marginTop: lay.captionMt ?? 64 }}>
-            {caption}
-          </div>
-        )}
       </div>
-    </Marco>
+
+      {/* Hairline finísima que asienta el pie del lienzo, sin voz de veredicto encima. */}
+      <div className="absolute" style={{ left: 108, right: 108, bottom: 104 }}>
+        <div className="h-px w-full bg-white/20" />
+      </div>
+
+      {/* Firma «keni» en micrografía, anclada al ángulo inferior derecho. */}
+      <p
+        className="absolute font-medium uppercase text-[12px] text-white/[.42]"
+        style={{ right: 108, bottom: 52, letterSpacing: "0.30em" }}
+      >
+        keni
+      </p>
+    </section>
   );
 }
 
@@ -593,7 +547,6 @@ function diapositivas(data: InformeProps): Slide[] {
         marcaLabel={marcaLabel}
         esTodas={esTodas}
         periodo={periodo}
-        titularMes={titularMes}
       />
     ),
   });
