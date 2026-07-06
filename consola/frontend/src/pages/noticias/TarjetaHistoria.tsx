@@ -94,7 +94,7 @@ export function TarjetaHistoria({
 
   return (
     <Card
-      className={`text-sm transition hover:border-keni-300 focus-within:border-keni-300 ${esDescartada ? "opacity-60" : ""} ${
+      className={`text-sm transition hover:border-keni-300 hover:bg-keni-50 focus-within:border-keni-300 focus-within:bg-keni-50 dark:hover:bg-accent dark:focus-within:bg-accent ${esDescartada ? "opacity-60" : ""} ${
         seleccionada ? "ring-2 ring-primary/40" : ""
       }`}
       data-testid="historia-item"
