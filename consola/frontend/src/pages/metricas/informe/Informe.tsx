@@ -11,7 +11,14 @@ import { nombreRed, numeroCompactoFijo } from "@/lib/formato";
 
 import { AreaBold } from "./graficas";
 import { LOGOS_MARCA } from "./logos";
-import type { ConclusionInforme, FilaRanking, InformeProps, KpiInforme } from "./tipos";
+import type {
+  ConclusionInforme,
+  FilaComparativaRed,
+  FilaRanking,
+  InformeProps,
+  KpiInforme,
+  MetricaRedComparada,
+} from "./tipos";
 
 import "./informe.css";
 
@@ -435,6 +442,80 @@ function Ranking({ filas, columnas = 1 }: { filas: FilaRanking[]; columnas?: num
   );
 }
 
+/** Celda de una métrica comparada: valor actual grande + "anterior → variación" en una línea fina. */
+function CeldaMetricaRed({ m }: { m: MetricaRedComparada }) {
+  return (
+    <td className="px-4 py-4 text-right align-middle">
+      <p className="text-[26px] font-light leading-none tracking-[-0.02em] tabular-nums text-neutral-900">
+        {finos(m.actual)}
+      </p>
+      <p className="mt-2 flex items-center justify-end gap-2 text-xs tabular-nums">
+        <span className="text-neutral-400">{finos(m.anterior)}</span>
+        <span className={`font-medium ${colorSigno(m.signo)}`}>
+          {flechaSigno(m.signo) && <span className="mr-0.5">{flechaSigno(m.signo)}</span>}
+          {finos(m.variacion)}
+        </span>
+      </p>
+    </td>
+  );
+}
+
+/**
+ * Comparativa por red: una FILA por red (no por métrica, que desborda a 5 redes) con una columna
+ * por métrica. Cada celda sirve la cifra ACTUAL grande + el periodo anterior y la variación con
+ * dirección en una línea fina debajo. El anterior en gris, la variación con su flecha/color. Cabe
+ * con aire a 1280×720 con las 4-5 redes en foco. Mismo lenguaje del deck (tabla de Top piezas).
+ */
+function TablaComparativaRed({
+  filas,
+  mesAnterior,
+  periodo,
+}: {
+  filas: FilaComparativaRed[];
+  mesAnterior: string;
+  periodo: string;
+}) {
+  // Etiquetas de métrica del orden real (Vistas · Interacciones · Engagement); la primera fila las fija.
+  const metricas = filas[0]?.metricas.map((m) => m.etiqueta) ?? [];
+  return (
+    <table className="w-full border-collapse">
+      <thead>
+        <tr className={`border-b border-neutral-200 text-[11px] uppercase tracking-[0.14em] ${TONO.tablaHeader}`}>
+          <th className="py-3 pr-4 text-left font-medium">Red</th>
+          {metricas.map((etq) => (
+            <th key={etq} className="px-4 py-3 text-right font-medium">
+              {etq}
+            </th>
+          ))}
+        </tr>
+        <tr className="text-[10px] normal-case tracking-normal text-neutral-400">
+          <th className="pb-2 pr-4 text-left font-normal" />
+          {metricas.map((etq) => (
+            <th key={etq} className="px-4 pb-2 text-right font-normal">
+              {periodo} · {mesAnterior}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {filas.map((red) => (
+          <tr key={red.clave} className="border-b border-neutral-100">
+            <td className="py-4 pr-4">
+              <span className="flex items-center gap-2.5 text-[15px] font-medium text-neutral-900">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: red.color }} />
+                {red.nombre}
+              </span>
+            </td>
+            {red.metricas.map((m) => (
+              <CeldaMetricaRed key={m.etiqueta} m={m} />
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 /** Rango de fechas de una serie como texto bajo la gráfica (sustituye al eje X recortado). */
 function RangoFechas({ data }: { data: Array<{ fecha: string }> }) {
   if (data.length < 2) return null;
@@ -465,6 +546,7 @@ function diapositivas(data: InformeProps): Slide[] {
     mediaInteracciones,
     porRed,
     redInsight,
+    comparativaRed,
     engPorRed,
     engInsight,
     engMedia,
@@ -513,6 +595,28 @@ function diapositivas(data: InformeProps): Slide[] {
       </Marco>
     ),
   });
+
+  // 2b · Comparativa por red — el desglose natural del resumen: del total a cada plataforma, con
+  // el periodo actual frente al anterior y su variación. Es la lámina que el cliente presenta
+  // (vistas e interacciones por red). Solo si hay redes con datos comparables.
+  if (comparativaRed.length) {
+    slides.push({
+      clave: "comparativa-red",
+      nodo: (
+        <Marco
+          marca={marcaLabel}
+          periodo={periodo}
+          etiqueta={etiqueta}
+          titulo={`Comparativa por red — ${periodo} vs ${mesAnterior}`}
+          subtitulo="Periodo actual frente al anterior, red a red"
+        >
+          <div className="flex h-full items-center">
+            <TablaComparativaRed filas={comparativaRed} mesAnterior={mesAnterior} periodo={periodo} />
+          </div>
+        </Marco>
+      ),
+    });
+  }
 
   // 3 · Tendencia diaria — el área de vistas es la estrella: gradiente rico, curva gruesa, el PICO
   // del titular marcado en la propia curva (disco + cifra + día) y la media como hairline. Las

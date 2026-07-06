@@ -58,6 +58,31 @@ export interface FilaPiezaInforme {
   formato?: string;
 }
 
+/** Una métrica comparada de una red: periodo actual, anterior y su variación con dirección. */
+export interface MetricaRedComparada {
+  /** Etiqueta legible (Vistas / Interacciones / Engagement). */
+  etiqueta: string;
+  /** Periodo actual, ya formateado para el deck (p. ej. "16.4 M" o "4.6 %"). */
+  actual: string;
+  /** Periodo anterior, ya formateado. */
+  anterior: string;
+  /** Variación con signo y unidad (p. ej. "+25.0 %" o "+0.4 pts"); vacío si no hay base. */
+  variacion: string;
+  /** Dirección de la variación (verde sube, rojo baja, gris estable). */
+  signo: "sube" | "baja" | "igual";
+}
+
+/** Comparativa de una red entre el periodo actual y el anterior (fila de la lámina por red). */
+export interface FilaComparativaRed {
+  /** Id canónico de red (facebook/instagram/tiktok/x/youtube). */
+  clave: string;
+  nombre: string;
+  /** Color del punto de la red (rampa de deck por posición). */
+  color: string;
+  /** Métricas comparadas de la red (Vistas, Interacciones, y Engagement si cabe). */
+  metricas: MetricaRedComparada[];
+}
+
 /** Conclusión del cierre: cifra grande + mini explicación. */
 export interface ConclusionInforme {
   valor: string;
@@ -89,6 +114,9 @@ export interface InformeProps {
   porRed: FilaRanking[];
   /** Insight del reparto (red dominante + su %). */
   redInsight: string;
+  // --- Comparativa por red (periodo actual vs anterior, red a red) ---
+  /** Una fila por red en foco con datos; [] cuando no hay comparativa por red (lámina no se emite). */
+  comparativaRed: FilaComparativaRed[];
   // --- Engagement por red: interacción por vista, ranking desc (dónde ENGANCHA, no dónde se ve) ---
   engPorRed: Array<{ clave: string; nombre: string; rate: number; color: string }>;
   /** Insight de engagement por red (la red con más interacción por vista). */

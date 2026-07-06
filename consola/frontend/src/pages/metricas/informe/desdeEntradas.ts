@@ -18,10 +18,12 @@ import {
 } from "@/lib/formato";
 import type {
   ConclusionInforme,
+  FilaComparativaRed,
   FilaPiezaInforme,
   FilaRanking,
   InformeProps,
   KpiInforme,
+  MetricaRedComparada,
   PuntoTendencia,
   SegmentoMix,
 } from "./tipos";
@@ -105,8 +107,16 @@ interface CeldaDesglose {
 }
 interface MetricaComparada {
   metrica?: string;
+  /** Valor del periodo anterior (A). Ausente a nivel de KPI total (que solo usa la variación). */
+  a?: number;
+  /** Valor del periodo actual (B). */
+  b?: number;
   variacion_pct?: number;
   diferencia?: number;
+}
+interface ReportePorRedComparado {
+  red?: string;
+  comparativa?: MetricaComparada[];
 }
 
 /** Índice dominio → dato (primer dato no nulo por dominio), espejo del `porDominio` del PDF. */
@@ -213,7 +223,9 @@ export function desdeEntradas(
   const total = reporte.total ?? {};
 
   // Comparativa por métrica (variación vs periodo anterior), indexada por nombre interno.
-  const comparar = datos.get("comparar") as { total?: { metricas?: MetricaComparada[] } } | undefined;
+  const comparar = datos.get("comparar") as
+    | { total?: { metricas?: MetricaComparada[] }; por_red?: ReportePorRedComparado[] }
+    | undefined;
   const compPorMetrica = new Map<string, MetricaComparada>();
   for (const m of comparar?.total?.metricas ?? []) {
     if (m.metrica) compPorMetrica.set(m.metrica, m);
@@ -325,6 +337,11 @@ export function desdeEntradas(
           ? `${porRed[0].nombre} concentra el ${porRed[0].pct}\u202f% de las visualizaciones`
           : `${porRed[0].nombre} lidera el reparto con el ${porRed[0].pct}\u202f% de las visualizaciones`;
 
+  // --- Comparativa por red: periodo actual vs anterior, red a red (lo que presenta el cliente). ---
+  // Solo redes EN FOCO con datos (mismo orden que el reparto por red), para no listar redes que el
+  // usuario filtró fuera ni redes vacías que no aportan comparación.
+  const comparativaRed = construirComparativaRed(comparar?.por_red, redesOrden);
+
   // --- Mezcla de interacciones: AGREGADA a una barra 100 % (no una por celda). ---
   const desgloseMix = analizarMezcla(datos.get("desglose"));
 
@@ -429,6 +446,7 @@ export function desdeEntradas(
     mediaInteracciones,
     porRed,
     redInsight,
+    comparativaRed,
     engPorRed,
     engInsight,
     engMedia,
@@ -442,6 +460,67 @@ export function desdeEntradas(
     conclusiones,
     recomendaciones,
   };
+}
+
+/** Métricas que la comparativa por red presenta, en orden, con su etiqueta y cómo se formatean. */
+const METRICAS_RED_COMPARADA: Array<{ metrica: string; etiqueta: string; tipo: "conteo" | "pct" }> = [
+  { metrica: "visualizaciones", etiqueta: "Vistas", tipo: "conteo" },
+  { metrica: "interacciones", etiqueta: "Interacciones", tipo: "conteo" },
+  { metrica: "engagement_pct", etiqueta: "Engagement", tipo: "pct" },
+];
+
+/**
+ * Comparativa por red: periodo actual (B) vs anterior (A) y su variación, red a red. Solo las
+ * redes EN FOCO con datos (mismo orden y color que el reparto por red) y solo las que tienen algún
+ * volumen real en algún periodo (una red con todo a 0 no aporta comparación). El engagement compara
+ * en PUNTOS (es ya un %); vistas e interacciones, en variación relativa.
+ */
+function construirComparativaRed(
+  porRedCrudo: ReportePorRedComparado[] | undefined,
+  redesOrden: string[],
+): FilaComparativaRed[] {
+  if (!porRedCrudo?.length) return [];
+  const compPorRed = new Map<string, Map<string, MetricaComparada>>();
+  for (const fila of porRedCrudo) {
+    const red = redCanonica(String(fila.red ?? ""));
+    if (!red) continue;
+    const idx = new Map<string, MetricaComparada>();
+    for (const m of fila.comparativa ?? []) {
+      if (m.metrica) idx.set(m.metrica, m);
+    }
+    compPorRed.set(red, idx);
+  }
+
+  const filas: FilaComparativaRed[] = [];
+  redesOrden.forEach((red, i) => {
+    const idx = compPorRed.get(red);
+    if (!idx) return;
+    const metricas: MetricaRedComparada[] = [];
+    // Volumen real = algún conteo (vistas/interacciones) no nulo en algún periodo de la PROPIA
+    // comparativa: una red con todo a 0 en A y B no aporta comparación aunque esté conectada.
+    let hayVolumen = false;
+    for (const def of METRICAS_RED_COMPARADA) {
+      const c = idx.get(def.metrica);
+      if (!c) continue;
+      const a = num(c.a);
+      const b = num(c.b);
+      if (def.tipo === "conteo" && (a > 0 || b > 0)) hayVolumen = true;
+      const delta =
+        def.tipo === "pct" ? deltaPuntos(num(c.diferencia)) : deltaRelativo(num(c.variacion_pct));
+      metricas.push({
+        etiqueta: def.etiqueta,
+        actual: def.tipo === "pct" ? porcentaje(b) : numeroCompactoFijo(b),
+        anterior: def.tipo === "pct" ? porcentaje(a) : numeroCompactoFijo(a),
+        variacion: delta.texto,
+        signo: delta.signo,
+      });
+    }
+    // Descarta redes triviales: sin métricas comparadas o sin volumen real en ningún periodo.
+    if (metricas.length && hayVolumen) {
+      filas.push({ clave: red, nombre: nombreRed(red), color: colorRango(i), metricas });
+    }
+  });
+  return filas;
 }
 
 /** Neto ganado en el periodo (cifra, %, ritmo) a partir de la serie de totales acumulados. */

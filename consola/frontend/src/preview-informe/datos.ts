@@ -309,6 +309,34 @@ function entradasMarca(p: PerfilMarca): Entrada[] {
   const interVar = -3.4;
   const engDif =
     Math.round(engagement * (1 - (1 + visVar / 100) / (1 + interVar / 100)) * 10) / 10;
+  // Comparativa por red: el periodo anterior de cada red se DERIVA aplicando su variación
+  // (ligeramente distinta por red vía jitter determinista), para que el actual/anterior/variación
+  // cuadren entre sí y la lámina «Comparativa por red» tenga datos realistas en el preview.
+  const porRedComp = porRed.map((r, i) => {
+    const jitter = ((i * 37) % 20) - 10; // −10..+9 puntos, determinista por posición
+    const visVarRed = Math.round((visVar + jitter * 0.6) * 10) / 10;
+    const interVarRed = Math.round((interVar + jitter * 0.5) * 10) / 10;
+    const visB = r.visualizaciones;
+    const interB = interPorRed.get(r.red) ?? 0;
+    const visA = Math.round(visB / (1 + visVarRed / 100));
+    const interA = Math.round(interB / (1 + interVarRed / 100));
+    const engB = Math.round((interB / Math.max(1, visB)) * 1000) / 10;
+    const engA = Math.round((interA / Math.max(1, visA)) * 1000) / 10;
+    return {
+      red: r.red,
+      comparativa: [
+        { metrica: "visualizaciones", a: visA, b: visB, variacion_pct: visVarRed, diferencia: visB - visA },
+        { metrica: "interacciones", a: interA, b: interB, variacion_pct: interVarRed, diferencia: interB - interA },
+        {
+          metrica: "engagement_pct",
+          a: engA,
+          b: engB,
+          variacion_pct: engA > 0 ? Math.round(((engB - engA) / engA) * 1000) / 10 : 0,
+          diferencia: Math.round((engB - engA) * 10) / 10,
+        },
+      ],
+    };
+  });
   const comparar = {
     total: {
       metricas: [
@@ -318,6 +346,7 @@ function entradasMarca(p: PerfilMarca): Entrada[] {
         { metrica: "engagement_pct", diferencia: engDif },
       ],
     },
+    por_red: porRedComp,
   };
 
   return [

@@ -63,7 +63,7 @@ function entradasBase(): Array<[readonly unknown[], unknown]> {
   ];
 }
 
-/** Comparativa (variación vs periodo anterior) con las 4 métricas del reporte. */
+/** Comparativa (variación vs periodo anterior) con las 4 métricas del reporte + desglose por red. */
 function entradaComparar(): [readonly unknown[], unknown] {
   return [
     ["metricas", "comparar", "mes:2026-06", "mes:2026-05", "claro_sports"],
@@ -76,6 +76,25 @@ function entradaComparar(): [readonly unknown[], unknown] {
           { metrica: "engagement_pct", a: 4, b: 5, variacion_pct: 25, diferencia: 1 },
         ],
       },
+      // Solo instagram y youtube (las mismas redes con vistas en `entradasBase`).
+      por_red: [
+        {
+          red: "instagram",
+          comparativa: [
+            { metrica: "visualizaciones", a: 500, b: 600, variacion_pct: 20, diferencia: 100 },
+            { metrica: "interacciones", a: 25, b: 30, variacion_pct: 20, diferencia: 5 },
+            { metrica: "engagement_pct", a: 5, b: 5, variacion_pct: 0, diferencia: 0 },
+          ],
+        },
+        {
+          red: "youtube",
+          comparativa: [
+            { metrica: "visualizaciones", a: 500, b: 400, variacion_pct: -20, diferencia: -100 },
+            { metrica: "interacciones", a: 20, b: 20, variacion_pct: 0, diferencia: 0 },
+            { metrica: "engagement_pct", a: 4, b: 5, variacion_pct: 25, diferencia: 1 },
+          ],
+        },
+      ],
     },
   ];
 }
@@ -150,6 +169,63 @@ describe("desdeEntradas", () => {
     expect(props.porRed.map((r) => r.pct)).toEqual([60, 40]);
     expect(props.porRed[0].color).toMatch(/^#/);
     expect(norm(props.redInsight)).toBe("Instagram concentra el 60 % de las visualizaciones");
+  });
+
+  it("SIN comparar la comparativa por red queda vacía (la lámina no se emite)", () => {
+    const props = desdeEntradas(entradasBase(), CTX_UNA);
+    expect(props.comparativaRed).toEqual([]);
+  });
+
+  it("CON comparar la comparativa por red = una fila por red con actual/anterior/variación", () => {
+    const props = desdeEntradas([...entradasBase(), entradaComparar()], CTX_UNA);
+
+    // Mismo orden que el reparto por red (Instagram 600 > YouTube 400).
+    expect(props.comparativaRed.map((r) => r.nombre)).toEqual(["Instagram", "YouTube"]);
+
+    const ig = props.comparativaRed[0];
+    expect(ig.clave).toBe("instagram");
+    expect(ig.color).toMatch(/^#/);
+    // Vistas, Interacciones y Engagement (el dato de por_red trae los tres).
+    expect(ig.metricas.map((m) => m.etiqueta)).toEqual(["Vistas", "Interacciones", "Engagement"]);
+    const vistas = ig.metricas[0];
+    expect(vistas.actual).toBe(numeroCompactoEsperado(600));
+    expect(vistas.anterior).toBe(numeroCompactoEsperado(500));
+    expect(norm(vistas.variacion)).toBe("+20.0 %");
+    expect(vistas.signo).toBe("sube");
+
+    // YouTube: vistas caen (−20 %) → dirección "baja"; engagement compara en PUNTOS.
+    const yt = props.comparativaRed[1];
+    expect(yt.metricas[0].signo).toBe("baja");
+    expect(norm(yt.metricas[2].variacion)).toBe("+1.0 pts");
+    expect(yt.metricas[2].signo).toBe("sube");
+  });
+
+  it("descarta de la comparativa por red las redes sin volumen en ningún periodo", () => {
+    const conRedVacia: [readonly unknown[], unknown] = [
+      ["metricas", "comparar", "mes:2026-06", "mes:2026-05", "claro_sports"],
+      {
+        total: { metricas: [{ metrica: "visualizaciones", a: 800, b: 1000, variacion_pct: 25, diferencia: 200 }] },
+        por_red: [
+          {
+            red: "instagram",
+            comparativa: [
+              { metrica: "visualizaciones", a: 500, b: 600, variacion_pct: 20, diferencia: 100 },
+              { metrica: "interacciones", a: 25, b: 30, variacion_pct: 20, diferencia: 5 },
+            ],
+          },
+          // Red presente en la comparativa pero con TODO a 0 en ambos periodos: no aporta, se descarta.
+          {
+            red: "youtube",
+            comparativa: [
+              { metrica: "visualizaciones", a: 0, b: 0, variacion_pct: 0, diferencia: 0 },
+              { metrica: "interacciones", a: 0, b: 0, variacion_pct: 0, diferencia: 0 },
+            ],
+          },
+        ],
+      },
+    ];
+    const props = desdeEntradas([...entradasBase(), conRedVacia], CTX_UNA);
+    expect(props.comparativaRed.map((r) => r.nombre)).toEqual(["Instagram"]);
   });
 
   it("engagement por red = interacción por vista, ranking desc (dónde engancha)", () => {
@@ -270,6 +346,7 @@ describe("desdeEntradas", () => {
     expect(props.tendencia).toEqual([]);
     expect(props.picoVistas).toBeNull();
     expect(props.porRed).toEqual([]);
+    expect(props.comparativaRed).toEqual([]);
     expect(props.cuentas).toEqual([]);
     expect(props.seguidoresNeto).toBeNull();
     expect(props.conclusiones).toEqual([]);
