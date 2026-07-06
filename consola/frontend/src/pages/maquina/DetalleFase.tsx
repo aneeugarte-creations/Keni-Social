@@ -365,7 +365,7 @@ export function DetalleFase({
               setAcercaAbierto((v) => !v);
             }
           }}
-          className="cursor-pointer"
+          className="cursor-pointer transition-colors hover:bg-accent"
         >
           <div className="flex w-full items-center justify-between gap-2 p-3">
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

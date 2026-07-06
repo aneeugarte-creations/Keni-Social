@@ -286,7 +286,7 @@ function FilaPipeline({ run, onAbrir }: { run: Pipeline; onAbrir: ((run: Pipelin
       }}
       className={cn(
         "transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        onAbrir && "cursor-pointer hover:border-keni-300",
+        onAbrir && "cursor-pointer hover:bg-accent",
         esFuturo && "opacity-60",
       )}
     >

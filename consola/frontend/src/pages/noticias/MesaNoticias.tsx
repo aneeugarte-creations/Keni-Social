@@ -432,7 +432,7 @@ function GrupoMacro({
     <div className="space-y-2" data-testid="grupo-macro" data-tema-macro={tema}>
       {/* Cabecera con el MISMO peso visual que una tarjeta de historia: misma Card, mismo
           padding y tamaño de título, para que el macro-evento no pase desapercibido. */}
-      <Card className="text-sm transition hover:border-keni-300 focus-within:border-keni-300">
+      <Card className="text-sm transition hover:bg-accent focus-within:bg-accent">
         <CardContent className="pt-3 pb-3">
           <button
             type="button"

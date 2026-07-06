@@ -154,7 +154,7 @@ export function FilaConAcciones({
     }
   }
 
-  // Realce naranja de marca al hover/foco: pista de descubribilidad cuando no hay kebab.
+  // Realce gris (bg-accent) al hover/foco: pista de descubribilidad cuando no hay kebab.
   // Solo en hosts tipo tarjeta (no `tr`) y cuando hay algo que accionar.
   const usaRealce = realce && como !== "tr" && (esClicable || hayMenu);
 
@@ -163,7 +163,7 @@ export function FilaConAcciones({
       "group",
       esClicable && "cursor-pointer select-none [-webkit-touch-callout:none]",
       usaRealce &&
-        "transition-colors hover:border-keni-300 focus-visible:border-keni-300 focus-visible:outline-none",
+        "transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none",
       className,
     ),
     onClick: esClicable ? alClick : undefined,

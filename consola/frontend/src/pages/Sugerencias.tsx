@@ -147,7 +147,7 @@ function MisIdeas({
             key={s.id}
             type="button"
             onClick={() => onAbrir(s)}
-            className="space-y-2 rounded-md border border-border bg-card p-3 text-left text-card-foreground shadow-sm transition-colors hover:border-keni-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="space-y-2 rounded-md border border-border bg-card p-3 text-left text-card-foreground shadow-sm transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <p className="text-sm font-medium leading-snug">{s.titulo}</p>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -275,7 +275,7 @@ function Tablero({
                 key={s.id}
                 type="button"
                 onClick={() => onAbrir(s)}
-                className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-left text-xs opacity-70 transition hover:opacity-100"
+                className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-left text-xs opacity-70 transition hover:bg-accent hover:opacity-100"
               >
                 <Badge
                   variant={ESTADO_VARIANTE[s.estado] ?? "secondary"}
@@ -370,7 +370,7 @@ function Tarjeta({
           onAbrir();
         }
       }}
-      className="group cursor-grab space-y-2 rounded-md border border-border bg-card p-3 text-card-foreground shadow-sm transition-colors hover:border-keni-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+      className="group cursor-grab space-y-2 rounded-md border border-border bg-card p-3 text-card-foreground shadow-sm transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
     >
       <p className="text-sm font-medium leading-snug">{sugerencia.titulo}</p>
       <div className="flex flex-wrap items-center gap-1.5">

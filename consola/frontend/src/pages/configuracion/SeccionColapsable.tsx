@@ -40,7 +40,7 @@ export function SeccionColapsable({
             alternar();
           }
         }}
-        className="flex cursor-pointer select-none items-start justify-between gap-3 py-3"
+        className="-mx-2 flex cursor-pointer select-none items-start justify-between gap-3 rounded-md px-2 py-3 transition-colors hover:bg-accent"
       >
         <div className="min-w-0">
           <h3

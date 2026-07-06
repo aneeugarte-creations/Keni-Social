@@ -75,11 +75,11 @@ export function Kpi({
   valor: React.ReactNode;
   subtitulo?: React.ReactNode;
   tono?: "alerta" | "ok" | "espera";
-  /** Si se pasa, la tarjeta navega aquí al hacer click (con realce de borde naranja). */
+  /** Si se pasa, la tarjeta navega aquí al hacer click (con realce gris al pasar el ratón). */
   href?: string;
 }) {
   const cuerpo = (
-    <Card className={cn("h-full", href && "transition-colors hover:border-keni-300")}>
+    <Card className={cn("h-full", href && "transition-colors hover:bg-accent")}>
       <CardContent className="space-y-1.5 p-5">
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Icono className="h-4 w-4" aria-hidden="true" />

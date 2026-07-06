@@ -529,8 +529,8 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
   return (
     // CLICK IZQUIERDO sobre la tarjeta abre el editor (modelo "item-first"); `onClickTarjeta`
     // ignora los clics nacidos en controles internos (botones sociales/borrar, enlaces, la
-    // imagen —role="button" con su propio handler—, inputs del hilo). Hover/foco viran el borde
-    // a naranja de marca como pista de que la tarjeta es accionable.
+    // imagen —role="button" con su propio handler—, inputs del hilo). Hover/foco tiñen el fondo
+    // de gris (bg-accent) como pista de que la tarjeta es accionable.
     <article
       aria-label={pieza.titulo}
       aria-busy={soloVisual || undefined}
@@ -543,7 +543,7 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
           : portalPendiente
             ? // Portal a demanda: la tarjeta no abre nada; SOLO el botón «Generar» es interactivo.
               "select-none"
-            : "cursor-pointer hover:border-keni-300 focus-within:border-keni-300",
+            : "cursor-pointer hover:bg-accent focus-within:bg-accent",
       )}
     >
       {/* Cabecera EN UNA SOLA LÍNEA (orden del rediseño aprobado): distintivo de FORMATO + RED
