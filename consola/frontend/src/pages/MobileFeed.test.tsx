@@ -188,11 +188,10 @@ describe("MobileFeed · feed móvil de revisión", () => {
     stubFetch();
     renderFeed();
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
-    // La tarjeta es el MISMO PostFeed del escritorio: like/dislike (la pieza está en revisión)
-    // y comentar; nada de los botones planos Aprobar/Rechazar sin gates. El nombre accesible
+    // La tarjeta es el MISMO PostFeed del escritorio: like y comentar (sin dislike desde el commit
+    // que lo retiró); nada de los botones planos Aprobar/Rechazar sin gates. El nombre accesible
     // del like deriva del estado real (aquí la cadena no da turno: "no disponible").
     expect(screen.getByRole("button", { name: "Me gusta: no disponible" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "No me gusta" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Comentar" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^aprobar$/i })).not.toBeInTheDocument();
   });
