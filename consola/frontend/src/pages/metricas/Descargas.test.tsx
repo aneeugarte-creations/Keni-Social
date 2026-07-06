@@ -40,8 +40,8 @@ function ActivarReporte() {
   return null;
 }
 
-/** Renderiza los items dentro del menú "⋮" (como en Metricas) y lo abre. */
-function renderYAbrir() {
+/** Renderiza los items dentro del menú "⋮" (como en Metricas), lo abre y devuelve el client. */
+function renderYAbrir(): QueryClient {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
@@ -52,6 +52,7 @@ function renderYAbrir() {
     </QueryClientProvider>,
   );
   fireEvent.click(screen.getByRole("button", { name: "Acciones" }));
+  return client;
 }
 
 beforeEach(() => {
@@ -89,5 +90,33 @@ describe("ItemsDescarga (menú ⋮ de Métricas)", () => {
     expect(entradas.length).toBeGreaterThan(0);
     expect(ctx).toMatchObject({ marca: "Claro Sports", red: "Instagram", periodo: "junio 2026" });
     expect(espia.mock.calls[0]).toHaveLength(3);
+  });
+
+  it("PDF refresca las queries activas de métricas ANTES de volcar el deck", async () => {
+    const orden: string[] = [];
+    const espia = vi.spyOn(pdf, "descargarPresentacion").mockImplementation(async () => {
+      orden.push("descargar");
+    });
+    const client = renderYAbrir();
+    const refetch = vi.spyOn(client, "refetchQueries").mockImplementation(async () => {
+      orden.push("refetch");
+    });
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /Descargar PDF \(presentación\)/ }));
+
+    await waitFor(() => expect(espia).toHaveBeenCalledTimes(1));
+    expect(refetch).toHaveBeenCalledWith({ queryKey: ["metricas"], type: "active" });
+    expect(orden).toEqual(["refetch", "descargar"]);
+  });
+
+  it("CSV también refresca las queries activas antes de volcar", async () => {
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const client = renderYAbrir();
+    const refetch = vi.spyOn(client, "refetchQueries");
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /Descargar CSV/ }));
+
+    await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
+    expect(refetch).toHaveBeenCalledWith({ queryKey: ["metricas"], type: "active" });
   });
 });

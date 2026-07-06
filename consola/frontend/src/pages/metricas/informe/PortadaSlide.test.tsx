@@ -35,6 +35,7 @@ describe("PortadaSlide · logo de marca", () => {
     const img = container.querySelector("img");
     expect(img, "la portada debe contener un <img> de logo").not.toBeNull();
     expect(img?.getAttribute("alt")).toBe("Claro Sports");
-    expect(img?.getAttribute("src")).toMatch(/claro-sports/);
+    // El logo viaja incrustado (`?inline`): un data-URI no puede dar 404 al rasterizar.
+    expect(img?.getAttribute("src")).toMatch(/^data:image\//);
   });
 });

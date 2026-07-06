@@ -64,6 +64,16 @@ export function ItemsDescarga({
       >
     ).filter(([, d]) => d != null);
 
+  // La exportación promete «lo de pantalla, RECIÉN pedido»: refresca todas las queries activas
+  // de métricas y espera a que asienten antes de volcar nada. Cubre el filtro recién cambiado
+  // (queries aún en vuelo, que sin esperar saldrían del volcado) y la pestaña abierta hace
+  // horas (caché pasada). El refetch se dedupe con los fetches en curso y el backend cachea
+  // las lecturas, así que en el caso habitual es casi instantáneo.
+  const entradasFrescas = async () => {
+    await qc.refetchQueries({ queryKey: ["metricas"], type: "active" });
+    return entradasActivas();
+  };
+
   const ctx = {
     marca: marcaEtiqueta,
     red: redEtiqueta,
@@ -78,26 +88,36 @@ export function ItemsDescarga({
     .filter(Boolean)
     .join("-");
 
-  const descargarCsv = () => {
-    const conDatos = entradasActivas();
-    if (conDatos.length === 0) {
-      toast.error("No hay datos cargados que exportar.");
-      return;
+  const descargarCsv = async () => {
+    const aviso = toast.loading("Actualizando datos…");
+    try {
+      const conDatos = await entradasFrescas();
+      toast.dismiss(aviso);
+      if (conDatos.length === 0) {
+        toast.error("No hay datos cargados que exportar.");
+        return;
+      }
+      descargarTexto(`analiticas-${nombre}.csv`, construirCsvCompleto(conDatos, ctx), "text/csv;charset=utf-8");
+      toast.success("CSV completo descargado.");
+    } catch (e) {
+      toast.dismiss(aviso);
+      toast.error(e instanceof Error ? e.message : "No se pudo generar el CSV.");
     }
-    descargarTexto(`analiticas-${nombre}.csv`, construirCsvCompleto(conDatos, ctx), "text/csv;charset=utf-8");
-    toast.success("CSV completo descargado.");
   };
 
   const exportarPdf = async () => {
-    const conDatos = entradasActivas();
-    if (conDatos.length === 0) {
-      toast.error("No hay datos cargados que exportar.");
-      return;
-    }
+    const aviso = toast.loading("Actualizando datos…");
     try {
+      const conDatos = await entradasFrescas();
+      toast.dismiss(aviso);
+      if (conDatos.length === 0) {
+        toast.error("No hay datos cargados que exportar.");
+        return;
+      }
       await descargarPresentacion(conDatos, ctx, nombre);
       toast.success("PDF de presentación descargado.");
     } catch (e) {
+      toast.dismiss(aviso);
       toast.error(e instanceof Error ? e.message : "No se pudo generar el PDF.");
     }
   };
@@ -119,7 +139,7 @@ export function ItemsDescarga({
       <ItemMenu icono={Table2} onClick={descargarDigitales}>
         Métricas Digitales
       </ItemMenu>
-      <ItemMenu icono={FileSpreadsheet} onClick={descargarCsv}>
+      <ItemMenu icono={FileSpreadsheet} onClick={() => void descargarCsv()}>
         Descargar CSV (todo)
       </ItemMenu>
       <ItemMenu icono={Presentation} onClick={() => void exportarPdf()}>

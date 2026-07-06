@@ -39,24 +39,51 @@ function esperarPintado(): Promise<void> {
   });
 }
 
+/** Resuelve cuando la `<img>` termina de cargar, con éxito o con error (nunca rechaza). */
+function cargaTerminada(img: HTMLImageElement): Promise<void> {
+  if (img.complete) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    img.addEventListener("load", () => resolve(), { once: true });
+    img.addEventListener("error", () => resolve(), { once: true });
+  });
+}
+
+/** Las `<img>` con src que terminaron SIN píxeles: el asset falló (red caída, hash purgado). */
+export function imagenesRotas(imgs: HTMLImageElement[]): HTMLImageElement[] {
+  return imgs.filter((img) => img.getAttribute("src") && img.naturalWidth === 0);
+}
+
 /**
- * Espera a que cada `<img>` del host esté cargada Y decodificada. `document.fonts.ready` solo
- * cubre fuentes; un logo o QR sin esperar se rasteriza en blanco. Tras esto el asset vive en la
- * caché del navegador, así que el fetch interno de `html-to-image` lo incrusta desde caché
- * caliente en vez de pedirlo crudo.
+ * Espera a que cada `<img>` del host esté cargada Y decodificada, y GARANTIZA que ninguna
+ * quedó rota: `document.fonts.ready` solo cubre fuentes, y una imagen fallida (red, asset
+ * purgado tras un deploy) se rasterizaría como hueco en blanco. Una rota se reintenta una
+ * vez; si persiste, se ABORTA la generación con un error legible — nunca se entrega un PDF
+ * sin logo/QR. Tras esto el asset vive en la caché del navegador, así que el fetch interno
+ * de `html-to-image` lo incrusta desde caché caliente en vez de pedirlo crudo.
  */
 async function esperarImagenes(raiz: HTMLElement): Promise<void> {
+  const imgs = Array.from(raiz.querySelectorAll("img"));
+  await Promise.all(imgs.map(cargaTerminada));
+
+  // Reintento único de las rotas: re-asignar `src` vuelve a disparar la petición del asset.
+  const reintentar = imagenesRotas(imgs);
   await Promise.all(
-    Array.from(raiz.querySelectorAll("img")).map(async (img) => {
-      if (!img.complete || img.naturalWidth === 0) {
-        await new Promise<void>((resolve) => {
-          img.addEventListener("load", () => resolve(), { once: true });
-          img.addEventListener("error", () => resolve(), { once: true });
-        });
-      }
-      if (img.decode) await img.decode().catch(() => {});
+    reintentar.map((img) => {
+      const src = img.src;
+      img.src = "";
+      img.src = src;
+      return cargaTerminada(img);
     }),
   );
+
+  const rotas = imagenesRotas(imgs);
+  if (rotas.length > 0) {
+    throw new Error(
+      `No se ${rotas.length === 1 ? "pudo cargar 1 imagen" : `pudieron cargar ${rotas.length} imágenes`} del informe (logo o QR). Revisa la conexión y recarga la página antes de reintentar.`,
+    );
+  }
+
+  await Promise.all(imgs.map((img) => img.decode?.().catch(() => {})));
 }
 
 /**
