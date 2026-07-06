@@ -42,9 +42,9 @@ import type { AnaliticaCampania, Campania } from "@/types";
 
 import { CLAVE_CAMPANIAS } from "./campanias/claves";
 import { DialogoCampania } from "./campanias/DialogoCampania";
+import { DialogoDescargarPdf } from "./campanias/DialogoDescargarPdf";
 import { DialogoEnlacesPublicos } from "./campanias/DialogoEnlacesPublicos";
-import { descargarPdfCampania } from "./campanias/exportarPdfCampania";
-import { enlaceVigentePara } from "./campanias/formato";
+import { enlaceVigentePara, urlEnlace } from "./campanias/formato";
 import { PanelCampania } from "./campanias/PanelCampania";
 import { SelectorTiempo } from "./metricas/Controles";
 import { etiquetaPeriodo } from "./metricas/exportarPdf";
@@ -97,6 +97,13 @@ export default function Campanias() {
   const [dialogoAbierto, setDialogoAbierto] = React.useState(false);
   const [editando, setEditando] = React.useState<Campania | null>(null);
   const [enlacesAbierto, setEnlacesAbierto] = React.useState(false);
+  // Diálogo «Descargar PDF»: al abrirlo se resuelve la analítica cacheada, el token del enlace
+  // vigente y su QR (para pintar la lámina de cierre en la previa), y todo se congela aquí.
+  const [pdf, setPdf] = React.useState<{
+    datos: AnaliticaCampania;
+    tokenEnlace: string | null;
+    enlacePrevia: { url: string; qrDataUrl: string } | null;
+  } | null>(null);
 
   // Las campañas son MULTIMARCA: no se acotan al switch de marca de la barra; se listan
   // todas. La elección de marcas vive en el diálogo (sobre las marcas de la persona).
@@ -141,10 +148,10 @@ export default function Campanias() {
     setDialogoAbierto(true);
   };
 
-  // PDF "testigo" de la campaña: reusa la analítica ya cargada por el panel (misma queryKey,
-  // sin volver a pedirla) y, si hay un enlace público vigente para este periodo/modo, lo cierra
-  // con su QR. Sin enlace, el PDF sale igual, solo sin esa última lámina.
-  const exportarPdf = async () => {
+  // PDF "testigo" de la campaña: reusa la analítica ya cargada por el panel (misma queryKey, sin
+  // volver a pedirla) y, si hay un enlace público vigente para este periodo/modo, prepara su QR
+  // para el cierre. Se abre el diálogo de descarga (previa + selección); no descarga directo.
+  const abrirDialogoPdf = async () => {
     if (!campaniaActual) return;
     const datos = queryClient.getQueryData<AnaliticaCampania>([
       ...CLAVE_CAMPANIAS,
@@ -159,14 +166,18 @@ export default function Campanias() {
     try {
       const { enlaces } = await api.enlacesCampania(campaniaActual.id);
       const vigente = enlaceVigentePara(enlaces, rango, ocultarAds);
-      await descargarPdfCampania(datos, {
-        periodoEtiqueta: etiquetaPeriodo(rango, RANGOS),
-        ocultarAds,
-        tokenEnlace: vigente?.token ?? null,
-      });
-      toast.success("PDF de la campaña descargado.");
+      let enlacePrevia: { url: string; qrDataUrl: string } | null = null;
+      if (vigente) {
+        const url = urlEnlace(vigente.token);
+        const { default: qrcode } = await import("qrcode-generator");
+        const qr = qrcode(0, "M");
+        qr.addData(url);
+        qr.make();
+        enlacePrevia = { url, qrDataUrl: qr.createDataURL(8, 4) };
+      }
+      setPdf({ datos, tokenEnlace: vigente?.token ?? null, enlacePrevia });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo generar el PDF.");
+      toast.error(e instanceof Error ? e.message : "No se pudo preparar el PDF.");
     }
   };
 
@@ -244,8 +255,8 @@ export default function Campanias() {
                       {`Descargar (${etiqueta})`}
                     </ItemMenu>
                   ))}
-                  <ItemMenu icono={Presentation} onClick={() => void exportarPdf()}>
-                    Descargar PDF
+                  <ItemMenu icono={Presentation} onClick={() => void abrirDialogoPdf()}>
+                    Descargar PDF…
                   </ItemMenu>
                   {/* Modo cliente: ajuste de vista persistente, como toggle directo del menú
                       (oculta Ads y suma sus visualizaciones a las orgánicas). */}
@@ -307,6 +318,16 @@ export default function Campanias() {
         rango={rango}
         ocultarAds={ocultarAds}
         onCerrar={() => setEnlacesAbierto(false)}
+      />
+
+      <DialogoDescargarPdf
+        abierto={pdf !== null}
+        datos={pdf?.datos ?? null}
+        periodoEtiqueta={etiquetaPeriodo(rango, RANGOS)}
+        ocultarAds={ocultarAds}
+        tokenEnlace={pdf?.tokenEnlace ?? null}
+        enlacePrevia={pdf?.enlacePrevia ?? null}
+        onCerrar={() => setPdf(null)}
       />
     </>
   );

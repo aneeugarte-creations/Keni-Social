@@ -12,7 +12,7 @@ import { nombreFormato, nombreRed, numeroCompacto, numeroCompleto, porcentaje } 
 import { AreaBold } from "@/pages/metricas/informe/graficas";
 import type { AnaliticaCampania, ComparativaKpi, PiezaCampania } from "@/types";
 
-import { fechaCorta, visEfectivas } from "../formato";
+import { clavePieza, fechaCorta, visEfectivas } from "../formato";
 
 import "@/pages/metricas/informe/informe.css";
 
@@ -20,8 +20,59 @@ const NARANJA = "#ea580c";
 const VERDE = "#059669";
 const ROJO = "#dc2626";
 
-/** Máximo de piezas en la tabla "testigo": una densidad legible en una sola lámina. */
+/** Máximo de piezas por lámina de tabla: una densidad legible en una sola lámina. */
 const TOPE_PIEZAS = 14;
+
+/** Secciones del deck que se pueden encender/apagar al descargar. La portada siempre va; la
+ * lámina de enlace/QR depende de si hay enlace vigente (no es una sección elegible). */
+export interface SeccionesDeck {
+  kpis: boolean;
+  tendencia: boolean;
+  desgloseRed: boolean;
+  piezas: boolean;
+}
+
+/** Todas las secciones activas: el comportamiento de hoy (nada apagado). */
+export const SECCIONES_TODAS: SeccionesDeck = {
+  kpis: true,
+  tendencia: true,
+  desgloseRed: true,
+  piezas: true,
+};
+
+/**
+ * Piezas a pintar en la tabla y cuántas quedan fuera, según la selección:
+ * - `seleccion == null` (default): TODAS ordenadas por vistas efectivas desc, cortadas al tope
+ *   de una lámina; `restantes` es lo que no cabe (nota "+N más").
+ * - `seleccion` (Set de claves): SOLO las elegidas por la persona (mismo orden por vistas), sin
+ *   corte —se paginan en varias láminas—; no hay "+N más" (las eligió a propósito).
+ */
+export function piezasParaTabla(
+  datos: AnaliticaCampania,
+  ocultarAds: boolean,
+  seleccion: Set<string> | null,
+): { piezas: PiezaCampania[]; restantes: number } {
+  const ordenadas = datos.piezas
+    .map((p, i) => ({ p, clave: clavePieza(p, i) }))
+    .sort((a, b) => visEfectivas(b.p, ocultarAds) - visEfectivas(a.p, ocultarAds));
+  if (seleccion == null) {
+    const piezas = ordenadas.slice(0, TOPE_PIEZAS).map((x) => x.p);
+    return { piezas, restantes: datos.piezas.length - piezas.length };
+  }
+  const piezas = ordenadas.filter((x) => seleccion.has(x.clave)).map((x) => x.p);
+  return { piezas, restantes: 0 };
+}
+
+/** Reparte una lista de piezas en páginas de hasta `TOPE_PIEZAS`. Al menos una página (vacía si
+ * no hay piezas), para que la sección "Piezas" siempre aporte su lámina cuando está activa. */
+function paginarPiezas(piezas: PiezaCampania[]): PiezaCampania[][] {
+  if (piezas.length === 0) return [[]];
+  const paginas: PiezaCampania[][] = [];
+  for (let i = 0; i < piezas.length; i += TOPE_PIEZAS) {
+    paginas.push(piezas.slice(i, i + TOPE_PIEZAS));
+  }
+  return paginas;
+}
 
 function SlideBase({
   className,
@@ -208,11 +259,15 @@ function SlideDesgloseRed({ datos }: { datos: AnaliticaCampania }) {
   );
 }
 
-function SlidePiezas({ datos, ocultarAds }: { datos: AnaliticaCampania; ocultarAds: boolean }) {
-  const piezas = [...datos.piezas]
-    .sort((a, b) => visEfectivas(b, ocultarAds) - visEfectivas(a, ocultarAds))
-    .slice(0, TOPE_PIEZAS);
-  const restantes = datos.piezas.length - piezas.length;
+function SlidePiezas({
+  piezas,
+  ocultarAds,
+  restantes,
+}: {
+  piezas: PiezaCampania[];
+  ocultarAds: boolean;
+  restantes: number;
+}) {
   return (
     <SlideBase className="flex flex-col bg-white">
       <Eyebrow>Piezas del periodo</Eyebrow>
@@ -283,6 +338,8 @@ export function DeckCampania({
   generadoEn,
   ocultarAds,
   enlace,
+  secciones = SECCIONES_TODAS,
+  piezasSeleccionadas = null,
 }: {
   datos: AnaliticaCampania;
   periodoEtiqueta: string;
@@ -291,14 +348,29 @@ export function DeckCampania({
   ocultarAds: boolean;
   /** Enlace público vigente para este periodo/modo, si existe (QR de cierre). */
   enlace?: { url: string; qrDataUrl: string } | null;
+  /** Secciones activas. Por defecto todas (comportamiento de hoy). La portada siempre va. */
+  secciones?: SeccionesDeck;
+  /** Claves (`clavePieza`) de las piezas elegidas. `null` = todas ordenadas y cortadas al tope
+   * (comportamiento de hoy con nota "+N más"); un Set = solo esas, paginadas sin corte. */
+  piezasSeleccionadas?: Set<string> | null;
 }) {
+  const { piezas, restantes } = piezasParaTabla(datos, ocultarAds, piezasSeleccionadas);
+  const paginas = paginarPiezas(piezas);
   return (
     <>
       <PortadaCampania datos={datos} periodoEtiqueta={periodoEtiqueta} generadoEn={generadoEn} />
-      <SlideKpis datos={datos} />
-      <SlideTendencia datos={datos} />
-      <SlideDesgloseRed datos={datos} />
-      <SlidePiezas datos={datos} ocultarAds={ocultarAds} />
+      {secciones.kpis && <SlideKpis datos={datos} />}
+      {secciones.tendencia && <SlideTendencia datos={datos} />}
+      {secciones.desgloseRed && <SlideDesgloseRed datos={datos} />}
+      {secciones.piezas &&
+        paginas.map((pagina, i) => (
+          <SlidePiezas
+            key={i}
+            piezas={pagina}
+            ocultarAds={ocultarAds}
+            restantes={i === paginas.length - 1 ? restantes : 0}
+          />
+        ))}
       {enlace && <SlideEnlace url={enlace.url} qrDataUrl={enlace.qrDataUrl} />}
     </>
   );

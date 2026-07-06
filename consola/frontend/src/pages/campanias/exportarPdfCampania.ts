@@ -11,6 +11,7 @@ import { slug } from "@/lib/formato";
 import { comprobarVersionNueva, recargaSegura } from "@/lib/version";
 import type { AnaliticaCampania } from "@/types";
 
+import type { SeccionesDeck } from "./informe/DeckCampania";
 import { urlEnlace } from "./formato";
 
 export interface ContextoPdfCampania {
@@ -19,6 +20,10 @@ export interface ContextoPdfCampania {
   ocultarAds: boolean;
   /** Token del enlace público vigente para este periodo/modo, si existe. */
   tokenEnlace?: string | null;
+  /** Secciones a incluir. Omitido = todas (comportamiento de hoy). */
+  secciones?: SeccionesDeck;
+  /** Claves (`clavePieza`) de las piezas elegidas. Omitido/null = todas al tope con "+N más". */
+  piezasSeleccionadas?: Set<string> | null;
 }
 
 /**
@@ -66,6 +71,8 @@ export async function descargarPdfCampania(
       generadoEn: datos.generado_en,
       ocultarAds: ctx.ocultarAds,
       enlace,
+      secciones: ctx.secciones,
+      piezasSeleccionadas: ctx.piezasSeleccionadas ?? null,
     }),
     nombreArchivo,
   );

@@ -8,7 +8,9 @@ import { describe, expect, it } from "vitest";
 
 import type { AnaliticaCampania, ComparativaKpi, PiezaCampania } from "@/types";
 
-import { DeckCampania } from "./DeckCampania";
+import { clavePieza } from "../formato";
+
+import { DeckCampania, piezasParaTabla } from "./DeckCampania";
 
 const COMP_SUBE: ComparativaKpi = { actual: 600, anterior: 400, delta: 200, variacion_pct: 50 };
 const COMP_VACIA: ComparativaKpi = { actual: 0, anterior: 0, delta: 0, variacion_pct: null };
@@ -110,6 +112,75 @@ describe("DeckCampania · tabla de piezas y modo cliente", () => {
     render(<DeckCampania datos={datosBase(piezas)} periodoEtiqueta="junio 2026" ocultarAds={false} />);
 
     expect(screen.getByText(/\+ 6 piezas más/)).toBeInTheDocument();
+  });
+});
+
+describe("piezasParaTabla", () => {
+  it("sin selección (null): ordena por vistas, corta al tope y reporta el resto", () => {
+    const piezas = Array.from({ length: 20 }, (_, i) => pieza(`p${i}`, 1000 - i, 0));
+    const { piezas: mostradas, restantes } = piezasParaTabla(datosBase(piezas), false, null);
+
+    expect(mostradas).toHaveLength(14);
+    expect(restantes).toBe(6);
+    // Ordenadas por vistas efectivas desc: la primera es la de más vistas.
+    expect(mostradas[0].visualizaciones).toBe(1000);
+  });
+
+  it("con selección: solo las elegidas, sin corte y sin resto", () => {
+    const piezas = Array.from({ length: 20 }, (_, i) => pieza(`p${i}`, 1000 - i, 0));
+    const datos = datosBase(piezas);
+    // Elige 16 piezas concretas (más que el tope de una lámina): tienen que salir todas.
+    const claves = new Set(datos.piezas.slice(0, 16).map((p, i) => clavePieza(p, i)));
+    const { piezas: mostradas, restantes } = piezasParaTabla(datos, false, claves);
+
+    expect(mostradas).toHaveLength(16);
+    expect(restantes).toBe(0);
+  });
+
+  it("selección vacía: no muestra ninguna pieza", () => {
+    const piezas = Array.from({ length: 5 }, (_, i) => pieza(`p${i}`, 100, 0));
+    const { piezas: mostradas } = piezasParaTabla(datosBase(piezas), false, new Set());
+    expect(mostradas).toHaveLength(0);
+  });
+});
+
+describe("DeckCampania · secciones y paginación", () => {
+  it("apaga una sección y su lámina desaparece del deck", () => {
+    const { rerender } = render(
+      <DeckCampania datos={datosBase([])} periodoEtiqueta="junio 2026" ocultarAds={false} />,
+    );
+    expect(screen.getByText("Desglose por red")).toBeInTheDocument();
+
+    rerender(
+      <DeckCampania
+        datos={datosBase([])}
+        periodoEtiqueta="junio 2026"
+        ocultarAds={false}
+        secciones={{ kpis: true, tendencia: true, desgloseRed: false, piezas: true }}
+      />,
+    );
+    expect(screen.queryByText("Desglose por red")).not.toBeInTheDocument();
+    // Otras secciones siguen ahí.
+    expect(screen.getByText("Resultados del periodo")).toBeInTheDocument();
+  });
+
+  it("con más de una lámina de piezas seleccionadas, pinta la cabecera de la tabla por página", () => {
+    const piezas = Array.from({ length: 20 }, (_, i) => pieza(`p${i}`, 1000 - i, 0));
+    const datos = datosBase(piezas);
+    const seleccion = new Set(datos.piezas.map((p, i) => clavePieza(p, i)));
+    render(
+      <DeckCampania
+        datos={datos}
+        periodoEtiqueta="junio 2026"
+        ocultarAds={false}
+        piezasSeleccionadas={seleccion}
+      />,
+    );
+
+    // 20 seleccionadas -> 2 láminas de piezas (14 + 6): la cabecera "Publicación" sale dos veces.
+    expect(screen.getAllByText("Publicación")).toHaveLength(2);
+    // Sin nota de "+N más": todas las elegidas salen.
+    expect(screen.queryByText(/piezas más en el periodo/)).not.toBeInTheDocument();
   });
 });
 

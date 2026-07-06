@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import type { EnlacePublicoCampania, PiezaCampania } from "@/types";
 
-import { calcularRentabilidad, enlaceVigentePara, urlEnlace, visEfectivas } from "./formato";
+import {
+  calcularRentabilidad,
+  clavePieza,
+  enlaceVigentePara,
+  urlEnlace,
+  visEfectivas,
+} from "./formato";
 
 function pieza(visualizaciones: number, visualizacionesPagadas: number): PiezaCampania {
   return {
@@ -29,6 +35,25 @@ describe("visEfectivas", () => {
 
   it("funde lo pagado en modo cliente (sin rastro de pauta)", () => {
     expect(visEfectivas(pieza(1000, 500), true)).toBe(1500);
+  });
+});
+
+describe("clavePieza", () => {
+  it("distingue la MISMA publicación en dos redes (mismo id, distinta red)", () => {
+    const ig = { ...pieza(0, 0), id: "post9", red: "instagram" };
+    const fb = { ...pieza(0, 0), id: "post9", red: "facebook" };
+    expect(clavePieza(ig, 0)).not.toBe(clavePieza(fb, 1));
+  });
+
+  it("distingue una fila de Ads de una orgánica aunque compartan id", () => {
+    const org = { ...pieza(0, 0), id: "x", es_inorganico: false };
+    const ad = { ...pieza(0, 0), id: "x", es_inorganico: true };
+    expect(clavePieza(org, 0)).not.toBe(clavePieza(ad, 1));
+  });
+
+  it("el índice desempata claves por lo demás idénticas", () => {
+    const a = pieza(0, 0);
+    expect(clavePieza(a, 0)).not.toBe(clavePieza(a, 1));
   });
 });
 

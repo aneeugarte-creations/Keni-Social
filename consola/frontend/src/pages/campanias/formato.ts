@@ -31,6 +31,15 @@ export function visEfectivas(p: PiezaCampania, ocultarAds: boolean): number {
   return p.visualizaciones + (ocultarAds ? p.visualizaciones_pagadas : 0);
 }
 
+/** Clave ESTABLE y única de una pieza dentro de la tabla de una campaña, para seleccionarla.
+ * El `id` del backend NO basta: la misma publicación puede salir en dos redes (mismo `id`,
+ * distinta `red`) y las filas de Ads usan un `id` sintético `ad:<nombre>` que podría chocar
+ * si dos boosts comparten nombre. Se compone `id|red|org?ad` y, como último seguro, el índice
+ * de fila (el orden de `datos.piezas` es estable dentro de una misma analítica). */
+export function clavePieza(p: PiezaCampania, indice: number): string {
+  return `${p.id}|${p.red}|${p.es_inorganico ? "ad" : "org"}|${indice}`;
+}
+
 /** URL pública (capability-URL) de un enlace de campaña a partir de su token. */
 export function urlEnlace(token: string): string {
   return `${window.location.origin}/c/${token}`;
