@@ -71,11 +71,12 @@ import {
   porcentaje,
   redEnFoco,
   rendimientoRel,
+  tiempoVis,
 } from "@/lib/formato";
 import type { MarcaDisponible, PiezaListado } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
-import { idsColumnas, metaColumnas, TABLA_PIEZAS } from "./columnasMeta";
+import { idsColumnas, idsOcultosPorDefecto, metaColumnas, TABLA_PIEZAS } from "./columnasMeta";
 import { MARCA_TODAS } from "./Controles";
 import { columnasVisibles, useVistaConfig } from "./vistaConfig";
 import { DetallePieza } from "./DetallePieza";
@@ -119,7 +120,19 @@ const COLS_INTERACCION: Array<{ clave: ClaveOrden; etiqueta: string; icono: Luci
 /** Columnas de interacción (icono + número) indexadas por id, para render por columna. */
 const META_INTERACCION = new Map(COLS_INTERACCION.map((c) => [c.clave as string, c]));
 
+/** Columnas opcionales (ocultas por defecto): granulares por pieza que no ordenan, se
+ * pintan como número a la derecha. `tiempo_medio_vis_s` se formatea como duración. */
+const COLS_OPCIONALES: Array<{ id: string; etiqueta: string; tiempo?: boolean }> = [
+  { id: "likes", etiqueta: "Me gusta" },
+  { id: "video_views", etiqueta: "Reproducciones" },
+  { id: "tiempo_medio_vis_s", etiqueta: "Tiempo medio", tiempo: true },
+  { id: "alcance", etiqueta: "Alcance" },
+];
+const META_OPCIONAL = new Map(COLS_OPCIONALES.map((c) => [c.id, c]));
+
 const IDS_PIEZAS_BASE = idsColumnas(TABLA_PIEZAS);
+/** Columnas opcionales (Me gusta / Reproducciones / Tiempo medio / Alcance): arrancan ocultas. */
+const IDS_PIEZAS_OCULTAS = idsOcultosPorDefecto(TABLA_PIEZAS);
 
 const TODAS = "__todas__";
 const SIN_LINEA = "Sin categoría";
@@ -164,7 +177,7 @@ export function PiezasConsolidada({
   const redGlobal = useVistaConfig((s) => s.red);
   const formato = useVistaConfig((s) => s.formato);
   const cfgGuardada = useVistaConfig((s) => s.columnas[TABLA_PIEZAS]);
-  const cfgCols = cfgGuardada ?? { orden: IDS_PIEZAS_BASE, ocultas: [] };
+  const cfgCols = cfgGuardada ?? { orden: IDS_PIEZAS_BASE, ocultas: IDS_PIEZAS_OCULTAS };
   const columnas = columnasVisibles(IDS_PIEZAS_BASE, cfgCols);
   const [busqueda, setBusqueda] = React.useState("");
   const [lineaFiltro, setLineaFiltro] = React.useState(TODAS);
@@ -277,6 +290,14 @@ export function PiezasConsolidada({
             <span className="sr-only">{inter.etiqueta}</span>
           </span>
         </CabeceraOrdenable>
+      );
+    }
+    const opc = META_OPCIONAL.get(id);
+    if (opc) {
+      return (
+        <TableHead key={id} className="hidden whitespace-nowrap text-right sm:table-cell">
+          {opc.etiqueta}
+        </TableHead>
       );
     }
     const etiqueta = id === "publicado" ? "Día" : id === "visualizaciones" ? "Vistas" : "Engagement";
@@ -538,6 +559,28 @@ function FilaPieza({
       return (
         <TableCell key={id} className="text-right tabular-nums">
           {porcentaje(pieza.engagement_pct)}
+        </TableCell>
+      );
+    }
+    // Columnas opcionales (likes/video_views/tiempo_medio_vis_s/alcance): número a la
+    // derecha, ocultas en móvil como la cabecera. El tiempo medio se lee como duración.
+    const opc = META_OPCIONAL.get(id);
+    if (opc) {
+      const bruto = pieza[id as keyof PiezaListado] as number | null;
+      if (opc.tiempo) {
+        return (
+          <TableCell key={id} className="hidden text-right tabular-nums sm:table-cell">
+            {bruto == null ? "—" : tiempoVis(bruto)}
+          </TableCell>
+        );
+      }
+      return (
+        <TableCell
+          key={id}
+          className="hidden text-right tabular-nums sm:table-cell"
+          title={bruto == null ? undefined : numeroCompleto(bruto)}
+        >
+          {bruto == null ? "—" : numeroCompacto(bruto)}
         </TableCell>
       );
     }

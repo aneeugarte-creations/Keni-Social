@@ -55,8 +55,9 @@ const RESP: AdsMetricas = {
   generado_en: "2026-06-02T00:00:00",
 };
 
-// Misma respuesta, pero con campos de rendimiento (CTR/CPC/CPM/Conversiones) y el id de
-// proveedor que habilita el drill-down. Una de las dos campañas los trae.
+// Misma respuesta, pero con campos de rendimiento (CTR/CPC/CPM/Conversiones + tasa/valor de
+// conversión, presupuesto, objetivo/estado, caption) y el id de proveedor que habilita el
+// drill-down. Una de las dos campañas los trae.
 const RESP_AVANZADO: AdsMetricas = {
   ...RESP,
   ads: [
@@ -66,6 +67,12 @@ const RESP_AVANZADO: AdsMetricas = {
       cpc: 2.94,
       cpm: 49.38,
       conversiones: 320,
+      tasa_conversion: 7.6,
+      valor_conversiones: 98000,
+      presupuesto_diario: 1500,
+      objetivo: "Reconocimiento",
+      estado: "ACTIVE",
+      caption: "Vive el Mundial 2026 con Claro Sports",
       provider_campaign_id: "cmp_123",
     },
     RESP.ads[1],
@@ -113,19 +120,17 @@ describe("SeccionAds", () => {
     expect(screen.queryByText("facebook")).not.toBeInTheDocument();
   });
 
-  it("no renderiza la sección sin campañas en el periodo (no ensucia el dashboard)", async () => {
-    const espia = vi.spyOn(api, "metricasAds").mockResolvedValue({
+  it("muestra un mensaje sobrio sin campañas en el periodo (la sección se queda)", async () => {
+    vi.spyOn(api, "metricasAds").mockResolvedValue({
       ...RESP,
       ads: [],
       total: { visualizaciones: 0, gasto: 0, clics: 0, campanias: 0, moneda: "MXN" },
     });
-    const { container } = renderConProviders(
-      <SeccionAds marcaActual="__todas__" rangoActual="semana" />,
-    );
+    renderConProviders(<SeccionAds marcaActual="__todas__" rangoActual="semana" />);
 
-    await vi.waitFor(() => expect(espia).toHaveBeenCalled());
-    await vi.waitFor(() => expect(container).toBeEmptyDOMElement());
-    expect(screen.queryByText("Publicidad")).not.toBeInTheDocument();
+    // El título permanece y el cuerpo explica por qué está vacío (no desaparece sin más).
+    expect(await screen.findByText("Sin campañas de Ads en este periodo.")).toBeInTheDocument();
+    expect(screen.getByText("Publicidad")).toBeInTheDocument();
   });
 
   it("muestra un mensaje de error honesto si las campañas no cargan", async () => {
@@ -137,7 +142,7 @@ describe("SeccionAds", () => {
     ).toBeInTheDocument();
   });
 
-  it("NO ofrece las columnas de rendimiento si la fuente no las trae", async () => {
+  it("NO ofrece las columnas de rendimiento ni de contexto si la fuente no las trae", async () => {
     vi.spyOn(api, "metricasAds").mockResolvedValue(RESP);
     renderConProviders(<SeccionAds marcaActual="__todas__" rangoActual="semana" />);
 
@@ -145,6 +150,12 @@ describe("SeccionAds", () => {
     expect(screen.queryByText("CTR")).not.toBeInTheDocument();
     expect(screen.queryByText("CPC")).not.toBeInTheDocument();
     expect(screen.queryByText("Conversiones")).not.toBeInTheDocument();
+    // Las columnas nuevas (tasa/valor de conversión, presupuesto, objetivo/estado) tampoco.
+    expect(screen.queryByText("Tasa conv.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Valor conv.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Presupuesto/día")).not.toBeInTheDocument();
+    expect(screen.queryByText("Objetivo")).not.toBeInTheDocument();
+    expect(screen.queryByText("Estado")).not.toBeInTheDocument();
   });
 
   it("ofrece las columnas de rendimiento cuando la fuente las trae, con formato es-MX", async () => {
@@ -161,6 +172,43 @@ describe("SeccionAds", () => {
     expect(screen.getByText("2.1 %")).toBeInTheDocument();
     expect(screen.getByText("2.94 MXN")).toBeInTheDocument();
     expect(screen.getByText("49.38 MXN")).toBeInTheDocument();
+  });
+
+  it("pinta tasa/valor de conversión y presupuesto diario cuando llegan (es-MX)", async () => {
+    vi.spyOn(api, "metricasAds").mockResolvedValue(RESP_AVANZADO);
+    renderConProviders(<SeccionAds marcaActual="__todas__" rangoActual="semana" />);
+
+    await screen.findByText("Campaña Mundial 2026");
+    // Cabeceras nuevas.
+    expect(screen.getByText("Tasa conv.")).toBeInTheDocument();
+    expect(screen.getByText("Valor conv.")).toBeInTheDocument();
+    expect(screen.getByText("Presupuesto/día")).toBeInTheDocument();
+    // Valores: tasa como porcentaje; valor y presupuesto como dinero con la moneda de la fuente.
+    expect(screen.getByText("7.6 %")).toBeInTheDocument();
+    expect(screen.getByText("98,000 MXN")).toBeInTheDocument();
+    expect(screen.getByText("1,500 MXN")).toBeInTheDocument();
+  });
+
+  it("pinta objetivo y estado (badge sobrio) cuando la fuente los trae", async () => {
+    vi.spyOn(api, "metricasAds").mockResolvedValue(RESP_AVANZADO);
+    renderConProviders(<SeccionAds marcaActual="__todas__" rangoActual="semana" />);
+
+    await screen.findByText("Campaña Mundial 2026");
+    expect(screen.getByText("Objetivo")).toBeInTheDocument();
+    expect(screen.getByText("Estado")).toBeInTheDocument();
+    expect(screen.getByText("Reconocimiento")).toBeInTheDocument();
+    expect(screen.getByText("ACTIVE")).toBeInTheDocument();
+  });
+
+  it("muestra el texto del anuncio (caption) en el desglose, truncado", async () => {
+    vi.spyOn(api, "metricasAds").mockResolvedValue(RESP_AVANZADO);
+    vi.spyOn(api, "metricasAdsDesglose").mockResolvedValue(DESGLOSE);
+    renderConProviders(<SeccionAds marcaActual="__todas__" rangoActual="semana" />);
+
+    fireEvent.click(await screen.findByLabelText("Ver desglose"));
+    expect(
+      await screen.findByText("“Vive el Mundial 2026 con Claro Sports”"),
+    ).toBeInTheDocument();
   });
 
   it("expande el desglose (conjuntos + anuncios) de una campaña con id de proveedor", async () => {

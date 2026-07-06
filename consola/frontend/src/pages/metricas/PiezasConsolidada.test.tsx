@@ -1,12 +1,14 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import * as React from "react";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api";
 import type { HistoricoPieza, MarcaDisponible, PiezaListado, PiezasListado } from "@/types";
 
 import { PiezasConsolidada } from "./PiezasConsolidada";
+import { TABLA_PIEZAS } from "./columnasMeta";
+import { useVistaConfig } from "./vistaConfig";
 
 beforeAll(() => {
   if (!globalThis.ResizeObserver) {
@@ -68,6 +70,12 @@ function renderConProviders(ui: React.ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  // La config de vista es un singleton global: restáurala para no contaminar otros tests.
+  useVistaConfig.getState().reset();
+});
 
 const MISMO_DIA: PiezaListado[] = [
   pieza({ id: "p1", titulo: "Gol de último minuto", visualizaciones: 1000, categoria: "Virales" }),
@@ -202,5 +210,55 @@ describe("PiezasConsolidada", () => {
     const fila = filasDatos().find((f) => within(f).queryByText("Noticia local"))!;
     fireEvent.contextMenu(fila);
     expect(await screen.findByRole("menuitem", { name: "Abrir en la red" })).toBeInTheDocument();
+  });
+
+  it("las columnas opcionales (Me gusta/Reproducciones/Tiempo medio/Alcance) están OCULTAS por defecto", async () => {
+    vi.spyOn(api, "metricasPiezasListado").mockResolvedValue(resp(MISMO_DIA));
+    renderConProviders(<PiezasConsolidada marcaActual="__todas__" rangoActual="mes" marcas={MARCAS} />);
+    await screen.findByText("Gol de último minuto");
+
+    // Sin config guardada: las cabeceras opcionales no se pintan (la tabla no se sobrecarga).
+    expect(screen.queryByRole("columnheader", { name: "Me gusta" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Reproducciones" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Tiempo medio" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Alcance" })).not.toBeInTheDocument();
+  });
+
+  it("al activar las columnas opcionales aparecen con su valor (tiempo como duración)", async () => {
+    // Activa las 4 opcionales en la config de vista (lo que hace el editor de columnas).
+    useVistaConfig.getState().setColumnas(TABLA_PIEZAS, {
+      orden: [
+        "pieza",
+        "publicado",
+        "visualizaciones",
+        "engagement_pct",
+        "comentarios",
+        "compartidos",
+        "guardados",
+        "clics_enlace",
+        "likes",
+        "video_views",
+        "tiempo_medio_vis_s",
+        "alcance",
+      ],
+      ocultas: [],
+    });
+    const datos = [
+      pieza({ id: "x", titulo: "Con granulares", likes: 4300, video_views: 55000, tiempo_medio_vis_s: 95, alcance: 120000 }),
+    ];
+    vi.spyOn(api, "metricasPiezasListado").mockResolvedValue(resp(datos));
+    renderConProviders(<PiezasConsolidada marcaActual="__todas__" rangoActual="mes" marcas={MARCAS} />);
+    await screen.findByText("Con granulares");
+
+    // Cabeceras presentes.
+    expect(screen.getByRole("columnheader", { name: "Me gusta" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Reproducciones" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Tiempo medio" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Alcance" })).toBeInTheDocument();
+    // Valores: compactos es-MX para conteos; el tiempo medio como duración legible (95s → "1m 35s").
+    expect(screen.getByText("4.3 k")).toBeInTheDocument();
+    expect(screen.getByText("55 k")).toBeInTheDocument();
+    expect(screen.getByText("1m 35s")).toBeInTheDocument();
+    expect(screen.getByText("120 k")).toBeInTheDocument();
   });
 });

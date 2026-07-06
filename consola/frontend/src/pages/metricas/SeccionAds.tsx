@@ -56,7 +56,17 @@ function dineroFino(v: number, moneda: string): string {
   return `${v.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${moneda}`.trim();
 }
 
-type ClaveOrden = "impresiones" | "gasto" | "clics" | "ctr" | "cpc" | "cpm" | "conversiones";
+type ClaveOrden =
+  | "impresiones"
+  | "gasto"
+  | "clics"
+  | "ctr"
+  | "cpc"
+  | "cpm"
+  | "conversiones"
+  | "tasa_conversion"
+  | "valor_conversiones"
+  | "presupuesto_diario";
 
 // Accesores de orden a nivel módulo: identidad estable entre renders. Los avanzados
 // devuelven `null` cuando la fuente no los trae (van al final del orden).
@@ -68,6 +78,9 @@ const ACCESORES: Record<ClaveOrden, (a: CampaniaAdsMetrica) => number | null> = 
   cpc: (a) => a.cpc ?? null,
   cpm: (a) => a.cpm ?? null,
   conversiones: (a) => a.conversiones ?? null,
+  tasa_conversion: (a) => a.tasa_conversion ?? null,
+  valor_conversiones: (a) => a.valor_conversiones ?? null,
+  presupuesto_diario: (a) => a.presupuesto_diario ?? null,
 };
 
 /** Columnas FIJAS de la tabla de campañas de Ads (orden base + etiquetas legibles). */
@@ -79,13 +92,23 @@ const COLUMNAS: ColumnaMeta[] = [
   { id: "clics", etiqueta: "Clics" },
 ];
 
-/** Columnas de rendimiento: solo se ofrecen si la fuente las trae en el periodo (CTR/CPC/CPM
- * y conversiones llegan de Meta Ads y no siempre vienen). */
+/** Columnas de contexto de la campaña (objetivo/estado): texto/badge, no ordenables. Solo
+ * entran si alguna campaña las trae. */
+const COLUMNAS_CONTEXTO: ColumnaMeta[] = [
+  { id: "objetivo", etiqueta: "Objetivo" },
+  { id: "estado", etiqueta: "Estado" },
+];
+
+/** Columnas de rendimiento: solo se ofrecen si la fuente las trae en el periodo (CTR/CPC/CPM,
+ * conversiones y su tasa/valor, y el presupuesto diario llegan de Meta Ads y no siempre vienen). */
 const COLUMNAS_AVANZADAS: ColumnaMeta[] = [
   { id: "ctr", etiqueta: "CTR" },
   { id: "cpc", etiqueta: "CPC" },
   { id: "cpm", etiqueta: "CPM" },
   { id: "conversiones", etiqueta: "Conversiones" },
+  { id: "tasa_conversion", etiqueta: "Tasa conv." },
+  { id: "valor_conversiones", etiqueta: "Valor conv." },
+  { id: "presupuesto_diario", etiqueta: "Presupuesto/día" },
 ];
 
 /** ¿La columna es una métrica ordenable (cabecera con clic)? */
@@ -129,13 +152,31 @@ export function SeccionAds({
     { clave: "impresiones", direccion: "desc" },
   );
 
-  // Las columnas de rendimiento solo entran (orden base + editor de campos) si alguna campaña
-  // las trae; si no, la tabla se ve exactamente como antes.
-  const hayAvanzadas = React.useMemo(
-    () => ads.some((a) => a.ctr != null || a.cpc != null || a.cpm != null || a.conversiones != null),
+  // Las columnas de contexto (objetivo/estado) y de rendimiento solo entran (orden base +
+  // editor de campos) si alguna campaña las trae; si no, la tabla se ve exactamente como antes.
+  const hayContexto = React.useMemo(
+    () => ads.some((a) => (a.objetivo ?? "") !== "" || (a.estado ?? "") !== ""),
     [ads],
   );
-  const columnasMeta = hayAvanzadas ? [...COLUMNAS, ...COLUMNAS_AVANZADAS] : COLUMNAS;
+  const hayAvanzadas = React.useMemo(
+    () =>
+      ads.some(
+        (a) =>
+          a.ctr != null ||
+          a.cpc != null ||
+          a.cpm != null ||
+          a.conversiones != null ||
+          a.tasa_conversion != null ||
+          a.valor_conversiones != null ||
+          a.presupuesto_diario != null,
+      ),
+    [ads],
+  );
+  const columnasMeta = [
+    ...COLUMNAS,
+    ...(hayContexto ? COLUMNAS_CONTEXTO : []),
+    ...(hayAvanzadas ? COLUMNAS_AVANZADAS : []),
+  ];
   const idsBase = columnasMeta.map((c) => c.id);
 
   const cfgGuardada = useVistaConfig((s) => s.columnas["ads"]);
@@ -145,8 +186,17 @@ export function SeccionAds({
   // Campaña expandida (drill-down): una a la vez, identificada por su id de proveedor.
   const [expandida, setExpandida] = React.useState<string | null>(null);
 
-  // Sin inversión con entrega en el periodo (o sin Ads conectado): no se muestra la sección.
-  if (!isPending && !isError && (data?.total.campanias ?? 0) === 0) return null;
+  // Sin inversión con entrega en el periodo (o sin Ads conectado): la sección se queda,
+  // con un mensaje sobrio (patrón del resto de secciones), sin ensuciar con controles.
+  if (!isPending && !isError && (data?.total.campanias ?? 0) === 0) {
+    return (
+      <Seccion id="ads" titulo="Publicidad" icono={Megaphone} descripcion="Campañas de pago">
+        <Card className="overflow-hidden py-2">
+          <p className="p-6 text-sm text-muted-foreground">Sin campañas de Ads en este periodo.</p>
+        </Card>
+      </Seccion>
+    );
+  }
 
   const total = data?.total;
   const etiquetaDe = (id: string) => columnasMeta.find((c) => c.id === id)?.etiqueta ?? id;
@@ -261,6 +311,47 @@ export function SeccionAds({
         </TableCell>
       );
     }
+    if (id === "tasa_conversion") {
+      return (
+        <TableCell key={id} className={claseNum}>
+          {a.tasa_conversion != null ? porcentaje(a.tasa_conversion) : vacia}
+        </TableCell>
+      );
+    }
+    if (id === "valor_conversiones") {
+      return (
+        <TableCell key={id} className={claseNum}>
+          {a.valor_conversiones != null ? dinero(a.valor_conversiones, a.moneda) : vacia}
+        </TableCell>
+      );
+    }
+    if (id === "presupuesto_diario") {
+      return (
+        <TableCell key={id} className={claseNum}>
+          {a.presupuesto_diario != null ? dinero(a.presupuesto_diario, a.moneda) : vacia}
+        </TableCell>
+      );
+    }
+    if (id === "objetivo") {
+      return (
+        <TableCell key={id} className={borde || undefined}>
+          {a.objetivo ? (
+            <span className="block max-w-[12rem] truncate text-muted-foreground" title={a.objetivo}>
+              {a.objetivo}
+            </span>
+          ) : (
+            vacia
+          )}
+        </TableCell>
+      );
+    }
+    if (id === "estado") {
+      return (
+        <TableCell key={id} className={borde || undefined}>
+          {a.estado ? <Badge variant="outline">{a.estado}</Badge> : vacia}
+        </TableCell>
+      );
+    }
     return null;
   };
 
@@ -328,7 +419,7 @@ export function SeccionAds({
                       {abierta && idProveedor != null && (
                         <TableRow>
                           <TableCell colSpan={columnas.length} className="bg-muted/30 p-0">
-                            <DesgloseAdsFila providerCampaignId={idProveedor} marca={marca_} moneda={a.moneda} />
+                            <DesgloseAdsFila providerCampaignId={idProveedor} marca={marca_} moneda={a.moneda} caption={a.caption} />
                           </TableCell>
                         </TableRow>
                       )}
@@ -351,10 +442,13 @@ function DesgloseAdsFila({
   providerCampaignId,
   marca,
   moneda,
+  caption,
 }: {
   providerCampaignId: string;
   marca?: string;
   moneda: string;
+  /** Texto del anuncio de la campaña, si la fuente lo trae (encabeza el desglose). */
+  caption?: string | null;
 }) {
   const { data, isPending, isError } = useQuery({
     queryKey: ["metricas", "ads", "desglose", providerCampaignId, marca ?? "todas"],
@@ -374,8 +468,14 @@ function DesgloseAdsFila({
   if (isError || (adgroups.length === 0 && ads.length === 0)) {
     return <p className="px-6 py-3 text-xs text-muted-foreground">Sin desglose disponible para esta campaña.</p>;
   }
+  const textoAnuncio = (caption ?? "").trim();
   return (
     <div className="space-y-4 px-6 py-4">
+      {textoAnuncio && (
+        <p className="max-w-[48rem] truncate text-xs italic text-muted-foreground" title={textoAnuncio}>
+          “{textoAnuncio}”
+        </p>
+      )}
       {adgroups.length > 0 && <SubTablaAdgroups filas={adgroups} moneda={moneda} />}
       {ads.length > 0 && <SubTablaCreativos filas={ads} moneda={moneda} />}
     </div>

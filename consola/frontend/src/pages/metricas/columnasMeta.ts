@@ -11,6 +11,9 @@ export interface ColumnaMeta {
   id: string;
   /** Etiqueta legible (es-MX) para el panel de configuración. */
   etiqueta: string;
+  /** Columna OPCIONAL: existe en el catálogo (el operador puede activarla) pero arranca
+   * oculta si no hay nada guardado. La tabla siembra su config por defecto con estas ocultas. */
+  ocultaPorDefecto?: boolean;
 }
 
 export interface TablaMeta {
@@ -62,6 +65,12 @@ export const TABLAS_CONFIG: TablaMeta[] = [
       { id: "compartidos", etiqueta: "Compartidos" },
       { id: "guardados", etiqueta: "Guardados" },
       { id: "clics_enlace", etiqueta: "Clics a enlace" },
+      // Granulares por pieza: existen en el catálogo pero arrancan ocultas (la tabla no
+      // se sobrecarga por defecto; el operador las activa desde el editor de columnas).
+      { id: "likes", etiqueta: "Me gusta", ocultaPorDefecto: true },
+      { id: "video_views", etiqueta: "Reproducciones", ocultaPorDefecto: true },
+      { id: "tiempo_medio_vis_s", etiqueta: "Tiempo medio", ocultaPorDefecto: true },
+      { id: "alcance", etiqueta: "Alcance", ocultaPorDefecto: true },
     ],
   },
 ];
@@ -75,4 +84,11 @@ export function idsColumnas(tablaId: string): string[] {
 /** Catálogo de columnas (orden base) de una tabla del registro central. */
 export function metaColumnas(tablaId: string): ColumnaMeta[] {
   return TABLAS_CONFIG.find((x) => x.id === tablaId)?.columnas ?? [];
+}
+
+/** Ids de las columnas OPCIONALES de una tabla (ocultas si no hay config guardada). */
+export function idsOcultosPorDefecto(tablaId: string): string[] {
+  return metaColumnas(tablaId)
+    .filter((c) => c.ocultaPorDefecto)
+    .map((c) => c.id);
 }
