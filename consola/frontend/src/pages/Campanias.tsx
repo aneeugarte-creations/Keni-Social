@@ -47,7 +47,7 @@ import { DialogoEnlacesPublicos } from "./campanias/DialogoEnlacesPublicos";
 import { enlaceVigentePara, urlEnlace } from "./campanias/formato";
 import { PanelCampania } from "./campanias/PanelCampania";
 import { SelectorTiempo } from "./metricas/Controles";
-import { etiquetaPeriodo } from "./metricas/exportarPdf";
+import { etiquetaPeriodo } from "./metricas/periodo";
 
 /**
  * Token `rango:AAAA-MM-DD_AAAA-MM-DD` de los últimos `n` días (incluye `hoy`, día CDMX).

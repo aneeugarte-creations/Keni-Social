@@ -130,13 +130,19 @@ export function ItemsDescarga({
       toast.error("Elige una marca para descargar Métricas Digitales.");
       return;
     }
-    toast.info("Generando Métricas Digitales… la descarga empezará en breve.");
+    toast.info(
+      "Generando Métricas Digitales (últimos 13 meses de la marca, ignora los filtros de pantalla)… la descarga empezará en breve.",
+    );
     api.exportarMetricasDigitales({ marca });
   };
 
   return (
     <>
-      <ItemMenu icono={Table2} onClick={descargarDigitales}>
+      <ItemMenu
+        icono={Table2}
+        onClick={descargarDigitales}
+        descripcion="Últimos 13 meses de la marca · ignora los filtros"
+      >
         Métricas Digitales
       </ItemMenu>
       <ItemMenu icono={FileSpreadsheet} onClick={() => void descargarCsv()}>

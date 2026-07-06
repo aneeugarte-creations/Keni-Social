@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { descargarPresentacion, etiquetaPeriodo } from "./exportarPdf";
+import { descargarPresentacion } from "./exportarPdf";
 
 const CTX = {
   marca: "Claro Sports",
@@ -10,13 +10,6 @@ const CTX = {
   generadoEn: "2026-06-22T10:00:00Z",
   marcaId: "claro_sports",
 };
-
-describe("etiquetaPeriodo", () => {
-  it("traduce presets y tokens de mes/rango", () => {
-    expect(etiquetaPeriodo("semana", [{ id: "semana", etiqueta: "Última semana" }])).toBe("Última semana");
-    expect(etiquetaPeriodo("mes:2026-06", [])).toBe("junio 2026");
-  });
-});
 
 describe("descargarPresentacion", () => {
   // El camino feliz monta React + rasteriza con html-to-image (canvas), que jsdom no soporta;

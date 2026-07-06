@@ -9,27 +9,8 @@ import { createElement } from "react";
 
 import { importarModulo, rasterizarDeckAPdf } from "@/lib/rasterizarDeck";
 import { comprobarVersionNueva, recargaSegura } from "@/lib/version";
-import type { RangoMetrica } from "@/types";
 
 import { desdeEntradas } from "./informe/desdeEntradas";
-import { diasDePeriodo, partesMes, partesRango } from "./rango";
-
-const MESES_ES = [
-  "enero", "febrero", "marzo", "abril", "mayo", "junio",
-  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
-];
-
-/** Etiqueta legible de un token de periodo (preset, `mes:` o `rango:`). */
-export function etiquetaPeriodo(token: string, rangos: RangoMetrica[]): string {
-  const preset = rangos.find((r) => r.id === token);
-  if (preset) return preset.etiqueta;
-  const mes = partesMes(token);
-  if (mes) return `${MESES_ES[mes.mes - 1]} ${mes.anio}`;
-  const rango = partesRango(token);
-  if (rango) return `${rango.desde} – ${rango.hasta}`;
-  const dias = diasDePeriodo(token);
-  return dias != null ? `Últimos ${dias} días` : token;
-}
 
 export interface ContextoDeck {
   marca: string;

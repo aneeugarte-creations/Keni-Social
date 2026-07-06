@@ -36,7 +36,7 @@ import { DesgloseInteracciones } from "./metricas/DesgloseInteracciones";
 import { FlujoAudiencia } from "./metricas/FlujoAudiencia";
 import { MapaAlcance } from "./metricas/MapaAlcance";
 import { SerieAlcance } from "./metricas/SerieAlcance";
-import { etiquetaPeriodo } from "./metricas/exportarPdf";
+import { etiquetaPeriodo } from "./metricas/periodo";
 import { DistribucionEngagement } from "./metricas/DistribucionEngagement";
 import { EvolucionRedes } from "./metricas/EvolucionRedes";
 import { GraficaMarcas } from "./metricas/GraficaMarcas";
@@ -234,6 +234,10 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
         generadoEn={reporteQuery.data?.generado_en}
       />
       <SelectorTiempo rangos={rangos} valor={rango} onCambio={cambiarRango} />
+      {/* Fechas del corte activo, legibles junto al selector: el valor del selector no siempre
+          dice el rango real (un atajo o un mes concreto). Sobrio (muted), sin robar fila en
+          escritorio; en pantallas estrechas fluye con el resto del toolbar (flex-wrap). */}
+      <span className="text-xs text-muted-foreground">{periodoEtiqueta}</span>
       {/* Selectores globales RED + FORMATO: filtran toda la página (escriben en `vistaConfig`).
           El de formato depende de la red en foco (Instagram → Reel/Carrusel/Foto, …). */}
       <SelectorRed />

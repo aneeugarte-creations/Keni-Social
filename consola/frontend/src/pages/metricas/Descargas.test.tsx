@@ -69,6 +69,13 @@ describe("ItemsDescarga (menú ⋮ de Métricas)", () => {
     expect(screen.queryByText(/JSON/)).not.toBeInTheDocument();
   });
 
+  it("Métricas Digitales avisa de su alcance (13 meses, ignora los filtros)", () => {
+    renderYAbrir();
+    const item = screen.getByRole("menuitem", { name: /Métricas Digitales/ });
+    expect(item).toHaveTextContent(/Últimos 13 meses de la marca/);
+    expect(item).toHaveTextContent(/ignora los filtros/);
+  });
+
   it("CSV vuelca las queries activas a un archivo descargado", async () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     renderYAbrir();

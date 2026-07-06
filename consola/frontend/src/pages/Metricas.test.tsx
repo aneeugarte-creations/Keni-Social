@@ -152,6 +152,26 @@ describe("Metricas · cuerpo del dashboard", () => {
     expect(screen.queryByText(/datos de muestra/i)).not.toBeInTheDocument();
   });
 
+  it("pinta la etiqueta legible del preset activo en el toolbar (además del selector)", async () => {
+    // Preset por defecto (primer rango): su etiqueta se muestra junto al selector de tiempo,
+    // así que aparece DOS veces —el valor del propio selector y la etiqueta del toolbar—.
+    renderMetricas();
+    await screen.findByText("Detalle por red"); // el cuerpo ya montó
+    expect(screen.getAllByText("Últimos 7 días").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("refleja en la etiqueta un mes concreto (?periodo=mes:AAAA-MM)", async () => {
+    // El selector nunca pinta "mayo 2026" como un solo texto (mes y año son dos controles):
+    // esta cadena solo puede venir de la etiqueta del toolbar.
+    renderMetricas("/metricas?periodo=mes:2026-05");
+    expect(await screen.findByText("mayo 2026")).toBeInTheDocument();
+  });
+
+  it("refleja en la etiqueta un rango exacto (?periodo=rango:…)", async () => {
+    renderMetricas("/metricas?periodo=rango:2026-05-01_2026-05-20");
+    expect(await screen.findByText("2026-05-01 – 2026-05-20")).toBeInTheDocument();
+  });
+
   it("muestra el contenido de una sección visible (toggle inline)", async () => {
     renderMetricas();
 

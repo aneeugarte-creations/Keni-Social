@@ -98,18 +98,21 @@ export function MenuAcciones({
   );
 }
 
-/** Un comando dentro de `<MenuAcciones/>`. */
+/** Un comando dentro de `<MenuAcciones/>`. Con `descripcion` gana una segunda línea de
+ *  contexto en muted (p. ej. el alcance de una descarga que ignora los filtros de pantalla). */
 export function ItemMenu({
   children,
   onClick,
   icono: Icono,
   disabled,
+  descripcion,
   className,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   icono?: LucideIcon;
   disabled?: boolean;
+  descripcion?: React.ReactNode;
   className?: string;
 }) {
   return (
@@ -119,12 +122,17 @@ export function ItemMenu({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50",
+        "flex w-full items-start gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50",
         className,
       )}
     >
-      {Icono && <Icono className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
-      <span className="truncate">{children}</span>
+      {Icono && <Icono className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{children}</span>
+        {descripcion && (
+          <span className="mt-0.5 block text-xs text-muted-foreground">{descripcion}</span>
+        )}
+      </span>
     </button>
   );
 }
