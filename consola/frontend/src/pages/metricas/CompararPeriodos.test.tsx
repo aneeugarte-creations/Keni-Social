@@ -211,6 +211,24 @@ describe("CompararPeriodos", () => {
     expect(screen.queryByText(/pts/)).not.toBeInTheDocument();
   });
 
+  it("sin datos (total, por_marca y por_red vacíos): mensaje sobrio en vez de la tabla hueca", async () => {
+    const respVacia: CompararMetricas = {
+      ...RESP,
+      total: { metricas: [] },
+      por_marca: [],
+      por_red: [],
+    };
+    vi.spyOn(api, "metricasComparar").mockResolvedValue(respVacia);
+    renderConProviders(<CompararPeriodos opciones={OPCIONES} rangoActual="mes" />);
+
+    expect(await screen.findByText("Sin datos en los periodos elegidos.")).toBeInTheDocument();
+    // No se pinta la cabecera de una tabla sin filas ("Métrica" solo existe como
+    // columna; "Periodo actual" también rotula el selector, así que no sirve de sonda).
+    expect(screen.queryByText("Métrica")).not.toBeInTheDocument();
+    // Ni la línea "Comparando A → B", que solo acompaña a una tabla con datos.
+    expect(screen.queryByText("Comparando")).not.toBeInTheDocument();
+  });
+
   it("muestra el desglose por marca con el nombre legible (no el id crudo)", async () => {
     vi.spyOn(api, "metricasComparar").mockResolvedValue(RESP);
     renderConProviders(<CompararPeriodos opciones={OPCIONES} rangoActual="mes" />);

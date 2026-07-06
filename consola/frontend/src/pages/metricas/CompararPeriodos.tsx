@@ -323,6 +323,12 @@ export function CompararPeriodos({
           onReintentar={() => void refetch()}
           cargando={isFetching}
         />
+      ) : !data.total.metricas.length &&
+        !data.por_marca.length &&
+        !data.por_red.length ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">
+          Sin datos en los periodos elegidos.
+        </p>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">

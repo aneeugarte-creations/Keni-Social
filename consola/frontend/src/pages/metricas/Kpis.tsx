@@ -64,6 +64,11 @@ export function Kpis({
   // hay comparación honesta posible (token irresoluble o periodo futuro).
   const par = rangoActual ? parComparable(rangoActual) : null;
 
+  // Sin datos: la marca/periodo no publicó nada medible (sin piezas, sin vistas y sin
+  // interacciones). Se enseña un mensaje sobrio en vez de una rejilla de ceros y guiones
+  // sin explicación. Cualquier señal de actividad pinta la rejilla como siempre.
+  const sinDatos = !total.piezas && !total.visualizaciones && !total.interacciones;
+
   const { data } = useQuery({
     // MISMA forma que CompararPeriodos (["metricas","comparar",A,B,marca]): si la
     // sección de comparar mira el mismo par, comparten entrada de caché.
@@ -149,9 +154,15 @@ export function Kpis({
       etiquetaCampos="Tarjetas"
     >
       <div className="space-y-2">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          {visibles.map((id) => tarjeta(id))}
-        </div>
+        {sinDatos ? (
+          <p className="py-12 text-center text-sm text-muted-foreground">
+            Aún no hay datos para este periodo
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            {visibles.map((id) => tarjeta(id))}
+          </div>
+        )}
         {/* Leyenda de comparabilidad: con el periodo en curso, las insignias comparan
             intervalos de la MISMA duración (días transcurridos vs el intervalo equivalente del
             periodo anterior), y aquí se dice de forma visible, no solo en el tooltip. */}

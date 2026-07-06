@@ -198,6 +198,41 @@ describe("Kpis", () => {
     expect(screen.queryByText("Alcance")).not.toBeInTheDocument();
   });
 
+  it("sin datos (piezas, vistas e interacciones a 0): mensaje sobrio en vez de la rejilla de ceros", () => {
+    vi.spyOn(api, "metricasComparar").mockResolvedValue(COMPARAR);
+    const vacio: TotalMetricas = {
+      visualizaciones: 0,
+      impresiones: 0,
+      alcance: null,
+      interacciones: 0,
+      engagement_pct: 0,
+      piezas: 0,
+    };
+    renderConProviders(<Kpis total={vacio} marcaActual={MARCA_TODAS} rangoActual="mes" />);
+
+    expect(screen.getByText("Aún no hay datos para este periodo")).toBeInTheDocument();
+    // Ninguna tarjeta de KPI: no hay pared de ceros sin explicación.
+    expect(screen.queryByText("Piezas publicadas")).not.toBeInTheDocument();
+    expect(screen.queryByText("Vistas")).not.toBeInTheDocument();
+  });
+
+  it("con cualquier dato (solo piezas): pinta la rejilla, no el estado vacío", () => {
+    vi.spyOn(api, "metricasComparar").mockResolvedValue(COMPARAR);
+    const soloPiezas: TotalMetricas = {
+      visualizaciones: 0,
+      impresiones: 0,
+      alcance: null,
+      interacciones: 0,
+      engagement_pct: 0,
+      piezas: 3,
+    };
+    renderConProviders(<Kpis total={soloPiezas} marcaActual={MARCA_TODAS} rangoActual="mes" />);
+
+    expect(screen.getByText("Piezas publicadas")).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.queryByText("Aún no hay datos para este periodo")).not.toBeInTheDocument();
+  });
+
   it("sin rangoActual: pinta los KPIs sin insignias y NO consulta la comparativa", () => {
     const espia = vi.spyOn(api, "metricasComparar").mockResolvedValue(COMPARAR);
     renderConProviders(<Kpis total={TOTAL} />);
