@@ -9,8 +9,11 @@
  * resumen ejecutivo de la página: va en el encuadre uniforme (`<Seccion>`) con su contenido
  * en una Card, justo tras los KPIs.
  *
- * El backend entrega cada hallazgo como una frase completa en es-MX; aquí solo se pinta el
- * icono de dirección y, si el hallazgo apunta a una pieza, su enlace.
+ * El backend entrega cada hallazgo como una frase completa en es-MX; esta capa la sirve
+ * apetecible: las cifras grandes de la prosa se compactan al vuelo (174.961.503 → "175 M",
+ * 11.9% → "12%") y la pieza que respalda un hallazgo va en una línea con "↳" —sin verbo—
+ * con su título en frase (sin MAYÚSCULAS gritadas ni emojis, truncado en palabra). El
+ * título íntegro queda en el `title` del enlace.
  */
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -26,12 +29,51 @@ import { marcaParam } from "@/components/comunes/selectores";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
-import { nombreRed, porcentaje } from "@/lib/formato";
+import { nombreRed, numeroCompacto, porcentaje, tituloLimpio } from "@/lib/formato";
 import type { AnalisisDiario, HallazgoAnalisis } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
 import { Seccion } from "./Seccion";
 import { useVistaConfig } from "./vistaConfig";
+
+/**
+ * Compacta las cifras DENTRO de la prosa del backend para que se sientan cantidades y no
+ * números de serie: miles con punto → compacto es-MX vía `numeroCompacto` (solo ≥10.000;
+ * "4.400" se queda), porcentajes con decimal → entero ("11.9%" → "12%", conserva el signo).
+ * El resto de la frase queda intacto.
+ */
+function redondearProsa(texto: string): string {
+  let t = texto.replace(
+    /([+-]?)(\d+(?:\.\d+)?)\s*%/g,
+    (_m, signo: string, num: string) => `${signo}${Math.round(Number(num))}%`,
+  );
+  t = t.replace(/\d{1,3}(?:\.\d{3})+/g, (m) => {
+    const n = Number(m.replace(/\./g, ""));
+    return n < 10_000 ? m : numeroCompacto(n);
+  });
+  return t;
+}
+
+/**
+ * Si el título viene GRITADO (≥50% de sus letras en mayúsculas), baja a minúsculas cada
+ * palabra íntegramente en mayúsculas (≥2 letras) y capitaliza la primera letra de la frase.
+ * Las palabras ya mixtas ("And I Love Her", "TikTok") no se tocan; un título normal con
+ * algún acrónimo ("Final de la Liga MX") no dispara el umbral y queda íntegro.
+ */
+function frasear(t: string): string {
+  const letras = t.replace(/[^\p{L}]/gu, "");
+  if (!letras) return t;
+  const mayus = letras.replace(/[^\p{Lu}]/gu, "").length;
+  if (mayus / letras.length < 0.5) return t;
+  const bajado = t.replace(/\p{Lu}[\p{Lu}\p{N}]+/gu, (w) => w.toLowerCase());
+  const i = bajado.search(/\p{L}/u);
+  return i < 0 ? bajado : bajado.slice(0, i) + bajado[i].toUpperCase() + bajado.slice(i + 1);
+}
+
+/** Título de pieza apetecible para la línea "↳": sin emojis, sin gritos, corto. */
+function tituloApetecible(t: string): string {
+  return tituloLimpio(frasear(t), 64);
+}
 
 /** Enlace externo a una pieza (nueva pestaña), con el icono de "sale de la app". */
 function EnlacePieza({ url, children }: { url: string; children: React.ReactNode }) {
@@ -40,7 +82,7 @@ function EnlacePieza({ url, children }: { url: string; children: React.ReactNode
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 underline-offset-2 hover:underline"
+      className="inline-flex min-w-0 items-center gap-1 underline-offset-2 hover:underline"
     >
       {children}
       <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
@@ -49,8 +91,9 @@ function EnlacePieza({ url, children }: { url: string; children: React.ReactNode
 }
 
 /**
- * Un hallazgo del periodo: icono de dirección + la frase completa que redacta el backend
- * y, si el hallazgo apunta a una pieza, la pieza enlazada con su red legible.
+ * Un hallazgo del periodo: icono de dirección + la frase del backend con las cifras
+ * compactadas y, si el hallazgo apunta a una pieza, la pieza en una línea "↳" (título en
+ * frase, enlazado, con su red legible y engagement redondeado).
  */
 function Hallazgo({ h }: { h: HallazgoAnalisis }) {
   const sube = h.direccion === "sube";
@@ -65,19 +108,25 @@ function Hallazgo({ h }: { h: HallazgoAnalisis }) {
   return (
     <li className="flex items-start gap-3">
       <Icono className={`mt-0.5 h-4 w-4 shrink-0 ${claseIcono}`} aria-hidden="true" />
-      <div className="min-w-0 space-y-0.5">
-        <p className="text-sm">{h.texto}</p>
+      <div className="min-w-0 space-y-1">
+        <p className="text-sm leading-relaxed">{redondearProsa(h.texto)}</p>
         {h.pieza && (
-          <p className="text-sm text-muted-foreground">
-            {"La explica: "}
-            {h.pieza.url ? (
-              <EnlacePieza url={h.pieza.url}>
-                <span className="min-w-0">“{h.pieza.titulo}”</span>
-              </EnlacePieza>
-            ) : (
-              <>“{h.pieza.titulo}”</>
-            )}
-            {` — ${nombreRed(h.pieza.plataforma)} · ${porcentaje(h.pieza.engagement_pct)} de engagement`}
+          <p className="flex min-w-0 items-baseline gap-2 text-sm text-muted-foreground">
+            <span aria-hidden="true" className="shrink-0">
+              ↳
+            </span>
+            <span className="min-w-0">
+              {h.pieza.url ? (
+                <EnlacePieza url={h.pieza.url}>
+                  <span className="truncate" title={h.pieza.titulo}>
+                    «{tituloApetecible(h.pieza.titulo)}»
+                  </span>
+                </EnlacePieza>
+              ) : (
+                <span title={h.pieza.titulo}>«{tituloApetecible(h.pieza.titulo)}»</span>
+              )}
+              {` — ${nombreRed(h.pieza.plataforma)} · ${redondearProsa(porcentaje(h.pieza.engagement_pct))} eng.`}
+            </span>
           </p>
         )}
       </div>
@@ -99,7 +148,7 @@ function CuerpoAnalisis({ data }: { data: AnalisisDiario }) {
   return (
     <div className="space-y-4">
       {data.hallazgos.length > 0 && (
-        <ul className="space-y-3">
+        <ul className="space-y-4">
           {data.hallazgos.map((h, i) => (
             <Hallazgo key={`${h.dimension}-${i}`} h={h} />
           ))}
@@ -121,7 +170,7 @@ function CuerpoAnalisis({ data }: { data: AnalisisDiario }) {
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Siguiente paso
           </p>
-          <p className="text-sm">{data.siguiente_paso.texto}</p>
+          <p className="text-sm leading-relaxed">{data.siguiente_paso.texto}</p>
           {data.siguiente_paso.pieza?.url && (
             <p className="mt-1 text-sm text-muted-foreground">
               <EnlacePieza url={data.siguiente_paso.pieza.url}>Ver la pieza</EnlacePieza>

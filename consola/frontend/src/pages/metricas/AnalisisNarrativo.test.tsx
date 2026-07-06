@@ -61,31 +61,55 @@ function renderConProviders(ui: React.ReactElement) {
 }
 
 describe("AnalisisNarrativo", () => {
-  it("pinta los hallazgos multi-dimensión como frases completas del backend", async () => {
+  it("pinta los hallazgos multi-dimensión con las cifras compactadas", async () => {
     vi.spyOn(api, "metricasAnalisis").mockResolvedValue(RESP);
     renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
 
     expect(await screen.findByText("Análisis del periodo")).toBeInTheDocument();
     // El título de sección se pinta durante la carga; espera al dato para el resto.
+    // Porcentaje con decimal → entero; un millar pequeño (4.400, <10.000) se queda tal cual.
     expect(
-      await screen.findByText(/Claro Sports subió \+39\.0% en vistas/),
+      await screen.findByText(/Claro Sports subió \+39% en vistas \(4\.400 en el periodo\)/),
     ).toBeInTheDocument();
-    // Dimensión de red y de seguidores (señal representativa), tal cual las redacta el backend.
     expect(screen.getByText(/TikTok fue la red que más aportó/)).toBeInTheDocument();
+    // Cifra grande dentro de la prosa compactada al estilo de la app (12.400 → "12.4 k").
     expect(
-      screen.getByText(/El 15-jun Instagram perdió 12\.400 seguidores/),
+      screen.getByText(/El 15-jun Instagram perdió 12\.4 k seguidores/),
     ).toBeInTheDocument();
   });
 
-  it("enlaza la pieza que explica un hallazgo, con su red legible", async () => {
+  it("enlaza la pieza que respalda un hallazgo en la línea ↳, sin «La explica»", async () => {
     vi.spyOn(api, "metricasAnalisis").mockResolvedValue(RESP);
     renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
 
-    expect(await screen.findByText(/La explica:/)).toBeInTheDocument();
-    // Red LEGIBLE ("TikTok", no "tiktok").
-    expect(screen.getByText(/TikTok · 6\.2 % de engagement/)).toBeInTheDocument();
-    const enlace = screen.getByRole("link", { name: /Final de la Liga MX/i });
+    // Red LEGIBLE ("TikTok", no "tiktok") y engagement redondeado a entero.
+    expect(await screen.findByText(/TikTok · 6% eng\./)).toBeInTheDocument();
+    expect(screen.queryByText(/La explica:/)).not.toBeInTheDocument();
+    // Un título mixto normal no dispara el des-gritado: conserva su acrónimo ("MX").
+    const enlace = screen.getByRole("link", { name: /Final de la Liga MX/ });
     expect(enlace).toHaveAttribute("href", "https://www.tiktok.com/@clarosports/video/1");
+    // El título íntegro sobrevive en el `title` del enlace.
+    expect(screen.getByTitle("Final de la Liga MX")).toBeInTheDocument();
+  });
+
+  it("baja a frase un título de pieza que viene gritado, sin tocar las palabras mixtas", async () => {
+    vi.spyOn(api, "metricasAnalisis").mockResolvedValue({
+      ...RESP,
+      hallazgos: [
+        {
+          ...RESP.hallazgos[0],
+          pieza: {
+            ...RESP.hallazgos[0].pieza!,
+            titulo: '¡GOLAZO DE ÚLTIMA HORA! Con "And I Love Her" de fondo',
+          },
+        },
+      ],
+    });
+    renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
+
+    expect(
+      await screen.findByText(/«¡Golazo de última hora! Con "And I Love Her" de fondo»/),
+    ).toBeInTheDocument();
   });
 
   it("pinta el siguiente paso tal cual lo redacta el backend, con enlace a la pieza", async () => {
