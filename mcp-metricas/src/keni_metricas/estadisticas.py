@@ -14,6 +14,10 @@ from collections.abc import Iterable, Sequence
 
 from .schema import DistribucionBucket, EstadisticasNumericas, Pieza, Plataforma
 
+# Mínimo de piezas de un formato para que su promedio sea señal y no una pieza suelta.
+# Compartido por la dimensión de formato (engagement medio) y la de valor (save-rate).
+MIN_PIEZAS_FORMATO = 2
+
 
 def _percentil(ordenados: Sequence[float], pct: float) -> float:
     """Percentil `pct` (0-100) por interpolacion lineal. `ordenados` debe venir ordenado."""
@@ -115,6 +119,84 @@ def anotar_rendimiento_relativo(piezas: Sequence[Pieza]) -> list[Pieza]:
                 round(p.visualizaciones / base, 3) if base else None
             )
     return list(piezas)
+
+
+# Mínimo de piezas CON vistas para que la concentración (Pareto) sea señal y no una
+# anécdota de un puñado de posts. Con <5 piezas el "80% de las vistas" no dice nada.
+MIN_PIEZAS_CONCENTRACION = 5
+
+# Cuota de vistas que la cabeza del ranking debe cubrir para el hallazgo de concentración
+# (el 80/20 de Pareto). Se acumulan piezas de más a menos vistas hasta cruzar este umbral.
+UMBRAL_CONCENTRACION = 0.80
+
+
+def concentracion_vistas(piezas: Sequence[Pieza]) -> dict | None:
+    """Concentración 80/20 (Pareto) de las visualizaciones del periodo, o None sin señal.
+
+    Ordena las piezas por visualizaciones de mayor a menor y acumula hasta cubrir
+    ≥`UMBRAL_CONCENTRACION` del total de vistas; devuelve cuántas piezas bastan para
+    ello (`n_piezas_80`), el total de piezas con vistas (`total_piezas`) y qué fracción
+    de piezas representan (`pct_piezas`, 0-100 redondeado). Mide si el resultado del
+    periodo lo cargan unas pocas piezas o está repartido.
+
+    None si hay menos de `MIN_PIEZAS_CONCENTRACION` piezas con vistas o el total de
+    vistas es 0 (sin base para un Pareto): degradación honesta, no un dato inventado.
+    """
+    con_vistas = sorted(
+        (p.visualizaciones for p in piezas if p.visualizaciones > 0), reverse=True
+    )
+    total_piezas = len(con_vistas)
+    total_vistas = sum(con_vistas)
+    if total_piezas < MIN_PIEZAS_CONCENTRACION or total_vistas <= 0:
+        return None
+    objetivo = total_vistas * UMBRAL_CONCENTRACION
+    acumulado = 0
+    n_piezas_80 = 0
+    for vistas in con_vistas:
+        acumulado += vistas
+        n_piezas_80 += 1
+        if acumulado >= objetivo:
+            break
+    return {
+        "n_piezas_80": n_piezas_80,
+        "total_piezas": total_piezas,
+        "pct_piezas": round(n_piezas_80 / total_piezas * 100),
+    }
+
+
+def save_rate_por_formato(piezas: Sequence[Pieza]) -> dict[str, dict] | None:
+    """Save-rate (guardados+compartidos ÷ vistas) por formato, o None si no hay dato.
+
+    La señal de VALOR ("contenido que se guarda/comparte") es distinta del engagement:
+    guardar o compartir una pieza es un voto fuerte de utilidad. Por FORMATO (necesita
+    ≥`MIN_PIEZAS_FORMATO` piezas, el mismo criterio que la dimensión de formato) agrega
+    guardados+compartidos y visualizaciones y calcula la tasa (0-100). Los campos
+    granulares ausentes (`None`) cuentan como 0.
+
+    None si NINGÚN formato tiene datos reales de guardados+compartidos (>0): muchas redes
+    no exponen `guardados` y no se inventa una tasa sobre un cero.
+    """
+    acum: dict[str, dict[str, int]] = {}
+    for p in piezas:
+        fmt = p.formato
+        if not fmt or p.visualizaciones <= 0:
+            continue
+        celda = acum.setdefault(fmt, {"valor": 0, "vistas": 0, "n": 0})
+        celda["valor"] += (p.guardados or 0) + (p.compartidos or 0)
+        celda["vistas"] += p.visualizaciones
+        celda["n"] += 1
+    salida: dict[str, dict] = {}
+    for fmt, celda in acum.items():
+        if celda["n"] < MIN_PIEZAS_FORMATO or celda["vistas"] <= 0:
+            continue
+        salida[fmt] = {
+            "save_rate": round(celda["valor"] / celda["vistas"] * 100, 2),
+            "n": celda["n"],
+            "valor": celda["valor"],
+        }
+    if not salida or not any(c["valor"] > 0 for c in salida.values()):
+        return None
+    return salida
 
 
 def top_y_peores(piezas: Sequence[Pieza], n: int = 5) -> tuple[list[Pieza], list[Pieza]]:

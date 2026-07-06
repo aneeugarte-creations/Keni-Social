@@ -27,6 +27,12 @@ import statistics
 from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 
+from .estadisticas import (
+    MIN_PIEZAS_FORMATO,
+    UMBRAL_CONCENTRACION,
+    concentracion_vistas,
+    save_rate_por_formato,
+)
 from .formato import (
     AVISO_MUESTRA_TXT,
     aviso_muestra_md,
@@ -38,6 +44,7 @@ from .formato import (
 from .fuentes.base import FuenteMetricas
 from .picos import detectar_picos
 from .reporte import construir_reporte
+from .schema import Pieza
 
 if TYPE_CHECKING:
     from .historico import Historico
@@ -63,6 +70,20 @@ HALLAZGOS_OBJETIVO = 5
 # más fuerte, ahí sí me hace mucho más sentido". k=3 marca solo los desplomes/picos que
 # se salen claramente del ritmo habitual del propio periodo.
 K_SEGUIDORES_REPRESENTATIVO = 3.0
+
+# Factor sobre la MEDIANA de save-rate de los formatos con datos a partir del cual un
+# formato DESTACA como "contenido que se guarda/comparte". x2 = el doble que el resto:
+# solo se emite el hallazgo de valor cuando un formato se separa claramente, no por un
+# margen menor que sería ruido.
+FACTOR_SAVE_RATE_DESTACA = 2.0
+
+# Cuota de vistas (en %) que redacta el hallazgo de concentración; espejo del umbral con el
+# que `concentracion_vistas` acumula la cabeza del ranking, para que texto y cálculo coincidan.
+UMBRAL_CONCENTRACION_PCT = UMBRAL_CONCENTRACION * 100
+
+# Por debajo de este % de piezas cubriendo el grueso de las vistas, la concentración se
+# considera EXTREMA (el resultado descansa en muy pocas piezas) y el texto lo matiza.
+PCT_CONCENTRACION_EXTREMA = 10
 
 # Nombres legibles de red (id de plataforma -> etiqueta), para redactar la dimensión de
 # red sin exponer el id crudo. Espejo del `nombreRed` del frontend.
@@ -278,8 +299,8 @@ def _hallazgo_red(rep: dict) -> dict | None:
 
 
 def _hallazgo_formato(piezas: list[dict]) -> dict | None:
-    """El formato que despunta por engagement medio (con ≥2 piezas para que sea señal, no
-    una pieza suelta). None si las piezas no traen formato o no hay suficientes.
+    """El formato que despunta por engagement medio (con ≥`MIN_PIEZAS_FORMATO` piezas para
+    que sea señal, no una pieza suelta). None si las piezas no traen formato o no hay suficientes.
     """
     por_formato: dict[str, list[float]] = {}
     for p in piezas:
@@ -287,7 +308,7 @@ def _hallazgo_formato(piezas: list[dict]) -> dict | None:
         eng = p.get("engagement_pct")
         if fmt and eng is not None:
             por_formato.setdefault(fmt, []).append(float(eng))
-    candidatos = {f: engs for f, engs in por_formato.items() if len(engs) >= 2}
+    candidatos = {f: engs for f, engs in por_formato.items() if len(engs) >= MIN_PIEZAS_FORMATO}
     if not candidatos:
         return None
     fmt, engs = max(candidatos.items(), key=lambda kv: statistics.mean(kv[1]))
@@ -295,6 +316,66 @@ def _hallazgo_formato(piezas: list[dict]) -> dict | None:
     return _hallazgo(
         "formato",
         f"El formato «{fmt}» fue el de mejor engagement ({media}% de media en {len(engs)} piezas).",
+        "sube",
+    )
+
+
+def _piezas_modelo(piezas: list[dict]) -> list[Pieza]:
+    """Rehidrata las piezas (dicts de `model_dump`) a modelos `Pieza` para las funciones
+    puras de `estadisticas`. Descarta en silencio las que no validen (degradación honesta).
+    """
+    modelos: list[Pieza] = []
+    for p in piezas:
+        try:
+            modelos.append(Pieza.model_validate(p))
+        except (TypeError, ValueError):
+            continue
+    return modelos
+
+
+def _hallazgo_concentracion(piezas: list[dict]) -> dict | None:
+    """Concentración 80/20 (Pareto) de las vistas del periodo: cuántas piezas cargan el
+    grueso del alcance. None si hay pocas piezas con vistas (ver `concentracion_vistas`).
+    """
+    conc = concentracion_vistas(_piezas_modelo(piezas))
+    if conc is None:
+        return None
+    n = conc["n_piezas_80"]
+    total = conc["total_piezas"]
+    pct_umbral = round(UMBRAL_CONCENTRACION_PCT)
+    verbo = "concentró" if n == 1 else "concentraron"
+    frase = (
+        f"{n} de {total} piezas {verbo} el {pct_umbral}% de las vistas del periodo"
+    )
+    # Concentración extrema (la cabeza es una fracción diminuta del catálogo): se matiza.
+    if conc["pct_piezas"] <= PCT_CONCENTRACION_EXTREMA:
+        frase += f": el resultado descansa en muy pocas piezas ({conc['pct_piezas']}% del total)"
+    frase += "."
+    return _hallazgo("concentracion", frase)
+
+
+def _hallazgo_valor(piezas: list[dict]) -> dict | None:
+    """Señal de VALOR ("contenido que se guarda/comparte"): el formato cuyo save-rate
+    (guardados+compartidos ÷ vistas) DESTACA sobre el resto. None si no hay datos reales de
+    guardados/compartidos o ningún formato se separa (ver `save_rate_por_formato`).
+    """
+    por_formato = save_rate_por_formato(_piezas_modelo(piezas))
+    if por_formato is None:
+        return None
+    tasas = sorted((c["save_rate"] for c in por_formato.values()), reverse=True)
+    if len(tasas) < 2:
+        # Un solo formato con datos: no hay "el resto" con el que compararlo -> sin señal.
+        return None
+    mediana = statistics.median(tasas)
+    if mediana <= 0:
+        return None
+    fmt, celda = max(por_formato.items(), key=lambda kv: kv[1]["save_rate"])
+    if celda["save_rate"] < FACTOR_SAVE_RATE_DESTACA * mediana:
+        return None
+    return _hallazgo(
+        "valor",
+        f"El formato «{fmt}» se guarda o comparte al {celda['save_rate']}% de sus vistas, "
+        f"muy por encima del resto ({celda['n']} piezas).",
         "sube",
     )
 
@@ -496,18 +577,21 @@ def _ensamblar_hallazgos(
 ) -> list[dict]:
     """Ensambla los hallazgos de todas las dimensiones, jerarquizados.
 
-    Orden de prioridad: vistas (movimientos fuertes) → red → seguidores (señal) → formato
-    → periodo → engagement → pieza estrella. Cada dimensión aporta 0..N hallazgos según el
-    dato disponible; nunca se rellena con ruido. Se apunta a `HALLAZGOS_OBJETIVO` pero no se
-    fuerza: si el periodo no da para tantas dimensiones con dato real, se emiten las que haya.
+    Orden de prioridad: vistas (movimientos fuertes) → red → concentración → seguidores
+    (señal) → formato → valor (save-rate) → periodo → engagement → pieza estrella. Cada
+    dimensión aporta 0..N hallazgos según el dato disponible; nunca se rellena con ruido. Se
+    apunta a `HALLAZGOS_OBJETIVO` pero no se fuerza: si el periodo no da para tantas
+    dimensiones con dato real, se emiten las que haya.
     """
     total = rep.get("total") or {}
     hallazgos: list[dict] = []
     hallazgos.extend(_hallazgos_vistas(movimientos, umbral))
     for constructor in (
         lambda: _hallazgo_red(rep),
+        lambda: _hallazgo_concentracion(piezas),
         lambda: _hallazgo_seguidores(serie_seguidores),
         lambda: _hallazgo_formato(piezas),
+        lambda: _hallazgo_valor(piezas),
         lambda: _hallazgo_periodo(rango, serie_diaria),
         lambda: _hallazgo_engagement(total, rep),
     ):

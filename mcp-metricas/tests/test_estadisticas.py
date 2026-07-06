@@ -5,9 +5,12 @@ from __future__ import annotations
 from datetime import date
 
 from keni_metricas.estadisticas import (
+    MIN_PIEZAS_CONCENTRACION,
     anotar_rendimiento_relativo,
     buckets_engagement,
+    concentracion_vistas,
     resumen_numerico,
+    save_rate_por_formato,
     top_y_peores,
 )
 from keni_metricas.schema import Pieza, Plataforma
@@ -19,6 +22,9 @@ def _pieza(
     i: int = 0,
     plat: Plataforma = Plataforma.instagram,
     cuenta: str | None = None,
+    formato: str | None = None,
+    guardados: int | None = None,
+    compartidos: int | None = None,
 ) -> Pieza:
     return Pieza(
         id=f"{cuenta or 'x'}-{plat.value}-p{i}-{eng}",
@@ -29,6 +35,9 @@ def _pieza(
         interacciones=int(vis * eng / 100),
         engagement_pct=eng,
         cuenta=cuenta,
+        formato=formato,
+        guardados=guardados,
+        compartidos=compartidos,
     )
 
 
@@ -146,3 +155,89 @@ def test_top_y_peores_orden_global_por_vistas():
     assert not ({p.id for p in top} & {p.id for p in peores})
     # el badge rendimiento_relativo queda anotado (aunque no ordena).
     assert all(p.rendimiento_relativo is not None for p in top)
+
+
+# --- Concentración 80/20 (Pareto) de las vistas del periodo ------------------
+
+
+def test_concentracion_vistas_cuenta_la_cabeza_que_cubre_el_80():
+    # 1 pieza gigante (800) + 9 pequeñas (~22 cada una) = 1000 vistas. La primera cubre el
+    # 80% ella sola: n_piezas_80 == 1 sobre 10 piezas con vistas.
+    piezas = [_pieza(5.0, vis=800, i=0)] + [_pieza(5.0, vis=22, i=i) for i in range(1, 10)]
+    conc = concentracion_vistas(piezas)
+    assert conc is not None
+    assert conc["n_piezas_80"] == 1
+    assert conc["total_piezas"] == 10
+    assert conc["pct_piezas"] == 10  # 1/10
+
+
+def test_concentracion_vistas_reparto_uniforme_necesita_casi_todas():
+    # 10 piezas iguales: para cubrir el 80% hacen falta 8 (reparto plano, sin concentración).
+    piezas = [_pieza(5.0, vis=100, i=i) for i in range(10)]
+    conc = concentracion_vistas(piezas)
+    assert conc is not None
+    assert conc["n_piezas_80"] == 8
+    assert conc["total_piezas"] == 10
+
+
+def test_concentracion_vistas_ignora_piezas_sin_vistas():
+    # 6 con vistas + 3 en cero: total_piezas cuenta SOLO las que tienen vistas.
+    piezas = [_pieza(5.0, vis=v, i=i) for i, v in enumerate([500, 200, 100, 80, 60, 60])]
+    piezas += [_pieza(5.0, vis=0, i=100 + i) for i in range(3)]
+    conc = concentracion_vistas(piezas)
+    assert conc is not None
+    assert conc["total_piezas"] == 6
+
+
+def test_concentracion_vistas_pocas_piezas_sin_senal():
+    # Menos de MIN_PIEZAS_CONCENTRACION piezas con vistas -> None (no hay base para un Pareto).
+    piezas = [_pieza(5.0, vis=100, i=i) for i in range(MIN_PIEZAS_CONCENTRACION - 1)]
+    assert concentracion_vistas(piezas) is None
+
+
+def test_concentracion_vistas_total_cero_sin_senal():
+    piezas = [_pieza(5.0, vis=0, i=i) for i in range(8)]
+    assert concentracion_vistas(piezas) is None
+
+
+# --- Save-rate por formato (señal de valor: contenido que se guarda/comparte) -
+
+
+def test_save_rate_por_formato_calcula_tasa_agregada():
+    # reel: 2 piezas, guardados+compartidos = (40+10)+(60+10)=120 sobre 2000 vistas -> 6.0%.
+    # foto: 2 piezas, (10+0)+(10+0)=20 sobre 2000 -> 1.0%.
+    piezas = [
+        _pieza(5.0, vis=1000, i=0, formato="reel", guardados=40, compartidos=10),
+        _pieza(5.0, vis=1000, i=1, formato="reel", guardados=60, compartidos=10),
+        _pieza(5.0, vis=1000, i=2, formato="foto", guardados=10, compartidos=0),
+        _pieza(5.0, vis=1000, i=3, formato="foto", guardados=10, compartidos=0),
+    ]
+    sr = save_rate_por_formato(piezas)
+    assert sr is not None
+    assert sr["reel"]["save_rate"] == 6.0
+    assert sr["reel"]["n"] == 2
+    assert sr["foto"]["save_rate"] == 1.0
+
+
+def test_save_rate_por_formato_exige_dos_piezas_por_formato():
+    # reel con 2 piezas (cuenta), video con 1 sola (se descarta como señal de formato).
+    piezas = [
+        _pieza(5.0, vis=1000, i=0, formato="reel", guardados=50, compartidos=0),
+        _pieza(5.0, vis=1000, i=1, formato="reel", guardados=50, compartidos=0),
+        _pieza(5.0, vis=1000, i=2, formato="video", guardados=90, compartidos=0),
+    ]
+    sr = save_rate_por_formato(piezas)
+    assert sr is not None
+    assert set(sr) == {"reel"}
+
+
+def test_save_rate_por_formato_sin_datos_reales_es_none():
+    # guardados y compartidos None/0 en todas: no se inventa una tasa sobre cero -> None.
+    piezas = [_pieza(5.0, vis=1000, i=i, formato="reel") for i in range(3)]
+    assert save_rate_por_formato(piezas) is None
+
+
+def test_save_rate_por_formato_sin_formato_es_none():
+    # Piezas con guardados pero sin formato: no hay eje por el que agrupar -> None.
+    piezas = [_pieza(5.0, vis=1000, i=i, guardados=100) for i in range(3)]
+    assert save_rate_por_formato(piezas) is None

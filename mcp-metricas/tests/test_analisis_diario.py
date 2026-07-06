@@ -18,7 +18,9 @@ import pytest
 
 from keni_metricas.analisis_diario import (
     HALLAZGOS_OBJETIVO,
+    _hallazgo_concentracion,
     _hallazgo_seguidores,
+    _hallazgo_valor,
     _senal_seguidores,
     construir_analisis,
     render_markdown,
@@ -124,6 +126,18 @@ def test_cada_hallazgo_lleva_dimension_direccion_texto():
         assert h["texto"]
 
 
+def test_concentracion_aparece_tras_red_en_la_lectura():
+    # La muestra tiene piezas suficientes: la concentración 80/20 sale como hallazgo propio,
+    # jerarquizada DESPUÉS de la red (cuota de vistas) y ANTES de formato.
+    a = construir_analisis(FuenteMuestra(), "semana")
+    dims = [h["dimension"] for h in a["hallazgos"]]
+    assert "concentracion" in dims
+    if "red" in dims and "formato" in dims:
+        assert dims.index("red") < dims.index("concentracion") < dims.index("formato")
+    conc = next(h for h in a["hallazgos"] if h["dimension"] == "concentracion")
+    assert "de las vistas del periodo" in conc["texto"]
+
+
 # --------------------------------------------------------------------------- #
 # Criterio 2: la lectura difiere estructuralmente entre semana y mes.          #
 # --------------------------------------------------------------------------- #
@@ -197,6 +211,91 @@ def test_seguidores_sin_senal_narra_neto_sereno():
 def test_seguidores_sin_serie_no_emite_hallazgo():
     assert _hallazgo_seguidores(None) is None
     assert _hallazgo_seguidores({"puntos": [], "neto": 0}) is not None  # neto=0 sí informa
+
+
+# --------------------------------------------------------------------------- #
+# Concentración 80/20 (Pareto): pocas piezas cargan el grueso de las vistas.   #
+# --------------------------------------------------------------------------- #
+
+
+def _pieza_dict(
+    i: int,
+    vis: int,
+    formato: str | None = None,
+    guardados: int | None = None,
+    compartidos: int | None = None,
+) -> dict:
+    """Pieza en la forma serializada (`model_dump`) que reciben los constructores."""
+    return {
+        "id": f"p{i}",
+        "plataforma": "instagram",
+        "titulo": f"Pieza {i}",
+        "publicado": "2026-05-01",
+        "visualizaciones": vis,
+        "interacciones": int(vis * 0.05),
+        "engagement_pct": 5.0,
+        "formato": formato,
+        "guardados": guardados,
+        "compartidos": compartidos,
+    }
+
+
+def test_hallazgo_concentracion_narra_la_cabeza():
+    # 1 pieza gigante + 9 pequeñas: la primera cubre el 80% (concentración extrema).
+    piezas = [_pieza_dict(0, 800)] + [_pieza_dict(i, 22) for i in range(1, 10)]
+    h = _hallazgo_concentracion(piezas)
+    assert h is not None
+    assert h["dimension"] == "concentracion"
+    assert h["direccion"] == "estable"
+    assert "1 de 10 piezas concentró el 80% de las vistas" in h["texto"]
+    assert "muy pocas piezas" in h["texto"]  # matiz de concentración extrema (≤10%)
+
+
+def test_hallazgo_concentracion_pocas_piezas_no_emite():
+    piezas = [_pieza_dict(i, 100) for i in range(4)]  # < mínimo
+    assert _hallazgo_concentracion(piezas) is None
+
+
+# --------------------------------------------------------------------------- #
+# Valor (save-rate): el formato que se guarda/comparte al doble que el resto.  #
+# --------------------------------------------------------------------------- #
+
+
+def test_hallazgo_valor_destaca_el_formato_que_se_guarda():
+    # reel se guarda al 6% de sus vistas; foto y texto al 0.5%. Mediana 0.5% -> reel (6%)
+    # supera 2x la mediana y DESTACA. (Con solo 2 formatos la mediana cae al punto medio y
+    # nada llega al doble; hace falta que "el resto" quede claramente por debajo.)
+    piezas = [
+        _pieza_dict(0, 1000, formato="reel", guardados=40, compartidos=10),
+        _pieza_dict(1, 1000, formato="reel", guardados=60, compartidos=10),
+        _pieza_dict(2, 1000, formato="foto", guardados=5, compartidos=0),
+        _pieza_dict(3, 1000, formato="foto", guardados=5, compartidos=0),
+        _pieza_dict(4, 1000, formato="texto", guardados=5, compartidos=0),
+        _pieza_dict(5, 1000, formato="texto", guardados=5, compartidos=0),
+    ]
+    h = _hallazgo_valor(piezas)
+    assert h is not None
+    assert h["dimension"] == "valor"
+    assert h["direccion"] == "sube"
+    assert "«reel»" in h["texto"]
+    assert "6.0%" in h["texto"]
+
+
+def test_hallazgo_valor_sin_separacion_no_emite():
+    # Ambos formatos con el MISMO save-rate: ninguno destaca al doble -> sin hallazgo.
+    piezas = [
+        _pieza_dict(0, 1000, formato="reel", guardados=30, compartidos=0),
+        _pieza_dict(1, 1000, formato="reel", guardados=30, compartidos=0),
+        _pieza_dict(2, 1000, formato="foto", guardados=30, compartidos=0),
+        _pieza_dict(3, 1000, formato="foto", guardados=30, compartidos=0),
+    ]
+    assert _hallazgo_valor(piezas) is None
+
+
+def test_hallazgo_valor_sin_datos_de_guardados_no_emite():
+    # Red que no expone guardados/compartidos: sin datos, sin hallazgo (nunca se inventa).
+    piezas = [_pieza_dict(i, 1000, formato="reel") for i in range(3)]
+    assert _hallazgo_valor(piezas) is None
 
 
 # --------------------------------------------------------------------------- #
