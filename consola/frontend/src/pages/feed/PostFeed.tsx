@@ -24,12 +24,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bot,
   CalendarClock,
+  Check,
   CopyCheck,
   GitBranch,
   MessageSquare,
   Sparkles,
   ThumbsDown,
-  ThumbsUp,
   Trash2,
   TriangleAlert,
   Zap,
@@ -536,14 +536,17 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
       aria-busy={soloVisual || undefined}
       onClick={generandoCopy ? undefined : onClickTarjeta}
       className={cn(
-        "rounded-xl border border-border bg-card text-left text-card-foreground shadow-sm transition-colors",
+        // Dirección "Focus": la tarjeta FLOTA (sin borde que compita con la foto) con sombra
+        // suave y esquina generosa; el contenido se recorta a la caja (`overflow-hidden`).
+        "overflow-hidden rounded-2xl bg-card text-left text-card-foreground shadow-[0_16px_44px_-20px_rgba(0,0,0,0.22),0_5px_14px_-10px_rgba(0,0,0,0.12)] transition-all duration-300",
         soloVisual
           ? // Solo visual: sin pista de clic y sin interacción en ningún hijo.
             "select-none [&_*]:pointer-events-none"
           : portalPendiente
             ? // Portal a demanda: la tarjeta no abre nada; SOLO el botón «Generar» es interactivo.
               "select-none"
-            : "cursor-pointer hover:bg-accent focus-within:bg-accent",
+            : // Al pasar el ratón / enfocar, la tarjeta se eleva: pista de que es accionable.
+              "cursor-pointer hover:-translate-y-0.5 hover:shadow-[0_28px_60px_-22px_rgba(0,0,0,0.26)] focus-within:shadow-[0_28px_60px_-22px_rgba(0,0,0,0.26)]",
       )}
     >
       {/* Cabecera EN UNA SOLA LÍNEA (orden del rediseño aprobado): distintivo de FORMATO + RED
@@ -861,7 +864,7 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
                 {aprobar.isPending || (deshacer.isPending && deshacer.variables !== undefined) ? (
                   <Spinner className="h-4 w-4" />
                 ) : (
-                  <ThumbsUp className="h-4 w-4" />
+                  <Check className="h-4 w-4" />
                 )}
               </Button>
             </Tooltip>

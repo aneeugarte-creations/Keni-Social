@@ -103,11 +103,11 @@ export function PieFeed({
  */
 export function SkeletonPost() {
   return (
-    // Paddings y sombra ESPEJO de la anatomía de PostFeed/PlaceholderRed (shadow-sm; header
+    // Paddings y relieve ESPEJO de la anatomía de PostFeed (marco Focus que flota; header
     // px-4 pb-2 pt-3; copy px-4 pt-3 pb-1 + fila h-5 del "leer más"; acciones px-4 pt-1 pb-2):
     // si cambia uno, cambiar el otro — el contenido debe aterrizar sin micro-saltos de altura
     // ni cambio de relieve.
-    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <div className="overflow-hidden rounded-2xl bg-card shadow-[0_16px_44px_-20px_rgba(0,0,0,0.22),0_5px_14px_-10px_rgba(0,0,0,0.12)]">
       <div className="px-4 pb-2 pt-3">
         <Skeleton className="h-4 w-1/3" />
       </div>

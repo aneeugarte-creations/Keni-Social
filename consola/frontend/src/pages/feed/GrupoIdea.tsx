@@ -45,7 +45,7 @@ export interface GrupoDeIdea {
 export function PlaceholderRed({ red, titulo }: { red: string; titulo?: string }) {
   const Icono = iconoRed(red);
   return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-dashed border-border bg-muted/30">
+    <div className="flex flex-col overflow-hidden rounded-2xl border border-dashed border-border bg-muted/30">
       <header className="flex items-center px-4 pb-2 pt-3">
         <DistintivoRed red={red} />
       </header>
