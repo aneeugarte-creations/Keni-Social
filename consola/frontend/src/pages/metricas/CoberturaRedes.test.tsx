@@ -111,7 +111,7 @@ describe("CoberturaRedes", () => {
 
     // Estados con su etiqueta legible (ver ESTADO en CoberturaRedes.tsx).
     expect(screen.getAllByText("Con datos").length).toBe(2);
-    expect(screen.getByText("Sin métricas")).toBeInTheDocument();
+    expect(screen.getByText("Conectada · sin datos aún")).toBeInTheDocument();
     expect(screen.getByText("Sin lectura")).toBeInTheDocument();
     expect(screen.getByText("No configurada")).toBeInTheDocument();
     expect(screen.getByText("No conectada")).toBeInTheDocument();

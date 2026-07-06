@@ -68,7 +68,7 @@ const ESTADO: Record<string, { etiqueta: string; texto: string; punto: string }>
     punto: "bg-emerald-500",
   },
   sin_metricas: {
-    etiqueta: "Sin métricas",
+    etiqueta: "Conectada · sin datos aún",
     texto: "text-amber-700 dark:text-amber-400",
     punto: "bg-amber-500",
   },
