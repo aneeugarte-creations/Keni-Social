@@ -320,7 +320,7 @@ def test_serie_alcance_degrada_sin_alcance():
 
 
 def test_mejor_hora_devuelve_la_franja_de_mayor_score(monkeypatch):
-    """mejor_hora toma la celda de mayor score de la matriz de besttimes y devuelve su hora."""
+    """mejor_hora toma la celda de mayor score de la matriz de besttimes y devuelve hora y día."""
     class _Cuenta:
         id = "claro_sports"
 
@@ -332,12 +332,40 @@ def test_mejor_hora_devuelve_la_franja_de_mayor_score(monkeypatch):
 
         def mejores_horas(self, cuenta_id, red):
             matriz = [[0.0] * 24 for _ in range(7)]
-            matriz[2][20] = 1.0  # la mejor franja: 20:00
+            matriz[2][20] = 1.0  # la mejor franja: miércoles (fila 2) a las 20:00
             matriz[0][7] = 0.4
             return matriz
 
     monkeypatch.setattr(servicio, "_fuente", lambda marca=None: _Fuente())
-    assert servicio.mejor_hora("claro_sports", "instagram") == "20:00"
+    assert servicio.mejor_hora("claro_sports", "instagram") == {
+        "hora": "20:00",
+        "dia": "miércoles",
+    }
+
+
+def test_mejor_hora_dia_por_indice_de_fila(monkeypatch):
+    """La fila 0 de la matriz es lunes y la 6 domingo (0=lunes..6=domingo)."""
+    class _Cuenta:
+        id = "claro_sports"
+
+    def _fuente_con_celda(dia_idx):
+        class _Fuente:
+            nombre = "metricool"
+
+            def cuentas(self):
+                return [_Cuenta()]
+
+            def mejores_horas(self, cuenta_id, red):
+                matriz = [[0.0] * 24 for _ in range(7)]
+                matriz[dia_idx][9] = 1.0
+                return matriz
+
+        return _Fuente()
+
+    monkeypatch.setattr(servicio, "_fuente", lambda marca=None: _fuente_con_celda(0))
+    assert servicio.mejor_hora("claro_sports", "instagram")["dia"] == "lunes"
+    monkeypatch.setattr(servicio, "_fuente", lambda marca=None: _fuente_con_celda(6))
+    assert servicio.mejor_hora("claro_sports", "instagram")["dia"] == "domingo"
 
 
 def test_mejor_hora_none_si_sin_datos_o_red_invalida(monkeypatch):

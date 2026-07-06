@@ -292,29 +292,35 @@ def test_demografia_sin_red_400(cliente, monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-def test_mejor_hora_200_devuelve_hora(cliente, monkeypatch):
-    _mock_servicio(monkeypatch, mejor_hora=lambda marca, red: "20:00")
+def test_mejor_hora_200_devuelve_hora_y_dia(cliente, monkeypatch):
+    _mock_servicio(
+        monkeypatch, mejor_hora=lambda marca, red: {"hora": "20:00", "dia": "miércoles"}
+    )
     r = cliente.get("/api/programacion/mejor-hora?marca=claro_sports&red=instagram")
     assert r.status_code == 200
-    assert r.json() == {"hora": "20:00"}
+    assert r.json() == {"hora": "20:00", "dia": "miércoles"}
 
 
 def test_mejor_hora_null_si_sin_datos(cliente, monkeypatch):
     _mock_servicio(monkeypatch, mejor_hora=lambda marca, red: None)
     r = cliente.get("/api/programacion/mejor-hora?marca=claro_sports&red=instagram")
     assert r.status_code == 200
-    assert r.json() == {"hora": None}
+    assert r.json() == {"hora": None, "dia": None}
 
 
 def test_mejor_hora_red_invalida_400(cliente, monkeypatch):
-    _mock_servicio(monkeypatch, mejor_hora=lambda marca, red: "20:00")
+    _mock_servicio(
+        monkeypatch, mejor_hora=lambda marca, red: {"hora": "20:00", "dia": "miércoles"}
+    )
     r = cliente.get("/api/programacion/mejor-hora?marca=claro_sports&red=threads")
     assert r.status_code == 400
     assert "error" in r.json()
 
 
 def test_mejor_hora_sin_red_400(cliente, monkeypatch):
-    _mock_servicio(monkeypatch, mejor_hora=lambda marca, red: "20:00")
+    _mock_servicio(
+        monkeypatch, mejor_hora=lambda marca, red: {"hora": "20:00", "dia": "miércoles"}
+    )
     r = cliente.get("/api/programacion/mejor-hora?marca=claro_sports")
     assert r.status_code == 400
     assert "error" in r.json()

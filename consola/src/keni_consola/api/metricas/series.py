@@ -390,10 +390,11 @@ async def demografia(request: Request) -> Response:
 
 
 async def mejor_hora(request: Request) -> Response:
-    """GET /api/programacion/mejor-hora: mejor hora de publicación (CDMX) de una marca×red.
+    """GET /api/programacion/mejor-hora: mejor franja de publicación (CDMX) de una marca×red.
 
-    `?marca=` y `?red=` (ambos obligatorios): devuelve `{"hora": "HH:mm"|null}`. null si la
-    fuente no expone besttimes o no hay datos para esa red. Computado al vuelo (en executor).
+    `?marca=` y `?red=` (ambos obligatorios): devuelve `{"hora": "HH:mm"|null, "dia":
+    "<día>"|null}` (día como «martes», en minúscula). Ambas claves null si la fuente no expone
+    besttimes o no hay datos para esa red. Computado al vuelo (en executor).
     """
     marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
     if rechazo is not None:
@@ -407,11 +408,13 @@ async def mejor_hora(request: Request) -> Response:
             {"error": "Faltan parámetros obligatorios: marca y red."}, status_code=400
         )
     try:
-        hora = await run_in_threadpool(servicio.mejor_hora, marca, red)
+        franja = await run_in_threadpool(servicio.mejor_hora, marca, red)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         _log.exception("Fallo al calcular la mejor hora (marca=%s, red=%s).", marca, red)
         return JSONResponse({"error": "No se pudo calcular la mejor hora."}, status_code=500)
-    return JSONResponse({"hora": hora})
+    return JSONResponse(
+        {"hora": (franja or {}).get("hora"), "dia": (franja or {}).get("dia")}
+    )
 
 
 async def audiencia(request: Request) -> Response:

@@ -857,12 +857,19 @@ def serie_seguidores_desde_fuente(fuente, rango: str, marca: str | None = None) 
     return serie.model_dump(mode="json")
 
 
-def mejor_hora(marca: str, red: str) -> str | None:
-    """Mejor hora de publicación (CDMX, "HH:mm") para una marca×red, o None si no hay datos.
+# Nombre del día de la semana (en español, minúscula) por índice de fila de la matriz de
+# besttimes: fila 0 = dayOfWeek 1 (lunes) .. fila 6 = dayOfWeek 7 (domingo). Misma numeración
+# 0=lunes..6=domingo que usa el resto del sistema.
+_DIAS_SEMANA = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+
+
+def mejor_hora(marca: str, red: str) -> dict | None:
+    """Mejor franja de publicación (CDMX) para una marca×red, o None si no hay datos.
 
     Reúsa `fuente.mejores_horas` (matriz 7x24 normalizada de besttimes): la mejor franja es la
-    celda de mayor score; se devuelve solo su HORA (la franja, sin día). None si la fuente no
-    expone besttimes (muestra/compuesta), la red no es válida o no hay datos para esa red.
+    celda de mayor score. Devuelve `{"hora": "HH:mm", "dia": "<día en minúscula>"}` (día como
+    «martes», «domingo»…, con fila 0=lunes..6=domingo). None si la fuente no expone besttimes
+    (muestra/compuesta), la red no es válida o no hay datos para esa red.
     """
     fuente = _fuente(marca)
     fn = getattr(fuente, "mejores_horas", None)
@@ -874,20 +881,25 @@ def mejor_hora(marca: str, red: str) -> str | None:
         return None
     mejor_val = 0.0
     mejor_hora_int: int | None = None
+    mejor_dia_idx: int | None = None
     for c in fuente.cuentas():
         try:
             matriz = fn(c.id, plat)
         except AttributeError:
             # La fuente envuelta no la implementa (FuenteScoped lo propaga): sin besttimes.
             return None
-        for fila in matriz:
+        for dia_idx, fila in enumerate(matriz):
             for hora, val in enumerate(fila):
                 if val > mejor_val:
                     mejor_val = val
                     mejor_hora_int = hora
-    if mejor_hora_int is None:
+                    mejor_dia_idx = dia_idx
+    if mejor_hora_int is None or mejor_dia_idx is None:
         return None
-    return f"{mejor_hora_int:02d}:00"
+    return {
+        "hora": f"{mejor_hora_int:02d}:00",
+        "dia": _DIAS_SEMANA[mejor_dia_idx],
+    }
 
 
 def construir_serie_alcance(rango: str = "mes", marca: str | None = None) -> dict:
