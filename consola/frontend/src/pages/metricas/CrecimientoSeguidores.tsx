@@ -1,11 +1,14 @@
 /**
  * Crecimiento de seguidores del periodo (estrategia digital).
  *
- * Pinta la evolución día a día del total de seguidores (LineChart de Tremor con
- * `autoMinValue`: es una serie de NIVEL, así que el eje truncado es legítimo y evita la
- * línea "plana") con opción de desglosar por red. Arriba, un KPI por red con el total
- * ACTUAL de seguidores (el dato protagonista, como en Metricool) y el neto del periodo
- * (`neto` / `neto_por_red`) como insignia de variación. Si la fuente activa no expone
+ * Pinta la GANANCIA ACUMULADA de seguidores día a día: la línea arranca en 0 al inicio
+ * del periodo y termina en el neto (`neto` / `neto_por_red`), de modo que la pendiente
+ * cuenta exactamente lo que el título promete y el eje es legible (0 → +5.2 k) aunque el
+ * stock sea de millones. En el desglose por red todas las series parten de 0 y son
+ * comparables entre sí. Mismo criterio que la lámina de seguidores del informe. El stock
+ * ABSOLUTO no se pierde: arriba, un KPI por red con el total ACTUAL de seguidores (el
+ * dato protagonista, como en Metricool) y el neto del periodo como insignia de
+ * variación; debajo, la tabla con las cifras exactas. Si la fuente activa no expone
  * seguidores (`puntos=[]`) lo dice con honestidad en vez de inventar una serie; una red
  * sin datos en el periodo no se pinta como serie (su ausencia queda explicada con "—").
  */
@@ -56,6 +59,36 @@ function fechaCorta(iso: string): string {
   return new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short" }).format(d);
 }
 
+/**
+ * Filas del chart: ganancia ACUMULADA por día (valor del día − primer valor CONOCIDO de
+ * su serie), con las claves de `por_red` re-mapeadas al nombre legible de cada red para
+ * que la leyenda no enseñe el id crudo. En el modo global la serie es "Total" (arranca
+ * en 0 y termina en el neto del periodo); en el desglose cada red resta SU primer valor,
+ * así todas parten de 0 y son comparables aunque sus stocks difieran en órdenes de
+ * magnitud. Un día sin dato para una red es `null` (hueco honesto en la línea), NUNCA un
+ * 0 inventado (parecería que la red volvió a su nivel inicial). Exportada para tests.
+ */
+export function filasAcumuladas(
+  puntos: PuntoSeguidores[],
+  porRed: boolean,
+  redes: string[],
+): Array<Record<string, string | number | null>> {
+  const inicioTotal = puntos[0]?.total ?? 0;
+  const inicioRed = new Map<string, number>();
+  for (const p of puntos)
+    for (const red of redes)
+      if (!inicioRed.has(red) && p.por_red[red] != null) inicioRed.set(red, p.por_red[red]);
+  return puntos.map((p) => {
+    if (!porRed) return { fecha: fechaCorta(p.fecha), Total: p.total - inicioTotal };
+    const fila: Record<string, string | number | null> = { fecha: fechaCorta(p.fecha) };
+    for (const red of redes) {
+      const v = p.por_red[red];
+      fila[nombreRed(red)] = v == null ? null : v - (inicioRed.get(red) ?? v);
+    }
+    return fila;
+  });
+}
+
 export function CrecimientoSeguidores({
   marcaActual = MARCA_TODAS,
   rangoActual,
@@ -81,16 +114,10 @@ export function CrecimientoSeguidores({
     return REDES_CANONICAS.filter((red) => puntos.some((p) => p.por_red[red] != null));
   }, [data]);
 
-  // Categorías legibles para la leyenda/serie: cada id de red → su nombre de marca.
-  // Re-mapeamos las claves de `por_red` a ese nombre para que el chart use la etiqueta
-  // legible como serie (no el id crudo). Un día sin dato para una red es `null` (hueco
-  // honesto en la línea), NUNCA un 0 inventado (sería un stock de cero seguidores).
-  const datos = (data?.puntos ?? []).map((p: PuntoSeguidores) => {
-    if (!porRed) return { fecha: fechaCorta(p.fecha), Total: p.total };
-    const fila: Record<string, string | number | null> = { fecha: fechaCorta(p.fecha) };
-    for (const red of redesConDatos) fila[nombreRed(red)] = p.por_red[red] ?? null;
-    return fila;
-  });
+  const datos = React.useMemo(
+    () => filasAcumuladas(data?.puntos ?? [], porRed, redesConDatos),
+    [data, porRed, redesConDatos],
+  );
 
   const categorias = porRed ? redesConDatos.map(nombreRed) : ["Total"];
   // Color por red SIEMPRE desde la fuente única (coloresRed.ts); los hex están en la
@@ -101,6 +128,7 @@ export function CrecimientoSeguidores({
     <Seccion
       id="seguidores"
       titulo="Crecimiento de seguidores"
+      descripcion="Seguidores ganados desde el inicio del periodo, acumulados día a día."
       icono={Users}
       acciones={
         <Label className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -136,17 +164,19 @@ export function CrecimientoSeguidores({
               {/* Alternativa textual del chart para lectores de pantalla. */}
               <div
                 role="img"
-                aria-label={`Seguidores del periodo: neto ${netoSeguidores(data.neto)}`}
+                aria-label={`Seguidores ganados en el periodo: ${netoSeguidores(data.neto)}`}
               >
+                {/* Eje y tooltip con signo (netoSeguidores): los valores son ganancia, no
+                    stock. `autoMinValue` deja bajar el eje de 0 si el neto se vuelve
+                    negativo (pérdida de seguidores). */}
                 <LineChart
                   data={datos}
                   index="fecha"
                   categories={categorias}
                   colors={colores}
-                  valueFormatter={numeroCompacto}
+                  valueFormatter={netoSeguidores}
                   showLegend={porRed}
                   showAnimation
-                  startEndOnly
                   curveType="monotone"
                   autoMinValue
                   className="h-56"

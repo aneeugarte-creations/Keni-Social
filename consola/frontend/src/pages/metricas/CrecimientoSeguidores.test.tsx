@@ -4,9 +4,9 @@ import * as React from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api";
-import type { SerieSeguidores } from "@/types";
+import type { PuntoSeguidores, SerieSeguidores } from "@/types";
 
-import { CrecimientoSeguidores } from "./CrecimientoSeguidores";
+import { CrecimientoSeguidores, filasAcumuladas } from "./CrecimientoSeguidores";
 
 beforeAll(() => {
   if (!globalThis.ResizeObserver) {
@@ -79,7 +79,7 @@ describe("CrecimientoSeguidores", () => {
 
     // El gráfico lleva un wrapper role="img" cuyo aria-label resume el neto con signo.
     expect(
-      await screen.findByRole("img", { name: /seguidores del periodo: neto \+/i }),
+      await screen.findByRole("img", { name: /seguidores ganados en el periodo: \+/i }),
     ).toBeInTheDocument();
   });
 
@@ -94,5 +94,33 @@ describe("CrecimientoSeguidores", () => {
     expect(
       await screen.findByText(/aún no hay datos de seguidores para este periodo/i),
     ).toBeInTheDocument();
+  });
+});
+
+describe("filasAcumuladas", () => {
+  it("la serie Total es ganancia acumulada: arranca en 0 y termina en el neto", () => {
+    const filas = filasAcumuladas(RESP.puntos, false, []);
+    // El chart pinta crecimiento (0 → +500), no el stock absoluto (10 000 → 10 500).
+    expect(filas.map((f) => f.Total)).toEqual([0, 500]);
+  });
+
+  it("en el desglose cada red resta SU primer valor (todas parten de 0)", () => {
+    const filas = filasAcumuladas(RESP.puntos, true, ["instagram", "x"]);
+    expect(filas[0]).toMatchObject({ Instagram: 0, X: 0 });
+    expect(filas[1]).toMatchObject({ Instagram: 300, X: 200 });
+  });
+
+  it("un día sin dato para una red queda como hueco (null), no como 0", () => {
+    const puntos: PuntoSeguidores[] = [
+      { fecha: "2026-05-26", total: 6000, por_red: { instagram: 6000 } },
+      { fecha: "2026-05-27", total: 10300, por_red: { instagram: 6300, x: 4000 } },
+      { fecha: "2026-05-28", total: 10400, por_red: { instagram: 6350, x: 4050 } },
+    ];
+    const filas = filasAcumuladas(puntos, true, ["instagram", "x"]);
+    // El día sin dato de X es null (hueco honesto en la línea)…
+    expect(filas[0]).toMatchObject({ Instagram: 0, X: null });
+    // …y X acumula desde SU primer valor conocido (4 000), no desde el inicio del periodo.
+    expect(filas[1]).toMatchObject({ Instagram: 300, X: 0 });
+    expect(filas[2]).toMatchObject({ Instagram: 350, X: 50 });
   });
 });
