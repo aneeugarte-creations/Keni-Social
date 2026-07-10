@@ -14,18 +14,26 @@
  * 11.9% → "12%") y la pieza que respalda un hallazgo va en una línea con "↳" —sin verbo—
  * con su título en frase (sin MAYÚSCULAS gritadas ni emojis, truncado en palabra). El
  * título íntegro queda en el `title` del enlace.
+ *
+ * La lista arranca PLEGADA en lo más importante (los primeros hallazgos, que el motor ya
+ * jerarquiza) con un "…" para desplegar el resto: quien quiere la lectura completa la abre,
+ * quien no, no se come la retahíla.
  */
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  ChevronUp,
   ExternalLink,
   Minus,
+  MoreHorizontal,
   Sparkles,
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
+import { useState } from "react";
 
 import { marcaParam } from "@/components/comunes/selectores";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
@@ -134,8 +142,22 @@ function Hallazgo({ h }: { h: HallazgoAnalisis }) {
   );
 }
 
+/**
+ * Nº de hallazgos visibles con la lista plegada. Coincide con el tope de movimientos de
+ * marca del motor (lo más relevante, que siempre va primero); el resto de dimensiones
+ * queda tras el "…".
+ */
+const HALLAZGOS_PLEGADOS = 3;
+
 /** Cuerpo de la tarjeta con datos ya cargados: hallazgos, aviso de cobertura y paso. */
 function CuerpoAnalisis({ data }: { data: AnalisisDiario }) {
+  const [expandido, setExpandido] = useState(false);
+  const ocultos = data.hallazgos.length - HALLAZGOS_PLEGADOS;
+  // Plegar solo si esconde ≥2 hallazgos: pedir un clic para leer 1 más no merece el gesto.
+  const plegable = ocultos >= 2;
+  const visibles =
+    plegable && !expandido ? data.hallazgos.slice(0, HALLAZGOS_PLEGADOS) : data.hallazgos;
+
   const sinHallazgos = data.hallazgos.length === 0 && data.siguiente_paso === null;
   if (sinHallazgos) {
     return (
@@ -148,11 +170,35 @@ function CuerpoAnalisis({ data }: { data: AnalisisDiario }) {
   return (
     <div className="space-y-4">
       {data.hallazgos.length > 0 && (
-        <ul className="space-y-4">
-          {data.hallazgos.map((h, i) => (
-            <Hallazgo key={`${h.dimension}-${i}`} h={h} />
-          ))}
-        </ul>
+        <div>
+          <ul className="space-y-4">
+            {visibles.map((h, i) => (
+              <Hallazgo key={`${h.dimension}-${i}`} h={h} />
+            ))}
+          </ul>
+          {plegable && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setExpandido((v) => !v)}
+              aria-expanded={expandido}
+              className="mt-2 w-full justify-center font-normal text-muted-foreground hover:text-foreground"
+            >
+              {expandido ? (
+                <>
+                  Mostrar menos
+                  <ChevronUp className="h-4 w-4" aria-hidden="true" />
+                </>
+              ) : (
+                <>
+                  <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                  {`${ocultos} hallazgos más`}
+                </>
+              )}
+            </Button>
+          )}
+        </div>
       )}
       {data.cobertura_parcial.length > 0 && (
         <p

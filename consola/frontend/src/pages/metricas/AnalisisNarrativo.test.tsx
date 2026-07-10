@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -110,6 +110,66 @@ describe("AnalisisNarrativo", () => {
     expect(
       await screen.findByText(/«¡Golazo de última hora! Con "And I Love Her" de fondo»/),
     ).toBeInTheDocument();
+  });
+
+  it("pliega la lista a los 3 primeros hallazgos y despliega el resto con el «…»", async () => {
+    vi.spyOn(api, "metricasAnalisis").mockResolvedValue({
+      ...RESP,
+      hallazgos: [
+        ...RESP.hallazgos,
+        {
+          dimension: "formato",
+          texto: "El formato reel se guarda o comparte al 4% de sus vistas.",
+          direccion: "sube",
+          pieza: null,
+        },
+        {
+          dimension: "engagement",
+          texto: "El formato link fue el de mejor engagement del periodo.",
+          direccion: "sube",
+          pieza: null,
+        },
+        {
+          dimension: "periodo",
+          texto: "El día más fuerte de la semana fue el 5-jul.",
+          direccion: "estable",
+          pieza: null,
+        },
+      ],
+    });
+    renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
+
+    // Plegado: los 3 primeros a la vista; el resto, detrás del "…".
+    expect(await screen.findByText(/Claro Sports subió/)).toBeInTheDocument();
+    expect(screen.getByText(/Instagram perdió/)).toBeInTheDocument();
+    expect(screen.queryByText(/El formato reel/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /3 hallazgos más/ }));
+    expect(screen.getByText(/El formato reel/)).toBeInTheDocument();
+    expect(screen.getByText(/El día más fuerte de la semana/)).toBeInTheDocument();
+
+    // Y se puede volver a plegar.
+    fireEvent.click(screen.getByRole("button", { name: /mostrar menos/i }));
+    expect(screen.queryByText(/El formato reel/)).not.toBeInTheDocument();
+  });
+
+  it("no pliega cuando apenas escondería 1 hallazgo", async () => {
+    vi.spyOn(api, "metricasAnalisis").mockResolvedValue({
+      ...RESP,
+      hallazgos: [
+        ...RESP.hallazgos,
+        {
+          dimension: "formato",
+          texto: "El formato reel despunta este periodo.",
+          direccion: "sube",
+          pieza: null,
+        },
+      ],
+    });
+    renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
+
+    expect(await screen.findByText(/El formato reel despunta/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /hallazgos más/ })).not.toBeInTheDocument();
   });
 
   it("pinta el siguiente paso tal cual lo redacta el backend, con enlace a la pieza", async () => {
