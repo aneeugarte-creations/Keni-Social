@@ -6,14 +6,14 @@ import { COBERTURA_BADGE, COBERTURA_TEXTO, SEMAFORO_ESTILO } from "./estado-colo
 
 /**
  * Fija la taxonomía CENTRAL de color: cada fase del semáforo y cada estado de cobertura mapea a sus
- * clases Tailwind EXACTAS (incluido `dark:`). Estas son las que pintaba el cockpit inline; el test
- * las congela para que la centralización siga siendo pixel-idéntica y los futuros estados no
- * deriven los existentes sin querer.
+ * clases Tailwind EXACTAS (incluido `dark:`). El tinte es la receta única de badge de estado del
+ * sistema de diseño (`bg-<c>-500/15 text-<c>-700 dark:text-<c>-300`, docs/sistema-diseno.md); el
+ * test la congela para que los futuros estados no deriven los existentes sin querer.
  */
 describe("SEMAFORO_ESTILO — color por fase temporal", () => {
   it("verde para en-vivo (badge + punto verde)", () => {
     expect(SEMAFORO_ESTILO["en-vivo"]).toEqual({
-      badge: "border-emerald-500/50 text-emerald-700 dark:text-emerald-300",
+      badge: "border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
       dot: "bg-emerald-500",
       icon: "text-emerald-600 dark:text-emerald-400",
     });
@@ -21,7 +21,7 @@ describe("SEMAFORO_ESTILO — color por fase temporal", () => {
 
   it("ámbar para empieza-en (PRE-LIVE)", () => {
     expect(SEMAFORO_ESTILO["empieza-en"]).toEqual({
-      badge: "border-amber-500/50 text-amber-700 dark:text-amber-300",
+      badge: "border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-300",
       dot: "bg-amber-500",
       icon: "text-amber-600 dark:text-amber-400",
     });
@@ -29,7 +29,7 @@ describe("SEMAFORO_ESTILO — color por fase temporal", () => {
 
   it("verde para terminado (resuelto, comparte el verde de en-vivo)", () => {
     expect(SEMAFORO_ESTILO.terminado).toEqual({
-      badge: "border-emerald-500/50 text-emerald-700 dark:text-emerald-300",
+      badge: "border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
       dot: "bg-emerald-500",
       icon: "text-emerald-600 dark:text-emerald-400",
     });
@@ -67,20 +67,20 @@ describe("COBERTURA_TEXTO — color del corte del KPI por estado de cobertura", 
   });
 });
 
-describe("COBERTURA_BADGE — píldora rellena de cobertura del chip del calendario", () => {
-  it("verde relleno para cubierto-turno («Cubierto · <nombres>»)", () => {
+describe("COBERTURA_BADGE — píldora de tinte de cobertura del chip del calendario", () => {
+  it("verde para cubierto-turno («Cubierto · <nombres>»)", () => {
     expect(COBERTURA_BADGE["cubierto-turno"]).toBe(
-      "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
+      "border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
     );
   });
 
-  it("cogido comparte el verde relleno de cubierto-turno", () => {
+  it("cogido comparte el verde de cubierto-turno", () => {
     expect(COBERTURA_BADGE.cogido).toBe(COBERTURA_BADGE["cubierto-turno"]);
   });
 
-  it("amarillo relleno suave para sin-cubrir (mismo amarillo que el KPI: «sin cubrir» es UN color)", () => {
+  it("amarillo para sin-cubrir (mismo amarillo que el KPI: «sin cubrir» es UN color)", () => {
     expect(COBERTURA_BADGE["sin-cubrir"]).toBe(
-      "border-yellow-300 bg-yellow-50 text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300",
+      "border-transparent bg-yellow-500/15 text-yellow-700 dark:text-yellow-300",
     );
   });
 

@@ -13,12 +13,13 @@ const badgeVariants = cva(
         destructive: "border-transparent bg-destructive text-destructive-foreground",
         outline: "text-foreground",
         // Variantes SEMÁNTICAS de estado (vocabulario único: ok=verde, info=cielo,
-        // aviso=ámbar, error=rojo). Pares 700/300 para claro/oscuro. Las consumen el
-        // doctor de Sistema y `ChipEstado` (badge único de estados de trabajo).
+        // aviso=ámbar; pares 700/300 para claro/oscuro). `error` usa el token
+        // `destructive` del tema: un solo rojo en toda la app (docs/sistema-diseno.md).
+        // Las consumen el doctor de Sistema y `ChipEstado` (badge único de estados).
         ok: "border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
         info: "border-transparent bg-sky-500/15 text-sky-700 dark:text-sky-300",
         aviso: "border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-300",
-        error: "border-transparent bg-red-500/15 text-red-700 dark:text-red-300",
+        error: "border-transparent bg-destructive/10 text-destructive",
       },
     },
     defaultVariants: {

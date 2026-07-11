@@ -1,7 +1,7 @@
 import { AlertTriangle, Bot, ChevronDown, ChevronRight, Clock, Coins, Cog, OctagonAlert, ShieldCheck, Sparkles } from "lucide-react";
 import * as React from "react";
 
-import { aspectoEstado, ChipEstado } from "@/components/comunes/ChipEstado";
+import { ChipEstado, claseEstado } from "@/components/comunes/ChipEstado";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Markdown } from "@/components/ui/Markdown";
@@ -69,8 +69,8 @@ function BadgeVerificacionFuente({ verificación, className }: { verificación?:
   if (verificación.rechazado) {
     return (
       <Badge
-        variant="secondary"
-        className={cn("gap-1 border border-destructive/30 bg-destructive/10 text-destructive", className)}
+        variant="error"
+        className={cn("gap-1", className)}
         title={verificación.resumen || "La verificación rechazó la fuente; sin copy."}
       >
         <OctagonAlert className="h-3 w-3" aria-hidden="true" />
@@ -81,8 +81,8 @@ function BadgeVerificacionFuente({ verificación, className }: { verificación?:
   if (verificación.requiere_humano) {
     return (
       <Badge
-        variant="secondary"
-        className={cn("gap-1 border border-amber-500/30 bg-amber-500/15 text-amber-600", className)}
+        variant="aviso"
+        className={cn("gap-1", className)}
         title={verificación.resumen || "La IA no pudo verificarla; requiere revisión humana."}
       >
         <AlertTriangle className="h-3 w-3" aria-hidden="true" />
@@ -93,8 +93,8 @@ function BadgeVerificacionFuente({ verificación, className }: { verificación?:
   if (verificación.verificado) {
     return (
       <Badge
-        variant="secondary"
-        className={cn("gap-1 border border-emerald-500/30 bg-emerald-500/15 text-emerald-600", className)}
+        variant="ok"
+        className={cn("gap-1", className)}
         title="Confirmada con fuentes fiables"
       >
         <ShieldCheck className="h-3 w-3" aria-hidden="true" />
@@ -157,7 +157,7 @@ function ProcedenciaIA({ cluster, modo }: { cluster: PipelineCluster; modo: "fus
             </Badge>
           )}
           {cluster.breaking && (
-            <Badge variant="secondary" className="border border-amber-500/30 bg-amber-500/15 text-[10px] text-amber-600">
+            <Badge variant="aviso" className="text-[10px]">
               🔥 breaking
             </Badge>
           )}
@@ -204,7 +204,7 @@ export function TiraEtapas({ etapas }: { etapas: PipelineEtapa[] }) {
               <div
                 className={cn(
                   "flex min-w-0 items-center gap-1.5 rounded-md border px-2 py-1 text-xs",
-                  aspectoEstado(e.estado).clase || "text-muted-foreground",
+                  claseEstado(e.estado),
                 )}
                 title={e.detalle}
               >

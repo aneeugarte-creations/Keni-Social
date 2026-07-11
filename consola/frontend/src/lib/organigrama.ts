@@ -13,6 +13,7 @@
  * organigrama "se redibuja solo" cuando el admin edita la jerarquía.
  */
 
+import { COLOR_MARCA } from "@/lib/marca-colores";
 import type { CargoUsuario, UsuarioAdmin } from "@/types";
 
 /** Zonas que NO son una marca: la dirección (raíz) y lo transversal (cruza verticales). */
@@ -39,15 +40,16 @@ export interface MetaZona {
 }
 
 /**
- * Paleta por zona. Los colores son fijos (no dependen del tema) para que cada área sea
- * reconocible de un vistazo; se usan como acento sobre tarjetas que sí respetan el tema.
+ * Paleta por zona. Las zonas de marca beben de la paleta canónica de marca
+ * (`lib/marca-colores.ts`); las internas (transversal/dirección) tienen su gris propio.
+ * Colores fijos (no dependen del tema): se usan como acento sobre tarjetas temadas.
  */
 export const META_ZONA: Record<string, MetaZona> = {
-  "claro-sports": { etiqueta: "Claro Sports", color: "#e11d48", corta: "CS" },
-  unotv: { etiqueta: "UnoTV", color: "#2563eb", corta: "U" },
-  "piso-15": { etiqueta: "Piso 15", color: "#7c3aed", corta: "P15" },
-  "nacion-gamer": { etiqueta: "Nación Gamer", color: "#0d9488", corta: "NG" },
-  fundacion: { etiqueta: "Fundación", color: "#d97706", corta: "F" },
+  "claro-sports": { etiqueta: "Claro Sports", color: COLOR_MARCA["claro-sports"], corta: "CS" },
+  unotv: { etiqueta: "UnoTV", color: COLOR_MARCA.unotv, corta: "U" },
+  "piso-15": { etiqueta: "Piso 15", color: COLOR_MARCA["piso-15"], corta: "P15" },
+  "nacion-gamer": { etiqueta: "Nación Gamer", color: COLOR_MARCA["nacion-gamer"], corta: "NG" },
+  fundacion: { etiqueta: "Fundación", color: COLOR_MARCA.fundacion, corta: "F" },
   [ZONA_TRANSVERSAL]: { etiqueta: "Transversal", color: "#64748b", corta: "T" },
   [ZONA_DIRECCION]: { etiqueta: "Dirección", color: "#0f172a", corta: "D" },
 };

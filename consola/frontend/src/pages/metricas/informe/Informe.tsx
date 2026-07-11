@@ -8,6 +8,7 @@
 import * as React from "react";
 
 import { nombreRed, numeroCompactoFijo } from "@/lib/formato";
+import { COLOR_MARCA } from "@/lib/marca-colores";
 
 import { AreaBold } from "./graficas";
 import { LOGOS_MARCA } from "./logos";
@@ -133,14 +134,8 @@ function LogoOWordmark({
   return <Wordmark id={id} nombre={nombre} size={Math.round(box.h * 0.62)} />;
 }
 
-/** Portadas con fondo del color de la marca (logo en blanco + caption claro encima). */
-const COVER_BG: Record<string, string> = {
-  unotv: "#16273F",
-  "claro-sports": "#DA291C",
-  fundacion: "#0067B1",
-  "nacion-gamer": "#16863E",
-  "piso-15": "#0B0B0F",
-};
+/** Portadas con fondo del color canónico de la marca (logo en blanco + caption claro encima). */
+const COVER_BG: Record<string, string> = COLOR_MARCA;
 /** Portada de "Todas las marcas": fondo oscuro neutro (no favorece el color de ninguna marca). */
 const COVER_TODAS = "#17181C";
 /** Orden de los logos en la portada-portfolio de "Todas las marcas". */

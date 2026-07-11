@@ -186,9 +186,9 @@ export function PantallaLogin() {
   }
 
   return (
-    <div className="flex min-h-dvh w-full items-center justify-center bg-white px-6">
+    <div className="flex min-h-dvh w-full items-center justify-center bg-background px-6">
       <div className="w-full max-w-sm">
-        <h1 className="mb-14 text-center text-2xl font-light uppercase text-neutral-900">
+        <h1 className="mb-14 text-center text-2xl font-light uppercase text-foreground">
           {/* El `tracking` añade espacio TRAS la última letra; con `text-center` eso descentra
               el wordmark. Lo aislamos en un inline-block y anulamos ese sobrante con un margen
               derecho negativo igual al tracking → KENI queda centrado EXACTO sobre el formulario. */}
@@ -198,7 +198,7 @@ export function PantallaLogin() {
           <div className="space-y-3">
             <Label
               htmlFor="login-usuario"
-              className="text-xs font-light text-neutral-900"
+              className="text-xs font-light text-foreground"
             >
               Usuario
             </Label>
@@ -210,13 +210,13 @@ export function PantallaLogin() {
               value={usuario}
               onChange={(e) => setUsuario(e.target.value)}
               disabled={enviando}
-              className="h-9 rounded-none border-x-0 border-t-0 border-b border-neutral-300 bg-transparent px-0 text-neutral-900 shadow-none transition-colors focus-visible:border-neutral-900 focus-visible:ring-0"
+              className="h-9 rounded-none border-x-0 border-t-0 border-b border-input bg-transparent px-0 text-foreground shadow-none transition-colors focus-visible:border-foreground focus-visible:ring-0"
             />
           </div>
           <div className="space-y-3">
             <Label
               htmlFor="login-password"
-              className="text-xs font-light text-neutral-900"
+              className="text-xs font-light text-foreground"
             >
               Contraseña
             </Label>
@@ -229,7 +229,7 @@ export function PantallaLogin() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={enviando}
-                className="h-9 rounded-none border-x-0 border-t-0 border-b border-neutral-300 bg-transparent px-0 pr-9 text-neutral-900 shadow-none transition-colors focus-visible:border-neutral-900 focus-visible:ring-0"
+                className="h-9 rounded-none border-x-0 border-t-0 border-b border-input bg-transparent px-0 pr-9 text-foreground shadow-none transition-colors focus-visible:border-foreground focus-visible:ring-0"
               />
               <button
                 type="button"
@@ -238,7 +238,7 @@ export function PantallaLogin() {
                 disabled={enviando}
                 aria-pressed={verPassword}
                 aria-label={verPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-neutral-400 transition-colors hover:text-neutral-900 disabled:cursor-not-allowed disabled:opacity-50"
+                className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {/* El icono refleja el ESTADO actual: oculta = ojo tachado (EyeOff), visible =
                     ojo abierto (Eye). Así por defecto se ve claramente que la contraseña NO se ve. */}
@@ -257,17 +257,17 @@ export function PantallaLogin() {
             type="submit"
             variant="outline"
             disabled={!puedeEnviar}
-            className="mt-3 h-11 w-full rounded-md border-neutral-900 text-xs uppercase tracking-[0.28em] text-neutral-900 shadow-none"
+            className="mt-3 h-11 w-full rounded-md border-foreground text-xs uppercase tracking-[0.28em] text-foreground shadow-none"
           >
             {enviando ? <Spinner className="h-4 w-4" /> : "Entrar"}
           </Button>
 
           {/* Atajo passwordless: la contraseña sigue siendo la base; esto entra directo con la
               llave de acceso (Face ID, huella o teléfono) sin teclear contraseña. */}
-          <div className="flex items-center gap-3 text-xs text-neutral-400">
-            <span className="h-px flex-1 bg-neutral-200" />
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
             <span className="uppercase tracking-[0.2em]">o</span>
-            <span className="h-px flex-1 bg-neutral-200" />
+            <span className="h-px flex-1 bg-border" />
           </div>
 
           <Button
@@ -275,7 +275,7 @@ export function PantallaLogin() {
             variant="ghost"
             disabled={enviando}
             onClick={alEntrarPasswordless}
-            className="h-11 w-full rounded-md text-xs uppercase tracking-[0.28em] text-neutral-600 hover:text-neutral-900"
+            className="h-11 w-full rounded-md text-xs uppercase tracking-[0.28em] text-muted-foreground hover:text-foreground"
           >
             <Fingerprint className="h-4 w-4" />
             Entrar con llave de acceso

@@ -94,17 +94,16 @@ const AlertDialogDescription = React.forwardRef<
 ));
 AlertDialogDescription.displayName = AlertDialogPrimitive.Description.displayName;
 
-// Acción afirmativa = relleno gris suave (guía de diseño Keni): grises, sin relleno
-// oscuro ni color. Es el punto focal de la tarjeta y se lee como botón (el outline
-// hairline quedaba invisible sobre la tarjeta clara). El peligro de una acción
-// destructiva lo comunica el texto del diálogo, no el color del botón.
+// Acción afirmativa = el botón primario del sistema (relleno oscuro `default`,
+// docs/sistema-diseno.md): punto focal inequívoco de la tarjeta, monocromo y plano.
+// El peligro de una acción destructiva lo comunica el texto del diálogo, no el color.
 const AlertDialogAction = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Action>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Action>
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Action
     ref={ref}
-    className={cn(buttonVariants({ variant: "secondary" }), className)}
+    className={cn(buttonVariants({ variant: "default" }), className)}
     {...props}
   />
 ));

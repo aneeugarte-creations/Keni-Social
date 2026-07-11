@@ -40,17 +40,17 @@ export interface EstiloSemaforo {
  */
 export const SEMAFORO_ESTILO: Record<Semaforo, EstiloSemaforo> = {
   "en-vivo": {
-    badge: "border-emerald-500/50 text-emerald-700 dark:text-emerald-300",
+    badge: "border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
     dot: "bg-emerald-500",
     icon: "text-emerald-600 dark:text-emerald-400",
   },
   "empieza-en": {
-    badge: "border-amber-500/50 text-amber-700 dark:text-amber-300",
+    badge: "border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-300",
     dot: "bg-amber-500",
     icon: "text-amber-600 dark:text-amber-400",
   },
   terminado: {
-    badge: "border-emerald-500/50 text-emerald-700 dark:text-emerald-300",
+    badge: "border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
     dot: "bg-emerald-500",
     icon: "text-emerald-600 dark:text-emerald-400",
   },
@@ -74,22 +74,19 @@ export const COBERTURA_TEXTO: Record<EstadoCobertura, string> = {
 };
 
 /**
- * Badge RELLENO (borde + fondo + texto, con `dark:`) por estado de cobertura, para el chip del
- * calendario de la rota. Es la píldora compacta de cobertura del chip de evento. Replica EXACTAMENTE
- * las clases que el chip pintaba inline:
- *  - `cubierto-turno`/`cogido` → verde relleno («Cubierto · <nombres>»: lo cubre quien está de turno).
- *  - `sin-cubrir`              → AMARILLO relleno suave («Sin cubrir»: hueco real). Mismo amarillo
- *    (con significado «pide decisión») que el KPI: el estado «sin cubrir» habla UN solo color en
- *    toda la app. Es `yellow`, NO `amber`: el ámbar queda reservado a `empieza-en` (PRE-LIVE), un
- *    eje distinto (tiempo, no cobertura).
+ * Badge de TINTE (fondo suave + texto, receta 700/300 del sistema de diseño) por estado de
+ * cobertura, para el chip del calendario de la rota. Es la píldora compacta de cobertura del
+ * chip de evento:
+ *  - `cubierto-turno`/`cogido` → verde («Cubierto · <nombres>»: lo cubre quien está de turno).
+ *  - `sin-cubrir`              → AMARILLO («Sin cubrir»: hueco real). Mismo amarillo (con
+ *    significado «pide decisión») que el KPI: el estado «sin cubrir» habla UN solo color en
+ *    toda la app. Es `yellow`, NO `amber`: el ámbar queda reservado a `empieza-en` (PRE-LIVE),
+ *    un eje distinto (tiempo, no cobertura).
  */
 export const COBERTURA_BADGE: Record<EstadoCobertura, string> = {
-  "cubierto-turno":
-    "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
-  cogido:
-    "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
-  "sin-cubrir":
-    "border-yellow-300 bg-yellow-50 text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300",
+  "cubierto-turno": "border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+  cogido: "border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+  "sin-cubrir": "border-transparent bg-yellow-500/15 text-yellow-700 dark:text-yellow-300",
 };
 
 // FASE 2 (preparado, SIN consumidor todavía — no se añaden entradas para no dejar código muerto que

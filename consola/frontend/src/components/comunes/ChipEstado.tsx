@@ -14,30 +14,27 @@ import type { EstadoDaemon } from "@/types";
 
 type Aspecto = { variant: BadgeProps["variant"]; clase?: string; texto: string };
 
-// Paletas compartidas (también las usa la tira de etapas de Pipelines vía `aspectoEstado`).
-const VERDE = "bg-emerald-500/15 text-emerald-600 border-emerald-500/30";
-const CIELO = "bg-sky-500/15 text-sky-600 border-sky-500/30";
-const AMBAR = "bg-amber-500/15 text-amber-600 border-amber-500/30";
-
 // Estado (cualquier dominio) -> aspecto. Sinónimos entre dominios apuntan al MISMO
 // aspecto: «completado» (generación) y «ok» (pipeline) son la misma cosa para el ojo.
+// Los colores salen de las variantes semánticas de `Badge` (ok/info/aviso/error), la
+// receta única de badge de estado del sistema de diseño (docs/sistema-diseno.md).
 const ASPECTO: Record<string, Aspecto> = {
   // Terminales felices.
-  ok: { variant: "secondary", clase: VERDE, texto: "Completado" },
-  completado: { variant: "secondary", clase: VERDE, texto: "Completado" },
+  ok: { variant: "ok", texto: "Completado" },
+  completado: { variant: "ok", texto: "Completado" },
   // En curso (generación ejecutando / etapa en curso / job reclamado).
-  en_curso: { variant: "secondary", clase: CIELO, texto: "En curso" },
-  ejecutando: { variant: "secondary", clase: CIELO, texto: "En curso" },
-  reclamado: { variant: "secondary", clase: CIELO, texto: "En curso" },
+  en_curso: { variant: "info", texto: "En curso" },
+  ejecutando: { variant: "info", texto: "En curso" },
+  reclamado: { variant: "info", texto: "En curso" },
   // Esperando turno.
   pendiente: { variant: "outline", clase: "text-muted-foreground", texto: "Pendiente" },
   lanzado: { variant: "outline", clase: "text-muted-foreground", texto: "En cola" },
   // Atención humana / verificaciones.
-  revisar: { variant: "secondary", clase: AMBAR, texto: "Revisar" },
+  revisar: { variant: "aviso", texto: "Revisar" },
   saltada: { variant: "outline", clase: "text-muted-foreground/60 border-dashed line-through", texto: "Omitida" },
   // Terminales con problema.
-  fallo: { variant: "destructive", texto: "Error" },
-  error: { variant: "destructive", texto: "Error" },
+  fallo: { variant: "error", texto: "Error" },
+  error: { variant: "error", texto: "Error" },
 };
 
 const DESCONOCIDO: Aspecto = { variant: "outline", clase: "text-muted-foreground", texto: "—" };
@@ -45,6 +42,21 @@ const DESCONOCIDO: Aspecto = { variant: "outline", clase: "text-muted-foreground
 /** Aspecto de un estado (etiqueta + variante); cae a un neutro si no se reconoce. */
 export function aspectoEstado(estado: string): Aspecto {
   return ASPECTO[estado] ?? { ...DESCONOCIDO, texto: estado || "—" };
+}
+
+// Receta de tinte por variante semántica, como clases sueltas, para elementos que NO son
+// `<Badge>` (p. ej. las cajas de etapa de `TiraEtapas`). Mismo color que el Badge.
+const CLASE_VARIANTE: Partial<Record<NonNullable<BadgeProps["variant"]>, string>> = {
+  ok: "border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+  info: "border-transparent bg-sky-500/15 text-sky-700 dark:text-sky-300",
+  aviso: "border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-300",
+  error: "border-transparent bg-destructive/10 text-destructive",
+};
+
+/** Clases de color de un estado para elementos crudos; texto muted si no hay tinte. */
+export function claseEstado(estado: string): string {
+  const a = aspectoEstado(estado);
+  return (a.variant && CLASE_VARIANTE[a.variant]) || a.clase || "text-muted-foreground";
 }
 
 export function ChipEstado({ estado, className }: { estado: string; className?: string }) {
@@ -60,10 +72,10 @@ export function ChipEstado({ estado, className }: { estado: string; className?: 
 // Lo comparten el Monitor (donde se opera) y el panel Sistema (donde se observa), para
 // que el mismo nivel se llame y pinte IGUAL en ambos.
 const NIVEL_PRESUPUESTO: Record<string, Aspecto> = {
-  normal: { variant: "secondary", clase: VERDE, texto: "Normal" },
-  solo_manual: { variant: "secondary", clase: AMBAR, texto: "Solo manual" },
-  agotado: { variant: "destructive", texto: "Agotado" },
-  pausado: { variant: "destructive", texto: "Pausado" },
+  normal: { variant: "ok", texto: "Normal" },
+  solo_manual: { variant: "aviso", texto: "Solo manual" },
+  agotado: { variant: "error", texto: "Agotado" },
+  pausado: { variant: "error", texto: "Pausado" },
 };
 
 export function ChipNivelPresupuesto({ nivel, className }: { nivel: string; className?: string }) {

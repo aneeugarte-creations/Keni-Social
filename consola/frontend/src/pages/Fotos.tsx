@@ -33,6 +33,7 @@ import * as React from "react";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
+import { confirmar } from "@/components/comunes/confirmar";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { VisorFoto } from "@/components/media/biblioteca/VisorFoto";
 import { Badge } from "@/components/ui/badge";
@@ -684,8 +685,16 @@ export default function Fotos() {
         marca={marca}
         onGuardar={(foto) => guardar.mutate(foto)}
         onDescargar={(foto) => foto.id && api.descargarBiblioteca(foto.id)}
-        onBorrar={(foto) => {
-          if (window.confirm("¿Quitar esta foto de la biblioteca?")) borrar.mutate(foto);
+        onBorrar={async (foto) => {
+          if (
+            await confirmar({
+              titulo: "Quitar foto",
+              mensaje: "¿Quitar esta foto de la biblioteca?",
+              destructivo: true,
+              textoConfirmar: "Quitar",
+            })
+          )
+            borrar.mutate(foto);
         }}
         guardandoClave={guardar.isPending ? (guardar.variables as FotoVista)?.clave : null}
         borrandoClave={borrar.isPending ? (borrar.variables as FotoVista)?.clave : null}

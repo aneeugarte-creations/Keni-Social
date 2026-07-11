@@ -6,8 +6,10 @@ import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
   // Estilo de boton Geist (Vercel): rectangulo de esquina suave (rounded-md),
-  // peso medio, sin sombras. Monocromo: por defecto `outline` (gris); el boton
-  // principal se distingue por posicion, no por color.
+  // peso medio, sin sombras (sistema de diseño: docs/sistema-diseno.md).
+  // Jerarquía: `default` (relleno oscuro) es el PRIMARIO de vista/diálogo;
+  // `outline` (el defaultVariant) la acción normal; `ghost` Cancelar/terciarias;
+  // destructivas = ghost + `text-destructive` (no hay variante rellena roja).
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
@@ -17,18 +19,19 @@ const buttonVariants = cva(
         // oscuro), válido en claro y oscuro. Foco con anillo de marca.
         brand:
           "bg-keni text-white hover:bg-keni-500 focus-visible:ring-keni dark:hover:bg-keni-300",
-        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         outline:
           "border border-border bg-background hover:bg-accent hover:text-accent-foreground",
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-foreground underline-offset-4 hover:underline",
       },
+      // Altura estándar de la app: h-7 compacta (`default`). `sm` queda como alias de la
+      // misma altura para no tocar a sus consumidores; `icon` es el cuadrado de solo-icono.
       size: {
-        default: "h-9 px-4 py-2",
-        sm: "h-8 rounded-md px-3 text-xs",
-        lg: "h-10 rounded-md px-6",
-        icon: "h-9 w-9",
+        default: "h-7 px-2.5 text-xs",
+        sm: "h-7 rounded-md px-2.5 text-xs",
+        lg: "h-9 rounded-md px-4",
+        icon: "h-7 w-7",
       },
     },
     defaultVariants: {
