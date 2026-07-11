@@ -86,7 +86,9 @@ function SelectorCanal({
   onCambiar: (canal: CanalPieza) => void;
 }) {
   return (
-    <div className="inline-flex rounded-md border border-border bg-muted p-0.5">
+    // Mismo aspecto que ToggleGroup (pista con borde, activo sobre `muted`); a mano porque
+    // necesita semántica radio y una opción bloqueada con tooltip.
+    <div className="inline-flex rounded-md border p-0.5">
       {CANALES.map((opcion) => {
         const activo = canal === opcion.id;
         const bloqueado = opcion.id === "postproxy" && !postproxyDisponible;
@@ -99,7 +101,7 @@ function SelectorCanal({
             onClick={() => onCambiar(opcion.id)}
             className={cn(
               "rounded px-2 py-0.5 text-xs font-medium transition-colors",
-              activo ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+              activo ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
               bloqueado && "cursor-not-allowed opacity-50",
             )}
           >

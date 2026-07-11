@@ -16,6 +16,7 @@ import { confirmar } from "@/components/comunes/confirmar";
 import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Button } from "@/components/ui/button";
+import { ToggleGroup } from "@/components/ui/toggle-group";
 import { Tooltip } from "@/components/ui/tooltip";
 import { api, mensajeError } from "@/lib/api";
 import { estaVencida, horaUtcACdmx, hoyCDMX } from "@/lib/fecha";
@@ -589,26 +590,16 @@ export function VistaCalendario({
         )}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            {/* Control segmentado al estilo de la plataforma (mismo look que `TabsList`/
-                `TabsTrigger`): pista gris `bg-muted` con pastilla activa blanca + sombra,
-                en lugar de la pastilla negra (`bg-primary`) que rompía con el resto. */}
-            <div className="inline-flex h-9 items-center rounded-lg bg-muted p-1">
-              {(["semana", "mes"] as const).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setVista(v)}
-                  className={cn(
-                    "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium capitalize transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    vista === v || (v === "semana" && vista === "dia")
-                      ? "bg-background text-foreground shadow"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
+            {/* La vista «dia» cuelga del botón Semana (es un zoom dentro de la semana). */}
+            <ToggleGroup
+              valor={vista === "dia" ? "semana" : vista}
+              onCambio={setVista}
+              ariaLabel="Vista del calendario"
+              opciones={[
+                { valor: "semana", etiqueta: "Semana" },
+                { valor: "mes", etiqueta: "Mes" },
+              ]}
+            />
             <p className="text-sm font-medium capitalize">{etiqueta}</p>
           </div>
           <div className="flex items-center gap-1">

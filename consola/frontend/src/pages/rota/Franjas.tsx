@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ToggleGroup } from "@/components/ui/toggle-group";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
@@ -515,29 +516,16 @@ export function DialogFranjas({
         <DialogHeader>
           <DialogTitle>Franjas</DialogTitle>
         </DialogHeader>
-        {/* Segmentado (píldora blanca sobre pista gris), como el resto de toggles del producto. */}
-        <div className="inline-flex w-fit rounded-md border border-border bg-muted p-0.5">
-          {(
-            [
-              ["semana", "Esta semana"],
-              ["plantilla", "Plantilla por defecto"],
-            ] as const
-          ).map(([clave, etiqueta]) => (
-            <button
-              key={clave}
-              type="button"
-              onClick={() => setTab(clave)}
-              className={cn(
-                "rounded-[5px] px-3 py-1 text-sm transition-colors",
-                tab === clave
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {etiqueta}
-            </button>
-          ))}
-        </div>
+        <ToggleGroup
+          valor={tab}
+          onCambio={setTab}
+          ariaLabel="Ámbito de las franjas"
+          opciones={[
+            { valor: "semana", etiqueta: "Esta semana" },
+            { valor: "plantilla", etiqueta: "Plantilla por defecto" },
+          ]}
+          className="w-fit"
+        />
         {tab === "semana" ? (
           <CuerpoFranjasSemana lunes={lunes} onCerrar={onCerrar} onAsignar={onAsignar} />
         ) : (

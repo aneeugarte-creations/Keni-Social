@@ -98,7 +98,7 @@ describe("VistaCalendario — aviso sin fecha y píldora terminal", () => {
       vi.fn(),
       new Date(2026, 5, 15),
     );
-    fireEvent.click(screen.getByRole("button", { name: "semana" }));
+    fireEvent.click(screen.getByRole("button", { name: "Semana" }));
     // El arrastre vive en el contenedor de la píldora (un <div>), no en el botón del título.
     const pildora = screen.getByText("Gol").closest("[draggable]");
     expect(pildora).toHaveAttribute("draggable", "false");
@@ -110,7 +110,7 @@ describe("VistaCalendario — aviso sin fecha y píldora terminal", () => {
       vi.fn(),
       new Date(2026, 5, 15),
     );
-    fireEvent.click(screen.getByRole("button", { name: "semana" }));
+    fireEvent.click(screen.getByRole("button", { name: "Semana" }));
     // El arrastre vive en el contenedor de la píldora (un <div>), no en el botón del título.
     const pildora = screen.getByText("Gol").closest("[draggable]");
     expect(pildora).toHaveAttribute("draggable", "true");
@@ -122,7 +122,7 @@ describe("VistaCalendario — aviso sin fecha y píldora terminal", () => {
       vi.fn(),
       new Date(2026, 5, 15),
     );
-    fireEvent.click(screen.getByRole("button", { name: "semana" }));
+    fireEvent.click(screen.getByRole("button", { name: "Semana" }));
     // El título de la pieza es un botón: lo pulsa quien quiere VERLA en el feed. Reprogramar
     // (cambiar día/hora) vive ahora solo en el menú contextual, no en el clic sobre la hora.
     fireEvent.click(screen.getByText("Gol"));
@@ -145,7 +145,7 @@ describe("VistaCalendario — agrupar espejos (mismo post, misma hora, varias re
       vi.fn(),
       new Date(2026, 5, 15),
     );
-    fireEvent.click(screen.getByRole("button", { name: "semana" }));
+    fireEvent.click(screen.getByRole("button", { name: "Semana" }));
     // Un único título (no tres) para el post espejo, con su logo por cada red.
     expect(screen.getAllByText("Gol")).toHaveLength(1);
     expect(screen.getByLabelText("X")).toBeInTheDocument();
@@ -162,7 +162,7 @@ describe("VistaCalendario — agrupar espejos (mismo post, misma hora, varias re
       vi.fn(),
       new Date(2026, 5, 15),
     );
-    fireEvent.click(screen.getByRole("button", { name: "semana" }));
+    fireEvent.click(screen.getByRole("button", { name: "Semana" }));
     // Distinta hora → dos filas separadas.
     expect(screen.getAllByText("Gol")).toHaveLength(2);
   });
@@ -176,7 +176,7 @@ describe("VistaCalendario — agrupar espejos (mismo post, misma hora, varias re
       vi.fn(),
       new Date(2026, 5, 15),
     );
-    fireEvent.click(screen.getByRole("button", { name: "semana" }));
+    fireEvent.click(screen.getByRole("button", { name: "Semana" }));
     expect(screen.getByText("Gol")).toBeInTheDocument();
     expect(screen.getByText("Penal")).toBeInTheDocument();
   });

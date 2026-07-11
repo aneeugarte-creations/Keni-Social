@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { ToggleGroup } from "@/components/ui/toggle-group";
 import { usePropuestaParrilla } from "@/hooks/use-propuesta-parrilla";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFecha } from "@/lib/fecha";
@@ -336,31 +337,24 @@ export function DialogoCrearTarea({
           </div>
         ) : (
           <>
-            {/* Qué se añade. Segmentado claro (píldora blanca sobre pista gris), no bloque negro. */}
-            <div className="inline-flex rounded-md border border-border bg-muted p-0.5">
-              {(["evento", "tarea"] as Modo[]).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => {
-                    setModo(m);
-                    // Una propuesta es de UN tipo (evento o tarea): al cambiar de modo se
-                    // descarta el import a medias para no mezclar tipos en la revisión.
-                    setPropuestaId(null);
-                    setPegado("");
-                    setArchivo(null);
-                  }}
-                  className={cn(
-                    "rounded-[5px] px-3 py-1 text-sm transition-colors",
-                    modo === m
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {m === "evento" ? "Evento" : "Tarea"}
-                </button>
-              ))}
-            </div>
+            {/* Qué se añade. */}
+            <ToggleGroup
+              valor={modo}
+              ariaLabel="Tipo de entrada"
+              onCambio={(m) => {
+                setModo(m);
+                // Una propuesta es de UN tipo (evento o tarea): al cambiar de modo se
+                // descarta el import a medias para no mezclar tipos en la revisión.
+                setPropuestaId(null);
+                setPegado("");
+                setArchivo(null);
+              }}
+              opciones={[
+                { valor: "evento", etiqueta: "Evento" },
+                { valor: "tarea", etiqueta: "Tarea" },
+              ]}
+              className="w-fit"
+            />
 
             {/* La distinción que pidió el equipo: un evento aterriza en el calendario de
                 Turnos; una tarea no, solo vive en el tablero de Cobertura. */}

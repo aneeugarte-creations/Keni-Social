@@ -73,6 +73,11 @@ deuda a migrar. Vista previa viva con los componentes reales: `/preview-diseno.h
   Mensajes/Comentarios en Inbox, Horarios/Keywords en Plan) va como Tabs segmentadas
   (`ui/tabs` w-fit) o `ToggleGroup` en el cuerpo. Nunca dos tiras de pestañas en la
   barra, y nunca Tabs de cuerpo para lo que es navegación de sección en una página plana.
+- **Conmutador segmentado: un solo estilo, el de `ToggleGroup`/`TabsList`** — pista con
+  borde fino y el ítem activo resaltado en gris (`bg-muted text-foreground`), plano.
+  Prohibida la variante invertida (pista `bg-muted` con pastilla blanca + sombra): no se
+  reimplementa a mano salvo que haga falta otra semántica (radio/bloqueado), y entonces
+  con estas mismas clases.
 - **Tooltips: SIEMPRE `ui/tooltip`**; `title=` nativo prohibido (lento, sin estilo,
   inexistente en móvil/teclado). Migración gradual de los ~110 ficheros.
 
