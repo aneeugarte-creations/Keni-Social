@@ -4,8 +4,9 @@
  * Pinta la GANANCIA ACUMULADA de seguidores día a día: la línea arranca en 0 al inicio
  * del periodo y termina en el neto (`neto` / `neto_por_red`), de modo que la pendiente
  * cuenta exactamente lo que el título promete y el eje es legible (0 → +5.2 k) aunque el
- * stock sea de millones. En el desglose por red todas las series parten de 0 y son
- * comparables entre sí. Mismo criterio que la lámina de seguidores del informe. El stock
+ * stock sea de millones. La vista por defecto es el DESGLOSE por red (todas las series
+ * parten de 0 y son comparables entre sí); el switch "Por red" las pliega a una sola
+ * línea "Total". Mismo criterio que la lámina de seguidores del informe. El stock
  * ABSOLUTO no se pierde: arriba, un KPI por red con el total ACTUAL de seguidores (el
  * dato protagonista, como en Metricool) y el neto del periodo como insignia de
  * variación; debajo, la tabla con las cifras exactas. Si la fuente activa no expone
@@ -98,7 +99,9 @@ export function CrecimientoSeguidores({
 }) {
   const marca_ = marcaParam(marcaActual);
   const red = useVistaConfig((s) => s.red);
-  const [porRed, setPorRed] = React.useState(false);
+  // El desglose por red es la vista por defecto (todas las redes a la vista); el switch
+  // "Por red" permite plegarlas a una sola línea "Total".
+  const [porRed, setPorRed] = React.useState(true);
 
   const { data, isPending, isError } = useQuery({
     queryKey: ["metricas", "seguidores", rangoActual ?? "", marca_ ?? "todas", red ?? "todas"],

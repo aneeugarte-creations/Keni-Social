@@ -73,6 +73,14 @@ describe("CrecimientoSeguidores", () => {
     expect(tabla.getByText("10,500")).toBeInTheDocument();
   });
 
+  it("arranca en el desglose por red (switch encendido): todas las redes a la vista", async () => {
+    vi.spyOn(api, "metricasSeguidores").mockResolvedValue(RESP);
+    renderConProviders(<CrecimientoSeguidores marcaActual="__todas__" rangoActual="semana" />);
+
+    await screen.findByText("Seguidores totales");
+    expect(screen.getByRole("switch", { name: "Desglosar por red" })).toBeChecked();
+  });
+
   it("ofrece una alternativa textual del chart (role=img con el neto del periodo)", async () => {
     vi.spyOn(api, "metricasSeguidores").mockResolvedValue(RESP);
     renderConProviders(<CrecimientoSeguidores marcaActual="__todas__" rangoActual="semana" />);
