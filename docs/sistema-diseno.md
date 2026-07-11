@@ -66,10 +66,13 @@ deuda a migrar. Vista previa viva con los componentes reales: `/preview-diseno.h
 - Cabecera de página SIEMPRE portalizada a la barra superior (`TituloPagina` /
   `EncabezadoSeccion`); los detalles usan `TituloPagina onAtras`. Ninguna página pinta
   `<h1>` ni botón "Volver" en el cuerpo.
-- **Pestañas de sección de página: SIEMPRE en la barra superior** (`PestanasSeccion` /
-  `EncabezadoSeccion`, subrayado). Migran Inbox, Fuentes y ProgramaPlan. Las Tabs
-  segmentadas (`ui/tabs` w-fit) y `ToggleGroup` quedan solo para conmutar vistas DENTRO
-  del contenido.
+- **Pestañas: jerarquía de dos niveles por FORMA.** Nivel 1 — la navegación de
+  sección/ruta vive en la barra superior con subrayado: `PestanasSeccion` en páginas
+  planas, las pestañas del hub (`pestanasDeRuta`) en hojas de hub. Nivel 2 — la segunda
+  dimensión DENTRO de una hoja (p. ej. Externas/Descubrimiento en Fuentes,
+  Mensajes/Comentarios en Inbox, Horarios/Keywords en Plan) va como Tabs segmentadas
+  (`ui/tabs` w-fit) o `ToggleGroup` en el cuerpo. Nunca dos tiras de pestañas en la
+  barra, y nunca Tabs de cuerpo para lo que es navegación de sección en una página plana.
 - **Tooltips: SIEMPRE `ui/tooltip`**; `title=` nativo prohibido (lento, sin estilo,
   inexistente en móvil/teclado). Migración gradual de los ~110 ficheros.
 
