@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { Aviso } from "@/components/comunes/Aviso";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, mensajeError } from "@/lib/api";
 import {
@@ -225,15 +226,16 @@ function EditorSubtitulosComposicion({
               <li key={s.id} className="flex gap-2">
                 {/* El timestamp es clicable cuando el padre proporciona onSeek (busca en el player). */}
                 {onSeek ? (
-                  <button
-                    type="button"
-                    onClick={() => onSeek(s.inicio)}
-                    title={`Ir a ${formatearTiempo(s.inicio)}`}
-                    aria-label={`Ir al segundo ${formatearTiempo(s.inicio)}`}
-                    className="w-20 shrink-0 cursor-pointer pt-1.5 text-left text-[11px] tabular-nums text-primary underline-offset-2 hover:underline"
-                  >
-                    {formatearTiempo(s.inicio)}
-                  </button>
+                  <Tooltip label={`Ir a ${formatearTiempo(s.inicio)}`}>
+                    <button
+                      type="button"
+                      onClick={() => onSeek(s.inicio)}
+                      aria-label={`Ir al segundo ${formatearTiempo(s.inicio)}`}
+                      className="w-20 shrink-0 cursor-pointer pt-1.5 text-left text-[11px] tabular-nums text-primary underline-offset-2 hover:underline"
+                    >
+                      {formatearTiempo(s.inicio)}
+                    </button>
+                  </Tooltip>
                 ) : (
                   <span className="w-20 shrink-0 pt-1.5 text-[11px] tabular-nums text-muted-foreground">
                     {formatearTiempo(s.inicio)}

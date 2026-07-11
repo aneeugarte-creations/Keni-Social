@@ -17,7 +17,9 @@ describe("CabeceraPlaca · botón de descarga", () => {
         onAbrirGaleria={() => {}}
       />,
     );
-    expect(screen.queryByTitle("Descargar imagen para postear")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Descargar imagen para postear" }),
+    ).toBeNull();
   });
 
   it("muestra el botón y lo invoca al pulsarlo cuando hay `onDescargar`", () => {
@@ -30,7 +32,7 @@ describe("CabeceraPlaca · botón de descarga", () => {
         onDescargar={onDescargar}
       />,
     );
-    fireEvent.click(screen.getByTitle("Descargar imagen para postear"));
+    fireEvent.click(screen.getByRole("button", { name: "Descargar imagen para postear" }));
     expect(onDescargar).toHaveBeenCalledTimes(1);
   });
 });
@@ -47,7 +49,9 @@ describe("CabeceraPlaca · modo plantilla", () => {
       <CabeceraPlaca sinPlantilla={false} onAlternarSinPlantilla={onAlternar} />,
     );
     expect(screen.queryByText("· solo foto")).toBeNull();
-    fireEvent.click(screen.getByTitle("Con plantilla. Toca para publicar solo la foto"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Con plantilla. Toca para publicar solo la foto" }),
+    );
     expect(onAlternar).toHaveBeenCalledTimes(1);
   });
 
@@ -57,7 +61,9 @@ describe("CabeceraPlaca · modo plantilla", () => {
       <CabeceraPlaca sinPlantilla={true} onAlternarSinPlantilla={onAlternar} />,
     );
     expect(screen.getByText("· solo foto")).toBeInTheDocument();
-    const toggle = screen.getByTitle("Solo foto. Toca para poner la plantilla");
+    const toggle = screen.getByRole("button", {
+      name: "Solo foto. Toca para poner la plantilla",
+    });
     expect(toggle).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(toggle);
     expect(onAlternar).toHaveBeenCalledTimes(1);

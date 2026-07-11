@@ -23,6 +23,7 @@ import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup } from "@/components/ui/toggle-group";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
@@ -181,15 +182,16 @@ export function VistaMensualTurnos({
           {/* «Imprimir»: solo el icono, botón-icono outline (el icon-button de la app). Gestión lo
               pliega en su menú ⋯ (`ocultarImprimir`); «Horario» lo deja como acción suelta. */}
           {!ocultarImprimir && (
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={imprimirMes}
-              title="Imprimir o guardar como PDF"
-              aria-label="Imprimir / PDF"
-            >
-              <Printer className="h-4 w-4" />
-            </Button>
+            <Tooltip label="Imprimir o guardar como PDF">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={imprimirMes}
+                aria-label="Imprimir / PDF"
+              >
+                <Printer className="h-4 w-4" />
+              </Button>
+            </Tooltip>
           )}
           {accionesDerecha}
         </div>
@@ -499,20 +501,24 @@ function IndicadorCobertura({
 
   if (nEventos > 0 && onAbrir) {
     return (
-      <button
-        type="button"
-        onClick={() => onAbrir(fecha)}
-        aria-label={`${formatearFechaCorta(fecha) || fecha}: ${nEventos} ${
-          nEventos === 1 ? "evento" : "eventos"
-        }${nSinCubrir > 0 ? `, ${nSinCubrir} sin cubrir` : ""}. Ver el resumen del día`}
-        title={`Ver el resumen del día (${nEventos} eventos${nSinCubrir > 0 ? `, ${nSinCubrir} sin cubrir` : ""})`}
-        className={cn(
-          clases,
-          "text-left text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring print:hover:bg-card",
-        )}
+      <Tooltip
+        className="w-full"
+        label={`Ver el resumen del día (${nEventos} eventos${nSinCubrir > 0 ? `, ${nSinCubrir} sin cubrir` : ""})`}
       >
-        {contenido}
-      </button>
+        <button
+          type="button"
+          onClick={() => onAbrir(fecha)}
+          aria-label={`${formatearFechaCorta(fecha) || fecha}: ${nEventos} ${
+            nEventos === 1 ? "evento" : "eventos"
+          }${nSinCubrir > 0 ? `, ${nSinCubrir} sin cubrir` : ""}. Ver el resumen del día`}
+          className={cn(
+            clases,
+            "text-left text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring print:hover:bg-card",
+          )}
+        >
+          {contenido}
+        </button>
+      </Tooltip>
     );
   }
   return <div className={cn(clases, "text-muted-foreground")}>{contenido}</div>;

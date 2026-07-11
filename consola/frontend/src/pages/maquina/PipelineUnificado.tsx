@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import { INTERVALO_VIVO_MS } from "@/lib/refresco";
 import { cn } from "@/lib/utils";
@@ -441,18 +442,19 @@ export function PipelineUnificado({
     }
     const tuning =
       esAdmin && etapa.ajustes && etapa.ajustes.length > 0 ? (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setAjustesEtapa(etapa.nombre);
-          }}
-          aria-label={`Ajustes de ${etapa.nombre}`}
-          title={`Ajustes de ${etapa.nombre}`}
-          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <Settings2 className="h-4 w-4" aria-hidden="true" />
-        </button>
+        <Tooltip label={`Ajustes de ${etapa.nombre}`}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setAjustesEtapa(etapa.nombre);
+            }}
+            aria-label={`Ajustes de ${etapa.nombre}`}
+            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Settings2 className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </Tooltip>
       ) : null;
     if (!conteos && !control && !tuning && !espera?.n) return null;
     return (

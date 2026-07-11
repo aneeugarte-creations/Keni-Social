@@ -12,6 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tooltip } from "@/components/ui/tooltip";
 import { SesionContexto } from "@/hooks/sesion-contexto";
 import { useRelojVivo } from "@/hooks/use-reloj-vivo";
 import { api, mensajeError } from "@/lib/api";
@@ -121,21 +122,22 @@ function AnadirRapido({ marca }: { marca: string }) {
         className="h-7 w-[5.5rem] shrink-0 border-0 bg-transparent px-1 text-xs tabular-nums text-muted-foreground shadow-none focus-visible:ring-0"
       />
       {/* «Urgente» plegado en un botón-icono fantasma; activo, teñido en amarillo sutil. */}
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className={cn(
-          "h-7 w-7 shrink-0 text-muted-foreground",
-          urgente && "bg-yellow-50 text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-300",
-        )}
-        aria-label="Urgente"
-        aria-pressed={urgente}
-        title={urgente ? "Nace como urgente (salta al tope)" : "Marcar como urgente"}
-        onClick={() => setUrgente((v) => !v)}
-      >
-        <Zap className="h-4 w-4" />
-      </Button>
+      <Tooltip label={urgente ? "Nace como urgente (salta al tope)" : "Marcar como urgente"}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={cn(
+            "h-7 w-7 shrink-0 text-muted-foreground",
+            urgente && "bg-yellow-50 text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-300",
+          )}
+          aria-label="Urgente"
+          aria-pressed={urgente}
+          onClick={() => setUrgente((v) => !v)}
+        >
+          <Zap className="h-4 w-4" />
+        </Button>
+      </Tooltip>
       <Button
         type="submit"
         variant="outline"
@@ -265,23 +267,24 @@ function AccionUrgente({ item }: { item: Item }) {
   });
 
   return (
-    <Button
-      type="button"
-      variant="outline"
-      size="icon"
-      className={cn(
-        "h-7 w-7 shrink-0",
-        esUrgente &&
-          "border-yellow-500/50 bg-yellow-50 text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-300",
-      )}
-      aria-label={esUrgente ? "Quitar urgente" : "Marcar urgente"}
-      aria-pressed={esUrgente}
-      title={esUrgente ? "Quitar urgente" : "Marcar urgente"}
-      disabled={escalar.isPending}
-      onClick={() => escalar.mutate()}
-    >
-      <Zap className="h-3.5 w-3.5" />
-    </Button>
+    <Tooltip label={esUrgente ? "Quitar urgente" : "Marcar urgente"}>
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className={cn(
+          "h-7 w-7 shrink-0",
+          esUrgente &&
+            "border-yellow-500/50 bg-yellow-50 text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-300",
+        )}
+        aria-label={esUrgente ? "Quitar urgente" : "Marcar urgente"}
+        aria-pressed={esUrgente}
+        disabled={escalar.isPending}
+        onClick={() => escalar.mutate()}
+      >
+        <Zap className="h-3.5 w-3.5" />
+      </Button>
+    </Tooltip>
   );
 }
 
@@ -440,16 +443,17 @@ function AccionesItem({
         </Button>
       )}
       <MenuContextual items={itemsMenu} disparador="click">
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          className="shrink-0"
-          aria-label="Más acciones"
-          title="Más acciones"
-        >
-          <MoreVertical className="h-3.5 w-3.5" />
-        </Button>
+        <Tooltip label="Más acciones">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="shrink-0"
+            aria-label="Más acciones"
+          >
+            <MoreVertical className="h-3.5 w-3.5" />
+          </Button>
+        </Tooltip>
       </MenuContextual>
       {editarAbierto && evento && (
         <DialogEditarEvento

@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { EditorPlacaInline } from "@/components/media/EditorPlacaInline";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { Tooltip } from "@/components/ui/tooltip";
 import { GaleriaPlantillas } from "@/editor/GaleriaPlantillas";
 import type { Documento } from "@/editor/documento";
 import { api, mensajeError, urlMedia, type PlantillaDiseno } from "@/lib/api";
@@ -373,23 +374,24 @@ export const EditorCarruselLateral = React.forwardRef<
           </Button>
           {/* Descarga el carrusel entero (un archivo por slide) para postear a mano donde
               Metricool no llega (p. ej. X). */}
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="gap-1 px-2"
-            onClick={() => void descargarCarrusel()}
-            disabled={disabled || descargando}
-            aria-label="Descargar carrusel"
-            title="Descargar carrusel para postear"
-          >
-            {descargando ? (
-              <Spinner className="h-4 w-4" />
-            ) : (
-              <Download className="h-4 w-4" />
-            )}
-            Carrusel
-          </Button>
+          <Tooltip label="Descargar carrusel para postear">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="gap-1 px-2"
+              onClick={() => void descargarCarrusel()}
+              disabled={disabled || descargando}
+              aria-label="Descargar carrusel"
+            >
+              {descargando ? (
+                <Spinner className="h-4 w-4" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              Carrusel
+            </Button>
+          </Tooltip>
         </div>
       </div>
 

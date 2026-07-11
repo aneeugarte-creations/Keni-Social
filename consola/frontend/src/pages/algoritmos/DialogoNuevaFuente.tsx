@@ -68,7 +68,7 @@ export function DialogoNuevaFuente({
         <DialogHeader>
           <DialogTitle>Nueva fuente de algoritmo</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="space-y-4">
           <Campo etiqueta="Nombre" htmlFor="alg-nombre" error={intentado ? errNombre : null}>
             <Input
               id="alg-nombre"

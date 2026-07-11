@@ -304,7 +304,7 @@ function TarjetaPieza({
                 />
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <EtiquetaRed red={pieza.red} nombre={pieza.red_nombre} />
               <span>· {pieza.marca_nombre}</span>
               <Autor nombre={pieza.autor_nombre} />

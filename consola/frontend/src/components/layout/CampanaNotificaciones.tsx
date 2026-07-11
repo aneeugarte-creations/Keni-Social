@@ -26,6 +26,7 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import {
   claveContadorNotificaciones,
@@ -160,26 +161,27 @@ export function CampanaNotificaciones() {
       {/* Cajón ABIERTO marcado con el mismo lenguaje que «Más»/«Adaptar»: píldora
           `--control-activo` (blanca con glifo naranja en la barra del editor; fuera de
           ella equivale al accent estándar). En reposo, ghost: hereda el color del scope. */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className={cn(
-          "relative h-8 w-8",
-          abierto &&
-            "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]",
-        )}
-        onClick={alternar}
-        aria-label={noLeidas > 0 ? `Notificaciones (${noLeidas} sin leer)` : "Notificaciones"}
-        aria-expanded={abierto}
-        title="Notificaciones"
-      >
-        <Bell className="h-4 w-4" />
-        {noLeidas > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-none text-white tabular-nums">
-            {noLeidas > 99 ? "99+" : noLeidas}
-          </span>
-        )}
-      </Button>
+      <Tooltip label="Notificaciones">
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn(
+            "relative h-8 w-8",
+            abierto &&
+              "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]",
+          )}
+          onClick={alternar}
+          aria-label={noLeidas > 0 ? `Notificaciones (${noLeidas} sin leer)` : "Notificaciones"}
+          aria-expanded={abierto}
+        >
+          <Bell className="h-4 w-4" />
+          {noLeidas > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-none text-white tabular-nums">
+              {noLeidas > 99 ? "99+" : noLeidas}
+            </span>
+          )}
+        </Button>
+      </Tooltip>
 
       {abierto && (
         <div

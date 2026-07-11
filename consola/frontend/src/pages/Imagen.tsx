@@ -33,6 +33,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tooltip } from "@/components/ui/tooltip";
 import { EditorDocumento } from "@/editor/EditorDocumento";
 import { PublicacionPlantillas } from "@/editor/GaleriaPlantillas";
 import { DialogoFotoMuestra } from "@/editor/DialogoFotoMuestra";
@@ -914,30 +915,34 @@ export default function Imagen() {
                     className="max-w-[200px] rounded border border-input bg-background px-1 py-0.5 text-sm"
                   />
                 ) : (
-                  <button
-                    onClick={() => setActiva(t.id)}
-                    onDoubleClick={() => setEditTab({ id: t.id, valor: t.nombre || "" })}
-                    title="Doble-clic para renombrar"
-                    className="max-w-[200px] truncate"
-                  >
-                    {t.nombre || marca}
-                    {dirty[t.id] && <span className="ml-1 text-red-500">•</span>}
-                  </button>
+                  <Tooltip label="Doble-clic para renombrar">
+                    <button
+                      onClick={() => setActiva(t.id)}
+                      onDoubleClick={() => setEditTab({ id: t.id, valor: t.nombre || "" })}
+                      className="max-w-[200px] truncate"
+                    >
+                      {t.nombre || marca}
+                      {dirty[t.id] && <span className="ml-1 text-red-500">•</span>}
+                    </button>
+                  </Tooltip>
                 )}
-                <button onClick={() => void cerrarPestana(t.id)} className="opacity-60 hover:opacity-100" title="Cerrar">
-                  <X className="h-3.5 w-3.5" />
-                </button>
+                <Tooltip label="Cerrar">
+                  <button onClick={() => void cerrarPestana(t.id)} className="opacity-60 hover:opacity-100">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </Tooltip>
               </div>
             );
           })}
-          <button
-            onClick={() => abrirPestana()}
-            disabled={!marcaInicial}
-            title="Nuevo lienzo en blanco"
-            className="ml-1 shrink-0 rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
+          <Tooltip label="Nuevo lienzo en blanco" className="ml-1 shrink-0">
+            <button
+              onClick={() => abrirPestana()}
+              disabled={!marcaInicial}
+              className="shrink-0 rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </Tooltip>
         </div>
       )}
 
@@ -971,13 +976,8 @@ export default function Imagen() {
                 >
                   {guardando ? "Guardando…" : sucia ? "Sin guardar" : "Guardado"}
                 </span>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8"
-                  disabled={guardando}
-                  onClick={() => guardar.mutate()}
-                  title={
+                <Tooltip
+                  label={
                     pestanaActiva.plantillaId
                       ? sucia
                         ? "Guardar la plantilla (hay cambios sin guardar)"
@@ -985,24 +985,33 @@ export default function Imagen() {
                       : "Guardar como plantilla…"
                   }
                 >
-                  <Save className="h-4 w-4" />
-                </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8"
+                    disabled={guardando}
+                    onClick={() => guardar.mutate()}
+                  >
+                    <Save className="h-4 w-4" />
+                  </Button>
+                </Tooltip>
               </>
             }
             accionesFin={
               pestanaActiva.contenido ? (
-                <Button
-                  size="sm"
-                  // Misma caja que las píldoras etiquetadas de la barra (marca, Adaptar):
-                  // h-8 px-2.5 text-sm, gap interno icono-texto 1.5 único (sin mr-* en el icono).
-                  className="h-8 gap-1.5 px-2.5 text-sm"
-                  disabled={guardarEnPieza.isPending}
-                  onClick={() => guardarEnPieza.mutate()}
-                  title="Guardar en la publicación (render + nueva versión)"
-                >
-                  <FileUp className="h-4 w-4" />
-                  <span className="hidden sm:inline">Guardar en pieza</span>
-                </Button>
+                <Tooltip label="Guardar en la publicación (render + nueva versión)">
+                  <Button
+                    size="sm"
+                    // Misma caja que las píldoras etiquetadas de la barra (marca, Adaptar):
+                    // h-8 px-2.5 text-sm, gap interno icono-texto 1.5 único (sin mr-* en el icono).
+                    className="h-8 gap-1.5 px-2.5 text-sm"
+                    disabled={guardarEnPieza.isPending}
+                    onClick={() => guardarEnPieza.mutate()}
+                  >
+                    <FileUp className="h-4 w-4" />
+                    <span className="hidden sm:inline">Guardar en pieza</span>
+                  </Button>
+                </Tooltip>
               ) : undefined
             }
             menuExtra={

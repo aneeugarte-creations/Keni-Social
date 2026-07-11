@@ -11,6 +11,7 @@
 import { Eye, EyeOff, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Tooltip } from "@/components/ui/tooltip";
 
 import { etiquetaSeccion } from "./seccionesMeta";
 import { useVistaConfig } from "./vistaConfig";
@@ -19,17 +20,18 @@ import { useVistaConfig } from "./vistaConfig";
 export function BotonOcultar({ id }: { id: string }) {
   const setSeccionVisible = useVistaConfig((s) => s.setSeccionVisible);
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      className="text-muted-foreground hover:text-foreground"
-      aria-label="Ocultar sección"
-      title="Ocultar"
-      onClick={() => setSeccionVisible(id, false)}
-    >
-      <EyeOff className="h-4 w-4" />
-    </Button>
+    <Tooltip label="Ocultar">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="text-muted-foreground hover:text-foreground"
+        aria-label="Ocultar sección"
+        onClick={() => setSeccionVisible(id, false)}
+      >
+        <EyeOff className="h-4 w-4" />
+      </Button>
+    </Tooltip>
   );
 }
 

@@ -23,6 +23,7 @@ import { toast } from "sonner";
 
 import { AccionesPaginaFin, TituloPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip } from "@/components/ui/tooltip";
 import { EditorSubtitulos } from "@/components/video/EditorSubtitulos";
 import { GestorComposiciones } from "@/components/video/GestorComposiciones";
 // El editor de capas (Konva) se carga PEREZOSAMENTE: pesa y solo se necesita en la sección
@@ -601,34 +602,38 @@ export default function Video() {
               un solo sitio para ese dato, igual que en Imagen. */}
 
           {/* Deshacer / Rehacer: historial de cambios del documento. */}
-          <button
-            type="button"
-            onClick={() => {
-              const anterior = historial.deshacer();
-              if (anterior) aplicarHistorial(anterior);
-            }}
-            disabled={!historial.puedeDeshacer}
-            title="Deshacer (Cmd+Z)"
-            aria-label="Deshacer"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs font-medium text-foreground hover:bg-accent/60 disabled:opacity-40"
-          >
-            <Undo2 className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const siguiente = historial.rehacer();
-              if (siguiente) aplicarHistorial(siguiente);
-            }}
-            disabled={!historial.puedeRehacer}
-            title="Rehacer (Cmd+Shift+Z)"
-            aria-label="Rehacer"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs font-medium text-foreground hover:bg-accent/60 disabled:opacity-40"
-          >
-            <Redo2 className="h-3.5 w-3.5" />
-          </button>
+          <Tooltip label="Deshacer (Cmd+Z)">
+            <button
+              type="button"
+              onClick={() => {
+                const anterior = historial.deshacer();
+                if (anterior) aplicarHistorial(anterior);
+              }}
+              disabled={!historial.puedeDeshacer}
+              aria-label="Deshacer"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs font-medium text-foreground hover:bg-accent/60 disabled:opacity-40"
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+            </button>
+          </Tooltip>
+          <Tooltip label="Rehacer (Cmd+Shift+Z)">
+            <button
+              type="button"
+              onClick={() => {
+                const siguiente = historial.rehacer();
+                if (siguiente) aplicarHistorial(siguiente);
+              }}
+              disabled={!historial.puedeRehacer}
+              aria-label="Rehacer"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs font-medium text-foreground hover:bg-accent/60 disabled:opacity-40"
+            >
+              <Redo2 className="h-3.5 w-3.5" />
+            </button>
+          </Tooltip>
 
           {/* Acciones: guardar borrador (si aún no existe) o marcar listo/volver a borrador. */}
+          {/* Estos tres llevan title= nativo a propósito: son botones CON texto y el Tooltip
+              clonaría su label como aria-label, pisando el nombre accesible visible. */}
           {!composicionId ? (
             <button
               type="button"
@@ -768,14 +773,15 @@ export default function Video() {
               {panelAbierto ? (
               <aside className="flex w-[300px] shrink-0 flex-col overflow-hidden border-r border-border">
                 <div className="flex shrink-0 items-center justify-end border-b border-border/60 px-1.5 py-1">
-                  <button
-                    type="button"
-                    onClick={() => setPanelAbierto(false)}
-                    title="Ocultar el panel"
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-                  >
-                    <PanelLeftClose className="h-4 w-4" />
-                  </button>
+                  <Tooltip label="Ocultar el panel">
+                    <button
+                      type="button"
+                      onClick={() => setPanelAbierto(false)}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                    >
+                      <PanelLeftClose className="h-4 w-4" />
+                    </button>
+                  </Tooltip>
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto p-4">
                 {seccion === "base" && (
@@ -833,14 +839,15 @@ export default function Video() {
                 </div>
               </aside>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => setPanelAbierto(true)}
-                  title="Mostrar el panel"
-                  className="flex w-8 shrink-0 items-center justify-center border-r border-border text-muted-foreground hover:bg-accent/50"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
+                <Tooltip label="Mostrar el panel" className="shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setPanelAbierto(true)}
+                    className="flex w-8 shrink-0 items-center justify-center border-r border-border text-muted-foreground hover:bg-accent/50"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </Tooltip>
               )}
 
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -892,14 +899,15 @@ export default function Video() {
                     <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                       Línea de tiempo
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setTimelineAbierto(false)}
-                      title="Ocultar la línea de tiempo"
-                      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-                    >
-                      <ChevronDown className="h-4 w-4" />
-                    </button>
+                    <Tooltip label="Ocultar la línea de tiempo">
+                      <button
+                        type="button"
+                        onClick={() => setTimelineAbierto(false)}
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                      </button>
+                    </Tooltip>
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-2">
                     <TimelineMultipista
@@ -927,14 +935,15 @@ export default function Video() {
                   </div>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => setTimelineAbierto(true)}
-                  title="Mostrar la línea de tiempo"
-                  className="flex h-8 shrink-0 items-center gap-1.5 border-t border-border bg-background px-3 text-xs font-medium text-muted-foreground hover:bg-accent/50"
-                >
-                  <ChevronUp className="h-4 w-4" /> Mostrar la línea de tiempo
-                </button>
+                <Tooltip label="Mostrar la línea de tiempo" className="w-full">
+                  <button
+                    type="button"
+                    onClick={() => setTimelineAbierto(true)}
+                    className="flex h-8 w-full shrink-0 items-center gap-1.5 border-t border-border bg-background px-3 text-xs font-medium text-muted-foreground hover:bg-accent/50"
+                  >
+                    <ChevronUp className="h-4 w-4" /> Mostrar la línea de tiempo
+                  </button>
+                </Tooltip>
               ))}
           </div>
           )}

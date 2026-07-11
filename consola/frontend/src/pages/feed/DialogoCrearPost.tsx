@@ -281,7 +281,7 @@ export function DialogoCrearPost({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
+        <div className="space-y-4">
           {/* Selector de marca SOLO cuando no hay una marca concreta activa (vista "Todas"):
               con una marca activa, el post va a esa marca y no se pregunta de nuevo. */}
           {marcaFija ? null : (

@@ -16,6 +16,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { Tooltip } from "@/components/ui/tooltip";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { CLAVE_TAREAS } from "@/pages/tareas/claves";
@@ -135,24 +136,25 @@ export function PropuestasCalendario({ propuestas }: { propuestas: Publicacion[]
 
   return (
     <div ref={contenedorRef} className="relative">
-      <Button
-        variant="ghost"
-        size="icon"
-        className={cn(
-          "relative h-8 w-8",
-          abierto &&
-            "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]",
-        )}
-        onClick={() => setAbierto((v) => !v)}
-        aria-label={`Propuestas de calendario (${n})`}
-        aria-expanded={abierto}
-        title="Tareas propuestas para el calendario"
-      >
-        <Bell className="h-4 w-4" />
-        <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-none text-white tabular-nums">
-          {n > 99 ? "99+" : n}
-        </span>
-      </Button>
+      <Tooltip label="Tareas propuestas para el calendario">
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn(
+            "relative h-8 w-8",
+            abierto &&
+              "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]",
+          )}
+          onClick={() => setAbierto((v) => !v)}
+          aria-label={`Propuestas de calendario (${n})`}
+          aria-expanded={abierto}
+        >
+          <Bell className="h-4 w-4" />
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-none text-white tabular-nums">
+            {n > 99 ? "99+" : n}
+          </span>
+        </Button>
+      </Tooltip>
 
       {abierto && (
         <div

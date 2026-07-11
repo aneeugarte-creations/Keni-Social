@@ -16,6 +16,7 @@ import {
 import { createPortal } from "react-dom";
 
 import { Label } from "@/components/ui/label";
+import { Tooltip } from "@/components/ui/tooltip";
 import type { PlantillaDiseno } from "@/lib/api";
 import {
   CATEGORIA_GENERAL,
@@ -478,6 +479,8 @@ function SelectorCategoria({
 
   return (
     <>
+      {/* title= nativo a propósito: el trigger muestra texto (el badge de categoría) y el
+          Tooltip clonaría su label como aria-label, pisando el nombre accesible visible. */}
       <button
         ref={refTrigger}
         type="button"
@@ -543,15 +546,16 @@ function SelectorCategoria({
                     placeholder="Nombre de la etiqueta…"
                     className="h-8 min-w-0 flex-1 rounded-sm border border-input bg-background px-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   />
-                  <button
-                    type="button"
-                    onClick={confirmarCrear}
-                    disabled={!nuevaEtiqueta.trim()}
-                    title="Crear etiqueta"
-                    className="grid h-8 w-8 shrink-0 place-items-center rounded-sm border border-input bg-background text-foreground hover:bg-accent disabled:opacity-40"
-                  >
-                    <Check className="h-4 w-4" />
-                  </button>
+                  <Tooltip label="Crear etiqueta">
+                    <button
+                      type="button"
+                      onClick={confirmarCrear}
+                      disabled={!nuevaEtiqueta.trim()}
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded-sm border border-input bg-background text-foreground hover:bg-accent disabled:opacity-40"
+                    >
+                      <Check className="h-4 w-4" />
+                    </button>
+                  </Tooltip>
                 </div>
               ) : (
                 <button
@@ -594,22 +598,24 @@ function SelectorCategoria({
                         }}
                         className="h-7 min-w-0 flex-1 rounded-sm border border-primary bg-background px-2 text-sm outline-none"
                       />
-                      <button
-                        type="button"
-                        onClick={commitRenEt}
-                        title="Guardar nombre"
-                        className="grid h-7 w-7 shrink-0 place-items-center rounded-sm border border-input bg-background hover:bg-accent"
-                      >
-                        <Check className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setRenEt(null)}
-                        title="Cancelar"
-                        className="grid h-7 w-7 shrink-0 place-items-center rounded-sm border border-input bg-background hover:bg-accent"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
+                      <Tooltip label="Guardar nombre">
+                        <button
+                          type="button"
+                          onClick={commitRenEt}
+                          className="grid h-7 w-7 shrink-0 place-items-center rounded-sm border border-input bg-background hover:bg-accent"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                      </Tooltip>
+                      <Tooltip label="Cancelar">
+                        <button
+                          type="button"
+                          onClick={() => setRenEt(null)}
+                          className="grid h-7 w-7 shrink-0 place-items-center rounded-sm border border-input bg-background hover:bg-accent"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </Tooltip>
                     </div>
                   );
                 }
@@ -634,25 +640,27 @@ function SelectorCategoria({
                     {gestionEtiquetas && (
                       // Acciones de la etiqueta (renombrar/borrar el rótulo): visibles al hover/foco.
                       <span className="flex shrink-0 items-center gap-0.5 pr-1 opacity-0 focus-within:opacity-100 group-hover/opt:opacity-100">
-                        <button
-                          type="button"
-                          title="Renombrar etiqueta"
-                          aria-label={`Renombrar ${c.etiqueta}`}
-                          onClick={(e) => { e.stopPropagation(); setRenEt({ slug: c.slug, valor: c.etiqueta }); }}
-                          className="grid h-6 w-6 place-items-center rounded-sm text-muted-foreground hover:bg-background hover:text-foreground"
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </button>
-                        {onBorrarEtiqueta && c.slug !== CATEGORIA_GENERAL && (
+                        <Tooltip label="Renombrar etiqueta">
                           <button
                             type="button"
-                            title="Borrar etiqueta"
-                            aria-label={`Borrar ${c.etiqueta}`}
-                            onClick={(e) => { e.stopPropagation(); onBorrarEtiqueta(c.slug); }}
-                            className="grid h-6 w-6 place-items-center rounded-sm text-muted-foreground hover:bg-background hover:text-destructive"
+                            aria-label={`Renombrar ${c.etiqueta}`}
+                            onClick={(e) => { e.stopPropagation(); setRenEt({ slug: c.slug, valor: c.etiqueta }); }}
+                            className="grid h-6 w-6 place-items-center rounded-sm text-muted-foreground hover:bg-background hover:text-foreground"
                           >
-                            <Trash2 className="h-3 w-3" />
+                            <Pencil className="h-3 w-3" />
                           </button>
+                        </Tooltip>
+                        {onBorrarEtiqueta && c.slug !== CATEGORIA_GENERAL && (
+                          <Tooltip label="Borrar etiqueta">
+                            <button
+                              type="button"
+                              aria-label={`Borrar ${c.etiqueta}`}
+                              onClick={(e) => { e.stopPropagation(); onBorrarEtiqueta(c.slug); }}
+                              className="grid h-6 w-6 place-items-center rounded-sm text-muted-foreground hover:bg-background hover:text-destructive"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </Tooltip>
                         )}
                       </span>
                     )}

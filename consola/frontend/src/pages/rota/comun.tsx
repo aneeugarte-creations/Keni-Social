@@ -31,6 +31,7 @@ import {
 } from "@/components/comunes/MenuContextual";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { Tooltip } from "@/components/ui/tooltip";
 import { api, mensajeError } from "@/lib/api";
 import { ZONA_CDMX } from "@/lib/fecha";
 import {
@@ -270,19 +271,20 @@ export function AyudaLeyenda() {
 
   return (
     <div ref={ref} className="relative inline-flex">
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 text-muted-foreground"
-        onClick={() => setAbierto((v) => !v)}
-        aria-haspopup="dialog"
-        aria-expanded={abierto}
-        aria-label="Leyenda del calendario"
-        title="Leyenda del calendario"
-      >
-        <HelpCircle className="h-4 w-4" />
-      </Button>
+      <Tooltip label="Leyenda del calendario">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground"
+          onClick={() => setAbierto((v) => !v)}
+          aria-haspopup="dialog"
+          aria-expanded={abierto}
+          aria-label="Leyenda del calendario"
+        >
+          <HelpCircle className="h-4 w-4" />
+        </Button>
+      </Tooltip>
       {abierto && (
         <div
           role="dialog"
@@ -404,16 +406,17 @@ export function MenuMasAcciones({
 
   return (
     <MenuContextual items={items} disparador="click">
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        aria-label="Más acciones"
-        title="Más acciones"
-        data-testid="rota-mas-acciones"
-      >
-        <MoreHorizontal className="h-4 w-4" />
-      </Button>
+      <Tooltip label="Más acciones">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label="Más acciones"
+          data-testid="rota-mas-acciones"
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </Tooltip>
     </MenuContextual>
   );
 }

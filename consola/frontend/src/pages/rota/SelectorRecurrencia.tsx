@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   DIAS_SEMANA,
@@ -81,7 +82,7 @@ export function SelectorRecurrencia({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="space-y-1.5">
         <Label htmlFor="evento-repetir">Repetir</Label>
         <Select value={preset} onValueChange={(v) => alElegirPreset(v as PresetRecurrencia)} disabled={disabled}>
@@ -105,24 +106,24 @@ export function SelectorRecurrencia({
             {DIAS_SEMANA.map((d) => {
               const activo = diasCustom.includes(d.valor);
               return (
-                <button
-                  key={d.valor}
-                  type="button"
-                  aria-pressed={activo}
-                  aria-label={d.nombre}
-                  title={d.nombre}
-                  disabled={disabled}
-                  onClick={() => alternarDia(d.valor)}
-                  className={cn(
-                    "h-9 w-9 rounded-md border text-sm font-medium transition-colors",
-                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
-                    activo
-                      ? "border-foreground bg-foreground text-background"
-                      : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
-                  )}
-                >
-                  {d.corto}
-                </button>
+                <Tooltip key={d.valor} label={d.nombre}>
+                  <button
+                    type="button"
+                    aria-pressed={activo}
+                    aria-label={d.nombre}
+                    disabled={disabled}
+                    onClick={() => alternarDia(d.valor)}
+                    className={cn(
+                      "h-9 w-9 rounded-md border text-sm font-medium transition-colors",
+                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+                      activo
+                        ? "border-foreground bg-foreground text-background"
+                        : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
+                    )}
+                  >
+                    {d.corto}
+                  </button>
+                </Tooltip>
               );
             })}
           </div>

@@ -11,6 +11,7 @@ import { Bot, Cog } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
+import { Tooltip } from "@/components/ui/tooltip";
 import { type GrupoAgentes, slugFase } from "@/pages/maquina/fases";
 
 export function PanelAgentes({
@@ -44,24 +45,24 @@ export function PanelAgentes({
                     ? () => navigate(`/maquina/contexto/${proceso}/${slugFase(f.nombre)}`)
                     : undefined;
                 return (
-                  <button
-                    key={f.nombre}
-                    type="button"
-                    disabled={!abrir}
-                    onClick={abrir}
-                    title={f.nombre}
-                    className={cn(
-                      "flex h-20 w-32 flex-col items-center justify-center gap-1.5 rounded-xl border bg-card px-2 text-center text-sm font-medium leading-tight",
-                      abrir ? "hover:bg-accent" : "cursor-default",
-                    )}
-                  >
-                    {f.es_ia ? (
-                      <Bot className="h-5 w-5 shrink-0" aria-label="IA" />
-                    ) : (
-                      <Cog className="h-5 w-5 shrink-0 text-muted-foreground" aria-label="determinista" />
-                    )}
-                    <span className="line-clamp-2 break-words">{f.nombre}</span>
-                  </button>
+                  <Tooltip key={f.nombre} label={f.nombre}>
+                    <button
+                      type="button"
+                      disabled={!abrir}
+                      onClick={abrir}
+                      className={cn(
+                        "flex h-20 w-32 flex-col items-center justify-center gap-1.5 rounded-xl border bg-card px-2 text-center text-sm font-medium leading-tight",
+                        abrir ? "hover:bg-accent" : "cursor-default",
+                      )}
+                    >
+                      {f.es_ia ? (
+                        <Bot className="h-5 w-5 shrink-0" aria-label="IA" />
+                      ) : (
+                        <Cog className="h-5 w-5 shrink-0 text-muted-foreground" aria-label="determinista" />
+                      )}
+                      <span className="line-clamp-2 break-words">{f.nombre}</span>
+                    </button>
+                  </Tooltip>
                 );
               })}
             </div>

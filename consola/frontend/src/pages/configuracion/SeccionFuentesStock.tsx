@@ -110,7 +110,7 @@ function FilaClaveStock({ proveedor }: { proveedor: ProveedorStock }) {
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-4">
       <Campo
         etiqueta={
           <span className="flex w-full items-center justify-between gap-3">

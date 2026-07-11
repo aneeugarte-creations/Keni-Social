@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
@@ -224,16 +225,16 @@ function AcompanaFase({
           </p>
           <div className="flex flex-wrap gap-2">
             {subPrompts.map((sp) => (
-              <Button
-                key={sp.doc}
-                type="button"
-                variant="outline"
-                size="sm"
-                title={sp.ayuda}
-                onClick={() => onAbrirDoc(sp.doc)}
-              >
-                {sp.nombre}
-              </Button>
+              <Tooltip key={sp.doc} label={sp.ayuda}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onAbrirDoc(sp.doc)}
+                >
+                  {sp.nombre}
+                </Button>
+              </Tooltip>
             ))}
           </div>
         </section>
@@ -402,17 +403,18 @@ export function DetalleFase({
                   Cambios sin publicar
                 </Badge>
               ) : null}
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8 shrink-0 text-foreground"
-                disabled={!acciones.puedePublicar}
-                title={tituloPublicar}
-                aria-label={acciones.esAdmin ? "Publicar" : "Solicitar publicación"}
-                onClick={acciones.publicar}
-              >
-                <Save className="h-4 w-4" />
-              </Button>
+              <Tooltip label={tituloPublicar}>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0 text-foreground"
+                  disabled={!acciones.puedePublicar}
+                  aria-label={acciones.esAdmin ? "Publicar" : "Solicitar publicación"}
+                  onClick={acciones.publicar}
+                >
+                  <Save className="h-4 w-4" />
+                </Button>
+              </Tooltip>
             </div>
           ) : null}
         </div>

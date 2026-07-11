@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { Tooltip } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { cn } from "@/lib/utils";
@@ -163,7 +164,7 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
   };
 
   return (
-    <div className="space-y-3 rounded-xl border bg-card p-3">
+    <div className="space-y-4 rounded-xl border bg-card p-3">
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm font-medium">{marca.etiqueta}</span>
         {marca.conectado ? (
@@ -206,21 +207,22 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
             disabled={ocupado}
             aria-invalid={(intentado && Boolean(errUserId)) || undefined}
           />
-          <Button
-            size="sm"
-            variant="outline"
-            className="shrink-0"
-            onClick={() => buscarMarcas.mutate()}
-            disabled={ocupado || !puedeBuscar}
-            title={!puedeBuscar ? "Pega el token y el userId para buscar." : undefined}
-          >
-            {buscarMarcas.isPending ? (
-              <Spinner className="h-4 w-4" />
-            ) : (
-              <Plug className="h-4 w-4" />
-            )}
-            {buscarMarcas.isPending ? "Buscando…" : "Buscar marcas"}
-          </Button>
+          <Tooltip label={!puedeBuscar ? "Pega el token y el userId para buscar." : ""}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0"
+              onClick={() => buscarMarcas.mutate()}
+              disabled={ocupado || !puedeBuscar}
+            >
+              {buscarMarcas.isPending ? (
+                <Spinner className="h-4 w-4" />
+              ) : (
+                <Plug className="h-4 w-4" />
+              )}
+              {buscarMarcas.isPending ? "Buscando…" : "Buscar marcas"}
+            </Button>
+          </Tooltip>
         </div>
       </Campo>
 

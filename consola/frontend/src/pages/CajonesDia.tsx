@@ -53,6 +53,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
@@ -410,22 +411,23 @@ function ItemCard({ item, fecha }: PropsItemCard) {
                 ) : (
                   <>
                     <Badge variant="secondary" className="text-xs">En el pool</Badge>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="gap-1 px-2 text-muted-foreground"
-                      onClick={() => usarMut.mutate()}
-                      disabled={usarMut.isPending}
-                      aria-label="Empujar ya (fuerza al feed)"
-                      title="Forzar al feed ahora"
-                    >
-                      {usarMut.isPending ? (
-                        <Spinner className="h-3 w-3" />
-                      ) : (
-                        <Send className="h-3 w-3" />
-                      )}
-                      Empujar ya
-                    </Button>
+                    <Tooltip label="Forzar al feed ahora">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="gap-1 px-2 text-muted-foreground"
+                        onClick={() => usarMut.mutate()}
+                        disabled={usarMut.isPending}
+                        aria-label="Empujar ya (fuerza al feed)"
+                      >
+                        {usarMut.isPending ? (
+                          <Spinner className="h-3 w-3" />
+                        ) : (
+                          <Send className="h-3 w-3" />
+                        )}
+                        Empujar ya
+                      </Button>
+                    </Tooltip>
                   </>
                 )}
               </>

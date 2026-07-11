@@ -19,6 +19,7 @@ import { AlertTriangle, Check, Hash, X } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { contieneHashtag, normalizarHashtag } from "@/pages/piezas/hashtags";
 import type { Pieza } from "@/types";
@@ -98,35 +99,37 @@ export function SugerenciaHashtags({ contenido, pieza, onAceptar }: SugerenciaHa
           ))}
         </p>
         <div className="ml-auto flex items-center gap-1">
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className={cn(
-              "h-7 w-7",
-              hayLinea
-                ? "text-red-600 hover:text-red-700"
-                : "text-emerald-600 hover:text-emerald-700",
-            )}
-            aria-label="Aceptar hashtags"
-            title="Añadir los hashtags que faltan"
-            onClick={() => onAceptar(faltantes)}
-          >
-            <Check className="h-4 w-4" />
-          </Button>
-          {/* Descartar solo aplica a los OPCIONALES: el de la línea no se puede ocultar. */}
-          {faltanSugeridos.length > 0 && (
+          <Tooltip label="Añadir los hashtags que faltan">
             <Button
               type="button"
               size="icon"
               variant="ghost"
-              className="text-muted-foreground hover:text-foreground"
-              aria-label="Rechazar hashtags sugeridos"
-              title="Rechazar sugeridos"
-              onClick={() => setDescartado(true)}
+              className={cn(
+                "h-7 w-7",
+                hayLinea
+                  ? "text-red-600 hover:text-red-700"
+                  : "text-emerald-600 hover:text-emerald-700",
+              )}
+              aria-label="Aceptar hashtags"
+              onClick={() => onAceptar(faltantes)}
             >
-              <X className="h-4 w-4" />
+              <Check className="h-4 w-4" />
             </Button>
+          </Tooltip>
+          {/* Descartar solo aplica a los OPCIONALES: el de la línea no se puede ocultar. */}
+          {faltanSugeridos.length > 0 && (
+            <Tooltip label="Rechazar sugeridos">
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="text-muted-foreground hover:text-foreground"
+                aria-label="Rechazar hashtags sugeridos"
+                onClick={() => setDescartado(true)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </Tooltip>
           )}
         </div>
       </div>

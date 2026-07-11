@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { Tooltip } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { ApiError, api, mensajeError } from "@/lib/api";
@@ -441,20 +442,23 @@ function CuerpoPlantillaFranjas({ onCerrar }: { onCerrar: () => void }) {
                   className="h-8"
                 />
               </div>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-destructive hover:text-destructive"
-                onClick={() => quitar(f._id)}
-                disabled={filas.length <= 1}
-                title={
+              <Tooltip
+                label={
                   filas.length <= 1
                     ? "La plantilla necesita al menos una franja"
                     : ""
                 }
               >
-                Quitar
-              </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => quitar(f._id)}
+                  disabled={filas.length <= 1}
+                >
+                  Quitar
+                </Button>
+              </Tooltip>
             </div>
           ))}
           <Button

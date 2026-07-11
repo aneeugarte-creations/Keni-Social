@@ -29,6 +29,7 @@ import {
   normalizarEspacios,
 } from "@/components/prompts/diffProsa.lib";
 import { cn } from "@/lib/utils";
+import { Tooltip } from "@/components/ui/tooltip";
 
 // `{{VARIABLE}}` | racha de espacios | racha sin espacios. Cubre TODO el texto, así
 // `tokens.join("") === texto` (sin pérdida) y la variable viaja entera por el diff.
@@ -197,21 +198,21 @@ export function DiffProsa({ antes, despues, soloCambios = false, className }: Di
         }
         if (soloCambios && !desplegados.has(i)) {
           return (
-            <button
-              key={i}
-              type="button"
-              onClick={() =>
-                setDesplegados((prev) => {
-                  const s = new Set(prev);
-                  s.add(i);
-                  return s;
-                })
-              }
-              title="Mostrar los párrafos sin cambios"
-              className="block w-full rounded-md border border-dashed border-border py-1 text-center text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-            >
-              ··· {b.parrafos.length === 1 ? "1 párrafo sin cambios" : `${b.parrafos.length} párrafos sin cambios`}
-            </button>
+            <Tooltip key={i} label="Mostrar los párrafos sin cambios" className="block w-full">
+              <button
+                type="button"
+                onClick={() =>
+                  setDesplegados((prev) => {
+                    const s = new Set(prev);
+                    s.add(i);
+                    return s;
+                  })
+                }
+                className="block w-full rounded-md border border-dashed border-border py-1 text-center text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+              >
+                ··· {b.parrafos.length === 1 ? "1 párrafo sin cambios" : `${b.parrafos.length} párrafos sin cambios`}
+              </button>
+            </Tooltip>
           );
         }
         return (

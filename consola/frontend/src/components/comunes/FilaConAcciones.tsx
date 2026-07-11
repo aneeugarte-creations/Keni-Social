@@ -4,6 +4,7 @@ import { MoreVertical } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useMenuContextual } from "@/hooks/use-menu-contextual";
+import { Tooltip } from "@/components/ui/tooltip";
 import {
   MenuFlotante,
   type EntradaMenuContextual,
@@ -190,48 +191,50 @@ export function FilaConAcciones({
   if (accionUnica && kebab !== "nunca") {
     const Icono = accionUnica.icono ?? MoreVertical;
     botonKebab = (
-      <button
-        ref={kebabRef}
-        type="button"
-        aria-label={accionUnica.etiqueta}
-        title={accionUnica.etiqueta}
-        disabled={accionUnica.deshabilitado}
-        onClick={(e) => {
-          e.stopPropagation();
-          accionUnica.onClick();
-        }}
-        className={cn(
-          claseControl,
-          "disabled:cursor-not-allowed disabled:opacity-50",
-          accionUnica.destructivo
-            ? "hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10"
-            : "hover:bg-accent hover:text-foreground focus-visible:bg-accent",
-          claseBotonKebab,
-        )}
-      >
-        <Icono className="h-4 w-4" />
-      </button>
+      <Tooltip label={accionUnica.etiqueta}>
+        <button
+          ref={kebabRef}
+          type="button"
+          aria-label={accionUnica.etiqueta}
+          disabled={accionUnica.deshabilitado}
+          onClick={(e) => {
+            e.stopPropagation();
+            accionUnica.onClick();
+          }}
+          className={cn(
+            claseControl,
+            "disabled:cursor-not-allowed disabled:opacity-50",
+            accionUnica.destructivo
+              ? "hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10"
+              : "hover:bg-accent hover:text-foreground focus-visible:bg-accent",
+            claseBotonKebab,
+          )}
+        >
+          <Icono className="h-4 w-4" />
+        </button>
+      </Tooltip>
     );
   } else if (hayMenu && kebab !== "nunca") {
     botonKebab = (
-      <button
-        ref={kebabRef}
-        type="button"
-        aria-label={etiquetaKebab}
-        aria-haspopup="menu"
-        title={etiquetaKebab}
-        onClick={(e) => {
-          e.stopPropagation();
-          menu.abrirEn(e, kebabRef.current);
-        }}
-        className={cn(
-          claseControl,
-          "hover:bg-accent hover:text-foreground focus-visible:bg-accent",
-          claseBotonKebab,
-        )}
-      >
-        <MoreVertical className="h-4 w-4" />
-      </button>
+      <Tooltip label={etiquetaKebab}>
+        <button
+          ref={kebabRef}
+          type="button"
+          aria-label={etiquetaKebab}
+          aria-haspopup="menu"
+          onClick={(e) => {
+            e.stopPropagation();
+            menu.abrirEn(e, kebabRef.current);
+          }}
+          className={cn(
+            claseControl,
+            "hover:bg-accent hover:text-foreground focus-visible:bg-accent",
+            claseBotonKebab,
+          )}
+        >
+          <MoreVertical className="h-4 w-4" />
+        </button>
+      </Tooltip>
     );
   }
 

@@ -18,6 +18,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tooltip } from "@/components/ui/tooltip";
 import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import type { CubridorPorTurno, Semaforo } from "@/lib/cobertura";
@@ -240,21 +241,21 @@ export function ChipsRolFaltante({
   return (
     <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Roles por cubrir">
       {faltan.map((rol) => (
-        <button
-          key={rol}
-          type="button"
-          disabled={disabled}
-          aria-label={`Coger ${etiquetaRol(rol)}`}
-          title={`Coger ${etiquetaRol(rol)}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onCoger(rol);
-          }}
-          className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:border-foreground/40 hover:bg-accent hover:text-foreground disabled:opacity-60"
-        >
-          <Plus className="h-3 w-3" aria-hidden />
-          {etiquetaRol(rol)}
-        </button>
+        <Tooltip key={rol} label={`Coger ${etiquetaRol(rol)}`}>
+          <button
+            type="button"
+            disabled={disabled}
+            aria-label={`Coger ${etiquetaRol(rol)}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onCoger(rol);
+            }}
+            className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:border-foreground/40 hover:bg-accent hover:text-foreground disabled:opacity-60"
+          >
+            <Plus className="h-3 w-3" aria-hidden />
+            {etiquetaRol(rol)}
+          </button>
+        </Tooltip>
       ))}
     </div>
   );
@@ -283,18 +284,19 @@ function RolLibre({ tarea }: { tarea: Publicacion }) {
         Por cubrir
       </Badge>
       <span className="text-sm text-muted-foreground">{etiquetaRol(tarea.formato)}</span>
-      <Button
-        variant="outline"
-        size="sm"
-        className="ml-auto"
-        onClick={() => coger.mutate()}
-        disabled={coger.isPending}
-        title="La cubro yo"
-        aria-label="La cubro yo"
-      >
-        <Hand className="mr-1 h-3.5 w-3.5" />
-        La cubro
-      </Button>
+      <Tooltip label="La cubro yo">
+        <Button
+          variant="outline"
+          size="sm"
+          className="ml-auto"
+          onClick={() => coger.mutate()}
+          disabled={coger.isPending}
+          aria-label="La cubro yo"
+        >
+          <Hand className="mr-1 h-3.5 w-3.5" />
+          La cubro
+        </Button>
+      </Tooltip>
     </div>
   );
 }
@@ -399,6 +401,8 @@ export function BadgeCubiertoPorTurno({ cubridores }: { cubridores: CubridorPorT
 
   return (
     <span className="inline-flex shrink-0">
+      {/* title= nativo a propósito: es un botón CON texto («Cubierto por turno») y el Tooltip
+          clonaría su label como aria-label, pisando el nombre accesible visible. */}
       <button
         ref={anclaRef}
         type="button"
@@ -557,7 +561,7 @@ export function TarjetaEventoLibre({
           </Badge>
         )}
         {evento.fecha && (
-          <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
             <CalendarClock className="h-3.5 w-3.5" />
             {formatearFecha(evento.fecha)}
             {evento.hora ? ` · ${evento.hora}` : ""}
@@ -798,21 +802,24 @@ export function TarjetaTarea({
         {/* Quitar a quien cubre (yo mismo o, si soy manager, a otra persona): suelta SU rol;
             el partido sigue y el rol vuelve a «Por cubrir». Reemplaza el viejo chip «Cubren:». */}
         {enCobertura && (esMia || esManager) && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label={esMia ? "Soltar (dejar de cubrir)" : `Quitar a ${tarea.responsable_nombre}`}
-            title={esMia ? "Soltar (dejar de cubrir)" : `Quitar a ${tarea.responsable_nombre}`}
-            disabled={soltar.isPending}
-            onClick={(e) => {
-              e.stopPropagation();
-              soltar.mutate();
-            }}
-            className="ml-auto shrink-0 rounded-full text-destructive hover:text-destructive"
+          <Tooltip
+            label={esMia ? "Soltar (dejar de cubrir)" : `Quitar a ${tarea.responsable_nombre}`}
           >
-            <X />
-          </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={esMia ? "Soltar (dejar de cubrir)" : `Quitar a ${tarea.responsable_nombre}`}
+              disabled={soltar.isPending}
+              onClick={(e) => {
+                e.stopPropagation();
+                soltar.mutate();
+              }}
+              className="ml-auto shrink-0 rounded-full text-destructive hover:text-destructive"
+            >
+              <X />
+            </Button>
+          </Tooltip>
         )}
         {!enCobertura && tarea.fecha_objetivo && (
           <span
@@ -1053,18 +1060,19 @@ export function TarjetaCoberturaMia({ cobertura }: { cobertura: Cobertura }) {
           <div key={t.id} className="flex items-center gap-2 text-sm">
             <SemaforoCobertura fecha={t.fecha_objetivo} hora={t.hora_objetivo} />
             <span className="text-muted-foreground">{etiquetaRol(t.formato)}</span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label="Soltar (dejar de cubrir)"
-              title="Soltar (dejar de cubrir)"
-              disabled={soltar.isPending}
-              onClick={() => soltar.mutate(t.id)}
-              className="ml-auto shrink-0 rounded-full text-destructive hover:text-destructive"
-            >
-              <X />
-            </Button>
+            <Tooltip label="Soltar (dejar de cubrir)">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Soltar (dejar de cubrir)"
+                disabled={soltar.isPending}
+                onClick={() => soltar.mutate(t.id)}
+                className="ml-auto shrink-0 rounded-full text-destructive hover:text-destructive"
+              >
+                <X />
+              </Button>
+            </Tooltip>
           </div>
         ))}
       </div>

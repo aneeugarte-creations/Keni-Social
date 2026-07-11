@@ -288,20 +288,24 @@ export default function Audio() {
                 panelesAbiertos ? "p-2" : "p-1",
               )}
             >
-              <Button
-                size="icon"
-                variant="ghost"
-                className={cn("h-8 w-8 shrink-0", panelesAbiertos ? "mb-2 self-end" : "self-center")}
-                aria-label={panelesAbiertos ? "Colapsar paneles" : "Expandir paneles"}
-                title={panelesAbiertos ? "Colapsar (leer a ancho completo)" : "Expandir paneles"}
-                onClick={() => setPanelesAbiertos((v) => !v)}
+              <Tooltip
+                label={panelesAbiertos ? "Colapsar (leer a ancho completo)" : "Expandir paneles"}
+                className={cn("shrink-0", panelesAbiertos ? "mb-2 self-end" : "self-center")}
               >
-                {panelesAbiertos ? (
-                  <ChevronLeft className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                )}
-              </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0"
+                  aria-label={panelesAbiertos ? "Colapsar paneles" : "Expandir paneles"}
+                  onClick={() => setPanelesAbiertos((v) => !v)}
+                >
+                  {panelesAbiertos ? (
+                    <ChevronLeft className="h-4 w-4" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                </Button>
+              </Tooltip>
               {panelesAbiertos ? (
                 <div className="flex min-h-0 flex-1 gap-2">
                   <PanelAudios
@@ -1520,15 +1524,16 @@ function FormularioPreguntas({
             <div key={i} className="rounded-md border border-border/70 bg-muted/30 p-3">
               <div className="flex items-start gap-2">
                 {reproducible ? (
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    className="shrink-0 bg-background"
-                    title={`Escuchar ${fmtSeg(ini)}–${fmtSeg(fin)}`}
-                    onClick={() => reproducir(i)}
-                  >
-                    {playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-                  </Button>
+                  <Tooltip label={`Escuchar ${fmtSeg(ini)}–${fmtSeg(fin)}`} className="shrink-0">
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="shrink-0 bg-background"
+                      onClick={() => reproducir(i)}
+                    >
+                      {playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                    </Button>
+                  </Tooltip>
                 ) : (
                   <span className="mt-0.5 shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
                     {q.t || "—"}

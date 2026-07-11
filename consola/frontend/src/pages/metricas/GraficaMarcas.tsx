@@ -22,23 +22,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tooltip } from "@/components/ui/tooltip";
 import { numeroCompacto, numeroCompleto } from "@/lib/formato";
 import type { CuentaMetrica } from "@/types";
 
 import { NOTA_VISTAS_CROSSRED } from "./metricas-meta";
 import { Seccion } from "./Seccion";
 
-/** Icono de info con la nota en el tooltip nativo (mismo patrón que `DetallePieza`). */
+/** Icono de info que muestra la nota en un tooltip (mismo patrón que `DetallePieza`). */
 function NotaInfo({ nota }: { nota: string }) {
   return (
-    <button
-      type="button"
-      title={nota}
-      aria-label={nota}
-      className="inline-flex text-muted-foreground/70 hover:text-muted-foreground focus-visible:text-muted-foreground"
-    >
-      <Info className="h-3.5 w-3.5" aria-hidden="true" />
-    </button>
+    <Tooltip label={nota}>
+      <button
+        type="button"
+        aria-label={nota}
+        className="inline-flex text-muted-foreground/70 hover:text-muted-foreground focus-visible:text-muted-foreground"
+      >
+        <Info className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
+    </Tooltip>
   );
 }
 

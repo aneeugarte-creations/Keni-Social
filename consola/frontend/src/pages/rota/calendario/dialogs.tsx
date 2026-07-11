@@ -192,7 +192,7 @@ export function DialogEditarEvento({
         <DialogHeader>
           <DialogTitle>Editar evento</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="space-y-4">
           {esSerie && (
             <p className="text-sm text-muted-foreground">
               Forma parte de una serie recurrente: al guardar o borrar podrás elegir el alcance.
@@ -448,7 +448,7 @@ export function DialogEditarTurno({
             Edita los detalles del turno. Las reglas se validan al guardar.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <Campo etiqueta="Fecha" htmlFor="et-fecha">
               <Input

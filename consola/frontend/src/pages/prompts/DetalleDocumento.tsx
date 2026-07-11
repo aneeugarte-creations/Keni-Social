@@ -37,6 +37,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useMenuContextual } from "@/hooks/use-menu-contextual";
 import { useEsAdmin } from "@/hooks/use-prompts";
 import { ApiError, api, mensajeError } from "@/lib/api";
@@ -416,37 +417,43 @@ export function DetalleDocumento({
             </Badge>
           ) : null}
           {esAdmin ? (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!puedePublicar}
-              title={
+            <Tooltip
+              label={
                 puedePublicar
                   ? "Publicar para que lo usen los agentes"
                   : cuerpoVacio
                     ? "El cuerpo está vacío"
                     : "No hay cambios sin publicar"
               }
-              onClick={() => setPublicarAbierto(true)}
             >
-              <Rocket className="mr-1 h-3.5 w-3.5" /> Publicar
-            </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!puedePublicar}
+                onClick={() => setPublicarAbierto(true)}
+              >
+                <Rocket className="mr-1 h-3.5 w-3.5" /> Publicar
+              </Button>
+            </Tooltip>
           ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!puedePublicar}
-              title={
+            <Tooltip
+              label={
                 puedePublicar
                   ? "Proponer estos cambios para publicar"
                   : cuerpoVacio
                     ? "El cuerpo está vacío"
                     : "No hay cambios sin publicar"
               }
-              onClick={() => setPublicarAbierto(true)}
             >
-              <Send className="mr-1 h-3.5 w-3.5" /> Solicitar publicación
-            </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!puedePublicar}
+                onClick={() => setPublicarAbierto(true)}
+              >
+                <Send className="mr-1 h-3.5 w-3.5" /> Solicitar publicación
+              </Button>
+            </Tooltip>
           )}
           <Button
             ref={botonMenuRef}
@@ -496,24 +503,26 @@ export function DetalleDocumento({
               Alguien más editó este documento. Tus cambios siguen aquí sin guardarse. Elige cómo
               resolver:
             </span>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={resolviendoConflicto}
-              onClick={() => void sobrescribirConLoMio()}
-              title="Vuelve a leer la versión del servidor y guarda lo tuyo encima"
-            >
-              {resolviendoConflicto ? "Guardando…" : "Sobrescribir con lo mío"}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={resolviendoConflicto}
-              onClick={recargarDesdeServidor}
-              title="Descarta lo que escribiste y carga la versión de los demás"
-            >
-              Descartar lo mío y recargar
-            </Button>
+            <Tooltip label="Vuelve a leer la versión del servidor y guarda lo tuyo encima">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={resolviendoConflicto}
+                onClick={() => void sobrescribirConLoMio()}
+              >
+                {resolviendoConflicto ? "Guardando…" : "Sobrescribir con lo mío"}
+              </Button>
+            </Tooltip>
+            <Tooltip label="Descarta lo que escribiste y carga la versión de los demás">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={resolviendoConflicto}
+                onClick={recargarDesdeServidor}
+              >
+                Descartar lo mío y recargar
+              </Button>
+            </Tooltip>
           </span>
         </Aviso>
       ) : null}
@@ -581,20 +590,21 @@ export function DetalleDocumento({
               }}
             />
             {/* Toggle al PIE, dentro del cajón blanco: `‹` colapsa (no oculta, deja el raíl); `›` expande. */}
-            <Button
-              size="icon"
-              variant="ghost"
-              className="mt-2 h-8 w-8 shrink-0 self-center"
-              aria-label={panelAbierto ? "Colapsar versiones" : "Expandir versiones"}
-              title={panelAbierto ? "Colapsar" : "Expandir"}
-              onClick={() => setPanelAbierto((v) => !v)}
-            >
-              {panelAbierto ? (
-                <ChevronLeft className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-            </Button>
+            <Tooltip label={panelAbierto ? "Colapsar" : "Expandir"}>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="mt-2 h-8 w-8 shrink-0 self-center"
+                aria-label={panelAbierto ? "Colapsar versiones" : "Expandir versiones"}
+                onClick={() => setPanelAbierto((v) => !v)}
+              >
+                {panelAbierto ? (
+                  <ChevronLeft className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+              </Button>
+            </Tooltip>
           </div>
         </aside>
 

@@ -25,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tooltip } from "@/components/ui/tooltip";
 import { numeroCompleto, porcentaje } from "@/lib/formato";
 import type { CuentaMetrica } from "@/types";
 
@@ -132,14 +133,15 @@ export function TablaCuentas({
       return (
         <TableCell key={id} className="pl-6 font-medium">
           {onVerPiezas ? (
-            <button
-              type="button"
-              onClick={() => onVerPiezas(c.marca_id)}
-              className="text-left underline-offset-4 hover:underline focus-visible:outline-none focus-visible:underline"
-              title={`Ver piezas de ${c.marca}`}
-            >
-              {c.marca}
-            </button>
+            <Tooltip label={`Ver piezas de ${c.marca}`}>
+              <button
+                type="button"
+                onClick={() => onVerPiezas(c.marca_id)}
+                className="text-left underline-offset-4 hover:underline focus-visible:outline-none focus-visible:underline"
+              >
+                {c.marca}
+              </button>
+            </Tooltip>
           ) : (
             c.marca
           )}

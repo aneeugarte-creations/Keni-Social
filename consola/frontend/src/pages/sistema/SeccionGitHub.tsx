@@ -28,6 +28,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { Tooltip } from "@/components/ui/tooltip";
 import { api, mensajeError } from "@/lib/api";
 import type { GithubAuth } from "@/types";
 
@@ -153,9 +154,11 @@ function DialogoConectar({ conectado, onConectado }: { conectado: boolean; onCon
                   value={codigo}
                   className="text-center font-mono text-lg tracking-[0.3em]"
                 />
-                <Button variant="outline" size="icon" onClick={copiarCodigo} title="Copiar código">
-                  <Copy className="h-4 w-4" aria-hidden="true" />
-                </Button>
+                <Tooltip label="Copiar código">
+                  <Button variant="outline" size="icon" onClick={copiarCodigo}>
+                    <Copy className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                </Tooltip>
               </div>
             </div>
             <div className="space-y-2">
@@ -273,18 +276,19 @@ export function SeccionGitHub() {
           </span>
           <span className="flex items-center gap-2">
             {data.disponible && <BadgeAuth auth={data.auth} />}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={refrescar}
-              disabled={query.isFetching}
-              title="Actualizar estado ahora"
-            >
-              <RefreshCw
-                className={query.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"}
-                aria-hidden="true"
-              />
-            </Button>
+            <Tooltip label="Actualizar estado ahora">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={refrescar}
+                disabled={query.isFetching}
+              >
+                <RefreshCw
+                  className={query.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"}
+                  aria-hidden="true"
+                />
+              </Button>
+            </Tooltip>
           </span>
         </CardTitle>
       </CardHeader>

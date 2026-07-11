@@ -16,6 +16,7 @@ import { confirmar } from "@/components/comunes/confirmar";
 import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Button } from "@/components/ui/button";
+import { Tooltip } from "@/components/ui/tooltip";
 import { api, mensajeError } from "@/lib/api";
 import { estaVencida, horaUtcACdmx, hoyCDMX } from "@/lib/fecha";
 import { colorCategoria, ETIQUETA_CATEGORIA } from "@/lib/categorias";
@@ -611,9 +612,11 @@ export function VistaCalendario({
             <p className="text-sm font-medium capitalize">{etiqueta}</p>
           </div>
           <div className="flex items-center gap-1">
-            <Button variant="outline" size="sm" onClick={() => setAncla(new Date())} title="Hoy">
-              Hoy
-            </Button>
+            <Tooltip label="Hoy">
+              <Button variant="outline" size="sm" onClick={() => setAncla(new Date())}>
+                Hoy
+              </Button>
+            </Tooltip>
             <Button variant="ghost" size="icon" aria-label="Anterior" onClick={() => navegar(-1)}>
               <ChevronLeft className="h-4 w-4" />
             </Button>

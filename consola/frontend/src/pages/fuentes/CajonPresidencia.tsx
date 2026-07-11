@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import type { SlideCarrusel } from "@/lib/carrusel";
@@ -119,24 +120,21 @@ export default function CajonPresidencia() {
           <Aviso>Se necesita imagen para portada del carrusel.</Aviso>
         )}
         <div className="flex justify-end">
-          <Button
-            className="gap-1"
-            onClick={() => crearMut.mutate()}
-            disabled={!puedeEnviar}
-            aria-label="Enviar nota de presidencia al feed"
-            title={
-              puedeEnviar
-                ? undefined
-                : "Completa nota e imagen"
-            }
-          >
-            {crearMut.isPending ? (
-              <Spinner className="h-4 w-4" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-            {crearMut.isPending ? "Enviando…" : "Enviar al feed"}
-          </Button>
+          <Tooltip label={puedeEnviar ? "" : "Completa nota e imagen"}>
+            <Button
+              className="gap-1"
+              onClick={() => crearMut.mutate()}
+              disabled={!puedeEnviar}
+              aria-label="Enviar nota de presidencia al feed"
+            >
+              {crearMut.isPending ? (
+                <Spinner className="h-4 w-4" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              {crearMut.isPending ? "Enviando…" : "Enviar al feed"}
+            </Button>
+          </Tooltip>
         </div>
 
         {/* Notas recientes con el estado de su pieza. */}

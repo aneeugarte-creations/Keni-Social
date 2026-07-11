@@ -85,6 +85,8 @@ export function PanelRender({ composicionId, onAntesDeRenderizar, disabled }: Pa
 
   return (
     <div className="space-y-3">
+      {/* title= nativo a propósito: es un botón CON texto y el Tooltip clonaría su label
+          como aria-label, pisando el nombre accesible visible («Renderizar video»). */}
       <Button
         type="button"
         onClick={() => render.mutate()}

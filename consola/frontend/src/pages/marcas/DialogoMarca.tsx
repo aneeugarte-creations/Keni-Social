@@ -154,7 +154,7 @@ export function DialogoMarca({
               : "El id y el id de métricas se generan del nombre si los dejas vacíos."}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="space-y-4">
           <Campo etiqueta="Nombre" htmlFor="marca-etiqueta" error={intentado ? errNombre : null}>
             <Input
               id="marca-etiqueta"

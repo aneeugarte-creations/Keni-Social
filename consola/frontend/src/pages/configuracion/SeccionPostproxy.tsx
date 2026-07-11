@@ -122,7 +122,7 @@ function SeccionPostproxyAdmin() {
       </div>
 
       {/* API key GLOBAL (write-only): solo se envía; del servidor llega el estado + una pista. */}
-      <div className="space-y-2 rounded-xl border bg-card p-3">
+      <div className="space-y-4 rounded-xl border bg-card p-3">
         <Campo
           etiqueta={
             <span className="flex w-full items-center justify-between gap-3">

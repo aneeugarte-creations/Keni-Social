@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tooltip } from "@/components/ui/tooltip";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import { asignarMatriz } from "@/lib/rota-reparto";
 import { cn } from "@/lib/utils";
@@ -603,35 +604,36 @@ export function ReparteMes({
                         : "vacío";
                       return (
                         <TableCell key={f} className="p-0">
-                          <button
-                            type="button"
-                            role="checkbox"
-                            aria-checked={st === "add" || st === "existe"}
-                            aria-label={`${m.nombre} ${f.slice(8, 10)}`}
-                            title={tip}
-                            onClick={() => toggleCelda(m.id, f)}
-                            className={cn(
-                              "relative h-[18px] w-[22px] rounded-[4px] border transition-colors",
-                              st === "add" && "border-keni-400/40 bg-keni-50 dark:bg-keni-900/30",
-                              st === "existe" && "border-keni-400 bg-keni-50 dark:bg-keni-900/30",
-                              st === "del" && "border-border/60 bg-keni-50/50 dark:bg-keni-900/20",
-                              st === "vacia" && "border-border/60 hover:bg-accent",
-                              enEdicion && "ring-2 ring-keni-400 ring-offset-1",
-                            )}
-                          >
-                            {st === "existe" && (
-                              <span className="pointer-events-none absolute right-0.5 top-0.5 h-1 w-1 rounded-full bg-keni-700 dark:bg-keni-300" />
-                            )}
-                            {st === "del" && (
-                              <span
-                                className="pointer-events-none absolute inset-0"
-                                style={{
-                                  backgroundImage:
-                                    "linear-gradient(to top right, transparent 45%, hsl(var(--muted-foreground)) 45%, hsl(var(--muted-foreground)) 55%, transparent 55%)",
-                                }}
-                              />
-                            )}
-                          </button>
+                          <Tooltip label={tip}>
+                            <button
+                              type="button"
+                              role="checkbox"
+                              aria-checked={st === "add" || st === "existe"}
+                              aria-label={`${m.nombre} ${f.slice(8, 10)}`}
+                              onClick={() => toggleCelda(m.id, f)}
+                              className={cn(
+                                "relative h-[18px] w-[22px] rounded-[4px] border transition-colors",
+                                st === "add" && "border-keni-400/40 bg-keni-50 dark:bg-keni-900/30",
+                                st === "existe" && "border-keni-400 bg-keni-50 dark:bg-keni-900/30",
+                                st === "del" && "border-border/60 bg-keni-50/50 dark:bg-keni-900/20",
+                                st === "vacia" && "border-border/60 hover:bg-accent",
+                                enEdicion && "ring-2 ring-keni-400 ring-offset-1",
+                              )}
+                            >
+                              {st === "existe" && (
+                                <span className="pointer-events-none absolute right-0.5 top-0.5 h-1 w-1 rounded-full bg-keni-700 dark:bg-keni-300" />
+                              )}
+                              {st === "del" && (
+                                <span
+                                  className="pointer-events-none absolute inset-0"
+                                  style={{
+                                    backgroundImage:
+                                      "linear-gradient(to top right, transparent 45%, hsl(var(--muted-foreground)) 45%, hsl(var(--muted-foreground)) 55%, transparent 55%)",
+                                  }}
+                                />
+                              )}
+                            </button>
+                          </Tooltip>
                         </TableCell>
                       );
                     })}

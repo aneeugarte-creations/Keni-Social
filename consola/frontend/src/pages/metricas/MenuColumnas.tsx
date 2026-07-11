@@ -13,6 +13,7 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Tooltip } from "@/components/ui/tooltip";
 
 import type { ColumnaMeta } from "./columnasMeta";
 import { type ConfigColumnas, useVistaConfig } from "./vistaConfig";
@@ -79,19 +80,20 @@ export function MenuColumnas({
 
   return (
     <div ref={ref} className="relative">
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="text-muted-foreground hover:text-foreground"
-        aria-label={etiqueta}
-        title={etiqueta}
-        aria-haspopup="menu"
-        aria-expanded={abierto}
-        onClick={() => setAbierto((v) => !v)}
-      >
-        <Columns3 className="h-4 w-4" />
-      </Button>
+      <Tooltip label={etiqueta}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground hover:text-foreground"
+          aria-label={etiqueta}
+          aria-haspopup="menu"
+          aria-expanded={abierto}
+          onClick={() => setAbierto((v) => !v)}
+        >
+          <Columns3 className="h-4 w-4" />
+        </Button>
+      </Tooltip>
       {abierto && (
         <div
           role="menu"

@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -280,17 +281,18 @@ function FilaPreset({
           )}
         </div>
       </div>
-      <a
-        href={preset.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-0.5 shrink-0 text-muted-foreground hover:text-foreground"
-        title={preset.url}
-        aria-label={`Abrir ${preset.nombre}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <ExternalLink className="h-4 w-4" />
-      </a>
+      <Tooltip label={preset.url}>
+        <a
+          href={preset.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-0.5 shrink-0 text-muted-foreground hover:text-foreground"
+          aria-label={`Abrir ${preset.nombre}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <ExternalLink className="h-4 w-4" />
+        </a>
+      </Tooltip>
     </li>
   );
 }

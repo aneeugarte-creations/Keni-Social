@@ -9,6 +9,7 @@
 import { Download, Image as ImageIcon, ImagePlus, LayoutGrid, LayoutTemplate } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Tooltip } from "@/components/ui/tooltip";
 
 export interface CabeceraPlacaProps {
   /** "Sin plantilla": publicar solo la foto cruda (sin la plantilla encima). */
@@ -36,50 +37,55 @@ export function CabeceraPlaca({
       </span>
       {/* Controles ghost sutiles: modo (el glifo refleja el estado) · elegir plantilla · descargar. */}
       <div className="flex items-center gap-0.5 text-muted-foreground">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="text-muted-foreground hover:text-foreground"
-          onClick={onAlternarSinPlantilla}
-          title={
+        <Tooltip
+          label={
             sinPlantilla
               ? "Solo foto. Toca para poner la plantilla"
               : "Con plantilla. Toca para publicar solo la foto"
           }
-          aria-pressed={sinPlantilla}
         >
-          {sinPlantilla ? (
-            <ImageIcon className="h-4 w-4" />
-          ) : (
-            <LayoutTemplate className="h-4 w-4" />
-          )}
-        </Button>
-        {onAbrirGaleria && (
           <Button
             type="button"
             variant="ghost"
             size="icon"
             className="text-muted-foreground hover:text-foreground"
-            onClick={onAbrirGaleria}
-            title="Elegir plantilla"
+            onClick={onAlternarSinPlantilla}
+            aria-pressed={sinPlantilla}
           >
-            <LayoutGrid className="h-4 w-4" />
+            {sinPlantilla ? (
+              <ImageIcon className="h-4 w-4" />
+            ) : (
+              <LayoutTemplate className="h-4 w-4" />
+            )}
           </Button>
+        </Tooltip>
+        {onAbrirGaleria && (
+          <Tooltip label="Elegir plantilla">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={onAbrirGaleria}
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+          </Tooltip>
         )}
         {/* Descarga el render completo (foto + plantilla + texto) tal cual se ve, para postear a
             mano donde Metricool no llega (p. ej. X). */}
         {onDescargar && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="text-muted-foreground hover:text-foreground"
-            onClick={onDescargar}
-            title="Descargar imagen para postear"
-          >
-            <Download className="h-4 w-4" />
-          </Button>
+          <Tooltip label="Descargar imagen para postear">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={onDescargar}
+            >
+              <Download className="h-4 w-4" />
+            </Button>
+          </Tooltip>
         )}
       </div>
     </div>

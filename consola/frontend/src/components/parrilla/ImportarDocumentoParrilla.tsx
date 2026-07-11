@@ -39,6 +39,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
+import { Tooltip } from "@/components/ui/tooltip";
 import {
   MenuContextual,
   type EntradaMenuContextual,
@@ -178,12 +179,14 @@ function BadgePropuestasPendientes({ onAbrir }: { onAbrir: (id: string) => void 
 
   return (
     <MenuContextual items={items} disparador="click">
-      <Button variant="ghost" size="sm" className="gap-1.5" title="Propuestas pendientes">
-        <Inbox className="h-4 w-4" />
-        <Badge variant="aviso" className="h-5 px-1.5 font-normal">
-          {propuestas.length}
-        </Badge>
-      </Button>
+      <Tooltip label="Propuestas pendientes">
+        <Button variant="ghost" size="sm" className="gap-1.5">
+          <Inbox className="h-4 w-4" />
+          <Badge variant="aviso" className="h-5 px-1.5 font-normal">
+            {propuestas.length}
+          </Badge>
+        </Button>
+      </Tooltip>
     </MenuContextual>
   );
 }

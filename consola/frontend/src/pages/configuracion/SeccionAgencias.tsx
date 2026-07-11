@@ -116,7 +116,7 @@ function TarjetaAgencia({ agencia }: { agencia: Agencia }) {
   const ocupado = guardar.isPending || probar.isPending || quitar.isPending;
 
   return (
-    <div className="space-y-3 rounded-xl border bg-card p-3">
+    <div className="space-y-4 rounded-xl border bg-card p-3">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-medium">{agencia.nombre}</p>
         {agencia.configurado ? (

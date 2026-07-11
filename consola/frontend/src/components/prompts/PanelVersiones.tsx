@@ -26,6 +26,7 @@ import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual"
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip } from "@/components/ui/tooltip";
 import { api, mensajeError } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
@@ -161,20 +162,21 @@ export function PanelVersiones({
     return (
       <div className={cn("flex flex-col items-center gap-1", className)}>
         {sinPublicar ? (
-          <button
-            type="button"
-            onClick={seleccionable ? () => verVersion(null) : undefined}
-            disabled={!seleccionable}
-            title="Tu borrador (cambios sin publicar)"
-            aria-label="Tu borrador"
-            className={cn(
-              "flex h-8 w-8 items-center justify-center rounded-md",
-              seleccionable && "hover:bg-accent",
-              versionActiva == null && "bg-accent",
-            )}
-          >
-            <FileText className="h-4 w-4 text-keni" />
-          </button>
+          <Tooltip label="Tu borrador (cambios sin publicar)">
+            <button
+              type="button"
+              onClick={seleccionable ? () => verVersion(null) : undefined}
+              disabled={!seleccionable}
+              aria-label="Tu borrador"
+              className={cn(
+                "flex h-8 w-8 items-center justify-center rounded-md",
+                seleccionable && "hover:bg-accent",
+                versionActiva == null && "bg-accent",
+              )}
+            >
+              <FileText className="h-4 w-4 text-keni" />
+            </button>
+          </Tooltip>
         ) : null}
         {historial.map((v) => {
           const esEnVivo = !!produccionSha && v.sha === produccionSha;
@@ -183,26 +185,29 @@ export function PanelVersiones({
           const activa = versionActiva === v.sha || (versionActiva == null && esVivoSinCambios(v.sha));
           const nombre = v.mensaje || "Publicación";
           return (
-            <button
+            <Tooltip
               key={v.sha}
-              type="button"
-              onClick={seleccionable ? () => verVersion(v.sha) : undefined}
-              disabled={!seleccionable}
-              title={`${nombre} · ${v.autor} · ${tiempoRelativo(v.fecha) || v.fecha.slice(0, 10)}${esEnVivo ? " · en vivo" : ""}`}
-              aria-label={`${nombre}${esEnVivo ? " (en vivo)" : ""}`}
-              className={cn(
-                "flex h-8 w-8 items-center justify-center rounded-md",
-                seleccionable && "hover:bg-accent",
-                activa && "bg-accent",
-              )}
+              label={`${nombre} · ${v.autor} · ${tiempoRelativo(v.fecha) || v.fecha.slice(0, 10)}${esEnVivo ? " · en vivo" : ""}`}
             >
-              <FileText
+              <button
+                type="button"
+                onClick={seleccionable ? () => verVersion(v.sha) : undefined}
+                disabled={!seleccionable}
+                aria-label={`${nombre}${esEnVivo ? " (en vivo)" : ""}`}
                 className={cn(
-                  "h-4 w-4",
-                  esEnVivo ? "text-emerald-500" : "text-muted-foreground",
+                  "flex h-8 w-8 items-center justify-center rounded-md",
+                  seleccionable && "hover:bg-accent",
+                  activa && "bg-accent",
                 )}
-              />
-            </button>
+              >
+                <FileText
+                  className={cn(
+                    "h-4 w-4",
+                    esEnVivo ? "text-emerald-500" : "text-muted-foreground",
+                  )}
+                />
+              </button>
+            </Tooltip>
           );
         })}
       </div>

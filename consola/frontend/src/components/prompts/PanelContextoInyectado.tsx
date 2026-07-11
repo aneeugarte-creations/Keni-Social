@@ -12,6 +12,7 @@ import { ChevronRight } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api } from "@/lib/api";
 
@@ -55,20 +56,21 @@ export function PanelContextoInyectado({
         <ul className="space-y-1.5">
           {adjuntos.map((a) => (
             <li key={a.id}>
-              <button
-                type="button"
-                onClick={() => onAbrirDoc(a.id)}
-                className="flex w-full items-center gap-2 rounded-xl border bg-card px-2.5 py-2 text-left text-sm transition-colors hover:border-input hover:bg-accent"
-                title={`Abrir ${a.titulo}`}
-              >
-                <span className="min-w-0 flex-1 truncate">{a.titulo}</span>
-                {a.clase ? (
-                  <Badge variant="secondary" className="shrink-0">
-                    {a.clase}
-                  </Badge>
-                ) : null}
-                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-              </button>
+              <Tooltip label={`Abrir ${a.titulo}`} className="block w-full">
+                <button
+                  type="button"
+                  onClick={() => onAbrirDoc(a.id)}
+                  className="flex w-full items-center gap-2 rounded-xl border bg-card px-2.5 py-2 text-left text-sm transition-colors hover:border-input hover:bg-accent"
+                >
+                  <span className="min-w-0 flex-1 truncate">{a.titulo}</span>
+                  {a.clase ? (
+                    <Badge variant="secondary" className="shrink-0">
+                      {a.clase}
+                    </Badge>
+                  ) : null}
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                </button>
+              </Tooltip>
             </li>
           ))}
         </ul>

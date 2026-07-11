@@ -84,7 +84,7 @@ describe("TablaCuentas", () => {
     const onVerPiezas = vi.fn();
     renderTabla({ onVerPiezas });
 
-    fireEvent.click(screen.getByTitle("Ver piezas de UnoTV"));
+    fireEvent.click(screen.getByRole("button", { name: "Ver piezas de UnoTV" }));
     expect(onVerPiezas).toHaveBeenCalledWith("unotv");
   });
 

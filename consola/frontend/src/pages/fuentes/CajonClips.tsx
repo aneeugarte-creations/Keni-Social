@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import type { SlideCarrusel } from "@/lib/carrusel";
@@ -123,20 +124,21 @@ export default function CajonClips() {
           </p>
         )}
         <div className="flex justify-end">
-          <Button
-            className="gap-1"
-            onClick={() => crearMut.mutate()}
-            disabled={!puedeEnviar}
-            aria-label="Enviar clip al feed"
-            title={puedeEnviar ? undefined : "Completa el contexto y sube el media"}
-          >
-            {crearMut.isPending ? (
-              <Spinner className="h-4 w-4" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-            {crearMut.isPending ? "Enviando…" : "Enviar al feed"}
-          </Button>
+          <Tooltip label={puedeEnviar ? "" : "Completa el contexto y sube el media"}>
+            <Button
+              className="gap-1"
+              onClick={() => crearMut.mutate()}
+              disabled={!puedeEnviar}
+              aria-label="Enviar clip al feed"
+            >
+              {crearMut.isPending ? (
+                <Spinner className="h-4 w-4" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              {crearMut.isPending ? "Enviando…" : "Enviar al feed"}
+            </Button>
+          </Tooltip>
         </div>
 
         {/* Clips recientes con el estado de su pieza. */}

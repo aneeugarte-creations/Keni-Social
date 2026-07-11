@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { CLAVE_USO_CUENTA, useUsoCuenta, type UsoCuenta as UsoCuentaBurn } from "@/hooks/use-uso-cuenta";
 import { api, mensajeError } from "@/lib/api";
@@ -244,14 +245,18 @@ function DialogoCambiarCuenta({
               </p>
               <div className="flex items-center gap-2">
                 <Input readOnly value={url} className="font-mono text-xs" />
-                <Button variant="outline" size="icon" onClick={copiar} title="Copiar enlace">
-                  <Copy className="h-4 w-4" aria-hidden="true" />
-                </Button>
-                <Button variant="outline" size="icon" asChild title="Abrir enlace">
-                  <a href={url} target="_blank" rel="noreferrer">
-                    <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                  </a>
-                </Button>
+                <Tooltip label="Copiar enlace">
+                  <Button variant="outline" size="icon" onClick={copiar}>
+                    <Copy className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                </Tooltip>
+                <Tooltip label="Abrir enlace">
+                  <Button variant="outline" size="icon" asChild>
+                    <a href={url} target="_blank" rel="noreferrer">
+                      <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                    </a>
+                  </Button>
+                </Tooltip>
               </div>
             </div>
             <div className="space-y-2">
@@ -353,29 +358,32 @@ function SelectorMarcas({
         const aqui = m.cuenta === cuenta;
         const ocupada = marcaPendiente === m.id;
         return (
-          <Button
+          <Tooltip
             key={m.id}
-            type="button"
-            size="sm"
-            // Activo = la sirve esta cuenta: relleno sólido. Inactivo: outline apagado. El
-            // contraste deja claro de un vistazo qué marcas pertenecen a la cuenta.
-            variant={aqui ? "default" : "outline"}
-            aria-pressed={aqui}
-            disabled={marcaPendiente != null}
-            onClick={() => onMover(m.id, aqui ? otra : cuenta)}
-            title={
+            label={
               aqui
                 ? `Quitar «${m.nombre}» de esta cuenta (mover a la cuenta ${otra.toUpperCase()})`
                 : `Mover «${m.nombre}» a esta cuenta`
             }
-            className={cn(
-              "h-7 rounded-full px-3 text-xs",
-              !aqui && "text-muted-foreground",
-            )}
           >
-            {ocupada && <Spinner className="mr-1.5 h-3 w-3" />}
-            {m.nombre}
-          </Button>
+            <Button
+              type="button"
+              size="sm"
+              // Activo = la sirve esta cuenta: relleno sólido. Inactivo: outline apagado. El
+              // contraste deja claro de un vistazo qué marcas pertenecen a la cuenta.
+              variant={aqui ? "default" : "outline"}
+              aria-pressed={aqui}
+              disabled={marcaPendiente != null}
+              onClick={() => onMover(m.id, aqui ? otra : cuenta)}
+              className={cn(
+                "h-7 rounded-full px-3 text-xs",
+                !aqui && "text-muted-foreground",
+              )}
+            >
+              {ocupada && <Spinner className="mr-1.5 h-3 w-3" />}
+              {m.nombre}
+            </Button>
+          </Tooltip>
         );
       })}
     </div>
@@ -468,18 +476,19 @@ function TarjetaCuenta({
           </span>
           <span className="flex items-center gap-2">
             {data.disponible && <BadgeAuth auth={data.auth} />}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={refrescar}
-              disabled={query.isFetching}
-              title="Actualizar estado y uso ahora"
-            >
-              <RefreshCw
-                className={cn("h-4 w-4", query.isFetching && "animate-spin")}
-                aria-hidden="true"
-              />
-            </Button>
+            <Tooltip label="Actualizar estado y uso ahora">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={refrescar}
+                disabled={query.isFetching}
+              >
+                <RefreshCw
+                  className={cn("h-4 w-4", query.isFetching && "animate-spin")}
+                  aria-hidden="true"
+                />
+              </Button>
+            </Tooltip>
           </span>
         </CardTitle>
         {descripcion && (

@@ -34,6 +34,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip } from "@/components/ui/tooltip";
 import { api, mensajeError } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
@@ -262,17 +263,18 @@ function FranjaEnsamblaje({
               {i > 0 ? (
                 <MoveRight className="mx-1.5 h-3.5 w-3.5 text-muted-foreground/50" aria-hidden />
               ) : null}
-              <button
-                type="button"
-                onClick={() => onAbrir(o.docId)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs font-medium shadow-sm transition-colors hover:bg-accent"
-                title={`${o.etiqueta} — abrir documento`}
-              >
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-muted text-[10px] font-semibold tabular-nums text-foreground">
-                  {i + 1}
-                </span>
-                {o.etiqueta}
-              </button>
+              <Tooltip label={`${o.etiqueta} — abrir documento`}>
+                <button
+                  type="button"
+                  onClick={() => onAbrir(o.docId)}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs font-medium shadow-sm transition-colors hover:bg-accent"
+                >
+                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-muted text-[10px] font-semibold tabular-nums text-foreground">
+                    {i + 1}
+                  </span>
+                  {o.etiqueta}
+                </button>
+              </Tooltip>
             </li>
           ))}
         </ol>
@@ -291,28 +293,29 @@ function TarjetaExtra({
 }) {
   const Icono = iconoDe(extra.clase);
   return (
-    <button
-      type="button"
-      onClick={() => extra.docId && onAbrir(extra.docId)}
-      className="flex w-full items-center gap-2.5 rounded-xl border bg-card px-3 py-2 text-left transition-colors hover:bg-accent focus-visible:bg-accent"
-      title={`${extra.tituloDoc || extra.titulo} — abrir documento`}
-    >
-      <Icono className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">
-          {extra.tituloDoc || extra.titulo}
+    <Tooltip label={`${extra.tituloDoc || extra.titulo} — abrir documento`} className="w-full">
+      <button
+        type="button"
+        onClick={() => extra.docId && onAbrir(extra.docId)}
+        className="flex w-full items-center gap-2.5 rounded-xl border bg-card px-3 py-2 text-left transition-colors hover:bg-accent focus-visible:bg-accent"
+      >
+        <Icono className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium">
+            {extra.tituloDoc || extra.titulo}
+          </span>
+          {extra.extracto ? (
+            <span className="block truncate text-xs text-muted-foreground">{extra.extracto}</span>
+          ) : null}
         </span>
-        {extra.extracto ? (
-          <span className="block truncate text-xs text-muted-foreground">{extra.extracto}</span>
+        {extra.sinPublicar ? (
+          <AlertTriangle
+            className="h-3.5 w-3.5 shrink-0 text-[hsl(var(--aviso-texto-plano))]"
+            aria-label="Cambios sin publicar"
+          />
         ) : null}
-      </span>
-      {extra.sinPublicar ? (
-        <AlertTriangle
-          className="h-3.5 w-3.5 shrink-0 text-[hsl(var(--aviso-texto-plano))]"
-          aria-label="Cambios sin publicar"
-        />
-      ) : null}
-    </button>
+      </button>
+    </Tooltip>
   );
 }
 

@@ -7,6 +7,7 @@ import { Music, Trash2, Volume2, VolumeX } from "lucide-react";
 
 import { EditorVideo } from "@/components/media/EditorVideo";
 import { Label } from "@/components/ui/label";
+import { Tooltip } from "@/components/ui/tooltip";
 import { pistaAudio, segmentosBase, type ComposicionVideo } from "@/lib/video";
 
 export interface PanelAudioProps {
@@ -120,17 +121,18 @@ function ControlVolumen({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <button
-        type="button"
-        onClick={() => onSilenciar(!silenciado)}
-        disabled={disabled}
-        aria-pressed={silenciado}
-        aria-label={silenciado ? `Activar sonido de ${nombre}` : `Silenciar ${nombre}`}
-        title={silenciado ? "Activar sonido" : "Silenciar"}
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-accent disabled:opacity-40"
-      >
-        {silenciado ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-      </button>
+      <Tooltip label={silenciado ? "Activar sonido" : "Silenciar"}>
+        <button
+          type="button"
+          onClick={() => onSilenciar(!silenciado)}
+          disabled={disabled}
+          aria-pressed={silenciado}
+          aria-label={silenciado ? `Activar sonido de ${nombre}` : `Silenciar ${nombre}`}
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-accent disabled:opacity-40"
+        >
+          {silenciado ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+        </button>
+      </Tooltip>
       <input
         type="range"
         min={0}
