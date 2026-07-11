@@ -23,6 +23,7 @@ export function MenuAcciones({
   ajustes,
   ajustesTitulo,
   ajustesAbiertoInicial = false,
+  alinearMovil = "izquierda",
 }: {
   children?: React.ReactNode;
   etiqueta?: string;
@@ -31,6 +32,10 @@ export function MenuAcciones({
   ajustesTitulo?: string;
   /** Abre el panel ya desplegado al montar (deep-links, p. ej. `?horarios=1`). */
   ajustesAbiertoInicial?: boolean;
+  /** Flanco al que se ancla el panel bajo `md` (en `md+` siempre a la derecha). Un "⋮"
+   *  pegado al borde derecho de su barra (p. ej. la fila de chips de Métricas en móvil)
+   *  debe anclar a la derecha para que el panel no desborde el viewport. */
+  alinearMovil?: "izquierda" | "derecha";
 }) {
   const [abierto, setAbierto] = React.useState(false);
   const [ajustesAbierto, setAjustesAbierto] = React.useState(ajustesAbiertoInicial);
@@ -69,9 +74,13 @@ export function MenuAcciones({
         <div
           role="menu"
           // El "⋮" vive en el flanco DERECHO de la barra (escritorio): el panel se ancla a su
-          // borde derecho y crece hacia dentro para no salirse del viewport. En móvil el "⋮" cae
-          // a la izquierda de su fila propia, así que ahí abre alineado a la izquierda.
-          className="absolute left-0 z-50 mt-1 min-w-44 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md md:left-auto md:right-0"
+          // borde derecho y crece hacia dentro para no salirse del viewport. En móvil el flanco
+          // lo decide `alinearMovil`: a la izquierda cuando el "⋮" cae al inicio de su fila
+          // (acciones de página), a la derecha cuando va pegado al borde derecho.
+          className={cn(
+            "absolute z-50 mt-1 min-w-44 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md",
+            alinearMovil === "izquierda" ? "left-0 md:left-auto md:right-0" : "right-0",
+          )}
           onClick={() => setAbierto(false)}
         >
           {ajustes && (

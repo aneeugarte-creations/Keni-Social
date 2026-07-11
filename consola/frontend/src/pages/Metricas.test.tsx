@@ -12,7 +12,7 @@
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -25,6 +25,15 @@ import type { OpcionesMetricas, ReporteMetricas } from "@/types";
 
 import Metricas from "./Metricas";
 import { useVistaConfig } from "./metricas/vistaConfig";
+
+// ── Viewport simulado ─────────────────────────────────────────────────────────
+// jsdom no trae `matchMedia`, así que `useEsEscritorio` devolvería siempre escritorio.
+// Este mock permite forzar la rama MÓVIL (chips + hoja inferior) por test.
+const pantalla = vi.hoisted(() => ({ esEscritorio: true }));
+vi.mock("@/hooks/use-media-query", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("@/hooks/use-media-query")>();
+  return { ...mod, useEsEscritorio: () => pantalla.esEscritorio };
+});
 
 // ── Stubs de los hijos pesados (queries/gráficas propias) ────────────────────
 
@@ -138,6 +147,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   // La config de vista es un singleton global: restáurala para no contaminar otros tests.
   useVistaConfig.getState().reset();
+  pantalla.esEscritorio = true;
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -195,6 +205,50 @@ describe("Metricas · cuerpo del dashboard", () => {
       screen.getByRole("button", { name: "Mostrar Comparativa por marca" }),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("grafica-marcas")).not.toBeInTheDocument();
+  });
+});
+
+describe("Metricas · cabecera móvil (chips + hoja inferior)", () => {
+  beforeEach(() => {
+    pantalla.esEscritorio = false;
+  });
+
+  it("pinta la fila de chips con las etiquetas del corte activo, sin textos pasivos", async () => {
+    renderMetricas();
+    await screen.findByText("Detalle por red"); // el cuerpo ya montó
+
+    // Los tres chips (periodo · red · formato) son botones que abren la hoja.
+    const chipPeriodo = screen.getByRole("button", { name: "Últimos 7 días" });
+    expect(chipPeriodo).toHaveAttribute("aria-haspopup", "dialog");
+    expect(screen.getByRole("button", { name: "Todas las redes" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Todos los formatos" })).toBeInTheDocument();
+    // Los textos pasivos (frescura, fechas del corte) no viven en la barra: van en la hoja.
+    expect(screen.queryByText(/^Actualizado /)).not.toBeInTheDocument();
+  });
+
+  it("el chip de red muestra la etiqueta real del corte aplicado", async () => {
+    useVistaConfig.getState().setRedes(["instagram"]);
+    renderMetricas();
+    await screen.findByText("Detalle por red");
+
+    expect(screen.getByRole("button", { name: "Instagram" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Todas las redes" })).not.toBeInTheDocument();
+  });
+
+  it("tocar un chip abre la hoja con los selectores apilados y el estado de frescura", async () => {
+    renderMetricas();
+    await screen.findByText("Detalle por red");
+
+    fireEvent.click(screen.getByRole("button", { name: "Todas las redes" }));
+
+    const hoja = await screen.findByRole("dialog", { name: "Filtros de métricas" });
+    // Selector de tiempo (mismo componente que en escritorio) + red + formato + vistas.
+    expect(within(hoja).getByLabelText("Tipo de periodo")).toBeInTheDocument();
+    expect(within(hoja).getByLabelText("Redes")).toBeInTheDocument();
+    expect(within(hoja).getByLabelText("Formatos")).toBeInTheDocument();
+    expect(within(hoja).getByRole("button", { name: /Vistas/ })).toBeInTheDocument();
+    // El pie de la hoja lleva la línea de frescura que en móvil no cabe en la barra.
+    expect(within(hoja).getByText(/^Actualizado /)).toBeInTheDocument();
   });
 });
 

@@ -9,9 +9,12 @@ import {
   marcaParam,
 } from "@/components/comunes/selectores";
 import { MenuAcciones } from "@/components/layout/MenuAcciones";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
+import { useEsEscritorio } from "@/hooks/use-media-query";
 import { api } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type { OpcionesMetricas } from "@/types";
 
 import { AlertaIngesta } from "./metricas/AlertaIngesta";
@@ -197,6 +200,13 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
     generadoEn: reporteQuery.data?.generado_en,
   });
 
+  // Cabecera en dos variantes según viewport: en escritorio los filtros van inline en la
+  // toolbar; en móvil la toolbar se comprime a chips y los filtros viven en una hoja
+  // inferior (`hojaAbierta`). El hook de refresco queda arriba, a nivel de página: la hoja
+  // se desmonta al cerrarse y el polling le sobrevive.
+  const esEscritorio = useEsEscritorio();
+  const [hojaAbierta, setHojaAbierta] = React.useState(false);
+
   // Un desglose por una dimensión con UN solo valor no aporta: con una sola marca, ni la
   // comparativa ni el detalle por marca; con una sola red con datos, ni la evolución ni el
   // detalle por red. Esas secciones se omiten (ni se muestran ni dejan barra de "mostrar").
@@ -221,13 +231,36 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
   // Reparto canónico de cabecera: el FILTRO de vista (rango temporal) queda inline con su
   // indicador de frescura; la ACCIÓN (Actualizar) va al menú "⋮". La conexión Metricool se
   // gestiona ahora en Sistema → Proveedores (junto al resto de conexiones a externos), no aquí.
-  // El estado del refresco vive aquí (hook): el item del menú se desmonta al cerrarse y el
-  // polling le sobrevive.
   // Toolbar PROPIA del dashboard (fila debajo de las pestañas), NO en la barra superior
-  // compartida: con tantos filtros (periodo, red, configurar, vistas, acciones) la cabecera
-  // se saturaba y solapaba con las pestañas/título. `flex-wrap` evita cualquier solape: en
-  // pantallas estrechas los controles fluyen a la siguiente línea.
-  const toolbar = (
+  // compartida: con tantos filtros (periodo, red, vistas, acciones) la cabecera se saturaba
+  // y solapaba con las pestañas/título. Dos variantes según viewport:
+  //   - Escritorio (md+): todos los controles inline en una fila (`flex-wrap` de cortesía).
+  //   - Móvil: UNA fila de chips con el corte activo (periodo · red · formato) + el "⋮";
+  //     tocar un chip abre la hoja inferior con los selectores apilados. Los textos pasivos
+  //     (frescura, fechas del corte) no caben en la barra: viven dentro de la hoja.
+  const menuAcciones = (
+    /* El "⋮" agrupa las ACCIONES (descargar CSV/PDF, actualizar) para no saturar la barra:
+       inline quedan solo los FILTROS (periodo, red) y Vistas guardadas. En móvil va pegado
+       al borde derecho de la fila de chips, así que su panel ancla a la derecha. */
+    <MenuAcciones alinearMovil="derecha">
+      <ItemsDescarga
+        rango={rango}
+        marca={marca_}
+        marcaEtiqueta={marcaEtiqueta}
+        redEtiqueta={redEtiqueta}
+        formatoEtiqueta={formatoEtiqueta}
+        periodoEtiqueta={periodoEtiqueta}
+        generadoEn={reporteQuery.data?.generado_en}
+      />
+      <div role="separator" aria-orientation="horizontal" className="my-1 h-px bg-border" />
+      <ItemActualizarMetricas
+        actualizar={refresco.actualizar}
+        deshabilitado={refresco.deshabilitado}
+      />
+    </MenuAcciones>
+  );
+
+  const toolbarEscritorio = (
     <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-b border-border/60 bg-background/95 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <EstadoActualizacion
         refrescando={refresco.refrescando}
@@ -235,15 +268,14 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
       />
       <SelectorTiempo rangos={rangos} valor={rango} onCambio={cambiarRango} />
       {/* Fechas del corte activo, legibles junto al selector: el valor del selector no siempre
-          dice el rango real (un atajo o un mes concreto). Sobrio (muted), sin robar fila en
-          escritorio; en pantallas estrechas fluye con el resto del toolbar (flex-wrap). */}
+          dice el rango real (un atajo o un mes concreto). Sobrio (muted). */}
       <span className="text-xs text-muted-foreground">{periodoEtiqueta}</span>
       {/* Selectores globales RED + FORMATO: filtran toda la página (escriben en `vistaConfig`).
           El de formato depende de la red en foco (Instagram → Reel/Carrusel/Foto, …). */}
       <SelectorRed />
       <SelectorFormato />
-      {/* La visibilidad de secciones y el orden/visibilidad de columnas se editan AHORA en
-          cada sección (toggle de ojo + kebab de columnas), no en un panel macro aparte. */}
+      {/* La visibilidad de secciones y el orden/visibilidad de columnas se editan en cada
+          sección (toggle de ojo + kebab de columnas), no en un panel macro aparte. */}
       {/* Vistas guardadas: presets nombrados (config de vista + marca + periodo). */}
       <VistasGuardadas
         marcaActual={marcaActiva}
@@ -253,30 +285,82 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           cambiarRango(periodo);
         }}
       />
-      {/* El "⋮" agrupa las ACCIONES (descargar CSV/PDF, actualizar) para no saturar la barra:
-          inline quedan solo los FILTROS (periodo, red) y Configurar vista / Vistas guardadas. */}
-      <MenuAcciones>
-        <ItemsDescarga
-          rango={rango}
-          marca={marca_}
-          marcaEtiqueta={marcaEtiqueta}
-          redEtiqueta={redEtiqueta}
-          formatoEtiqueta={formatoEtiqueta}
-          periodoEtiqueta={periodoEtiqueta}
-          generadoEn={reporteQuery.data?.generado_en}
-        />
-        <div role="separator" aria-orientation="horizontal" className="my-1 h-px bg-border" />
-        <ItemActualizarMetricas
-          actualizar={refresco.actualizar}
-          deshabilitado={refresco.deshabilitado}
-        />
-      </MenuAcciones>
+      {menuAcciones}
     </div>
+  );
+
+  // Móvil: los chips muestran el corte activo con su etiqueta real; los de red/formato se
+  // realzan (texto foreground + punto) cuando hay corte aplicado (≠ todas). La fila scrollea
+  // en horizontal sin scrollbar visible si las etiquetas no caben.
+  const hayRed = red != null;
+  const hayFormato = formato != null;
+  const abrirHoja = () => setHojaAbierta(true);
+  const toolbarMovil = (
+    <div className="sticky top-0 z-20 flex items-center gap-1.5 border-b border-border/60 bg-background/95 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <ChipFiltro etiqueta={periodoEtiqueta} activo onClick={abrirHoja} />
+        <ChipFiltro etiqueta={redEtiqueta} activo={hayRed} punto={hayRed} onClick={abrirHoja} />
+        <ChipFiltro
+          etiqueta={formatoEtiqueta}
+          activo={hayFormato}
+          punto={hayFormato}
+          onClick={abrirHoja}
+        />
+      </div>
+      {menuAcciones}
+    </div>
+  );
+
+  // Hoja inferior móvil con TODOS los filtros apilados: cualquier chip abre esta misma
+  // hoja. Los selectores son los mismos componentes que en escritorio, tal cual (bajo `sm`
+  // ya ocupan el ancho completo).
+  const hojaFiltros = (
+    <Sheet open={hojaAbierta} onOpenChange={setHojaAbierta}>
+      <SheetContent aria-label="Filtros de métricas">
+        <SheetTitle className="sr-only">Filtros de métricas</SheetTitle>
+        <div className="flex flex-col gap-5 px-4 pb-4 pt-2">
+          <section className="flex flex-col gap-1.5">
+            <h3 className="text-xs font-medium text-muted-foreground">Periodo</h3>
+            <SelectorTiempo rangos={rangos} valor={rango} onCambio={cambiarRango} />
+            {/* Fechas del corte activo: el valor del selector no siempre dice el rango real. */}
+            <p className="text-xs text-muted-foreground">{periodoEtiqueta}</p>
+          </section>
+          <section className="flex flex-col gap-1.5">
+            <h3 className="text-xs font-medium text-muted-foreground">Redes</h3>
+            <SelectorRed />
+          </section>
+          <section className="flex flex-col gap-1.5">
+            <h3 className="text-xs font-medium text-muted-foreground">Formato</h3>
+            <SelectorFormato />
+          </section>
+          <section className="flex flex-col gap-1.5">
+            <h3 className="text-xs font-medium text-muted-foreground">Vistas guardadas</h3>
+            <VistasGuardadas
+              marcaActual={marcaActiva}
+              periodoActual={rango}
+              onAplicar={(marca, periodo) => {
+                cambiarMarca(marca);
+                cambiarRango(periodo);
+                // Aplicar una vista es una acción terminal: la hoja se cierra para ver el corte.
+                setHojaAbierta(false);
+              }}
+            />
+          </section>
+          <div className="border-t border-border/60 pt-3">
+            <EstadoActualizacion
+              refrescando={refresco.refrescando}
+              generadoEn={reporteQuery.data?.generado_en}
+            />
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 
   return (
     <div className="space-y-6">
-      {toolbar}
+      {esEscritorio ? toolbarEscritorio : toolbarMovil}
+      {!esEscritorio && hojaFiltros}
 
       {reporteQuery.isPending ? (
         <EsqueletoDashboard />
@@ -379,6 +463,41 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Chip de la barra móvil de Métricas: muestra la etiqueta real del corte activo (periodo,
+ * red o formato) y abre la hoja inferior de filtros. `activo` pinta el texto en foreground
+ * (hay un corte que leer); `punto` añade el indicador de filtro aplicado (≠ todas), el
+ * mismo lenguaje que el punto de filtros de `ControlContexto`.
+ */
+function ChipFiltro({
+  etiqueta,
+  activo = false,
+  punto = false,
+  onClick,
+}: {
+  etiqueta: string;
+  activo?: boolean;
+  punto?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-haspopup="dialog"
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border px-2.5 text-xs transition-colors hover:bg-accent",
+        activo ? "font-medium text-foreground" : "text-muted-foreground",
+      )}
+    >
+      {etiqueta}
+      {punto && (
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-foreground" aria-hidden="true" />
+      )}
+    </button>
   );
 }
 
