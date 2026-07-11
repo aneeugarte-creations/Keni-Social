@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { marcaParam } from "@/components/comunes/selectores";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
@@ -391,13 +392,9 @@ export function PiezasConsolidada({
             No se pudo cargar el listado de piezas.
           </p>
         ) : piezas.length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">
-            Sin piezas en este periodo.
-          </p>
+          <EstadoVacioTexto texto="Sin piezas en este periodo." />
         ) : filasOrdenadas.length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">
-            Ninguna pieza coincide con los filtros.
-          </p>
+          <EstadoVacioTexto texto="Ninguna pieza coincide con los filtros." />
         ) : (
           <>
             <Table>

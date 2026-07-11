@@ -11,6 +11,7 @@ import { AreaChart } from "@tremor/react";
 import { LineChart as LineChartIcon } from "lucide-react";
 import * as React from "react";
 
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
@@ -56,9 +57,7 @@ export function GraficaTendencia({ puntos }: { puntos: PuntoTendenciaCampania[] 
           </Select>
         </div>
         {datos.length === 0 ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">
-            No hay piezas con estos hashtags en el periodo.
-          </p>
+          <EstadoVacioTexto texto="No hay piezas con estos hashtags en el periodo." />
         ) : (
           <AreaChart
             data={datos}

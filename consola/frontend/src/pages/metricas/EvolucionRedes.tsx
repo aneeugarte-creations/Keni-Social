@@ -21,6 +21,7 @@ import {
   YAxis,
 } from "recharts";
 
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { marcaParam } from "@/components/comunes/selectores";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
@@ -238,9 +239,7 @@ export function EvolucionRedes({
           No se pudo cargar la evolución por red.
         </p>
       ) : filas.length === 0 ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          Aún no hay piezas publicadas en este periodo.
-        </p>
+        <EstadoVacioTexto texto="Aún no hay piezas publicadas en este periodo." />
       ) : (
         /* role=img: alternativa textual del chart (resume intervalos, granularidad y redes). */
         <div

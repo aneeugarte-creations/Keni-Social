@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 import { BarChart, type CustomTooltipProps } from "@tremor/react";
 import { SigmaSquare } from "lucide-react";
 
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { marcaParam } from "@/components/comunes/selectores";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
 import { Card } from "@/components/ui/card";
@@ -70,9 +71,7 @@ export function DistribucionEngagement({
             No se pudo cargar la distribución de engagement.
           </p>
         ) : data.total === 0 || data.distribucion.length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">
-            Sin piezas en este periodo.
-          </p>
+          <EstadoVacioTexto texto="Sin piezas en este periodo." />
         ) : (
           <Cuerpo data={data} />
         )}

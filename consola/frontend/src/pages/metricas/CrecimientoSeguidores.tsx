@@ -18,6 +18,7 @@ import { BadgeDelta, type DeltaType, LineChart } from "@tremor/react";
 import { Users } from "lucide-react";
 import * as React from "react";
 
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { marcaParam } from "@/components/comunes/selectores";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
 import { Card } from "@/components/ui/card";
@@ -154,9 +155,7 @@ export function CrecimientoSeguidores({
               No se pudo cargar la serie de seguidores.
             </p>
           ) : (data.puntos ?? []).length === 0 ? (
-            <p className="py-12 text-center text-sm text-muted-foreground">
-              Aún no hay datos de seguidores para este periodo
-            </p>
+            <EstadoVacioTexto texto="Aún no hay datos de seguidores para este periodo" />
           ) : (
             <>
               <KpisSeguidores

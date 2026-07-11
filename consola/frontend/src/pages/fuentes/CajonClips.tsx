@@ -156,7 +156,7 @@ export default function CajonClips() {
                   realce
                   acciones={[]}
                   onPrimaria={() => navigate("/operacion/feed")}
-                  className="flex items-start justify-between gap-2 rounded-md border p-2.5 text-sm"
+                  className="flex items-start justify-between gap-2 rounded-md border p-3 text-sm"
                 >
                   <div className="min-w-0" data-testid="clip-item">
                     <p className="truncate font-medium leading-snug">{c.titulo || "(sin título)"}</p>

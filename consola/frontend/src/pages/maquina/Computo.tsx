@@ -5,11 +5,12 @@
  * el presupuesto y la economía viven en su pestaña hermana «Economía».
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, AlertTriangle, Clock, Cpu, type LucideIcon, Trash2, Users } from "lucide-react";
+import { Activity, Clock, Cpu, type LucideIcon, Trash2, Users } from "lucide-react";
 import * as React from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { confirmar } from "@/components/comunes/confirmar";
 import { AccionesPagina } from "@/components/layout/encabezado";
@@ -260,26 +261,25 @@ export default function Computo() {
       {/* Jobs huérfanos: parte del conteo global sin generación detrás (no se procesan). El botón
           de limpiarlos es admin (el back responde 403 si no lo es). */}
       {totalHuerf > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/50 bg-amber-50 px-4 py-3 dark:bg-amber-950/30">
-          <p className="flex items-center gap-2 text-sm text-amber-900 dark:text-amber-200">
-            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-            <span>
+        <Aviso className="flex-wrap items-center gap-3">
+          <span className="flex flex-wrap items-center gap-3">
+            <span className="min-w-0 flex-1">
               <span className="font-semibold tabular-nums">{totalHuerf}</span> jobs huérfanos: sin
               generación, no se procesan.
               {!esAdmin && " Un administrador puede limpiarlos."}
             </span>
-          </p>
-          {esAdmin && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={limpiarHuerfanos.isPending}
-              onClick={() => limpiarHuerfanos.mutate()}
-            >
-              Limpiar huérfanos
-            </Button>
-          )}
-        </div>
+            {esAdmin && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={limpiarHuerfanos.isPending}
+                onClick={() => limpiarHuerfanos.mutate()}
+              >
+                Limpiar huérfanos
+              </Button>
+            )}
+          </span>
+        </Aviso>
       )}
 
       {/* Estado en vivo. (El presupuesto y la parada de emergencia viven en «Economía».) Con marca

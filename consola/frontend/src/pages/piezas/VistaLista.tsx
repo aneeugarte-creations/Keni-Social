@@ -229,7 +229,7 @@ function TarjetaPieza({
         realce
         className="rounded-xl border bg-card text-card-foreground"
       >
-        <div className="flex min-w-0 flex-1 gap-3 py-4 pl-4 pr-10">
+        <div className="flex min-w-0 flex-1 gap-3 p-3 pr-10">
           {imagen && (
             <div className="relative h-16 w-16 shrink-0">
               <OverlaySinLicencia

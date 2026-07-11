@@ -10,6 +10,7 @@ import { Presentation, Search } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -173,7 +174,7 @@ export function DialogoDescargarPdf({
                 enlace={enlacePrevia}
               />
             ) : (
-              <p className="py-12 text-center text-sm text-muted-foreground">Sin datos cargados.</p>
+              <EstadoVacioTexto texto="Sin datos cargados." />
             )}
           </div>
 

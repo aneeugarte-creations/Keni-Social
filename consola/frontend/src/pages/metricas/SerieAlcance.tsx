@@ -19,6 +19,7 @@ import { useQuery } from "@tanstack/react-query";
 import { LineChart } from "@tremor/react";
 import { Radar } from "lucide-react";
 
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { marcaParam } from "@/components/comunes/selectores";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
 import { Card } from "@/components/ui/card";
@@ -155,9 +156,7 @@ export function SerieAlcance({
             No se pudo cargar la serie de alcance.
           </p>
         ) : fechas.length === 0 ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">
-            No hay alcance de cuenta para este periodo (solo Instagram lo mide).
-          </p>
+          <EstadoVacioTexto texto="No hay alcance de cuenta para este periodo (solo Instagram lo mide)." />
         ) : (
           <>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

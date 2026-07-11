@@ -13,6 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { UsersRound } from "lucide-react";
 import * as React from "react";
 
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { marcaParam } from "@/components/comunes/selectores";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -89,9 +90,7 @@ export function FlujoAudiencia({
             No se pudo cargar el flujo de audiencia.
           </p>
         ) : filas.length === 0 ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">
-            No hay flujo de audiencia para este periodo.
-          </p>
+          <EstadoVacioTexto texto="No hay flujo de audiencia para este periodo." />
         ) : (
           <Table>
             <TableHeader>

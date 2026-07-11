@@ -99,7 +99,7 @@ export function TarjetaHistoria({
       }`}
       data-testid="historia-item"
     >
-      <CardContent className="pt-3 pb-3">
+      <CardContent className="p-3">
         <div className="flex items-start justify-between gap-2">
           <div className="flex flex-1 min-w-0 items-start gap-2">
             {onToggleSeleccion && (

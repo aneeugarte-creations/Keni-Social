@@ -17,6 +17,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { GitBranch } from "lucide-react";
 
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { marcaParam } from "@/components/comunes/selectores";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -123,9 +124,7 @@ export function MetricaPorCategoria({
           No se pudo cargar el rendimiento por categoría.
         </p>
       ) : data.categorias.length === 0 && data.origenes.length === 0 ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          Aún no hay rendimiento por categoría u origen para este periodo.
-        </p>
+        <EstadoVacioTexto texto="Aún no hay rendimiento por categoría u origen para este periodo." />
       ) : (
         <>
           <TablaCategorias

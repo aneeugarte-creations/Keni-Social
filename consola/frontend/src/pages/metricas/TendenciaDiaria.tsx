@@ -11,6 +11,7 @@ import { AreaChart } from "@tremor/react";
 import { LineChart as LineChartIcon } from "lucide-react";
 import * as React from "react";
 
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { marcaParam } from "@/components/comunes/selectores";
 import { Card } from "@/components/ui/card";
 import {
@@ -125,9 +126,7 @@ export function TendenciaDiaria({
             No se pudo cargar la tendencia.
           </p>
         ) : datos.length === 0 ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">
-            Aún no hay datos día a día para este periodo
-          </p>
+          <EstadoVacioTexto texto="Aún no hay datos día a día para este periodo" />
         ) : (
           <div
             role="img"

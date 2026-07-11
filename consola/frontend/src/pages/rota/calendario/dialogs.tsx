@@ -9,6 +9,7 @@ import {
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { Campo } from "@/components/comunes/Campo";
 import { confirmar, elegir } from "@/components/comunes/confirmar";
@@ -530,12 +531,10 @@ export function DialogEditarTurno({
             />
           </Campo>
           {pendienteOverride && (
-            <div className="rounded-md border border-amber-300/60 bg-amber-50/40 p-3 text-sm text-amber-900 dark:bg-amber-950/20 dark:text-amber-300">
+            <Aviso>
               <p className="font-medium">{pendienteOverride.mensaje}</p>
-              <p className="mt-1 text-xs">
-                Confirma solo si es una cobertura estratégica intencional.
-              </p>
-            </div>
+              <p className="mt-1">Confirma solo si es una cobertura estratégica intencional.</p>
+            </Aviso>
           )}
         </div>
         <DialogFooter>

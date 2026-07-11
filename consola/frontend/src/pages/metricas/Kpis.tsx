@@ -17,6 +17,7 @@
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
 import { marcaParam } from "@/components/comunes/selectores";
 import { api } from "@/lib/api";
@@ -155,9 +156,7 @@ export function Kpis({
     >
       <div className="space-y-2">
         {sinDatos ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">
-            Aún no hay datos para este periodo
-          </p>
+          <EstadoVacioTexto texto="Aún no hay datos para este periodo" />
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
             {visibles.map((id) => tarjeta(id))}

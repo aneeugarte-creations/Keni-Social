@@ -22,6 +22,7 @@ import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { ChipNivelPresupuesto } from "@/components/comunes/ChipEstado";
 import { confirmar, elegir } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
@@ -767,35 +768,35 @@ function AvisoGateCuenta({
 
   // Pausado por consumo del día: aviso prominente. Admin ve «Aceptar continuar (+10%)».
   return (
-    <div className="space-y-3 rounded-lg border border-amber-500/50 bg-amber-50 p-4 dark:bg-amber-950/30">
-      <div className="flex items-start gap-2">
-        <PauseCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-        <div className="space-y-1">
-          <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-            Generación pausada por el consumo del día ({etiquetaCuenta})
-          </p>
-          <p className="text-xs text-amber-800 dark:text-amber-300/90 tabular-nums">
-            Hoy se ha consumido {consumo.toFixed(1)}% del límite semanal de la {etiquetaCuenta}{" "}
-            (umbral del día {gate.umbral_pct.toFixed(1)}%). El fondo de sus marcas deja de encolar y
-            ejecutar; los lanzamientos manuales del equipo siguen.
-          </p>
+    <Aviso icono={false}>
+      <div className="space-y-3">
+        <div className="flex items-start gap-2">
+          <PauseCircle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+          <div className="space-y-1">
+            <p className="font-semibold">
+              Generación pausada por el consumo del día ({etiquetaCuenta})
+            </p>
+            <p className="tabular-nums">
+              Hoy se ha consumido {consumo.toFixed(1)}% del límite semanal de la {etiquetaCuenta}{" "}
+              (umbral del día {gate.umbral_pct.toFixed(1)}%). El fondo de sus marcas deja de encolar y
+              ejecutar; los lanzamientos manuales del equipo siguen.
+            </p>
+          </div>
         </div>
+        {esAdmin ? (
+          <Button
+            size="sm"
+            onClick={() => aceptar.mutate()}
+            disabled={aceptar.isPending}
+            className="bg-amber-600 hover:bg-amber-700"
+          >
+            Aceptar continuar (+10%)
+          </Button>
+        ) : (
+          <p>Un administrador puede aceptar +10% para reanudar el fondo de hoy de esta cuenta.</p>
+        )}
       </div>
-      {esAdmin ? (
-        <Button
-          size="sm"
-          onClick={() => aceptar.mutate()}
-          disabled={aceptar.isPending}
-          className="bg-amber-600 hover:bg-amber-700"
-        >
-          Aceptar continuar (+10%)
-        </Button>
-      ) : (
-        <p className="text-xs text-amber-800 dark:text-amber-300/90">
-          Un administrador puede aceptar +10% para reanudar el fondo de hoy de esta cuenta.
-        </p>
-      )}
-    </div>
+    </Aviso>
   );
 }
 

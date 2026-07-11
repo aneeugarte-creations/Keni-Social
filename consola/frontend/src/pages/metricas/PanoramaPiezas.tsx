@@ -33,6 +33,7 @@ import {
   YAxis,
 } from "recharts";
 
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { marcaParam } from "@/components/comunes/selectores";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
@@ -442,9 +443,7 @@ export function PanoramaPiezas({
           No se pudo cargar el panorama de piezas.
         </p>
       ) : total === 0 ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          Aún no hay piezas publicadas en este periodo.
-        </p>
+        <EstadoVacioTexto texto="Aún no hay piezas publicadas en este periodo." />
       ) : (
         /* role=img: alternativa textual del chart (total, redes y clave de lectura). */
         <div

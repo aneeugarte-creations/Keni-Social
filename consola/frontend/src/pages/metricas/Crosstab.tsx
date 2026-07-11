@@ -13,6 +13,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Grid3x3 } from "lucide-react";
 
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { marcaParam } from "@/components/comunes/selectores";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -124,10 +125,7 @@ export function Crosstab({
           No se pudo cargar el rendimiento por formato.
         </p>
       ) : data.celdas.length === 0 ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          Aún no hay cruce por formato para este periodo (la fuente de métricas no lo
-          entrega).
-        </p>
+        <EstadoVacioTexto texto="Aún no hay cruce por formato para este periodo (la fuente de métricas no lo entrega)." />
       ) : (
         <TablaCrosstab celdas={data.celdas} marcas={marcas} />
       )}

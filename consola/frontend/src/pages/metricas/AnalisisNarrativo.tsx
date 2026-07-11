@@ -25,6 +25,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Eye, ExternalLink, Sparkles, TrendingUp } from "lucide-react";
 
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { marcaParam } from "@/components/comunes/selectores";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -174,9 +175,7 @@ function CuerpoAnalisis({ data }: { data: AnalisisDiario }) {
   const sinHallazgos = data.hallazgos.length === 0 && data.siguiente_paso === null;
   if (sinHallazgos) {
     return (
-      <p className="px-6 py-10 text-center text-sm text-muted-foreground">
-        Sin datos suficientes para una lectura del periodo.
-      </p>
+      <EstadoVacioTexto texto="Sin datos suficientes para una lectura del periodo." className="px-6" />
     );
   }
 

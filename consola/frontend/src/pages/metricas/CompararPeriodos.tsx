@@ -16,9 +16,10 @@
  * `rango:AAAA-MM-DD_AAAA-MM-DD` o preset).
  */
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, AlertTriangle, ArrowLeftRight, RefreshCw } from "lucide-react";
+import { AlertCircle, ArrowLeftRight, RefreshCw } from "lucide-react";
 import * as React from "react";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import {
   marcaMetricasDesdeCanonica,
   marcaParam,
@@ -190,24 +191,12 @@ function AvisosComparabilidad({ rangoA, rangoB }: { rangoA: string; rangoB: stri
   return (
     <div className="space-y-2">
       {distintaDuracion && (
-        <p
-          className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
-          role="status"
-        >
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <span>
-            Periodos con distinta duración ({diasA} vs {diasB} días): variación no comparable.
-          </span>
-        </p>
+        <Aviso role="status">
+          Periodos con distinta duración ({diasA} vs {diasB} días): variación no comparable.
+        </Aviso>
       )}
       {solapados && (
-        <p
-          className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
-          role="status"
-        >
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <span>Los periodos se solapan: la comparación no es fiable.</span>
-        </p>
+        <Aviso role="status">Los periodos se solapan: la comparación no es fiable.</Aviso>
       )}
     </div>
   );

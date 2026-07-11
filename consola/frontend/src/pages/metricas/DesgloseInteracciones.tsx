@@ -26,6 +26,7 @@ import { BarChart } from "@tremor/react";
 import { Activity } from "lucide-react";
 import * as React from "react";
 
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { marcaParam } from "@/components/comunes/selectores";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -157,9 +158,7 @@ export function DesgloseInteracciones({
           No se pudo cargar el desglose de interacciones.
         </p>
       ) : data.celdas.length === 0 ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          Aún no hay desglose de interacciones para este periodo.
-        </p>
+        <EstadoVacioTexto texto="Aún no hay desglose de interacciones para este periodo." />
       ) : (
         <>
           <Card className="p-4 sm:p-6">

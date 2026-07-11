@@ -1299,7 +1299,7 @@ function FormularioIdeas({
               return (
                 <li
                   key={i}
-                  className="flex items-start gap-2 rounded-xl border bg-card p-2.5"
+                  className="flex items-start gap-2 rounded-xl border bg-card p-3"
                 >
                   <span className="mt-0.5 shrink-0 text-xs font-semibold tabular-nums text-muted-foreground">
                     {num}.

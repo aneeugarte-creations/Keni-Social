@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { AvisoZonaOperativa } from "@/components/comunes/AvisoZonaOperativa";
 import { confirmar } from "@/components/comunes/confirmar";
 import { Button } from "@/components/ui/button";
@@ -461,10 +462,10 @@ export function ReparteMes({
               </p>
             )}
             {huecos.length > 0 && (
-              <div className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+              <Aviso>
                 Esto deja {huecos.length} evento{huecos.length === 1 ? "" : "s"} sin cubrir:{" "}
                 {huecos.map((h) => `${h.titulo} (${fechaCorta(h.fecha)})`).join(" · ")}.
-              </div>
+              </Aviso>
             )}
           </div>
         ),

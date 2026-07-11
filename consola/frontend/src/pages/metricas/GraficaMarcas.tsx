@@ -13,6 +13,7 @@ import { BarChart, type CustomTooltipProps } from "@tremor/react";
 import { Info } from "lucide-react";
 import * as React from "react";
 
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -108,9 +109,7 @@ export function GraficaMarcas({ cuentas }: { cuentas: CuentaMetrica[] }) {
   if (cuentas.length === 0) {
     return (
       <Seccion id="marca-comparativa" titulo="Comparativa por marca">
-        <p className="py-8 text-center text-sm text-muted-foreground">
-          No hay marcas para mostrar en este periodo.
-        </p>
+        <EstadoVacioTexto texto="No hay marcas para mostrar en este periodo." />
       </Seccion>
     );
   }

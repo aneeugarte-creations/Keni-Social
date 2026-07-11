@@ -16,6 +16,7 @@ import {
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { Campo } from "@/components/comunes/Campo";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
@@ -841,11 +842,11 @@ export function TarjetaSwap({
       {/* Mientras el swap sigue abierto, el turno NO ha cambiado de manos: lo dejamos claro
           para que nadie lo confunda con un turno ya cubierto/cedido. */}
       {!esTerminal && (
-        <p className="rounded-md border border-amber-300/60 bg-amber-50/50 px-2.5 py-1.5 text-xs text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
+        <Aviso icono={false}>
           {soySolicitante || soyDestinatario
             ? "Este turno sigue siendo tuyo hasta que se aplique el cambio."
             : "Cada quien conserva su turno hasta que se aplique el cambio."}
-        </p>
+        </Aviso>
       )}
 
       {swap.motivo && (
