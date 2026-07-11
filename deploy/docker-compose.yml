@@ -530,10 +530,12 @@ services:
       KENI_REUTERS_API_KEY: ${KENI_REUTERS_API_KEY:-}
       KENI_AFP_CLIENT_ID: ${KENI_AFP_CLIENT_ID:-}
       KENI_AFP_CLIENT_SECRET: ${KENI_AFP_CLIENT_SECRET:-}
-      # Traducir SOLO los clusters extranjeros relevantes: score mínimo (0..1) para entrar a
-      # Traducir. Def 0 = traducir todo; con feeds de alto volumen eso dispara el gasto. 0.3
-      # deja pasar el top de relevancia (mediana del pool ~0.11, p90 ~0.20).
-      KENI_TRAD_MIN_SCORE: "0.3"
+      # Traducir TODO cluster extranjero reciente (umbral 0): el equipo navega la mesa de
+      # Noticias siempre en español, sin titulares en idioma original. Es el score mínimo
+      # (0..1) para entrar a Traducir; subirlo limita Traducir al top de relevancia (mediana
+      # del pool ~0.11, p90 ~0.20) y ahorra gasto de Haiku dejando las de baja relevancia en
+      # su idioma hasta que se usan (bajarlas al tablero ya las traduce en el acto).
+      KENI_TRAD_MIN_SCORE: "0"
       # MÁQUINA DE CONTENIDO: APAGADA por defecto. Se enciende EN CALIENTE desde el panel admin
       # (avatar -> Configuración) o, si se prefiere fijar por entorno, descomentando los flags de
       # abajo. El maestro KENI_MAQUINA es el kill-switch global; cuelgan de él las 3 etapas:
