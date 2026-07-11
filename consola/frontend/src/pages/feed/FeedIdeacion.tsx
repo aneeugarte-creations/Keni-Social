@@ -738,114 +738,118 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
       </AccionesPagina>
       <DialogoCrearPost abierto={creandoPost} onCerrar={() => setCreandoPost(false)} />
 
-      {/* UN SOLO EJE de composición: pestañas, estados (skeleton/error/vacío), feed y pie viven
-          en la MISMA columna centrada (`MAX_W_FEED` por columnas efectivas). Antes las pestañas
-          iban pegadas al borde y los vacíos a TODO el ancho: la página saltaba de eje al
-          cambiar de pestaña en monitores anchos. */}
-      <div className={cn("mx-auto w-full", MAX_W_FEED[colsEfectivas])}>
-        <h2 className="sr-only">Feed de ideación</h2>
+      {/* Cabecera de la página (buscador + chips de línea + pestañas): va a ANCHO COMPLETO con
+          el margen lateral fijo del AppShell, igual que el resto de páginas. No se centra ni se
+          ata al número de columnas, así queda SIEMPRE en el mismo sitio al cambiar de densidad o
+          de pestaña. */}
+      <h2 className="sr-only">Feed de ideación</h2>
 
-        {/* Filtros de la PÁGINA: buscador por titular + chips de LÍNEA del plan (las categorías
-            del plan de la marca —Última hora, Entretenimiento, Internacional, Nacional,
-            Evergreen…—, las mismas filas de Programa › Plan). Cada pieza cae en UNA categoría del
-            plan, así que el filtro es exacto: una «Última hora» no se cuela en «Nacional». */}
-        <div className="mb-3 space-y-2">
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              type="search"
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Buscar por palabras del titular…"
-              aria-label="Buscar piezas por titular"
-              className="pl-8 pr-8"
-            />
-            {busqueda && (
-              <button
-                type="button"
-                onClick={() => setBusqueda("")}
-                aria-label="Limpiar búsqueda"
-                className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            )}
-          </div>
-          {tieneGrupos ? (
-            <NavGruposLineas
-              grupos={gruposNav}
-              total={totalGrupos ?? 0}
-              grupoSel={navGrupoSel}
-              lineaSel={navLineaSel}
-              onSelGrupo={(g) => {
-                if (!g) {
-                  setGrupoSel("");
-                  setCategoria("");
-                  return;
-                }
-                const meta = metaPorGrupo.get(g);
-                if (meta?.categoria) {
-                  setCategoria(meta.categoria);
-                  setGrupoSel("");
-                } else {
-                  setGrupoSel(g);
-                  setCategoria("");
-                }
-              }}
-              onSelLinea={(_g, lineaId) => {
-                setCategoria(lineaId);
-                setGrupoSel("");
-              }}
-            />
-          ) : (
-            categoriasPlan.length > 0 && (
-              <div
-                role="radiogroup"
-                aria-label="Filtrar por categoría"
-                className="flex flex-wrap gap-x-5 gap-y-1"
-              >
-                <ChipLinea activo={categoria === ""} onClick={() => setCategoria("")}>
-                  Todas
-                </ChipLinea>
-                {categoriasPlan.map((c) => (
-                  <ChipLinea
-                    key={c.id}
-                    activo={categoria === c.id}
-                    onClick={() => setCategoria(c.id)}
-                  >
-                    {c.nombre}
-                  </ChipLinea>
-                ))}
-              </div>
-            )
+      {/* Filtros de la PÁGINA: buscador por titular + chips de LÍNEA del plan (las categorías
+          del plan de la marca —Última hora, Entretenimiento, Internacional, Nacional,
+          Evergreen…—, las mismas filas de Programa › Plan). Cada pieza cae en UNA categoría del
+          plan, así que el filtro es exacto: una «Última hora» no se cuela en «Nacional». */}
+      <div className="mb-3 space-y-2">
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            type="search"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar por palabras del titular…"
+            aria-label="Buscar piezas por titular"
+            className="pl-8 pr-8"
+          />
+          {busqueda && (
+            <button
+              type="button"
+              onClick={() => setBusqueda("")}
+              aria-label="Limpiar búsqueda"
+              className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
           )}
         </div>
-
-        {/* Pestañas (control segmentado en UNA fila), solas en su fila. El scroll horizontal de
-            emergencia vive FUERA del rail (dentro recortaba el anillo de foco y pintaba scrollbar
-            sobre las píldoras). El badge cuenta PIEZAS con el total real del servidor y se pinta
-            en cuanto su número está resuelto, no solo con el feed agotado. */}
-        <div className="mb-4 overflow-x-auto">
-          <Tabs value={vista} onValueChange={(v) => cambiarVista(v as Vista)}>
-            <TabsList className="w-fit" aria-label="Vista del feed">
-              {VISTAS.map((v) => (
-                <TabsTrigger key={v.id} value={v.id} className="gap-1.5">
-                  <PublicacionPestanaVista
-                    vista={v}
-                    conteo={conteoVista[v.id]}
-                    // Énfasis pasivo "te toca decidir" (mismo acento keni que el pulgar de
-                    // PostFeed) cuando hay piezas esperando OK; en cero, neutro.
-                    enfasis={v.id === "pendiente" && (totalRevision ?? 0) > 0}
-                  />
-                </TabsTrigger>
+        {tieneGrupos ? (
+          <NavGruposLineas
+            grupos={gruposNav}
+            total={totalGrupos ?? 0}
+            grupoSel={navGrupoSel}
+            lineaSel={navLineaSel}
+            onSelGrupo={(g) => {
+              if (!g) {
+                setGrupoSel("");
+                setCategoria("");
+                return;
+              }
+              const meta = metaPorGrupo.get(g);
+              if (meta?.categoria) {
+                setCategoria(meta.categoria);
+                setGrupoSel("");
+              } else {
+                setGrupoSel(g);
+                setCategoria("");
+              }
+            }}
+            onSelLinea={(_g, lineaId) => {
+              setCategoria(lineaId);
+              setGrupoSel("");
+            }}
+          />
+        ) : (
+          categoriasPlan.length > 0 && (
+            <div
+              role="radiogroup"
+              aria-label="Filtrar por categoría"
+              className="flex flex-wrap gap-x-5 gap-y-1"
+            >
+              <ChipLinea activo={categoria === ""} onClick={() => setCategoria("")}>
+                Todas
+              </ChipLinea>
+              {categoriasPlan.map((c) => (
+                <ChipLinea
+                  key={c.id}
+                  activo={categoria === c.id}
+                  onClick={() => setCategoria(c.id)}
+                >
+                  {c.nombre}
+                </ChipLinea>
               ))}
-            </TabsList>
-          </Tabs>
-        </div>
+            </div>
+          )
+        )}
+      </div>
 
+      {/* Pestañas (control segmentado en UNA fila), solas en su fila. El scroll horizontal de
+          emergencia vive FUERA del rail (dentro recortaba el anillo de foco y pintaba scrollbar
+          sobre las píldoras). El badge cuenta PIEZAS con el total real del servidor y se pinta
+          en cuanto su número está resuelto, no solo con el feed agotado. */}
+      <div className="mb-4 overflow-x-auto">
+        <Tabs value={vista} onValueChange={(v) => cambiarVista(v as Vista)}>
+          <TabsList className="w-fit" aria-label="Vista del feed">
+            {VISTAS.map((v) => (
+              <TabsTrigger key={v.id} value={v.id} className="gap-1.5">
+                <PublicacionPestanaVista
+                  vista={v}
+                  conteo={conteoVista[v.id]}
+                  // Énfasis pasivo "te toca decidir" (mismo acento keni que el pulgar de
+                  // PostFeed) cuando hay piezas esperando OK; en cero, neutro.
+                  enfasis={v.id === "pendiente" && (totalRevision ?? 0) > 0}
+                />
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      </div>
+
+      {/* UN SOLO EJE de composición para el CONTENIDO del feed: los estados (skeleton/error/vacío),
+          el grid de posts y el pie viven en la MISMA columna centrada (`MAX_W_FEED` por columnas
+          efectivas), que gana o pierde margen según la densidad. La cabecera queda fuera de este
+          wrapper, a ancho completo con el margen del AppShell. */}
+      <div className={cn("mx-auto w-full", MAX_W_FEED[colsEfectivas])}>
         {/* Feed. Con TODAS las redes: una MATRIZ por idea (un bloque por idea; dentro, una rejilla
             con sus redes generadas y la franja "Falta generar") — así no se mezclan ideas en una
             fila. Filtrado a UNA red: rejilla PLANA con microcabecera por celda. `colsEfectivas`
