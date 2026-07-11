@@ -172,7 +172,7 @@ export default function GeneracionDetalle() {
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded border px-2 py-0.5 text-xs">{gen.marca || "—"}</span>
-              <Badge variant="secondary" className="text-[10px]">
+              <Badge variant="secondary">
                 {etiquetaTipoGeneracion(gen.tipo)}
               </Badge>
               <ChipEstado estado={estado} />

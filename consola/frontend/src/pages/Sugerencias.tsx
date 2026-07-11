@@ -151,12 +151,12 @@ function MisIdeas({
           >
             <p className="text-sm font-medium leading-snug">{s.titulo}</p>
             <div className="flex flex-wrap items-center gap-1.5">
-              <Badge variant="outline" className="text-[10px] font-normal">
+              <Badge variant="outline" className="font-normal">
                 {etiqueta(CATEGORIA_LABEL, s.categoria)}
               </Badge>
               <Badge
                 variant={ESTADO_VARIANTE[s.estado] ?? "secondary"}
-                className="text-[10px] font-normal"
+                className="font-normal"
               >
                 {etiqueta(ESTADO_LABEL, s.estado)}
               </Badge>
@@ -324,7 +324,7 @@ function Columna({
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {titulo}
         </span>
-        <Badge variant="outline" className="text-[10px] tabular-nums">
+        <Badge variant="outline" className="tabular-nums">
           {total}
         </Badge>
       </div>
@@ -374,31 +374,31 @@ function Tarjeta({
     >
       <p className="text-sm font-medium leading-snug">{sugerencia.titulo}</p>
       <div className="flex flex-wrap items-center gap-1.5">
-        <Badge variant="outline" className="text-[10px] font-normal">
+        <Badge variant="outline" className="font-normal">
           {etiqueta(CATEGORIA_LABEL, sugerencia.categoria)}
         </Badge>
         {sugerencia.complejidad && (
           <Badge
             variant={COMPLEJIDAD_VARIANTE[sugerencia.complejidad] ?? "outline"}
-            className="text-[10px] font-normal"
+            className="font-normal"
           >
             {etiqueta(COMPLEJIDAD_LABEL, sugerencia.complejidad)}
           </Badge>
         )}
         {enDiscovery && (
-          <span className="flex items-center gap-1 text-[10px] text-sky-600">
+          <span className="flex items-center gap-1 text-[10px] text-sky-600 dark:text-sky-400">
             <Spinner className="h-3 w-3" aria-hidden="true" />
             en curso
           </span>
         )}
         {specListo && (
-          <span className="flex items-center gap-1 text-[10px] text-emerald-600">
+          <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
             <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
             spec listo
           </span>
         )}
         {enVivo && (
-          <span className="flex items-center gap-1 text-[10px] text-sky-600">
+          <span className="flex items-center gap-1 text-[10px] text-sky-600 dark:text-sky-400">
             <Spinner className="h-3 w-3" aria-hidden="true" />
             en vivo
           </span>

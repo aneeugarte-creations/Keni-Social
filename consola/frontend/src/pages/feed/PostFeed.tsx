@@ -496,7 +496,7 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
         {esBreaking && (
           <Tooltip label="Última hora: al aprobarla se publica de inmediato (~5 min), sin esperar a su franja.">
             <span
-              className="inline-flex items-center gap-1 font-semibold text-red-600"
+              className="inline-flex items-center gap-1 font-semibold text-red-600 dark:text-red-400"
               aria-label="Última hora: se publica de inmediato al aprobar"
             >
               <Zap className="h-3.5 w-3.5 fill-current" aria-hidden="true" />

@@ -65,7 +65,7 @@ export function SugerenciaHashtags({ contenido, pieza, onAceptar }: SugerenciaHa
       className={cn(
         "rounded-md border border-dashed p-2.5",
         hayLinea
-          ? "border-red-400/70 bg-red-50/60 dark:bg-red-950/20"
+          ? "border-destructive/50 bg-destructive/5"
           : "border-border bg-muted/20",
       )}
     >
@@ -73,7 +73,7 @@ export function SugerenciaHashtags({ contenido, pieza, onAceptar }: SugerenciaHa
         <span
           className={cn(
             "flex items-center gap-1.5 text-xs font-medium",
-            hayLinea ? "text-red-600 dark:text-red-400" : "text-muted-foreground",
+            hayLinea ? "text-destructive" : "text-muted-foreground",
           )}
         >
           {hayLinea ? (
@@ -87,7 +87,7 @@ export function SugerenciaHashtags({ contenido, pieza, onAceptar }: SugerenciaHa
             en gris, no en dos mensajes separados. */}
         <p className="min-w-0 flex-1 font-mono text-sm">
           {faltanLinea.map((t) => (
-            <span key={`l-${t}`} className="text-red-600 dark:text-red-400">
+            <span key={`l-${t}`} className="text-destructive">
               {t}{" "}
             </span>
           ))}

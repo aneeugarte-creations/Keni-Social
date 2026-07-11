@@ -101,13 +101,13 @@ function mensajeAfectados(activar: boolean, afectados: UsuarioAdmin[]): React.Re
 function FuenteBadge({ fuente }: { fuente: AjusteConfig["fuente"] }) {
   if (fuente === "store") {
     return (
-      <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-normal">
+      <Badge variant="secondary" className="h-5 px-1.5 font-normal">
         Personalizado
       </Badge>
     );
   }
   return (
-    <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal text-muted-foreground">
+    <Badge variant="outline" className="h-5 px-1.5 font-normal text-muted-foreground">
       Por defecto
     </Badge>
   );

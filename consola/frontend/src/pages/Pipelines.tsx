@@ -113,12 +113,11 @@ function ListaHallazgos({ hallazgos }: { hallazgos: PipelineHallazgo[] }) {
       {hallazgos.map((h, i) => (
         <li key={i} className="rounded border border-destructive/20 bg-destructive/5 p-2 text-xs">
           <div className="flex flex-wrap items-center gap-1.5">
-            {h.tipo && <Badge variant="outline" className="text-[10px]">{h.tipo}</Badge>}
+            {h.tipo && <Badge variant="outline">{h.tipo}</Badge>}
             {h.gravedad && (
               <Badge
                 variant="outline"
                 className={cn(
-                  "text-[10px]",
                   h.gravedad === "error" && "border-destructive/40 text-destructive",
                 )}
               >
@@ -142,27 +141,27 @@ function ProcedenciaIA({ cluster, modo }: { cluster: PipelineCluster; modo: "fus
     <div className="flex flex-wrap gap-1.5">
       {modo === "fusionar" && (
         <>
-          <Badge variant="outline" className="text-[10px]">{cluster.n_fuentes} fuentes</Badge>
+          <Badge variant="outline">{cluster.n_fuentes} fuentes</Badge>
           {cluster.n_items > 1 && (
-            <Badge variant="outline" className="text-[10px]">{cluster.n_items} notas</Badge>
+            <Badge variant="outline">{cluster.n_items} notas</Badge>
           )}
         </>
       )}
       {modo === "priorizar" && (
         <>
-          <Badge variant="outline" className="text-[10px]">Score {cluster.score.toFixed(2)}</Badge>
+          <Badge variant="outline">Score {cluster.score.toFixed(2)}</Badge>
           {cluster.verificacion && (
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline">
               {VERIFICACION_TEXTO[cluster.verificacion] ?? cluster.verificacion}
             </Badge>
           )}
           {cluster.breaking && (
-            <Badge variant="aviso" className="text-[10px]">
+            <Badge variant="aviso">
               🔥 breaking
             </Badge>
           )}
           {cluster.senal > 0 && (
-            <Badge variant="outline" className="text-[10px]">viralidad {cluster.senal.toLocaleString("es-MX")}</Badge>
+            <Badge variant="outline">viralidad {cluster.senal.toLocaleString("es-MX")}</Badge>
           )}
         </>
       )}
@@ -239,18 +238,18 @@ export function MetricasPipeline({ metricas, className }: { metricas?: PipelineM
   return (
     <span className={cn("flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground", className)}>
       {tokens != null && (
-        <Badge variant="outline" className="gap-1 text-[10px] tabular-nums" title={`${numeroCompleto(tokens)} tokens`}>
+        <Badge variant="outline" className="gap-1 tabular-nums" title={`${numeroCompleto(tokens)} tokens`}>
           {numeroCompacto(tokens)} tok
         </Badge>
       )}
       {coste_usd != null && (
-        <Badge variant="outline" className="gap-1 text-[10px] tabular-nums" title="Coste de las generaciones">
+        <Badge variant="outline" className="gap-1 tabular-nums" title="Coste de las generaciones">
           <Coins className="h-2.5 w-2.5" aria-hidden="true" />
           {costeUsd(coste_usd)}
         </Badge>
       )}
       {duration_ms != null && duration_ms > 0 && (
-        <Badge variant="outline" className="gap-1 text-[10px] tabular-nums" title="Tiempo de cómputo IA">
+        <Badge variant="outline" className="gap-1 tabular-nums" title="Tiempo de cómputo IA">
           <Clock className="h-2.5 w-2.5" aria-hidden="true" />
           {duracion(duration_ms)}
         </Badge>
@@ -295,7 +294,7 @@ function FilaPipeline({ run, onAbrir }: { run: Pipeline; onAbrir: ((run: Pipelin
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline" className="shrink-0">{run.marca_nombre || run.marca}</Badge>
             {esActividad && (
-              <Badge variant="secondary" className="shrink-0 gap-1 text-[10px]" title="Trabajo manual">
+              <Badge variant="secondary" className="shrink-0 gap-1" title="Trabajo manual">
                 <Sparkles className="h-2.5 w-2.5" aria-hidden="true" />
                 {etiquetaTipoGeneracion(run.tipo || "")}
               </Badge>
@@ -303,7 +302,7 @@ function FilaPipeline({ run, onAbrir }: { run: Pipeline; onAbrir: ((run: Pipelin
             {esFuturo && (
               <Badge
                 variant="secondary"
-                className="shrink-0 gap-1 text-[10px] text-muted-foreground"
+                className="shrink-0 gap-1 text-muted-foreground"
                 title="Tema del tablero aún sin trabajar: el pipeline no ha corrido"
               >
                 <Clock className="h-2.5 w-2.5" aria-hidden="true" />
@@ -315,7 +314,7 @@ function FilaPipeline({ run, onAbrir }: { run: Pipeline; onAbrir: ((run: Pipelin
             {run.cluster && (
               <Badge
                 variant="outline"
-                className="shrink-0 gap-1 text-[10px]"
+                className="shrink-0 gap-1"
                 title={`Historia jerarquizada por IA: ${run.cluster.n_fuentes} fuente(s), score ${run.cluster.score.toFixed(2)}`}
               >
                 <Sparkles className="h-3 w-3" aria-hidden="true" />
@@ -364,7 +363,7 @@ function BloqueIA({ gen, plantilla }: { gen?: PipelineGeneracion; plantilla?: st
   return (
     <div className="space-y-2 rounded-md border border-violet-500/20 bg-violet-500/5 p-2.5">
       <div className="flex flex-wrap items-center gap-2">
-        <Sparkles className="h-3 w-3 text-violet-600" aria-hidden="true" />
+        <Sparkles className="h-3 w-3 text-violet-600 dark:text-violet-400" aria-hidden="true" />
         <span className="text-xs font-semibold text-foreground">IA</span>
         {gen
           ? <ChipEstado estado={enCurso ? "en_curso" : gen.estado === "error" ? "fallo" : "ok"} />
@@ -540,7 +539,7 @@ export function PanelEtapa({
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <Cog className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
           <span className="font-medium">{etapa.nombre}</span>
-          <Badge variant="outline" className="text-[10px] text-muted-foreground">
+          <Badge variant="outline" className="text-muted-foreground">
             {etapa.clave === "aprobar" ? "Humano" : "Sistema"}
           </Badge>
           <ChipEstado estado={etapa.estado} />
@@ -565,11 +564,11 @@ export function PanelEtapa({
           <span className="text-sm font-semibold">{etapa.nombre}</span>
           {/* Marca clara IA vs no-IA (Admitir/Recolectar = Sistema/BD; Aprobar = Humano). */}
           {etapa.es_ia ? (
-            <Badge variant="outline" className="gap-1 border-violet-500/30 text-[10px] text-violet-600">
+            <Badge variant="outline" className="gap-1 border-violet-500/30 text-violet-700 dark:text-violet-300">
               <Sparkles className="h-2.5 w-2.5" aria-hidden="true" />IA
             </Badge>
           ) : (
-            <Badge variant="outline" className="text-[10px] text-muted-foreground">
+            <Badge variant="outline" className="text-muted-foreground">
               {etapa.clave === "aprobar" ? "Humano" : "Sistema"}
             </Badge>
           )}

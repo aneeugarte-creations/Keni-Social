@@ -200,7 +200,7 @@ function ResultadosAgrupados({
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-foreground">{grupo.etiqueta}</span>
             {grupo.enVivo && (
-              <Badge variant="ok" className="px-1.5 py-0 text-[10px]">
+              <Badge variant="ok" className="px-1.5 py-0">
                 en vivo
               </Badge>
             )}

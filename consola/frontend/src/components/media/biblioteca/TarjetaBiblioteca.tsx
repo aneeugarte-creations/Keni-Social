@@ -46,7 +46,7 @@ export function TarjetaBiblioteca({
         {item.etiquetas.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {item.etiquetas.slice(0, 4).map((e) => (
-              <Badge key={e} variant="outline" className="px-1.5 py-0 text-[10px]">
+              <Badge key={e} variant="outline" className="px-1.5 py-0">
                 {e}
               </Badge>
             ))}

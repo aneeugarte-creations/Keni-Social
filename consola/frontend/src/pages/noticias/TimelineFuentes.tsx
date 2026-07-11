@@ -23,7 +23,7 @@ export function TimelineFuentes({ fuentes }: { fuentes: FuenteHistoria[] }) {
           <span className="h-2 w-2 shrink-0 self-center rounded-full bg-sky-500" />
           <span className="font-medium">{nombreFuente(f.fuente, f.fuente_id) || f.fuente_id}</span>
           {i === 0 && (
-            <Badge variant="outline" className="text-[10px] font-normal">
+            <Badge variant="outline" className="font-normal">
               la abrió
             </Badge>
           )}

@@ -1310,7 +1310,7 @@ function FormularioIdeas({
                       <p className="text-xs text-muted-foreground">{it.porque}</p>
                     ) : null}
                     {it.minuto ? (
-                      <Badge variant="outline" className="text-[10px] font-normal tabular-nums">
+                      <Badge variant="outline" className="font-normal tabular-nums">
                         {it.minuto}
                       </Badge>
                     ) : null}

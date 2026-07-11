@@ -270,10 +270,10 @@ function PildoraPub({
           "w-full max-w-full border-transparent text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           publicado ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
           publicado
-            ? "bg-emerald-500/15 text-emerald-800 hover:bg-emerald-500/25 dark:text-emerald-200"
+            ? "bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 dark:text-emerald-300"
             : vencida
-              ? "bg-red-500/15 text-red-800 hover:bg-red-500/25 dark:text-red-200"
-              : "bg-amber-500/15 text-amber-800 hover:bg-amber-500/25 dark:text-amber-200",
+              ? "bg-red-500/15 text-red-700 hover:bg-red-500/25 dark:text-red-300"
+              : "bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:text-amber-300",
         )}
       >
         {vencida && (

@@ -200,10 +200,10 @@ export function ChipTurnoCM({
   const indicadores = (
     <>
       {turno.override && (
-        <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" aria-label="override" />
+        <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-400" aria-label="override" />
       )}
       {ausencia && !turno.override && (
-        <Plane className="h-3 w-3 shrink-0 text-orange-600" aria-label="ausente" />
+        <Plane className="h-3 w-3 shrink-0 text-orange-600 dark:text-orange-400" aria-label="ausente" />
       )}
     </>
   );
@@ -213,7 +213,7 @@ export function ChipTurnoCM({
     <>
       <span className="truncate">{turno.miembro_nombre}</span>
       {turno.horario_propio && (
-        <span className="shrink-0 tabular-nums text-sky-700/80" aria-label="horario a medida">
+        <span className="shrink-0 tabular-nums text-sky-700/80 dark:text-sky-300/80" aria-label="horario a medida">
           · {horaCompacta(turno.inicio)}–{horaCompacta(turno.fin)}
         </span>
       )}
@@ -225,7 +225,7 @@ export function ChipTurnoCM({
       {indicadores}
       {turno.horario_propio && (
         <span
-          className="shrink-0 text-[10px] font-medium tabular-nums text-sky-600"
+          className="shrink-0 text-[10px] font-medium tabular-nums text-sky-700 dark:text-sky-300"
           aria-label="horario a medida"
         >
           {horaCompacta(turno.inicio)}–{horaCompacta(turno.fin)}

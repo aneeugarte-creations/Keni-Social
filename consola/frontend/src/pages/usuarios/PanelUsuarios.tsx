@@ -41,11 +41,11 @@ const ROL_TODOS = "__todos__";
 /** Insignia del rol EFECTIVO (superadmin es un rol más: gana sobre admin/editor). */
 function BadgeRol({ usuario }: { usuario: UsuarioAdmin }) {
   if (usuario.superadmin) {
-    return <Badge className="h-5 px-1.5 text-[10px] font-medium">Superadmin</Badge>;
+    return <Badge className="h-5 px-1.5 font-medium">Superadmin</Badge>;
   }
   if (usuario.rol === "admin") {
     return (
-      <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-medium">
+      <Badge variant="secondary" className="h-5 px-1.5 font-medium">
         Administrador
       </Badge>
     );

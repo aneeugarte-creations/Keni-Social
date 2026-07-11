@@ -89,8 +89,8 @@ export function Kpi({
           className={cn(
             "truncate text-2xl font-semibold tracking-tight tabular-nums",
             tono === "alerta" && "text-destructive",
-            tono === "ok" && "text-emerald-600",
-            tono === "espera" && "text-amber-600",
+            tono === "ok" && "text-emerald-700 dark:text-emerald-300",
+            tono === "espera" && "text-amber-700 dark:text-amber-300",
           )}
         >
           {valor}
@@ -280,12 +280,12 @@ export function TablaJobs({
                 <span className="inline-flex items-center gap-1.5">
                   {j.etiqueta || j.gen_id}
                   {j.prioridad > 0 && (
-                    <Badge variant="info" className="text-[10px]">
+                    <Badge variant="info">
                       prioritario
                     </Badge>
                   )}
                   {j.huerfano && (
-                    <Badge variant="aviso" className="text-[10px]" title="Su generación ya no existe: no se procesa">
+                    <Badge variant="aviso" title="Su generación ya no existe: no se procesa">
                       huérfano
                     </Badge>
                   )}
@@ -769,7 +769,7 @@ function AvisoGateCuenta({
   return (
     <div className="space-y-3 rounded-lg border border-amber-500/50 bg-amber-50 p-4 dark:bg-amber-950/30">
       <div className="flex items-start gap-2">
-        <PauseCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" aria-hidden="true" />
+        <PauseCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
         <div className="space-y-1">
           <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
             Generación pausada por el consumo del día ({etiquetaCuenta})

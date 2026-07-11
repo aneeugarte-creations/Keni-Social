@@ -103,7 +103,7 @@ function LogsFase({
               {r.marca_nombre ? <span className="text-muted-foreground"> · {r.marca_nombre}</span> : null}
             </span>
             <span className="flex shrink-0 items-center gap-2">
-              <ChipEstado estado={r.estado_global} className="text-[11px]" />
+              <ChipEstado estado={r.estado_global} />
               <span className="tabular-nums text-muted-foreground">
                 {tiempoRelativo(r.actualizado) || r.actualizado?.slice(0, 10)}
               </span>

@@ -68,8 +68,8 @@ const PESTANAS: readonly PestanaEconomia[] = PAREJAS.flat();
 const META: Record<PestanaEconomia, { etiqueta: string; barra: string; texto: string }> = {
   investigacion: PROC_META.investigacion,
   produccion: PROC_META.produccion,
-  herramientas: { etiqueta: "Herramientas", barra: "bg-violet-500/70", texto: "text-violet-600" },
-  desarrollo: { etiqueta: "Desarrollo", barra: "bg-amber-500/70", texto: "text-amber-600" },
+  herramientas: { etiqueta: "Herramientas", barra: "bg-violet-500/70", texto: "text-violet-700 dark:text-violet-300" },
+  desarrollo: { etiqueta: "Desarrollo", barra: "bg-amber-500/70", texto: "text-amber-700 dark:text-amber-300" },
 };
 
 /** Ventanas de tiempo del selector (días que pide la economía). */

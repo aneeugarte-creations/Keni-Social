@@ -97,7 +97,7 @@ function StreamGeneracion({ genId }: { genId: string }) {
           estado={seg.ejecutando ? "en_curso" : gen.estado === "error" ? "fallo" : "ok"}
         />
         {gen.metricas?.total_cost_usd != null && (
-          <Badge variant="outline" className="gap-1 text-[10px] tabular-nums">
+          <Badge variant="outline" className="gap-1 tabular-nums">
             <Coins className="h-2.5 w-2.5" aria-hidden="true" />
             {costeUsd(gen.metricas.total_cost_usd)}
           </Badge>

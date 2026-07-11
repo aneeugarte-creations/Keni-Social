@@ -387,7 +387,7 @@ export function PipelineUnificado({
                 <label key={a.clave} className="flex items-center gap-1.5 text-xs">
                   <span className="text-muted-foreground">{nombre}</span>
                   {esRedactar && !a.valor && nEntran > 0 && (
-                    <span className="text-amber-600" title={`Si activas: entran ~${nEntran} piezas`}>
+                    <span className="text-amber-700 dark:text-amber-300" title={`Si activas: entran ~${nEntran} piezas`}>
                       ~{nEntran}
                     </span>
                   )}
@@ -414,7 +414,7 @@ export function PipelineUnificado({
         const nEntran = previewPorMarca.get(marca) ?? 0;
         const pista =
           esRedactar && ajuste && !ajuste.valor && nEntran > 0 ? (
-            <span className="text-xs text-amber-600" title={`Si activas: entran ~${nEntran} piezas`}>
+            <span className="text-xs text-amber-700 dark:text-amber-300" title={`Si activas: entran ~${nEntran} piezas`}>
               si activas: ~{nEntran} piezas
             </span>
           ) : null;

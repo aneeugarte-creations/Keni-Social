@@ -84,7 +84,7 @@ export function TarjetaDetalleAlcance({
           </p>
         </div>
 
-        <span className="inline-flex items-center rounded-full bg-neutral-100 px-2.5 py-0.5 text-[11px] font-medium text-neutral-600">
+        <span className="inline-flex items-center rounded-md bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
           {tipo}
         </span>
 

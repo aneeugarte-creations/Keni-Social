@@ -497,7 +497,7 @@ export function PanelPlan({ marca }: { marca: string }) {
                 </>
               ) : estadoGuardado === "guardado" ? (
                 <>
-                  <Check className="h-3.5 w-3.5 text-emerald-600" /> Guardado
+                  <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> Guardado
                 </>
               ) : (
                 <span className="text-muted-foreground/70">Se guarda solo</span>

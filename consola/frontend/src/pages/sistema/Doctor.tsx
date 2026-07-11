@@ -60,7 +60,7 @@ function ListaChequeos({ chequeos }: { chequeos: ChequeoEstado[] }) {
       role="alert"
       className={cn(
         "divide-y divide-border/50 rounded-xl border",
-        hayError ? "border-red-500/40 bg-red-500/5" : "border-amber-500/40 bg-amber-500/5",
+        hayError ? "border-destructive/40 bg-destructive/5" : "border-amber-500/40 bg-amber-500/5",
       )}
     >
       {chequeos.map((c) => (
@@ -87,7 +87,7 @@ function TemasBloqueados({ marca }: { marca?: string }) {
   if (items.length === 0) return null;
   const Flecha = abierto ? ChevronDown : ChevronRight;
   return (
-    <div className="rounded-xl border border-red-500/30 bg-red-500/5">
+    <div className="rounded-xl border border-destructive/30 bg-destructive/5">
       <button
         type="button"
         onClick={() => setAbierto((v) => !v)}

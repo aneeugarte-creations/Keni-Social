@@ -892,7 +892,7 @@ export function Calendario({
                           {marcaActiva === null && franja.marca_nombre ? (
                             <Badge
                               variant="outline"
-                              className="mt-1 w-fit px-1.5 py-0 text-[10px] font-normal"
+                              className="mt-1 w-fit px-1.5 py-0 font-normal"
                             >
                               {franja.marca_nombre}
                             </Badge>

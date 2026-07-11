@@ -63,7 +63,7 @@ export function PanelContextoInyectado({
               >
                 <span className="min-w-0 flex-1 truncate">{a.titulo}</span>
                 {a.clase ? (
-                  <Badge variant="secondary" className="shrink-0 rounded-full text-[10px]">
+                  <Badge variant="secondary" className="shrink-0">
                     {a.clase}
                   </Badge>
                 ) : null}

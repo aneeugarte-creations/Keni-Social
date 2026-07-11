@@ -31,7 +31,7 @@ const CLASE_ACCION_EQUIPO = "border-transparent bg-amber-500/15 text-amber-700 d
 
 /** Falta el hashtag OBLIGATORIO de la categoría: badge ROJO (más fuerte que el ámbar de
  *  acción de equipo) — sin él las métricas por línea no cuadran, igual que la sugerencia del editor. */
-const CLASE_FALTA_EDITORIAL = "border-transparent bg-red-500/15 text-red-700 dark:text-red-300";
+const CLASE_FALTA_EDITORIAL = "border-transparent bg-destructive/10 text-destructive";
 
 /** Color del punto por etapa, a juego con la clase del badge. */
 const PUNTO_DE_ETAPA: Record<EtapaIa, string> = {

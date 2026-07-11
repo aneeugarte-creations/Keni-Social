@@ -272,7 +272,7 @@ export function EditorCarrusel({
                     {s.tipo === "video" && <Video className="h-3 w-3 shrink-0" aria-hidden="true" />}
                     <span className="truncate">{s.objeto}</span>
                     {i === idxPortada && (
-                      <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+                      <span className="inline-flex shrink-0 items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-xs font-medium text-foreground">
                         <Star className="h-2.5 w-2.5" aria-hidden="true" />
                         Portada
                       </span>

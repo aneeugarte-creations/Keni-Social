@@ -437,7 +437,7 @@ function DialogImportarParrilla({
             )}
             {generacion?.prompt && <VerPrompt prompt={generacion.prompt} />}
             {conflictoAplicar && (
-              <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300">
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
                 <p className="font-medium">El calendario cambió desde que se generó esta propuesta.</p>
                 <p>
                   {conflictoAplicar.mensaje ??

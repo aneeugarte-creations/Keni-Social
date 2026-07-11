@@ -121,7 +121,7 @@ export function TarjetaHistoria({
               <p className="font-medium leading-snug min-w-0">
                 {esUltimaHora && (
                   <Zap
-                    className="mr-1 inline-block h-3.5 w-3.5 shrink-0 align-middle text-red-600"
+                    className="mr-1 inline-block h-3.5 w-3.5 shrink-0 align-middle text-red-600 dark:text-red-400"
                     aria-label="Última hora"
                     data-testid="badge-ultima-hora"
                   />

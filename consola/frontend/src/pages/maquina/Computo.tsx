@@ -45,7 +45,7 @@ function ColaCard({
     <Card className={borde}>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          <Icono className="h-4 w-4 text-sky-600" aria-hidden="true" />
+          <Icono className="h-4 w-4 text-sky-600 dark:text-sky-400" aria-hidden="true" />
           {titulo} <span className="font-normal text-muted-foreground">({jobs.length})</span>
         </CardTitle>
       </CardHeader>
@@ -262,7 +262,7 @@ export default function Computo() {
       {totalHuerf > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/50 bg-amber-50 px-4 py-3 dark:bg-amber-950/30">
           <p className="flex items-center gap-2 text-sm text-amber-900 dark:text-amber-200">
-            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
             <span>
               <span className="font-semibold tabular-nums">{totalHuerf}</span> jobs huérfanos: sin
               generación, no se procesan.

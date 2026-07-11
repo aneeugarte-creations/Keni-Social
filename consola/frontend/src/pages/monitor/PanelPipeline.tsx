@@ -112,7 +112,7 @@ export function FilaFasePipeline({
           )}
           <span className="truncate">{nombre}</span>
           {precaucion && (
-            <Badge variant="error" className="shrink-0 px-1.5 py-0 text-[10px] font-medium">
+            <Badge variant="error" className="shrink-0 px-1.5 py-0 font-medium">
               {precaucion}
             </Badge>
           )}

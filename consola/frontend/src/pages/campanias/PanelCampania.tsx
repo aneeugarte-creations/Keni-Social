@@ -702,14 +702,14 @@ function TablaPiezas({ piezas, ocultarAds }: { piezas: PiezaCampania[]; ocultarA
               {p.por_cross_post && (
                 <Badge
                   variant="secondary"
-                  className="shrink-0 text-[10px]"
+                  className="shrink-0"
                   title="Cross-post: mismo contenido en otra red"
                 >
                   cross-post
                 </Badge>
               )}
               {!ocultarAds && p.es_inorganico && (
-                <Badge variant="aviso" className="shrink-0 text-[10px]" title="Incluida en Meta Ads">
+                <Badge variant="aviso" className="shrink-0" title="Incluida en Meta Ads">
                   Ads
                 </Badge>
               )}

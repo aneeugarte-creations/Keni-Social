@@ -113,7 +113,7 @@ function AnilloCompletitud({
 function EstadoPilar({ pilar }: { pilar: PilarNormalizado }) {
   if (pilar.vacio) {
     return (
-      <span className="inline-flex items-center rounded-full border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+      <span className="inline-flex items-center rounded-md border border-dashed border-border px-2 py-0.5 text-xs text-muted-foreground">
         vacía
       </span>
     );
@@ -123,14 +123,14 @@ function EstadoPilar({ pilar }: { pilar: PilarNormalizado }) {
       {pilar.publicado ? (
         <Badge
           variant="ok"
-          className="gap-1 px-2 py-0.5 text-[11px]"
+          className="gap-1 px-2 py-0.5"
           title="Versión publicada: es la que sirven los pipelines"
         >
           <span aria-hidden>●</span> publicada
         </Badge>
       ) : (
         <span
-          className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
+          className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground"
           title="Sin versión publicada: los pipelines usan la copia de trabajo"
         >
           sin publicar aún
@@ -139,7 +139,7 @@ function EstadoPilar({ pilar }: { pilar: PilarNormalizado }) {
       {pilar.sinPublicar ? (
         <Badge
           variant="aviso"
-          className="gap-1 px-2 py-0.5 text-[11px]"
+          className="gap-1 px-2 py-0.5"
           title="El borrador difiere de la versión publicada"
         >
           <AlertTriangle className="h-3 w-3" aria-hidden /> cambios sin publicar
@@ -188,7 +188,7 @@ function TarjetaPilar({
           <h4 className="text-sm font-semibold leading-snug">{pilar.titulo}</h4>
           {pilar.global ? (
             <span
-              className="mt-0.5 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+              className="mt-0.5 inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
               title="Capa global: la comparten todas las marcas"
             >
               global

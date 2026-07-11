@@ -99,14 +99,14 @@ export function SaludFeeds() {
     fila: string;
   } {
     if (feed.desactivado_auto === 1) {
-      return { label: "Auto-desactivado", variant: "error", severidad: 0, fila: "bg-red-50/40" };
+      return { label: "Auto-desactivado", variant: "error", severidad: 0, fila: "bg-destructive/10" };
     }
     const slaMin = 180; // KENI_FEED_SLA_MIN por defecto
     if (feed.activo && feed.errores_seguidos > 0) {
-      return { label: "Con error", variant: "error", severidad: 1, fila: "bg-amber-50/40" };
+      return { label: "Con error", variant: "error", severidad: 1, fila: "bg-amber-50/60 dark:bg-amber-950/20" };
     }
     if (feed.activo && feed.frescura_min !== null && feed.frescura_min > slaMin) {
-      return { label: "Stale", variant: "aviso", severidad: 2, fila: "bg-amber-50/30" };
+      return { label: "Stale", variant: "aviso", severidad: 2, fila: "bg-amber-50/40 dark:bg-amber-950/15" };
     }
     if (!feed.activo) {
       return {

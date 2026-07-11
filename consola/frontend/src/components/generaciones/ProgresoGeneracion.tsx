@@ -54,7 +54,7 @@ function LineaMetricas({ metricas }: { metricas: MetricasRun | null }) {
         </span>
       ))}
       {metricas.modelo && (
-        <Badge variant="secondary" className="font-mono text-[10px]">
+        <Badge variant="secondary" className="font-mono">
           {metricas.modelo}
         </Badge>
       )}

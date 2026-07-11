@@ -230,13 +230,13 @@ export function LeyendaCobertura() {
         <BellRing className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" /> Reprogramado
       </span>
       <span className="inline-flex items-center gap-1.5">
-        <AlertTriangle className="h-3.5 w-3.5 text-amber-600" /> Turno forzado
+        <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" /> Turno forzado
       </span>
       <span className="inline-flex items-center gap-1.5">
-        <Plane className="h-3.5 w-3.5 text-orange-600" /> Ausente
+        <Plane className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" /> Ausente
       </span>
       <span className="inline-flex items-center gap-1.5">
-        <Clock className="h-3.5 w-3.5 text-sky-600" /> Horario a medida
+        <Clock className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" /> Horario a medida
       </span>
     </div>
   );

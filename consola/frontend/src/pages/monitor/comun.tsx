@@ -17,8 +17,8 @@ import type { ColaSerie, Proceso, ResultadoDia, ResultadoProceso } from "@/types
  *  proceso en barras y gráficas, por eso NO va por `Badge`/`ChipEstado`. Reutilizado por Monitor,
  *  Cómputo y Economía. */
 export const PROC_META: Record<Proceso, { etiqueta: string; barra: string; texto: string }> = {
-  investigacion: { etiqueta: "Investigación", barra: "bg-sky-500/70", texto: "text-sky-600" },
-  produccion: { etiqueta: "Producción", barra: "bg-emerald-500/70", texto: "text-emerald-600" },
+  investigacion: { etiqueta: "Investigación", barra: "bg-sky-500/70", texto: "text-sky-700 dark:text-sky-300" },
+  produccion: { etiqueta: "Producción", barra: "bg-emerald-500/70", texto: "text-emerald-700 dark:text-emerald-300" },
 };
 
 const PROC_ORDEN: Proceso[] = ["investigacion", "produccion"];
@@ -147,7 +147,7 @@ export function SerieProceso({
               />
             </div>
             <span className="w-40 shrink-0 text-right tabular-nums text-muted-foreground">
-              {!soloProceso && <span className="text-amber-600">{enc} enc</span>}
+              {!soloProceso && <span className="text-amber-700 dark:text-amber-300">{enc} enc</span>}
               {!soloProceso && " · "}
               {soloProceso ? (
                 <>

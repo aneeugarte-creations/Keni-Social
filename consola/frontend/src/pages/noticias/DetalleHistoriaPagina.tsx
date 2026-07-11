@@ -223,7 +223,7 @@ export default function DetalleHistoriaPagina() {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
               {esUltimaHora && (
                 <Badge
-                  className="gap-1 text-[10px] bg-red-600 hover:bg-red-600 text-white border-0"
+                  className="gap-1 bg-red-600 hover:bg-red-600 text-white border-0"
                   data-testid="badge-ultima-hora"
                 >
                   <Zap className="h-3 w-3" />
@@ -232,7 +232,7 @@ export default function DetalleHistoriaPagina() {
               )}
               <ChipMarca historia={historia} />
               {badgeEstado}
-              <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
+              <Badge variant="outline" className="font-normal text-muted-foreground">
                 {etiquetaCategoria(historia.breaking === 1 ? "breaking" : historia.categoria)}
               </Badge>
               <BadgeVerificacionFuente verificacion_fuente={historia.verificacion_fuente} />

@@ -22,7 +22,7 @@ export function ChipMarca({ historia, className }: { historia: Historia; classNa
   if (!nombre) return null;
   return (
     <span className={cn("inline-flex items-center gap-1", className)} data-testid="chip-marca">
-      <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
+      <Badge variant="outline" className="font-normal text-muted-foreground">
         {nombre}
       </Badge>
     </span>
