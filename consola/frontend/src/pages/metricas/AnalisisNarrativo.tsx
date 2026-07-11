@@ -17,18 +17,13 @@
  * francesa. Tono «susurro»: hairlines, versalitas con tracking amplio y color
  * únicamente donde significa.
  *
- * El aviso de cobertura parcial es una NOTA AL PIE tipográfica (asterisco ámbar +
- * una línea gris, sin caja ni separador) con una × que la descarta durante la
- * sesión; reaparece si cambia el periodo o las marcas afectadas.
- *
  * Las cifras grandes de la prosa se compactan al vuelo (174.961.503 → "175 M",
  * 11.9% → "12%") y los títulos de pieza se sirven en frase (sin MAYÚSCULAS
  * gritadas ni emojis, truncados en palabra); el título íntegro queda en el
  * `title` del enlace.
  */
 import { useQuery } from "@tanstack/react-query";
-import { Eye, ExternalLink, Sparkles, TrendingUp, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Eye, ExternalLink, Sparkles, TrendingUp } from "lucide-react";
 
 import { marcaParam } from "@/components/comunes/selectores";
 import { Card, CardContent } from "@/components/ui/card";
@@ -174,42 +169,8 @@ function Columna({ lado, filas }: { lado: "funciono" | "vigilar"; filas: Hallazg
   );
 }
 
-/** Lee de sessionStorage si el aviso de esa clave ya fue descartado (falla → visible). */
-function avisoDescartado(clave: string): boolean {
-  try {
-    return sessionStorage.getItem(clave) === "1";
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Descarte del aviso de cobertura parcial: la × lo oculta y sessionStorage lo recuerda
- * durante la sesión, pero la clave lleva el rango y las marcas afectadas, así que el
- * aviso REAPARECE si cambia el periodo o la cobertura (la honestidad no se descarta
- * para siempre, solo deja de molestar en la lectura actual).
- */
-function useAvisoParcial(data: AnalisisDiario): [boolean, () => void] {
-  const clave = `analisis-aviso-parcial:${data.rango}:${data.cobertura_parcial.join(",")}`;
-  const [descartado, setDescartado] = useState(() => avisoDescartado(clave));
-  useEffect(() => {
-    setDescartado(avisoDescartado(clave));
-  }, [clave]);
-  const descartar = useCallback(() => {
-    try {
-      sessionStorage.setItem(clave, "1");
-    } catch {
-      // Sin almacenamiento (modo privado estricto): se oculta igualmente en memoria.
-    }
-    setDescartado(true);
-  }, [clave]);
-  const mostrar = data.cobertura_parcial.length > 0 && !descartado;
-  return [mostrar, descartar];
-}
-
-/** Cuerpo de la tarjeta con datos ya cargados: columnas, contexto, aviso y paso. */
+/** Cuerpo de la tarjeta con datos ya cargados: columnas, contexto y paso. */
 function CuerpoAnalisis({ data }: { data: AnalisisDiario }) {
-  const [mostrarAviso, descartarAviso] = useAvisoParcial(data);
   const sinHallazgos = data.hallazgos.length === 0 && data.siguiente_paso === null;
   if (sinHallazgos) {
     return (
@@ -251,43 +212,19 @@ function CuerpoAnalisis({ data }: { data: AnalisisDiario }) {
           </p>
         </div>
       )}
-      {(mostrarAviso || data.siguiente_paso) && (
+      {data.siguiente_paso && (
         <div className="p-6 pt-4">
-          {mostrarAviso && (
-            <p
-              className="mb-3 flex items-baseline gap-1.5 text-[12.5px] leading-relaxed text-muted-foreground"
-              role="status"
-            >
-              <span aria-hidden="true" className="shrink-0 text-amber-600 dark:text-amber-500">
-                *
-              </span>
-              <span>
-                <span className="font-medium">Datos parciales</span> de:{" "}
-                {data.cobertura_parcial.join(", ")}
-              </span>
-              <button
-                type="button"
-                aria-label="Ocultar aviso"
-                onClick={descartarAviso}
-                className="ml-0.5 self-center rounded p-0.5 text-muted-foreground/60 transition-colors hover:text-foreground"
-              >
-                <X className="h-3 w-3" aria-hidden="true" />
-              </button>
+          <div className="rounded-r-lg border-l-2 border-emerald-700 bg-muted/30 px-4 py-4 dark:border-emerald-400">
+            <p className="mb-2 text-[10.5px] font-semibold uppercase leading-none tracking-[0.13em] text-emerald-700 dark:text-emerald-400">
+              Siguiente paso
             </p>
-          )}
-          {data.siguiente_paso && (
-            <div className="rounded-r-lg border-l-2 border-emerald-700 bg-muted/30 px-4 py-4 dark:border-emerald-400">
-              <p className="mb-2 text-[10.5px] font-semibold uppercase leading-none tracking-[0.13em] text-emerald-700 dark:text-emerald-400">
-                Siguiente paso
+            <p className="text-sm leading-relaxed tabular-nums">{data.siguiente_paso.texto}</p>
+            {data.siguiente_paso.pieza?.url && (
+              <p className="mt-1.5 text-[13px] text-muted-foreground">
+                <EnlacePieza url={data.siguiente_paso.pieza.url}>Ver la pieza</EnlacePieza>
               </p>
-              <p className="text-sm leading-relaxed tabular-nums">{data.siguiente_paso.texto}</p>
-              {data.siguiente_paso.pieza?.url && (
-                <p className="mt-1.5 text-[13px] text-muted-foreground">
-                  <EnlacePieza url={data.siguiente_paso.pieza.url}>Ver la pieza</EnlacePieza>
-                </p>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
     </div>

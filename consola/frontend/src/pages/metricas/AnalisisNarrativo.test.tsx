@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import * as React from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api";
 import type { AnalisisDiario } from "@/types";
@@ -71,9 +71,6 @@ function renderConProviders(ui: React.ReactElement) {
 }
 
 describe("AnalisisNarrativo", () => {
-  // El descarte del aviso de cobertura vive en sessionStorage: cada test parte limpio.
-  beforeEach(() => sessionStorage.clear());
-
   it("reparte los hallazgos por grupo: positivos a «Qué funcionó», negativos a «Qué vigilar»", async () => {
     vi.spyOn(api, "metricasAnalisis").mockResolvedValue(RESP);
     renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
@@ -174,51 +171,6 @@ describe("AnalisisNarrativo", () => {
     expect(
       await screen.findByText(/sin datos suficientes para una lectura del periodo/i),
     ).toBeInTheDocument();
-  });
-
-  it("avisa de cobertura parcial sin romper", async () => {
-    vi.spyOn(api, "metricasAnalisis").mockResolvedValue({
-      ...RESP,
-      cobertura_parcial: ["UnoTV"],
-    });
-    renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
-
-    expect(await screen.findByRole("status")).toHaveTextContent("Datos parciales de: UnoTV");
-  });
-
-  it("la × descarta el aviso y la sesión lo recuerda para el mismo periodo y cobertura", async () => {
-    vi.spyOn(api, "metricasAnalisis").mockResolvedValue({
-      ...RESP,
-      cobertura_parcial: ["UnoTV"],
-    });
-    const { unmount } = renderConProviders(
-      <AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />,
-    );
-
-    fireEvent.click(await screen.findByRole("button", { name: /ocultar aviso/i }));
-    expect(screen.queryByText(/Datos parciales/)).not.toBeInTheDocument();
-    // El «Siguiente paso» sobrevive al descarte: solo se va la nota.
-    expect(screen.getByText("Siguiente paso")).toBeInTheDocument();
-
-    // Un montaje nuevo con la MISMA cobertura arranca ya descartado (sessionStorage).
-    unmount();
-    renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
-    expect(await screen.findByText("Siguiente paso")).toBeInTheDocument();
-    expect(screen.queryByText(/Datos parciales/)).not.toBeInTheDocument();
-  });
-
-  it("el aviso reaparece cuando cambia la cobertura afectada", async () => {
-    // Descartado para UnoTV a solas; la cobertura ahora incluye otra marca → clave nueva.
-    sessionStorage.setItem("analisis-aviso-parcial:semana:UnoTV", "1");
-    vi.spyOn(api, "metricasAnalisis").mockResolvedValue({
-      ...RESP,
-      cobertura_parcial: ["UnoTV", "Fundación"],
-    });
-    renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
-
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "Datos parciales de: UnoTV, Fundación",
-    );
   });
 
   it("avisa sin romper cuando la API falla", async () => {
