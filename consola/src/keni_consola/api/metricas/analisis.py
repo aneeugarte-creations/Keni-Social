@@ -38,11 +38,17 @@ def _pieza_serializable(pieza: dict | None) -> dict | None:
 
 
 def _hallazgo_serializable(hallazgo: dict) -> dict:
-    """Un hallazgo (dimensión + frase + dirección + pieza opcional) para el SPA."""
+    """Un hallazgo (dimensión + frase + dirección + ancla + grupo + pieza) para el SPA."""
     return {
         "dimension": hallazgo.get("dimension", ""),
         "texto": hallazgo.get("texto", ""),
         "direccion": hallazgo.get("direccion", "estable"),
+        # Dato ANCLA ya formateado + su nombre en una palabra (None en los hallazgos de
+        # contexto, que llevan las cifras dentro de la propia frase).
+        "cifra": hallazgo.get("cifra"),
+        "etiqueta": hallazgo.get("etiqueta"),
+        # Reparto del panel: "positivo" | "vigilar" | "contexto".
+        "grupo": hallazgo.get("grupo", "contexto"),
         # `pieza` se normaliza a None cuando el hallazgo no apunta a una pieza (el motor
         # omite la clave); el contrato la emite siempre (nullable) para el SPA.
         "pieza": _pieza_serializable(hallazgo.get("pieza")),

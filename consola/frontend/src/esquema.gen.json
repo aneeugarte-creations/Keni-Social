@@ -613,6 +613,29 @@
         "direccion": {
           "type": "string"
         },
+        "cifra": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "etiqueta": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "grupo": {
+          "type": "string"
+        },
         "pieza": {
           "anyOf": [
             {
@@ -629,6 +652,9 @@
         "dimension",
         "texto",
         "direccion",
+        "cifra",
+        "etiqueta",
+        "grupo",
         "pieza"
       ]
     },

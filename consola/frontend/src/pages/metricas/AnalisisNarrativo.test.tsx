@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import * as React from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -16,8 +16,11 @@ const RESP: AnalisisDiario = {
   hallazgos: [
     {
       dimension: "vistas",
-      texto: "Claro Sports subió +39.0% en vistas (4.400 en el periodo), con 1.8% de engagement.",
+      texto: "Claro Sports sumó 4.400 vistas frente al periodo anterior.",
       direccion: "sube",
+      cifra: "+39.0%",
+      etiqueta: "vistas",
+      grupo: "positivo",
       pieza: {
         titulo: "Final de la Liga MX",
         plataforma: "tiktok",
@@ -26,16 +29,22 @@ const RESP: AnalisisDiario = {
       },
     },
     {
-      dimension: "red",
-      texto: "TikTok fue la red que más aportó: 62% de las vistas del periodo (18.500.000).",
-      direccion: "estable",
+      dimension: "seguidores",
+      texto:
+        "Instagram perdió seguidores el 15-jun, muy por encima del ritmo diario habitual del periodo.",
+      direccion: "baja",
+      cifra: "-12.400",
+      etiqueta: "seguidores",
+      grupo: "vigilar",
       pieza: null,
     },
     {
-      dimension: "seguidores",
-      texto:
-        "El 15-jun Instagram perdió 12.400 seguidores, muy por encima del ritmo diario habitual del periodo.",
-      direccion: "baja",
+      dimension: "red",
+      texto: "TikTok concentró el 62% de las vistas del periodo (18.500.000).",
+      direccion: "estable",
+      cifra: null,
+      etiqueta: null,
+      grupo: "contexto",
       pieza: null,
     },
   ],
@@ -50,7 +59,8 @@ const RESP: AnalisisDiario = {
       engagement_pct: 6.2,
       url: "https://www.tiktok.com/@clarosports/video/1",
     },
-    texto: "Replica el formato de la pieza ganadora esta semana.",
+    texto:
+      "Claro Sports tuvo el mejor rendimiento del periodo, con 6.2% de engagement; su pieza más destacada fue «Final de la Liga MX» en TikTok. Si quieren dar continuidad a esa línea, pueden pedir a Claude un copy o un clip de referencia. Qué publicar y cuándo es decisión del equipo.",
   },
   generado_en: "2026-06-09T00:00:00",
 };
@@ -61,30 +71,45 @@ function renderConProviders(ui: React.ReactElement) {
 }
 
 describe("AnalisisNarrativo", () => {
-  it("pinta los hallazgos multi-dimensión con las cifras compactadas", async () => {
+  it("reparte los hallazgos por grupo: positivos a «Qué funcionó», negativos a «Qué vigilar»", async () => {
     vi.spyOn(api, "metricasAnalisis").mockResolvedValue(RESP);
     renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
 
     expect(await screen.findByText("Análisis del periodo")).toBeInTheDocument();
-    // El título de sección se pinta durante la carga; espera al dato para el resto.
-    // Porcentaje con decimal → entero; un millar pequeño (4.400, <10.000) se queda tal cual.
+    const funciono = await screen.findByRole("region", { name: "Qué funcionó" });
+    expect(within(funciono).getByText(/Claro Sports sumó 4\.400 vistas/)).toBeInTheDocument();
+    const vigilar = screen.getByRole("region", { name: "Qué vigilar" });
+    expect(within(vigilar).getByText(/Instagram perdió seguidores el 15-jun/)).toBeInTheDocument();
+  });
+
+  it("pinta la cifra ancla con su micro-etiqueta, compactada al estilo de la app", async () => {
+    vi.spyOn(api, "metricasAnalisis").mockResolvedValue(RESP);
+    renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
+
+    // "+39.0%" → "+39%" (porcentaje a entero) y "-12.400" → "-12.4 k" (miles compactos).
+    expect(await screen.findByText("+39%")).toBeInTheDocument();
+    expect(screen.getByText("vistas")).toBeInTheDocument();
+    expect(screen.getByText("-12.4 k")).toBeInTheDocument();
+    expect(screen.getByText("seguidores")).toBeInTheDocument();
+  });
+
+  it("agrupa los hallazgos sin valencia en la franja de contexto, con las cifras compactadas", async () => {
+    vi.spyOn(api, "metricasAnalisis").mockResolvedValue(RESP);
+    renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
+
+    expect(await screen.findByText("Contexto")).toBeInTheDocument();
+    // 18.500.000 → "18.5 M" dentro de la prosa del contexto.
     expect(
-      await screen.findByText(/Claro Sports subió \+39% en vistas \(4\.400 en el periodo\)/),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/TikTok fue la red que más aportó/)).toBeInTheDocument();
-    // Cifra grande dentro de la prosa compactada al estilo de la app (12.400 → "12.4 k").
-    expect(
-      screen.getByText(/El 15-jun Instagram perdió 12\.4 k seguidores/),
+      screen.getByText(/TikTok concentró el 62% de las vistas del periodo \(18\.5 M\)/),
     ).toBeInTheDocument();
   });
 
-  it("enlaza la pieza que respalda un hallazgo en la línea ↳, sin «La explica»", async () => {
+  it("enlaza la pieza que respalda un hallazgo en la línea ↳, con su red legible", async () => {
     vi.spyOn(api, "metricasAnalisis").mockResolvedValue(RESP);
     renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
 
     // Red LEGIBLE ("TikTok", no "tiktok") y engagement redondeado a entero.
     expect(await screen.findByText(/TikTok · 6% eng\./)).toBeInTheDocument();
-    expect(screen.queryByText(/La explica:/)).not.toBeInTheDocument();
     // Un título mixto normal no dispara el des-gritado: conserva su acrónimo ("MX").
     const enlace = screen.getByRole("link", { name: /Final de la Liga MX/ });
     expect(enlace).toHaveAttribute("href", "https://www.tiktok.com/@clarosports/video/1");
@@ -112,64 +137,15 @@ describe("AnalisisNarrativo", () => {
     ).toBeInTheDocument();
   });
 
-  it("pliega la lista a los 3 primeros hallazgos y despliega el resto con el «…»", async () => {
+  it("oculta la columna «Qué vigilar» cuando no hay hallazgos negativos", async () => {
     vi.spyOn(api, "metricasAnalisis").mockResolvedValue({
       ...RESP,
-      hallazgos: [
-        ...RESP.hallazgos,
-        {
-          dimension: "formato",
-          texto: "El formato reel se guarda o comparte al 4% de sus vistas.",
-          direccion: "sube",
-          pieza: null,
-        },
-        {
-          dimension: "engagement",
-          texto: "El formato link fue el de mejor engagement del periodo.",
-          direccion: "sube",
-          pieza: null,
-        },
-        {
-          dimension: "periodo",
-          texto: "El día más fuerte de la semana fue el 5-jul.",
-          direccion: "estable",
-          pieza: null,
-        },
-      ],
+      hallazgos: RESP.hallazgos.filter((h) => h.grupo !== "vigilar"),
     });
     renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
 
-    // Plegado: los 3 primeros a la vista; el resto, detrás del "…".
-    expect(await screen.findByText(/Claro Sports subió/)).toBeInTheDocument();
-    expect(screen.getByText(/Instagram perdió/)).toBeInTheDocument();
-    expect(screen.queryByText(/El formato reel/)).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /3 hallazgos más/ }));
-    expect(screen.getByText(/El formato reel/)).toBeInTheDocument();
-    expect(screen.getByText(/El día más fuerte de la semana/)).toBeInTheDocument();
-
-    // Y se puede volver a plegar.
-    fireEvent.click(screen.getByRole("button", { name: /mostrar menos/i }));
-    expect(screen.queryByText(/El formato reel/)).not.toBeInTheDocument();
-  });
-
-  it("no pliega cuando apenas escondería 1 hallazgo", async () => {
-    vi.spyOn(api, "metricasAnalisis").mockResolvedValue({
-      ...RESP,
-      hallazgos: [
-        ...RESP.hallazgos,
-        {
-          dimension: "formato",
-          texto: "El formato reel despunta este periodo.",
-          direccion: "sube",
-          pieza: null,
-        },
-      ],
-    });
-    renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
-
-    expect(await screen.findByText(/El formato reel despunta/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /hallazgos más/ })).not.toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Qué funcionó" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Qué vigilar" })).not.toBeInTheDocument();
   });
 
   it("pinta el siguiente paso tal cual lo redacta el backend, con enlace a la pieza", async () => {
@@ -177,7 +153,7 @@ describe("AnalisisNarrativo", () => {
     renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
 
     expect(
-      await screen.findByText("Replica el formato de la pieza ganadora esta semana."),
+      await screen.findByText(/Claro Sports tuvo el mejor rendimiento del periodo/),
     ).toBeInTheDocument();
     expect(screen.getByText("Siguiente paso")).toBeInTheDocument();
     const enlace = screen.getByRole("link", { name: /ver la pieza/i });

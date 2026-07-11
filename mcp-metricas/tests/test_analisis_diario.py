@@ -109,8 +109,9 @@ def test_emite_hallazgos_multidimension():
 
 def test_hallazgos_vistas_ordenados_por_magnitud_descendente():
     a = construir_analisis(FuenteMuestra(), "semana")
+    # Los movimientos de vistas llevan la variación como CIFRA ANCLA ("+63.0%").
     vistas = [
-        h for h in a["hallazgos"] if h["dimension"] == "vistas" and h["texto"].endswith("engagement.")
+        h for h in a["hallazgos"] if h["dimension"] == "vistas" and (h.get("cifra") or "").endswith("%")
     ]
     # Los movimientos de vistas con variación se listan de mayor a menor cambio; el primero es
     # el más llamativo (aparece antes que cualquier otro hallazgo).
@@ -118,12 +119,16 @@ def test_hallazgos_vistas_ordenados_por_magnitud_descendente():
     assert vistas, "debería haber movimientos de vistas narrados"
 
 
-def test_cada_hallazgo_lleva_dimension_direccion_texto():
+def test_cada_hallazgo_lleva_dimension_direccion_texto_y_grupo():
     a = construir_analisis(FuenteMuestra(), "semana")
     for h in a["hallazgos"]:
         assert h["dimension"]
         assert h["direccion"] in {"sube", "baja", "estable"}
         assert h["texto"]
+        assert h["grupo"] in {"positivo", "vigilar", "contexto"}
+        # La cifra ancla es opcional, pero si viene, viene nombrada.
+        if h["cifra"] is not None:
+            assert h["etiqueta"], "una cifra ancla sin etiqueta queda huérfana"
 
 
 def test_concentracion_aparece_tras_red_en_la_lectura():
@@ -135,7 +140,9 @@ def test_concentracion_aparece_tras_red_en_la_lectura():
     if "red" in dims and "formato" in dims:
         assert dims.index("red") < dims.index("concentracion") < dims.index("formato")
     conc = next(h for h in a["hallazgos"] if h["dimension"] == "concentracion")
-    assert "de las vistas del periodo" in conc["texto"]
+    assert "80% de las vistas" in conc["texto"]
+    assert conc["cifra"] and "/" in conc["cifra"]  # "n/total" como ancla
+    assert conc["etiqueta"] == "piezas"
 
 
 # --------------------------------------------------------------------------- #
@@ -153,9 +160,10 @@ def test_periodo_semana_narra_dia_mas_fuerte_y_flojo():
     }
     a = construir_analisis(_FuenteEstable(), "semana", serie_diaria=serie)
     periodo = [h for h in a["hallazgos"] if h["dimension"] == "periodo"]
-    assert periodo, "la semana debe narrar el día más fuerte/flojo"
-    assert "día más fuerte de la semana" in periodo[0]["texto"]
+    assert periodo, "la semana debe narrar el día pico/valle"
+    assert "Pico de vistas" in periodo[0]["texto"]
     assert "2-jun" in periodo[0]["texto"]  # el día de más vistas
+    assert "valle" in periodo[0]["texto"]
 
 
 def test_periodo_mes_narra_tendencia_intra_mes():
@@ -194,6 +202,10 @@ def test_senal_seguidores_detecta_desplome_representativo():
     assert "Instagram" in h["texto"]
     assert "muy por encima del ritmo" in h["texto"]
     assert h["direccion"] == "baja"
+    # La magnitud del desplome viaja como cifra ancla, no dentro de la frase.
+    assert h["cifra"] == "-12.400"
+    assert h["etiqueta"] == "seguidores"
+    assert h["grupo"] == "vigilar"
 
 
 def test_seguidores_sin_senal_narra_neto_sereno():
@@ -206,6 +218,7 @@ def test_seguidores_sin_senal_narra_neto_sereno():
     h = _hallazgo_seguidores({"puntos": puntos, "neto": 1200})
     assert "neto de 1.200 seguidores" in h["texto"]
     assert "dentro del ritmo habitual" in h["texto"]
+    assert h["grupo"] == "contexto"  # sin señal fuerte no es ni logro ni alarma
 
 
 def test_seguidores_sin_serie_no_emite_hallazgo():
@@ -247,8 +260,11 @@ def test_hallazgo_concentracion_narra_la_cabeza():
     assert h is not None
     assert h["dimension"] == "concentracion"
     assert h["direccion"] == "estable"
-    assert "1 de 10 piezas concentró el 80% de las vistas" in h["texto"]
-    assert "muy pocas piezas" in h["texto"]  # matiz de concentración extrema (≤10%)
+    assert h["cifra"] == "1/10"
+    assert h["etiqueta"] == "piezas"
+    assert "80% de las vistas salió del 10% de las piezas" in h["texto"]
+    assert "depende de muy pocas" in h["texto"]  # matiz de concentración extrema (≤10%)
+    assert h["grupo"] == "vigilar"  # la extrema es señal a vigilar, no mero contexto
 
 
 def test_hallazgo_concentracion_pocas_piezas_no_emite():
@@ -278,7 +294,10 @@ def test_hallazgo_valor_destaca_el_formato_que_se_guarda():
     assert h["dimension"] == "valor"
     assert h["direccion"] == "sube"
     assert "«reel»" in h["texto"]
-    assert "6.0%" in h["texto"]
+    # La tasa viaja como cifra ancla nombrada; la frase es autónoma.
+    assert h["cifra"] == "6.0%"
+    assert h["etiqueta"] == "guardado"
+    assert h["grupo"] == "positivo"
 
 
 def test_hallazgo_valor_sin_separacion_no_emite():
@@ -308,8 +327,8 @@ def test_cierra_con_siguiente_paso_accionable():
     paso = a["siguiente_paso"]
     assert paso is not None
     assert paso["marca"]
-    assert "Pídele a Claude" in paso["texto"]
-    assert "lo decides tú" in paso["texto"].lower()
+    assert "pedir a Claude" in paso["texto"]
+    assert "decisión del equipo" in paso["texto"]
 
 
 def test_render_markdown_incluye_hallazgos_y_siguiente_paso():
@@ -395,6 +414,9 @@ def test_usa_variacion_real_del_historico(tmp_path):
     )
     a = construir_analisis(FuenteMuestra(), "semana", historico=h)
     # La muestra de claro_sports ronda millones de vistas vs. baseline 1000: aparece un
-    # movimiento de vistas al alza enorme entre los hallazgos.
+    # movimiento de vistas al alza enorme entre los hallazgos (variación en la cifra ancla).
     vistas = [h for h in a["hallazgos"] if h["dimension"] == "vistas"]
-    assert any("Claro Sports" in x["texto"] and "subió" in x["texto"] for x in vistas)
+    assert any(
+        "Claro Sports" in x["texto"] and "sumó" in x["texto"] and (x.get("cifra") or "").startswith("+")
+        for x in vistas
+    )

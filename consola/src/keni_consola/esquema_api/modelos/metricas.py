@@ -239,9 +239,17 @@ class HallazgoAnalisis(TypedDict):
     # "periodo" (clasifica el eje; la UI pinta el icono adecuado).
     dimension: str
     # texto: la lectura completa en es-MX, sin jerga (frase para el resumen ejecutivo).
+    # Cuando hay `cifra`, la frase es autónoma: NO repite el dato ancla.
     texto: str
     # direccion: "sube" | "baja" | "estable" (fija la flecha del hallazgo).
     direccion: str
+    # cifra: dato ANCLA ya formateado ("+63.0%", "62.000"); None en hallazgos de
+    # contexto, que llevan sus cifras dentro de la propia frase.
+    cifra: str | None
+    # etiqueta: nombre del ancla en una palabra ("vistas", "seguidores", "engagement").
+    etiqueta: str | None
+    # grupo: "positivo" | "vigilar" | "contexto" (reparto en columnas del panel).
+    grupo: str
     # pieza: None salvo que el hallazgo apunte a una pieza concreta (enlazable).
     pieza: PiezaAnalisis | None
 

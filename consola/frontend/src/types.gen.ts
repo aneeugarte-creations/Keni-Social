@@ -184,6 +184,9 @@ export interface HallazgoAnalisis {
   dimension: string;
   texto: string;
   direccion: string;
+  cifra: string | null;
+  etiqueta: string | null;
+  grupo: string;
   pieza: PiezaAnalisis | null;
 }
 /**

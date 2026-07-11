@@ -153,7 +153,7 @@ async def test_analisis_diario_devuelve_narrativa_con_siguiente_paso():
     assert out["hallazgos"]  # la muestra produce hallazgos multi-dimensión
     # cierra con un siguiente paso accionable (loop a la accion)
     assert out["siguiente_paso"] is not None
-    assert "Pídele a Claude" in out["siguiente_paso"]["texto"]
+    assert "pedir a Claude" in out["siguiente_paso"]["texto"]
     json.dumps(out)
 
 

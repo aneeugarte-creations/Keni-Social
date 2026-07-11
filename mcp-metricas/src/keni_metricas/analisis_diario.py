@@ -7,8 +7,15 @@ cubren dimensiones DISTINTAS —vistas por marca, red que empujó, formato que d
 seguidores (con la señal de variación representativa), engagement, pieza estrella y la
 variación propia del periodo (semana ≠ mes)—, más un siguiente paso accionable. No es
 un cálculo nuevo de métricas: ENSAMBLA lo que ya producen el reporte consolidado, el
-detector de picos y las series, y lo redacta en castellano llano para alguien que NO
-está inmerso en métricas.
+detector de picos y las series, y lo redacta en castellano llano y profesional para
+alguien que NO está inmerso en métricas.
+
+Cada hallazgo lleva, además de la frase, un dato ANCLA (`cifra` + `etiqueta`, p. ej.
+"+63.0%" / "vistas") y un `grupo` ("positivo" | "vigilar" | "contexto"): la consola
+pinta las columnas "Qué funcionó" / "Qué vigilar" con la cifra como ancla visual y la
+franja de contexto con los hallazgos sin valencia. Cuando hay cifra, la frase es
+AUTÓNOMA (no repite el dato ancla); los hallazgos de contexto llevan sus cifras en la
+propia frase porque se pintan solo como texto.
 
 Frontera (UX-roadmap §0): keni-social CONSOLIDA y SUGIERE; la interpretación final y la
 decisión de qué cambiar quedan en el equipo. Los hallazgos NO atribuyen causas de
@@ -120,6 +127,9 @@ def _hallazgo(
     texto: str,
     direccion: str = "estable",
     pieza: dict | None = None,
+    cifra: str | None = None,
+    etiqueta: str | None = None,
+    grupo: str = "contexto",
 ) -> dict:
     """Un hallazgo del periodo: dimensión + frase + dirección + pieza opcional.
 
@@ -127,8 +137,21 @@ def _hallazgo(
     "engagement", "pieza", "periodo") para que la UI pinte el icono adecuado; `direccion`
     ("sube"|"baja"|"estable") fija la flecha; `pieza` enlaza cuando el hallazgo apunta a
     una pieza concreta.
+
+    `cifra` es el dato ANCLA ya formateado ("+63.0%", "62.000") y `etiqueta` lo nombra
+    en una palabra ("vistas", "seguidores"): la UI los pinta como columna de cifras
+    junto a la frase, así que cuando hay cifra la frase NO la repite (es autónoma).
+    `grupo` reparte el hallazgo en el panel: "positivo" (qué funcionó), "vigilar"
+    (qué vigilar) o "contexto" (dato de encuadre, sin valencia, solo texto).
     """
-    h: dict = {"dimension": dimension, "texto": texto, "direccion": direccion}
+    h: dict = {
+        "dimension": dimension,
+        "texto": texto,
+        "direccion": direccion,
+        "cifra": cifra,
+        "etiqueta": etiqueta,
+        "grupo": grupo,
+    }
     if pieza is not None:
         h["pieza"] = pieza
     return h
@@ -222,20 +245,42 @@ def _hallazgos_vistas(movimientos: list[dict], umbral: float) -> list[dict]:
     out: list[dict] = []
     for m in fuertes[:MAX_MOVIMIENTOS]:
         vis = miles(m["visualizaciones"])
-        verbo = "subió" if m["direccion"] == "sube" else "bajó"
+        sube = m["direccion"] == "sube"
         arranque = m["direccion"] != "estable" and m["variacion_vis_pct"] == 0
         if arranque:
-            frase = f"{m['marca']} estrenó vistas (antes no tenía) y sumó {vis} en el periodo"
-        else:
-            frase = f"{m['marca']} {verbo} {signo(m['variacion_vis_pct'])}% en vistas ({vis} en el periodo)"
-        if m.get("engagement_pct") is not None:
-            frase += f", con {m['engagement_pct']}% de engagement"
-        frase += "."
-        out.append(_hallazgo("vistas", frase, m["direccion"], _pieza_hallazgo(m.get("pieza"))))
+            out.append(
+                _hallazgo(
+                    "vistas",
+                    f"{m['marca']} registró sus primeras vistas del periodo (sin base previa).",
+                    m["direccion"],
+                    _pieza_hallazgo(m.get("pieza")),
+                    cifra=vis,
+                    etiqueta="vistas",
+                    grupo="positivo",
+                )
+            )
+            continue
+        # La variación es la CIFRA ANCLA; la frase, autónoma, lleva el nivel de vistas.
+        verbo = "sumó" if sube else "bajó a"
+        out.append(
+            _hallazgo(
+                "vistas",
+                f"{m['marca']} {verbo} {vis} vistas frente al periodo anterior.",
+                m["direccion"],
+                _pieza_hallazgo(m.get("pieza")),
+                cifra=f"{signo(m['variacion_vis_pct'])}%",
+                etiqueta="vistas",
+                grupo="positivo" if sube else "vigilar",
+            )
+        )
     if len(fuertes) > MAX_MOVIMIENTOS:
         resto = len(fuertes) - MAX_MOVIMIENTOS
-        plural = "marca más" if resto == 1 else "marcas más"
-        out.append(_hallazgo("vistas", f"Otras {resto} {plural} también se movieron en vistas."))
+        frase = (
+            "Otra marca más también presentó variaciones en vistas."
+            if resto == 1
+            else f"Otras {resto} marcas también presentaron variaciones en vistas."
+        )
+        out.append(_hallazgo("vistas", frase))
     # Estabilidad: cuando NO hubo movimientos fuertes, se informa igualmente (no se calla).
     if not fuertes and estables:
         if len(estables) == 1:
@@ -244,8 +289,8 @@ def _hallazgos_vistas(movimientos: list[dict], umbral: float) -> list[dict]:
             out.append(
                 _hallazgo(
                     "vistas",
-                    f"{m['marca']} se mantuvo estable en vistas ({signo(m['variacion_vis_pct'])}%, "
-                    f"{vis} en el periodo): sin cambios relevantes frente al periodo anterior.",
+                    f"{m['marca']} se mantuvo estable en vistas "
+                    f"({signo(m['variacion_vis_pct'])}%, {vis} en el periodo).",
                 )
             )
         else:
@@ -253,8 +298,7 @@ def _hallazgos_vistas(movimientos: list[dict], umbral: float) -> list[dict]:
             out.append(
                 _hallazgo(
                     "vistas",
-                    f"Las {n} marcas se mantuvieron estables en vistas: sin cambios relevantes "
-                    "frente al periodo anterior.",
+                    f"Las {n} marcas se mantuvieron estables en vistas frente al periodo anterior.",
                 )
             )
     # Nivel de vistas para las marcas sin variación comparable (típico con foco de red): la
@@ -265,9 +309,11 @@ def _hallazgos_vistas(movimientos: list[dict], umbral: float) -> list[dict]:
             out.append(
                 _hallazgo(
                     "vistas",
-                    f"{lider['marca']} lideró en vistas con {miles(lider['visualizaciones'])} "
-                    "en el periodo.",
+                    f"{lider['marca']} lideró las vistas del periodo.",
                     pieza=_pieza_hallazgo(lider.get("pieza")),
+                    cifra=miles(lider["visualizaciones"]),
+                    etiqueta="vistas",
+                    grupo="positivo",
                 )
             )
     return out
@@ -291,10 +337,10 @@ def _hallazgo_red(rep: dict) -> dict | None:
         return None
     red, vis = max(con_vistas.items(), key=lambda kv: kv[1])
     cuota = round(vis / total * 100)
+    # Contexto (sin valencia): la frase lleva todas las cifras porque se pinta solo texto.
     return _hallazgo(
         "red",
-        f"{_nombre_red(red)} fue la red que más aportó: {cuota}% de las vistas del periodo "
-        f"({miles(vis)}).",
+        f"{_nombre_red(red)} concentró el {cuota}% de las vistas del periodo ({miles(vis)}).",
     )
 
 
@@ -315,8 +361,11 @@ def _hallazgo_formato(piezas: list[dict]) -> dict | None:
     media = round(statistics.mean(engs), 1)
     return _hallazgo(
         "formato",
-        f"El formato «{fmt}» fue el de mejor engagement ({media}% de media en {len(engs)} piezas).",
+        f"El formato «{fmt}» promedió el mejor engagement del periodo ({len(engs)} piezas).",
         "sube",
+        cifra=f"{media}%",
+        etiqueta="engagement",
+        grupo="positivo",
     )
 
 
@@ -343,15 +392,23 @@ def _hallazgo_concentracion(piezas: list[dict]) -> dict | None:
     n = conc["n_piezas_80"]
     total = conc["total_piezas"]
     pct_umbral = round(UMBRAL_CONCENTRACION_PCT)
-    verbo = "concentró" if n == 1 else "concentraron"
-    frase = (
-        f"{n} de {total} piezas {verbo} el {pct_umbral}% de las vistas del periodo"
+    # Concentración extrema (la cabeza es una fracción diminuta del catálogo): es una
+    # señal a VIGILAR (el alcance depende de muy pocas piezas); si no, mero contexto.
+    extrema = conc["pct_piezas"] <= PCT_CONCENTRACION_EXTREMA
+    if extrema:
+        frase = (
+            f"El {pct_umbral}% de las vistas salió del {conc['pct_piezas']}% de las piezas: "
+            "el alcance depende de muy pocas."
+        )
+    else:
+        frase = f"El {pct_umbral}% de las vistas del periodo provino de {n} de {total} piezas."
+    return _hallazgo(
+        "concentracion",
+        frase,
+        cifra=f"{n}/{total}",
+        etiqueta="piezas",
+        grupo="vigilar" if extrema else "contexto",
     )
-    # Concentración extrema (la cabeza es una fracción diminuta del catálogo): se matiza.
-    if conc["pct_piezas"] <= PCT_CONCENTRACION_EXTREMA:
-        frase += f": el resultado descansa en muy pocas piezas ({conc['pct_piezas']}% del total)"
-    frase += "."
-    return _hallazgo("concentracion", frase)
 
 
 def _hallazgo_valor(piezas: list[dict]) -> dict | None:
@@ -374,9 +431,12 @@ def _hallazgo_valor(piezas: list[dict]) -> dict | None:
         return None
     return _hallazgo(
         "valor",
-        f"El formato «{fmt}» se guarda o comparte al {celda['save_rate']}% de sus vistas, "
-        f"muy por encima del resto ({celda['n']} piezas).",
+        f"El formato «{fmt}» logró la tasa más alta de guardado y compartido "
+        f"({celda['n']} piezas).",
         "sube",
+        cifra=f"{celda['save_rate']}%",
+        etiqueta="guardado",
+        grupo="positivo",
     )
 
 
@@ -396,26 +456,30 @@ def _hallazgo_seguidores(serie: dict | None) -> dict | None:
     señal = _senal_seguidores(puntos)
     if señal is not None:
         fecha, red, delta = señal
-        verbo = "ganó" if delta > 0 else "perdió"
-        direccion = "sube" if delta > 0 else "baja"
-        red_txt = f"{_nombre_red(red)} " if red else ""
+        sube = delta > 0
+        verbo = "ganó" if sube else "perdió"
+        sujeto = _nombre_red(red) if red else "El conjunto de cuentas"
         return _hallazgo(
             "seguidores",
-            f"El {_fecha_es(fecha)} {red_txt}{verbo} {miles(abs(delta))} seguidores, muy por "
-            "encima del ritmo diario habitual del periodo.",
-            direccion,
+            f"{sujeto} {verbo} seguidores el {_fecha_es(fecha)}, muy por encima "
+            "del ritmo diario habitual del periodo.",
+            "sube" if sube else "baja",
+            cifra=f"{'+' if sube else '-'}{miles(abs(delta))}",
+            etiqueta="seguidores",
+            grupo="positivo" if sube else "vigilar",
         )
-    # Sin señal fuerte: neto sereno del periodo.
+    # Sin señal fuerte: neto sereno del periodo (contexto: la frase lleva la cifra).
     if neto == 0:
         return _hallazgo(
             "seguidores",
-            "Los seguidores se mantuvieron sin cambios netos en el periodo.",
+            "Los seguidores cerraron el periodo sin cambios netos.",
         )
     verbo = "ganó" if neto > 0 else "perdió"
     direccion = "sube" if neto > 0 else "baja"
     return _hallazgo(
         "seguidores",
-        f"En el periodo se {verbo} un neto de {miles(abs(neto))} seguidores, dentro del ritmo habitual.",
+        f"El periodo cerró con un neto de {miles(abs(neto))} seguidores "
+        f"{'ganados' if neto > 0 else 'perdidos'}, dentro del ritmo habitual.",
         direccion,
     )
 
@@ -496,12 +560,16 @@ def _hallazgo_pieza_estrella(movimientos: list[dict]) -> dict | None:
         key=lambda m: (m["pieza"] or {}).get("engagement_pct", 0.0),
     )
     pieza = mejor["pieza"]
+    # El título y el enlace viven en la línea de pieza («↳»); la frase no los repite.
     return _hallazgo(
         "pieza",
-        f"La pieza que más destacó fue «{pieza.get('titulo', '')}» de {mejor['marca']} en "
-        f"{_nombre_red(pieza.get('plataforma', ''))} ({pieza.get('engagement_pct', 0)}% de engagement).",
+        f"La pieza más destacada del periodo salió de {mejor['marca']} en "
+        f"{_nombre_red(pieza.get('plataforma', ''))}.",
         "sube",
         _pieza_hallazgo(pieza),
+        cifra=f"{pieza.get('engagement_pct', 0)}%",
+        etiqueta="engagement",
+        grupo="positivo",
     )
 
 
@@ -535,8 +603,8 @@ def _hallazgo_periodo_semana(puntos: list[dict]) -> dict | None:
         return None
     return _hallazgo(
         "periodo",
-        f"El día más fuerte de la semana fue el {_fecha_es(fuerte.get('fecha', ''))} "
-        f"({miles(fuerte.get('visualizaciones', 0))} vistas) y el más flojo el "
+        f"Pico de vistas el {_fecha_es(fuerte.get('fecha', ''))} "
+        f"({miles(fuerte.get('visualizaciones', 0))}) y valle el "
         f"{_fecha_es(flojo.get('fecha', ''))} ({miles(flojo.get('visualizaciones', 0))}).",
     )
 
@@ -556,13 +624,16 @@ def _hallazgo_periodo_mes(puntos: list[dict]) -> dict | None:
             "periodo",
             "El mes se mantuvo parejo: la segunda mitad rindió parecido a la primera en vistas.",
         )
-    direccion = "sube" if var > 0 else "baja"
-    tendencia = "de menos a más" if var > 0 else "de más a menos"
+    sube = var > 0
+    tendencia = "de menos a más" if sube else "de más a menos"
     return _hallazgo(
         "periodo",
-        f"El mes fue {tendencia}: la segunda mitad {'subió' if var > 0 else 'bajó'} "
-        f"{abs(var)}% en vistas frente a la primera.",
-        direccion,
+        f"El mes fue {tendencia}: la segunda mitad "
+        f"{'superó a' if sube else 'quedó por debajo de'} la primera en vistas.",
+        "sube" if sube else "baja",
+        cifra=f"{signo(var)}%",
+        etiqueta="vistas",
+        grupo="positivo" if sube else "vigilar",
     )
 
 
@@ -687,17 +758,21 @@ def _siguiente_paso(lider: dict | None) -> dict | None:
     pieza = lider.get("pieza") or {}
     plat = pieza.get("plataforma")
     titulo = pieza.get("titulo")
-    detalle = f' Tu mejor pieza fue «{titulo}» en {_nombre_red(plat)}.' if titulo and plat else ""
+    detalle = (
+        f"; su pieza más destacada fue «{titulo}» en {_nombre_red(plat)}"
+        if titulo and plat
+        else ""
+    )
     return {
         "marca_id": lider["marca_id"],
         "marca": lider["marca"],
         "engagement_pct": lider["engagement_pct"],
         "pieza": _pieza_hallazgo(lider.get("pieza")),
         "texto": (
-            f"{lider['marca']} es lo que mejor rindió este periodo "
-            f"({lider['engagement_pct']}% de engagement).{detalle} "
-            "Pídele a Claude copy o un clip en esa línea y dobla la apuesta por lo "
-            "que funciona. Qué publicar y qué ajustar, lo decides tú."
+            f"{lider['marca']} tuvo el mejor rendimiento del periodo, con "
+            f"{lider['engagement_pct']}% de engagement{detalle}. "
+            "Si quieren dar continuidad a esa línea, pueden pedir a Claude un copy o "
+            "un clip de referencia. Qué publicar y cuándo es decisión del equipo."
         ),
     }
 
@@ -733,7 +808,13 @@ def render_markdown(analisis: dict) -> str:
     else:
         out.append("**Lo que pasó:**")
         for h in hallazgos:
-            linea = f"- {_icono_direccion(h.get('direccion', 'estable'))} {h.get('texto', '')}"
+            # La cifra ancla no vive en la frase (la UI la pinta aparte): en texto se
+            # antepone para que el dato no se pierda ("**+63.0%** vistas — ...").
+            ancla = ""
+            if h.get("cifra"):
+                etiqueta = f" {h['etiqueta']}" if h.get("etiqueta") else ""
+                ancla = f"**{h['cifra']}**{etiqueta} — "
+            linea = f"- {_icono_direccion(h.get('direccion', 'estable'))} {ancla}{h.get('texto', '')}"
             pieza = h.get("pieza")
             if pieza and pieza.get("titulo"):
                 linea += (

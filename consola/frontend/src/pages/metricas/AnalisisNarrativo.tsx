@@ -1,43 +1,36 @@
 /**
  * Análisis del periodo: lectura multi-dimensión "qué pasó y por qué" + siguiente paso.
  *
- * Capa de lectura para un equipo de redes NO técnico sobre `GET /metricas/analisis`:
- * una lista de HALLAZGOS jerarquizados (lo más relevante primero) que cubren dimensiones
- * distintas —vistas por marca, red que empujó, formato que despunta, seguidores (con la
- * señal de variación representativa), engagement, pieza estrella y la variación propia del
- * periodo (semana ≠ mes)— más una sugerencia accionable ya redactada por el backend. Es el
- * resumen ejecutivo de la página: va en el encuadre uniforme (`<Seccion>`) con su contenido
- * en una Card, justo tras los KPIs.
+ * Capa de lectura para un equipo de redes NO técnico sobre `GET /metricas/analisis`.
+ * El panel reparte los hallazgos en dos columnas de igual peso —«Qué funcionó»
+ * (izquierda, esmeralda) y «Qué vigilar» (derecha, rojo)— según el `grupo` que ya
+ * clasifica el backend; los hallazgos sin valencia van en una franja de contexto
+ * discreta bajo las columnas. Positivo a la izquierda porque en lectura LTR la
+ * primera posición fija el marco (convención pros/contras y retrospectivas).
  *
- * El backend entrega cada hallazgo como una frase completa en es-MX; esta capa la sirve
- * apetecible: las cifras grandes de la prosa se compactan al vuelo (174.961.503 → "175 M",
- * 11.9% → "12%") y la pieza que respalda un hallazgo va en una línea con "↳" —sin verbo—
- * con su título en frase (sin MAYÚSCULAS gritadas ni emojis, truncado en palabra). El
- * título íntegro queda en el `title` del enlace.
+ * Cada hallazgo con valencia es una fila ANCLA | FRASE: la cifra ancla (`cifra`,
+ * ya formateada por el backend) va en una columna estrecha alineada a la derecha,
+ * compartiendo línea base con la frase, y lleva debajo una micro-etiqueta
+ * (`etiqueta`) que la nombra; la frase es autónoma (no repite el ancla). La cifra
+ * se colorea solo si es una variación con signo (+/−); los niveles van en tinta.
+ * Si el hallazgo apunta a una pieza, esta cuelga en gris con «↳» y sangría
+ * francesa. Tono «susurro»: hairlines, versalitas con tracking amplio y color
+ * únicamente donde significa.
  *
- * La lista arranca PLEGADA en lo más importante (los primeros hallazgos, que el motor ya
- * jerarquiza) con un "…" para desplegar el resto: quien quiere la lectura completa la abre,
- * quien no, no se come la retahíla.
+ * Las cifras grandes de la prosa se compactan al vuelo (174.961.503 → "175 M",
+ * 11.9% → "12%") y los títulos de pieza se sirven en frase (sin MAYÚSCULAS
+ * gritadas ni emojis, truncados en palabra); el título íntegro queda en el
+ * `title` del enlace.
  */
 import { useQuery } from "@tanstack/react-query";
-import {
-  AlertTriangle,
-  ChevronUp,
-  ExternalLink,
-  Minus,
-  MoreHorizontal,
-  Sparkles,
-  TrendingDown,
-  TrendingUp,
-} from "lucide-react";
-import { useState } from "react";
+import { AlertTriangle, Eye, ExternalLink, Sparkles, TrendingUp } from "lucide-react";
 
 import { marcaParam } from "@/components/comunes/selectores";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { nombreRed, numeroCompacto, porcentaje, tituloLimpio } from "@/lib/formato";
+import { cn } from "@/lib/utils";
 import type { AnalisisDiario, HallazgoAnalisis } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
@@ -90,137 +83,163 @@ function EnlacePieza({ url, children }: { url: string; children: React.ReactNode
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex min-w-0 items-center gap-1 underline-offset-2 hover:underline"
+      className="underline decoration-border decoration-1 underline-offset-2 transition-colors hover:text-foreground hover:decoration-muted-foreground"
     >
       {children}
-      <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
+      <ExternalLink className="ml-0.5 inline h-3 w-3 shrink-0 align-[-1px]" aria-hidden="true" />
     </a>
   );
 }
 
-/**
- * Un hallazgo del periodo: icono de dirección + la frase del backend con las cifras
- * compactadas y, si el hallazgo apunta a una pieza, la pieza en una línea "↳" (título en
- * frase, enlazado, con su red legible y engagement redondeado).
- */
-function Hallazgo({ h }: { h: HallazgoAnalisis }) {
-  const sube = h.direccion === "sube";
-  const baja = h.direccion === "baja";
-  const Icono = sube ? TrendingUp : baja ? TrendingDown : Minus;
-  const claseIcono = sube
-    ? "text-emerald-600 dark:text-emerald-400"
-    : baja
-      ? "text-red-600 dark:text-red-400"
-      : "text-muted-foreground";
-
+/** Línea de pieza «↳ "título" — Red · X% eng.» con sangría francesa. */
+function LineaPieza({ pieza }: { pieza: NonNullable<HallazgoAnalisis["pieza"]> }) {
   return (
-    <li className="flex items-start gap-3">
-      <Icono className={`mt-0.5 h-4 w-4 shrink-0 ${claseIcono}`} aria-hidden="true" />
-      <div className="min-w-0 space-y-1">
-        <p className="text-sm leading-relaxed">{redondearProsa(h.texto)}</p>
-        {h.pieza && (
-          <p className="flex min-w-0 items-baseline gap-2 text-sm text-muted-foreground">
-            <span aria-hidden="true" className="shrink-0">
-              ↳
-            </span>
-            <span className="min-w-0">
-              {h.pieza.url ? (
-                <EnlacePieza url={h.pieza.url}>
-                  <span className="truncate" title={h.pieza.titulo}>
-                    «{tituloApetecible(h.pieza.titulo)}»
-                  </span>
-                </EnlacePieza>
-              ) : (
-                <span title={h.pieza.titulo}>«{tituloApetecible(h.pieza.titulo)}»</span>
-              )}
-              {` — ${nombreRed(h.pieza.plataforma)} · ${redondearProsa(porcentaje(h.pieza.engagement_pct))} eng.`}
-            </span>
-          </p>
-        )}
-      </div>
-    </li>
+    <p className="mt-1.5 -indent-[18px] pl-[18px] text-[13px] leading-5 text-muted-foreground">
+      <span aria-hidden="true" className="mr-1.5 text-muted-foreground/60">
+        ↳
+      </span>
+      {pieza.url ? (
+        <EnlacePieza url={pieza.url}>
+          <span title={pieza.titulo}>«{tituloApetecible(pieza.titulo)}»</span>
+        </EnlacePieza>
+      ) : (
+        <span title={pieza.titulo}>«{tituloApetecible(pieza.titulo)}»</span>
+      )}
+      {` — ${nombreRed(pieza.plataforma)} · ${redondearProsa(porcentaje(pieza.engagement_pct))} eng.`}
+    </p>
   );
 }
 
 /**
- * Nº de hallazgos visibles con la lista plegada. Coincide con el tope de movimientos de
- * marca del motor (lo más relevante, que siempre va primero); el resto de dimensiones
- * queda tras el "…".
+ * Una fila ANCLA | FRASE de las columnas del panel. La cifra ancla se colorea solo si
+ * es una variación con signo; los niveles (15%, 1/21…) van en tinta normal para que el
+ * color siga significando dirección, no decoración.
  */
-const HALLAZGOS_PLEGADOS = 3;
+function FilaHallazgo({ h }: { h: HallazgoAnalisis }) {
+  const cifra = h.cifra ? redondearProsa(h.cifra) : null;
+  const varia = cifra?.startsWith("+") ? "pos" : cifra?.startsWith("-") ? "neg" : null;
+  return (
+    <article className="grid grid-cols-[84px_1fr] items-baseline gap-x-3.5">
+      <div className="min-w-0">
+        <p
+          className={cn(
+            "whitespace-nowrap text-right text-[15px] font-semibold leading-5 tracking-tight tabular-nums",
+            varia === "pos" && "text-emerald-700 dark:text-emerald-400",
+            varia === "neg" && "text-red-600 dark:text-red-400",
+          )}
+        >
+          {cifra}
+        </p>
+        {h.etiqueta && (
+          <p className="mt-[3px] whitespace-nowrap text-right text-[9.5px] font-medium uppercase leading-[11px] tracking-[0.08em] text-muted-foreground/80">
+            {h.etiqueta}
+          </p>
+        )}
+      </div>
+      <div className="min-w-0">
+        <p className="text-sm leading-5 tabular-nums">{redondearProsa(h.texto)}</p>
+        {h.pieza && <LineaPieza pieza={h.pieza} />}
+      </div>
+    </article>
+  );
+}
 
-/** Cuerpo de la tarjeta con datos ya cargados: hallazgos, aviso de cobertura y paso. */
+/** Una columna del panel: encabezado en versalitas de color + filas con aire regular. */
+function Columna({ lado, filas }: { lado: "funciono" | "vigilar"; filas: HallazgoAnalisis[] }) {
+  const pos = lado === "funciono";
+  const Icono = pos ? TrendingUp : Eye;
+  const titulo = pos ? "Qué funcionó" : "Qué vigilar";
+  return (
+    <section className="min-w-0 px-6 pb-8 pt-6" aria-label={titulo}>
+      <h3
+        className={cn(
+          "mb-6 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase leading-none tracking-[0.13em]",
+          pos ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
+        )}
+      >
+        <Icono className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        {titulo}
+      </h3>
+      <div className="space-y-[30px]">
+        {filas.map((h, i) => (
+          <FilaHallazgo key={`${h.dimension}-${i}`} h={h} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** Cuerpo de la tarjeta con datos ya cargados: columnas, contexto, aviso y paso. */
 function CuerpoAnalisis({ data }: { data: AnalisisDiario }) {
-  const [expandido, setExpandido] = useState(false);
-  const ocultos = data.hallazgos.length - HALLAZGOS_PLEGADOS;
-  // Plegar solo si esconde ≥2 hallazgos: pedir un clic para leer 1 más no merece el gesto.
-  const plegable = ocultos >= 2;
-  const visibles =
-    plegable && !expandido ? data.hallazgos.slice(0, HALLAZGOS_PLEGADOS) : data.hallazgos;
-
   const sinHallazgos = data.hallazgos.length === 0 && data.siguiente_paso === null;
   if (sinHallazgos) {
     return (
-      <p className="py-6 text-center text-sm text-muted-foreground">
+      <p className="px-6 py-10 text-center text-sm text-muted-foreground">
         Sin datos suficientes para una lectura del periodo.
       </p>
     );
   }
 
+  const positivos = data.hallazgos.filter((h) => h.grupo === "positivo");
+  const vigilar = data.hallazgos.filter((h) => h.grupo === "vigilar");
+  const contexto = data.hallazgos.filter((h) => h.grupo !== "positivo" && h.grupo !== "vigilar");
+  const dosColumnas = positivos.length > 0 && vigilar.length > 0;
+
   return (
-    <div className="space-y-4">
-      {data.hallazgos.length > 0 && (
-        <div>
-          <ul className="space-y-4">
-            {visibles.map((h, i) => (
-              <Hallazgo key={`${h.dimension}-${i}`} h={h} />
-            ))}
-          </ul>
-          {plegable && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setExpandido((v) => !v)}
-              aria-expanded={expandido}
-              className="mt-2 w-full justify-center font-normal text-muted-foreground hover:text-foreground"
-            >
-              {expandido ? (
-                <>
-                  Mostrar menos
-                  <ChevronUp className="h-4 w-4" aria-hidden="true" />
-                </>
-              ) : (
-                <>
-                  <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-                  {`${ocultos} hallazgos más`}
-                </>
-              )}
-            </Button>
+    <div>
+      {(positivos.length > 0 || vigilar.length > 0) && (
+        <div className={cn("grid", dosColumnas && "md:grid-cols-2 md:divide-x md:divide-border")}>
+          {positivos.length > 0 && <Columna lado="funciono" filas={positivos} />}
+          {vigilar.length > 0 && (
+            <div className={cn("min-w-0", dosColumnas && "border-t md:border-t-0")}>
+              <Columna lado="vigilar" filas={vigilar} />
+            </div>
           )}
         </div>
       )}
-      {data.cobertura_parcial.length > 0 && (
-        <p
-          className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
-          role="status"
-        >
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <span>
-            Datos parciales de: {data.cobertura_parcial.join(", ")}
+      {contexto.length > 0 && (
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t bg-muted/30 px-6 py-3">
+          <span className="text-[10.5px] font-semibold uppercase leading-none tracking-[0.13em] text-muted-foreground">
+            Contexto
           </span>
-        </p>
-      )}
-      {data.siguiente_paso && (
-        <div className="rounded-lg border-l-4 border-emerald-500 bg-muted/40 p-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Siguiente paso
+          <p className="text-[13px] leading-relaxed text-muted-foreground tabular-nums">
+            {contexto.map((h, i) => (
+              <span key={`${h.dimension}-${i}`}>
+                {i > 0 && <span className="mx-1.5 text-muted-foreground/50">·</span>}
+                {redondearProsa(h.texto)}
+              </span>
+            ))}
           </p>
-          <p className="text-sm leading-relaxed">{data.siguiente_paso.texto}</p>
-          {data.siguiente_paso.pieza?.url && (
-            <p className="mt-1 text-sm text-muted-foreground">
-              <EnlacePieza url={data.siguiente_paso.pieza.url}>Ver la pieza</EnlacePieza>
+        </div>
+      )}
+      {(data.cobertura_parcial.length > 0 || data.siguiente_paso) && (
+        <div className="border-t p-6">
+          {data.cobertura_parcial.length > 0 && (
+            <p
+              className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-[13px] leading-relaxed text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
+              role="status"
+            >
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>Datos parciales de: {data.cobertura_parcial.join(", ")}</span>
             </p>
+          )}
+          {data.siguiente_paso && (
+            <div
+              className={cn(
+                "rounded-r-lg border-l-2 border-emerald-700 bg-muted/30 px-4 py-4 dark:border-emerald-400",
+                data.cobertura_parcial.length > 0 && "mt-4",
+              )}
+            >
+              <p className="mb-2 text-[10.5px] font-semibold uppercase leading-none tracking-[0.13em] text-emerald-700 dark:text-emerald-400">
+                Siguiente paso
+              </p>
+              <p className="text-sm leading-relaxed tabular-nums">{data.siguiente_paso.texto}</p>
+              {data.siguiente_paso.pieza?.url && (
+                <p className="mt-1.5 text-[13px] text-muted-foreground">
+                  <EnlacePieza url={data.siguiente_paso.pieza.url}>Ver la pieza</EnlacePieza>
+                </p>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -254,11 +273,11 @@ export function AnalisisNarrativo({
       descripcion={data?.etiqueta_rango}
     >
       <Card>
-        <CardContent className="pt-6">
+        <CardContent className="p-0">
           {isPending ? (
             <Skeleton className="h-40 w-full rounded-xl" />
           ) : isError || !data ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
+            <p className="px-6 py-10 text-center text-sm text-muted-foreground">
               No se pudo cargar el análisis del periodo.
             </p>
           ) : (

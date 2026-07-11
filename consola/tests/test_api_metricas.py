@@ -503,15 +503,18 @@ def test_analisis_devuelve_hallazgos_con_procedencia(cliente):
     assert "es_muestra" not in data
     assert isinstance(data["hallazgos"], list)
     assert data["hallazgos"], "la muestra produce hallazgos multi-dimensión"
-    # Cada hallazgo lleva dimensión + frase + dirección; cubre dimensiones distintas.
+    # Cada hallazgo lleva dimensión + frase + dirección + grupo + ancla (nullable);
+    # cubre dimensiones distintas.
     for h in data["hallazgos"]:
         assert h["dimension"]
         assert h["texto"]
         assert h["direccion"] in {"sube", "baja", "estable"}
+        assert h["grupo"] in {"positivo", "vigilar", "contexto"}
+        assert "cifra" in h and "etiqueta" in h
     assert len({h["dimension"] for h in data["hallazgos"]}) >= 3
     # cierra con un siguiente paso accionable (loop a la acción)
     assert data["siguiente_paso"] is not None
-    assert "Pídele a Claude" in data["siguiente_paso"]["texto"]
+    assert "pedir a Claude" in data["siguiente_paso"]["texto"]
 
 
 def test_analisis_acotado_a_una_marca(cliente):

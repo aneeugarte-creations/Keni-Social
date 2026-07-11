@@ -12,6 +12,8 @@ from collections.abc import Mapping
 from html import escape
 from typing import TYPE_CHECKING
 
+from keni_shared import marcas
+
 if TYPE_CHECKING:
     from .schema import Cobertura
 
@@ -99,13 +101,17 @@ def pct(valor: float | None) -> str:
 def etiqueta_marca(cuenta_id: str, nombres: Mapping[str, str] | None = None) -> str:
     """Nombre legible de una marca a partir de su id interno.
 
-    Es la MISMA regla que usa el dashboard (`nombres.get(cuenta_id, cuenta_id)`):
-    se traduce el id crudo (`claro_sports`) al nombre legible (`Claro Sports`)
-    usando el mapa `{id: nombre}` que las fuentes ya exponen via `cuentas()`. Si
-    no hay nombre para ese id (o no se pasa mapa), se cae al id tal cual para no
-    perder informacion. Centraliza el fallback id->titulo de las CLIs de texto
-    (reporte, picos, digest) para que sean consistentes con el dashboard.
+    Prioriza el catalogo unico de marcas (`keni_shared.marcas`, resuelto por la
+    frontera `id_metricas`), cae al mapa `{id: nombre}` que las fuentes exponen
+    via `cuentas()` y, en ultima instancia, al id tal cual para no perder
+    informacion. Es la misma prioridad que aplica la API de la consola
+    (`_nombre_marca_id`), asi que texto y SPA imprimen el mismo nombre.
+    Centraliza el fallback id->titulo de las CLIs de texto (reporte, picos,
+    digest) para que sean consistentes con el dashboard.
     """
+    etiqueta = marcas.etiqueta_por_id_metricas(cuenta_id)
+    if etiqueta != cuenta_id:
+        return etiqueta
     if not nombres:
         return cuenta_id
     return nombres.get(cuenta_id, cuenta_id)
