@@ -846,10 +846,11 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
       </div>
 
       {/* UN SOLO EJE de composición para el CONTENIDO del feed: los estados (skeleton/error/vacío),
-          el grid de posts y el pie viven en la MISMA columna centrada (`MAX_W_FEED` por columnas
-          efectivas), que gana o pierde margen según la densidad. La cabecera queda fuera de este
-          wrapper, a ancho completo con el margen del AppShell. */}
-      <div className={cn("mx-auto w-full", MAX_W_FEED[colsEfectivas])}>
+          el grid de posts y el pie viven en la MISMA columna alineada a la IZQUIERDA (`MAX_W_FEED`
+          por columnas efectivas acota el ancho; el sobrante cae a la derecha). Su borde izquierdo
+          coincide con el de la cabecera y el resto de la página, así los posts nunca flotan
+          centrados: con pocos posts se quedan pegados al mismo riel, no en mitad del ancho. */}
+      <div className={cn("w-full", MAX_W_FEED[colsEfectivas])}>
         {/* Feed. Con TODAS las redes: una MATRIZ por idea (un bloque por idea; dentro, una rejilla
             con sus redes generadas y la franja "Falta generar") — así no se mezclan ideas en una
             fila. Filtrado a UNA red: rejilla PLANA con microcabecera por celda. `colsEfectivas`
