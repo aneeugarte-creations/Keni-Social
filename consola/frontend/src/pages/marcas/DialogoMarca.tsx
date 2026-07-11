@@ -253,10 +253,10 @@ export function DialogoMarca({
             )}
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onCerrar} disabled={ocupado}>
+            <Button variant="ghost" onClick={onCerrar} disabled={ocupado}>
               Cancelar
             </Button>
-            <Button onClick={onGuardar} disabled={ocupado}>
+            <Button variant="default" onClick={onGuardar} disabled={ocupado}>
               {crear.isPending || editar.isPending ? <Spinner className="h-4 w-4" /> : null}
               {esEditar ? "Guardar" : "Crear"}
             </Button>

@@ -266,7 +266,7 @@ export function DialogoCampania({
           <Button variant="ghost" onClick={onCerrar}>
             Cancelar
           </Button>
-          <Button onClick={onGuardar} disabled={guardar.isPending}>
+          <Button variant="default" onClick={onGuardar} disabled={guardar.isPending}>
             {guardar.isPending && <Spinner className="h-4 w-4" />}
             {editando ? "Guardar cambios" : "Crear campaña"}
           </Button>

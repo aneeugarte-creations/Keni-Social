@@ -90,10 +90,10 @@ export function DialogoReprogramar({
         </Campo>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onCerrar} disabled={ocupado}>
+          <Button variant="ghost" onClick={onCerrar} disabled={ocupado}>
             Cancelar
           </Button>
-          <Button onClick={confirmar} disabled={ocupado}>
+          <Button variant="default" onClick={confirmar} disabled={ocupado}>
             {ocupado ? (
               <Spinner className="h-4 w-4" />
             ) : (

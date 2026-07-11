@@ -49,7 +49,7 @@ function Fila({
           <Button
             size="sm"
             variant="outline"
-            className="h-7 px-2 text-xs"
+            className="px-2"
             onClick={() => onAceptar(propuesta)}
             disabled={ocupada}
           >
@@ -63,7 +63,7 @@ function Fila({
           <Button
             size="sm"
             variant="ghost"
-            className="h-7 px-2 text-xs text-muted-foreground"
+            className="px-2 text-muted-foreground"
             onClick={() => onDescartar(propuesta)}
             disabled={ocupada}
           >

@@ -167,7 +167,7 @@ export function PanelLanzarArte({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-7 gap-1 text-xs text-muted-foreground"
+                className="gap-1 text-muted-foreground"
                 onClick={onEditarPrompt}
               >
                 <Pencil className="h-3.5 w-3.5" /> Editar prompt
@@ -260,7 +260,7 @@ export function PanelLanzarArte({
           className="w-full"
         >
           <Button
-            variant="outline"
+            variant="default"
             className="w-full"
             onClick={() => lanzar.mutate()}
             disabled={!puedeArrancar}

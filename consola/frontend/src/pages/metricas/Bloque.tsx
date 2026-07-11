@@ -23,7 +23,7 @@ export function BotonOcultar({ id }: { id: string }) {
       type="button"
       variant="ghost"
       size="icon"
-      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+      className="text-muted-foreground hover:text-foreground"
       aria-label="Ocultar sección"
       title="Ocultar"
       onClick={() => setSeccionVisible(id, false)}
@@ -56,7 +56,7 @@ export function BarraOculta({
         type="button"
         variant="ghost"
         size="sm"
-        className="h-7 shrink-0 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+        className="shrink-0 gap-1.5 text-muted-foreground hover:text-foreground"
         onClick={() => setSeccionVisible(id, true)}
         aria-label={`Mostrar ${etiqueta}`}
       >

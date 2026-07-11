@@ -57,7 +57,7 @@ export function TarjetaBiblioteca({
             type="button"
             variant="ghost"
             size="sm"
-            className="h-7 gap-1 px-2 text-[11px]"
+            className="gap-1 px-2 text-[11px]"
             disabled={ocupado}
             onClick={() => api.descargarBiblioteca(item.id)}
           >
@@ -69,7 +69,7 @@ export function TarjetaBiblioteca({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 gap-1 px-2 text-[11px]"
+              className="gap-1 px-2 text-[11px]"
               disabled={ocupado}
               onClick={() => onRafaga(item)}
             >
@@ -81,7 +81,7 @@ export function TarjetaBiblioteca({
             <Button
               type="button"
               size="sm"
-              className="h-7 px-2 text-[11px]"
+              className="px-2 text-[11px]"
               disabled={ocupado}
               onClick={() => onElegir(item)}
             >

@@ -274,7 +274,7 @@ export function VisorFoto({
             )}
             {!esTunel && onBorrar && (
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 className="flex-1 gap-1 text-destructive hover:text-destructive"
                 disabled={borrando}

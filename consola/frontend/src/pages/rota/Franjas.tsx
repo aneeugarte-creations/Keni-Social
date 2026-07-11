@@ -234,7 +234,7 @@ export function FilaFranjaSemana({
       <Button
         size="sm"
         variant="ghost"
-        className="text-destructive"
+        className="text-destructive hover:text-destructive"
         onClick={() => borrar.mutate(false)}
         disabled={borrar.isPending}
       >
@@ -444,7 +444,7 @@ function CuerpoPlantillaFranjas({ onCerrar }: { onCerrar: () => void }) {
               <Button
                 size="sm"
                 variant="ghost"
-                className="text-destructive"
+                className="text-destructive hover:text-destructive"
                 onClick={() => quitar(f._id)}
                 disabled={filas.length <= 1}
                 title={
@@ -476,6 +476,7 @@ function CuerpoPlantillaFranjas({ onCerrar }: { onCerrar: () => void }) {
           Cancelar
         </Button>
         <Button
+          variant="default"
           onClick={() => guardar.mutate()}
           disabled={!puedeGuardar || guardar.isPending}
         >

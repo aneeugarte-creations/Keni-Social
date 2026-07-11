@@ -404,7 +404,7 @@ export function DialogoEditarAusencia({
           <Button variant="ghost" onClick={onCerrar}>
             Cancelar
           </Button>
-          <Button variant="secondary" onClick={onGuardar} disabled={guardar.isPending}>
+          <Button variant="default" onClick={onGuardar} disabled={guardar.isPending}>
             {guardar.isPending && <Spinner className="h-4 w-4" />}
             Guardar
           </Button>

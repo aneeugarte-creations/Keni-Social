@@ -309,7 +309,7 @@ export function EditorImagen({
             type="button"
             variant="ghost"
             size="sm"
-            className="h-7 px-2 text-xs text-muted-foreground"
+            className="px-2 text-muted-foreground"
             disabled={!!disabled}
             onClick={
               disabled
@@ -417,7 +417,7 @@ export function EditorImagen({
                 type="button"
                 size="sm"
                 variant="outline"
-                className="h-7 shrink-0 px-2.5 text-xs"
+                className="shrink-0"
                 onClick={() => void onAutorizar()}
                 disabled={ocupado}
               >
@@ -436,7 +436,7 @@ export function EditorImagen({
                 type="button"
                 size="sm"
                 variant="ghost"
-                className="h-7 px-2 text-xs text-muted-foreground"
+                className="px-2 text-muted-foreground"
                 onClick={() => void onAutorizar()}
                 disabled={ocupado}
               >

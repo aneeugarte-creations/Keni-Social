@@ -125,7 +125,7 @@ export default function GeneracionDetalle() {
             <Button
               variant="ghost"
               size="sm"
-              className="gap-1 text-destructive"
+              className="gap-1 text-destructive hover:text-destructive"
               onClick={async () => {
                 if (
                   await confirmar({

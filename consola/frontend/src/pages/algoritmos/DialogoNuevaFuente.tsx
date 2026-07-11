@@ -119,10 +119,10 @@ export function DialogoNuevaFuente({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onCerrar} disabled={guardando}>
+          <Button variant="ghost" onClick={onCerrar} disabled={guardando}>
             Cancelar
           </Button>
-          <Button onClick={enviar} disabled={guardando}>
+          <Button variant="default" onClick={enviar} disabled={guardando}>
             Añadir fuente
           </Button>
         </DialogFooter>

@@ -235,7 +235,7 @@ function DialogoCambiarCuenta({
               Usar consola de Anthropic (facturación por API) en vez de suscripción
             </Label>
             <DialogFooter>
-              <Button onClick={() => iniciar.mutate()} disabled={iniciar.isPending}>
+              <Button variant="default" onClick={() => iniciar.mutate()} disabled={iniciar.isPending}>
                 {iniciar.isPending ? (
                   <Spinner className="mr-2 h-4 w-4" />
                 ) : (
@@ -277,6 +277,7 @@ function DialogoCambiarCuenta({
             </div>
             <DialogFooter>
               <Button
+                variant="default"
                 onClick={() => confirmar.mutate()}
                 disabled={confirmar.isPending || !codigo.trim()}
               >
@@ -313,7 +314,7 @@ function BotonLogout({ cuenta, onHecho }: { cuenta: Cuenta; onHecho: () => void 
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="text-destructive">
+        <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
           <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
           Cerrar sesión
         </Button>
@@ -477,7 +478,6 @@ function TarjetaCuenta({
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
               onClick={refrescar}
               disabled={query.isFetching}
               title="Actualizar estado y uso ahora"

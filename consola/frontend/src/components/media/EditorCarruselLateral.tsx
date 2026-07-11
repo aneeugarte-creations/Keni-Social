@@ -328,7 +328,7 @@ export const EditorCarruselLateral = React.forwardRef<
                 type="button"
                 size="sm"
                 variant="ghost"
-                className="h-7 px-2"
+                className="px-2"
                 onClick={() => moverActivo(-1)}
                 disabled={disabled || activo <= 1}
                 aria-label="Mover slide a la izquierda"
@@ -339,7 +339,7 @@ export const EditorCarruselLateral = React.forwardRef<
                 type="button"
                 size="sm"
                 variant="ghost"
-                className="h-7 px-2"
+                className="px-2"
                 onClick={() => moverActivo(1)}
                 disabled={disabled || activo >= total - 1}
                 aria-label="Mover slide a la derecha"
@@ -350,7 +350,7 @@ export const EditorCarruselLateral = React.forwardRef<
                 type="button"
                 size="sm"
                 variant="ghost"
-                className="h-7 gap-1 px-2 text-destructive hover:text-destructive"
+                className="gap-1 px-2 text-destructive hover:text-destructive"
                 onClick={quitarActivo}
                 disabled={disabled}
                 aria-label="Quitar slide"
@@ -363,7 +363,7 @@ export const EditorCarruselLateral = React.forwardRef<
             type="button"
             size="sm"
             variant="outline"
-            className="h-7 gap-1 px-2"
+            className="gap-1 px-2"
             onClick={anadirSlide}
             disabled={disabled}
             aria-label="Añadir slide"
@@ -377,7 +377,7 @@ export const EditorCarruselLateral = React.forwardRef<
             type="button"
             size="sm"
             variant="outline"
-            className="h-7 gap-1 px-2"
+            className="gap-1 px-2"
             onClick={() => void descargarCarrusel()}
             disabled={disabled || descargando}
             aria-label="Descargar carrusel"

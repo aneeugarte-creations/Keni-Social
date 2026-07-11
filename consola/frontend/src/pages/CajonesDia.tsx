@@ -257,10 +257,10 @@ function DialogoEditarItem({ item, abierto, onCerrar, onGuardado }: PropsDialogo
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onCerrar} disabled={mutacion.isPending}>
+          <Button variant="ghost" onClick={onCerrar} disabled={mutacion.isPending}>
             Cancelar
           </Button>
-          <Button onClick={() => mutacion.mutate()} disabled={mutacion.isPending}>
+          <Button variant="default" onClick={() => mutacion.mutate()} disabled={mutacion.isPending}>
             {mutacion.isPending && <Spinner className="h-4 w-4" />}
             Guardar
           </Button>
@@ -395,7 +395,7 @@ function ItemCard({ item, fecha }: PropsItemCard) {
                 ) : esEvento ? (
                   <Button
                     size="sm"
-                    className="h-7 gap-1 px-2 text-xs"
+                    className="gap-1 px-2"
                     onClick={() => crearEventoMut.mutate()}
                     disabled={crearEventoMut.isPending}
                     aria-label="Crear evento"
@@ -413,7 +413,7 @@ function ItemCard({ item, fecha }: PropsItemCard) {
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+                      className="gap-1 px-2 text-muted-foreground"
                       onClick={() => usarMut.mutate()}
                       disabled={usarMut.isPending}
                       aria-label="Empujar ya (fuerza al feed)"
@@ -676,9 +676,9 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
             <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span className="flex-1">{l.error || "Error al parsear el lote."}</span>
             <Button
-              size="sm"
+              size="icon"
               variant="ghost"
-              className="h-6 w-6 p-0"
+              className="text-destructive hover:text-destructive"
               onClick={() => borrarLoteMut.mutate(l.id)}
               disabled={borrarLoteMut.isPending}
               aria-label="Borrar lote con error"

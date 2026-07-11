@@ -943,7 +943,7 @@ function Lector({
                   <Button
                     size="sm"
                     variant={abrir ? "secondary" : "ghost"}
-                    className="h-7 gap-1 px-2 text-xs"
+                    className="gap-1 px-2"
                     disabled={crear.isPending || deshab || (!abrir && !fuenteLista)}
                     onClick={() =>
                       abrir ? onSeleccionarArtefacto(abrir.id) : crear.mutate(tipo)
@@ -965,14 +965,14 @@ function Lector({
           <div className="ml-auto flex shrink-0 items-center gap-1">
             {acciones && editable ? (
               <Tooltip label={editando ? "Vista" : "Editar"} side="bottom">
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditando((v) => !v)}>
+                <Button size="icon" variant="ghost" onClick={() => setEditando((v) => !v)}>
                   {editando ? <Eye className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
                 </Button>
               </Tooltip>
             ) : null}
             {acciones ? (
               <Tooltip label="Descargar" side="bottom">
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={descargar}>
+                <Button size="icon" variant="ghost" onClick={descargar}>
                   <Download className="h-3.5 w-3.5" />
                 </Button>
               </Tooltip>
@@ -982,7 +982,7 @@ function Lector({
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="h-7 w-7 text-destructive hover:text-destructive"
+                  className="text-destructive hover:text-destructive"
                   onClick={onBorrar}
                   disabled={borrar.isPending}
                 >
@@ -1314,7 +1314,6 @@ function FormularioIdeas({
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-7 w-7"
                         disabled={ocupada !== null}
                         onClick={() => guardar(i)}
                       >
@@ -1329,7 +1328,7 @@ function FormularioIdeas({
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-7 w-7 text-destructive hover:text-destructive"
+                        className="text-destructive hover:text-destructive"
                         disabled={ocupada !== null}
                         onClick={() => quitar(i)}
                       >
@@ -1518,7 +1517,7 @@ function FormularioPreguntas({
                   <Button
                     size="icon"
                     variant="outline"
-                    className="h-7 w-7 shrink-0 bg-background"
+                    className="shrink-0 bg-background"
                     title={`Escuchar ${fmtSeg(ini)}–${fmtSeg(fin)}`}
                     onClick={() => reproducir(i)}
                   >
@@ -1874,7 +1873,7 @@ function DialogoSubida({
               </Button>
             )}
             <Button
-              variant="outline"
+              variant="default"
               disabled={sinFuente || subiendo}
               onClick={transcribir}
               className="gap-2"

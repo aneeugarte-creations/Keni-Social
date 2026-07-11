@@ -1060,7 +1060,7 @@ export function DialogAccionSwap({
             <Button variant="ghost" onClick={() => setAbierto(false)}>
               Cancelar
             </Button>
-            <Button variant="secondary" onClick={() => mutar.mutate()} disabled={mutar.isPending}>
+            <Button variant="default" onClick={() => mutar.mutate()} disabled={mutar.isPending}>
               {mutar.isPending ? (
                 <Spinner className="h-4 w-4" />
               ) : null}

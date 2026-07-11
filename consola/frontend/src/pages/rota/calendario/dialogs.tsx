@@ -272,7 +272,7 @@ export function DialogEditarEvento({
         </div>
         <DialogFooter className="flex-row justify-between gap-2 sm:justify-between">
           <Button
-            variant="outline"
+            variant="ghost"
             className="text-destructive hover:text-destructive"
             onClick={async () => {
               setEnviando(true);
@@ -308,6 +308,7 @@ export function DialogEditarEvento({
               Cancelar
             </Button>
             <Button
+              variant="default"
               onClick={async () => {
                 setEnviando(true);
                 try {
@@ -552,7 +553,7 @@ export function DialogEditarTurno({
               <AlertTriangle className="h-4 w-4" /> Forzar override
             </Button>
           ) : (
-            <Button onClick={() => guardar.mutate(false)} disabled={sinCambios || guardar.isPending}>
+            <Button variant="default" onClick={() => guardar.mutate(false)} disabled={sinCambios || guardar.isPending}>
               {guardar.isPending && <Spinner className="h-4 w-4" />}
               Guardar
             </Button>

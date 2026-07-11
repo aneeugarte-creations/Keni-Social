@@ -740,7 +740,6 @@ export function ChipToggle({
       type="button"
       size="sm"
       variant={activo ? "secondary" : "outline"}
-      className="h-7 px-2.5 text-xs"
       onClick={onClick}
       aria-pressed={activo}
     >

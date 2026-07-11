@@ -900,7 +900,7 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 px-2 text-xs"
+            className="px-2"
             onClick={(e) => {
               e.stopPropagation();
               void cadenaQuery.refetch();

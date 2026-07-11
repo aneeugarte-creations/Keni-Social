@@ -120,7 +120,7 @@ export function SugerenciaHashtags({ contenido, pieza, onAceptar }: SugerenciaHa
               type="button"
               size="icon"
               variant="ghost"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              className="text-muted-foreground hover:text-foreground"
               aria-label="Rechazar hashtags sugeridos"
               title="Rechazar sugeridos"
               onClick={() => setDescartado(true)}

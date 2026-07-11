@@ -106,7 +106,7 @@ export function ContenedorConfirmacion() {
                           type="button"
                           size="icon"
                           variant="outline"
-                          className="h-7 w-7 shrink-0"
+                          className="shrink-0"
                           onClick={() =>
                             setValorNumero((v) => Math.max(estado.numero!.minimo, v - 1))
                           }
@@ -127,7 +127,7 @@ export function ContenedorConfirmacion() {
                           type="button"
                           size="icon"
                           variant="outline"
-                          className="h-7 w-7 shrink-0"
+                          className="shrink-0"
                           onClick={() =>
                             setValorNumero((v) => Math.min(estado.numero!.maximo, v + 1))
                           }

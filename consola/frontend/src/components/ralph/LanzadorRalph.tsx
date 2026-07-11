@@ -11,6 +11,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { AutoTextarea } from "@/components/ui/auto-textarea";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -115,20 +116,20 @@ export function LanzadorRalph() {
             </SelectContent>
           </Select>
         </div>
-        <button
+        <Button
           type="button"
+          variant={hayTexto ? "brand" : "ghost"}
+          size="icon"
           onClick={lanzar}
           disabled={spawneando || !hayTexto}
           aria-label="Lanzar"
           className={cn(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors disabled:cursor-not-allowed",
-            hayTexto
-              ? "bg-keni text-white hover:bg-keni-500"
-              : "bg-muted text-muted-foreground/40",
+            "h-9 w-9 shrink-0 rounded-full",
+            !hayTexto && "bg-muted text-muted-foreground/40",
           )}
         >
           {spawneando ? <Spinner className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}
-        </button>
+        </Button>
       </div>
     </div>
   );

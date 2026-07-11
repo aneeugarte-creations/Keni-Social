@@ -243,7 +243,6 @@ function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 text-xs"
                   onClick={() => setSeleccion(new Set())}
                   disabled={descartarLoteMut.isPending}
                 >
@@ -252,7 +251,7 @@ function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-7 gap-1 text-xs"
+                  className="gap-1"
                   onClick={() => descartarLoteMut.mutate([...seleccion])}
                   disabled={descartarLoteMut.isPending || borrarLoteMut.isPending}
                   data-testid="btn-descartar-seleccion"
@@ -261,9 +260,9 @@ function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
                   Descartar {seleccion.size}
                 </Button>
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  className="h-7 gap-1 text-xs border-destructive/50 text-destructive hover:text-destructive"
+                  className="gap-1 text-destructive hover:text-destructive"
                   onClick={confirmarYBorrarSeleccion}
                   disabled={borrarLoteMut.isPending || descartarLoteMut.isPending}
                   data-testid="btn-borrar-seleccion"
@@ -278,9 +277,9 @@ function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
               </>
             )}
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              className="h-7 gap-1 text-xs border-destructive/50 text-destructive hover:text-destructive"
+              className="gap-1 text-destructive hover:text-destructive"
               onClick={confirmarYVaciarPool}
               disabled={borrarTodoMut.isPending}
               data-testid="btn-borrar-todo"

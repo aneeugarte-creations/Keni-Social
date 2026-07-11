@@ -564,7 +564,7 @@ export function DialogoAsignarTurnos({
 
   const botonAsignar = (
     <Button
-      variant="secondary"
+      variant="default"
       onClick={() => asignar.mutate()}
       disabled={incompleto || asignar.isPending}
     >
@@ -600,7 +600,6 @@ export function DialogoAsignarTurnos({
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
             onClick={() => onOpenChange(false)}
             aria-label="Cerrar"
           >
@@ -625,7 +624,7 @@ export function DialogoAsignarTurnos({
         {camposManual}
         <DialogFooter>
           <span className="mr-auto self-center">{pieTexto}</span>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={asignar.isPending}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={asignar.isPending}>
             Cancelar
           </Button>
           {botonAsignar}

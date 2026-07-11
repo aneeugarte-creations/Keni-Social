@@ -499,7 +499,6 @@ export function DetalleDocumento({
             <Button
               size="sm"
               variant="outline"
-              className="h-7"
               disabled={resolviendoConflicto}
               onClick={() => void sobrescribirConLoMio()}
               title="Vuelve a leer la versión del servidor y guarda lo tuyo encima"
@@ -509,7 +508,6 @@ export function DetalleDocumento({
             <Button
               size="sm"
               variant="outline"
-              className="h-7"
               disabled={resolviendoConflicto}
               onClick={recargarDesdeServidor}
               title="Descarta lo que escribiste y carga la versión de los demás"
@@ -614,7 +612,7 @@ export function DetalleDocumento({
                   <Eye className="h-3.5 w-3.5" aria-hidden /> Viendo una versión anterior · solo
                   lectura
                 </span>
-                <Button size="sm" variant="outline" className="h-7" onClick={() => setPreviewSha(null)}>
+                <Button size="sm" variant="outline" onClick={() => setPreviewSha(null)}>
                   Volver a tu borrador
                 </Button>
               </div>

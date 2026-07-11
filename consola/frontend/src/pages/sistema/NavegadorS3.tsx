@@ -126,7 +126,7 @@ function PreviewObjeto({
                 </span>
                 <div className="flex items-center gap-2">
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
                     className="text-destructive hover:text-destructive"
                     disabled={borrando}

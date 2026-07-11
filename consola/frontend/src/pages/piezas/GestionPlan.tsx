@@ -434,7 +434,7 @@ export function PanelPlan({ marca }: { marca: string }) {
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                    className="text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
                     aria-label={`Quitar ${fila.etiqueta}`}
                     disabled={quitarLinea.isPending}
                     onClick={() => quitarLinea.mutate(fila.clave)}

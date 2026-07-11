@@ -705,7 +705,6 @@ function DialogoEditarInterno({
                     type="button"
                     size="sm"
                     variant={formato === valor ? "secondary" : "ghost"}
-                    className="h-7 px-2.5 text-xs"
                     onClick={() => cambiarFormato(valor)}
                     disabled={flipFormato.isPending || generandoCarrusel}
                     aria-pressed={formato === valor}
@@ -777,7 +776,7 @@ function DialogoEditarInterno({
                         type="button"
                         size="sm"
                         variant="ghost"
-                        className="ml-auto h-7 px-2.5 text-xs"
+                        className="ml-auto"
                         onClick={() => void cancelarGenCarrusel()}
                         disabled={cancelandoCarrusel}
                       >
@@ -794,7 +793,7 @@ function DialogoEditarInterno({
                         type="button"
                         size="sm"
                         variant="outline"
-                        className="ml-auto h-7 px-2.5 text-xs"
+                        className="ml-auto"
                         onClick={() => void pedirLongitudYGenerar(false)}
                       >
                         Generar carrusel
@@ -809,7 +808,7 @@ function DialogoEditarInterno({
                         type="button"
                         size="sm"
                         variant="ghost"
-                        className="ml-auto h-7 px-2.5 text-xs"
+                        className="ml-auto"
                         onClick={() => void pedirLongitudYGenerar(true)}
                       >
                         Regenerar

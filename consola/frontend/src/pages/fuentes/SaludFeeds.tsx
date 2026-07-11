@@ -235,7 +235,7 @@ export function SaludFeeds() {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-7 gap-1 px-2 text-xs"
+                          className="gap-1 px-2"
                           disabled={reactivando}
                           onClick={() => reactivarMut.mutate(feed.id)}
                           data-testid={`btn-reactivar-${feed.id}`}

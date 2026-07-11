@@ -74,7 +74,7 @@ export function DialogoAsignar({
           })}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
         </DialogFooter>
@@ -148,7 +148,7 @@ export function DialogoAnadirPersona({
           ))}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
         </DialogFooter>

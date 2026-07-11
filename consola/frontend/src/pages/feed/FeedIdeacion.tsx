@@ -730,7 +730,7 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
           {/* Alta directa: tu copy FINAL, tal cual, como borrador por red — el mismo motor
               que las piezas que nacen al usar una noticia/investigación, sin generación.
               Sin tooltip: el botón ya se nombra a sí mismo (texto visible). */}
-          <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => setCreandoPost(true)}>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreandoPost(true)}>
             <Plus className="h-4 w-4" />
             Crear post
           </Button>

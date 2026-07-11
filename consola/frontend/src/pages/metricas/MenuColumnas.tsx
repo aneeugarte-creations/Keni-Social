@@ -83,7 +83,7 @@ export function MenuColumnas({
         type="button"
         variant="ghost"
         size="icon"
-        className="h-7 w-7 text-muted-foreground hover:text-foreground"
+        className="text-muted-foreground hover:text-foreground"
         aria-label={etiqueta}
         title={etiqueta}
         aria-haspopup="menu"
@@ -119,7 +119,6 @@ export function MenuColumnas({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6"
                     onClick={() => mover(idx, -1)}
                     disabled={idx === 0}
                     aria-label={`Subir ${etiquetaDe(id)}`}
@@ -130,7 +129,6 @@ export function MenuColumnas({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6"
                     onClick={() => mover(idx, 1)}
                     disabled={idx === orden.length - 1}
                     aria-label={`Bajar ${etiquetaDe(id)}`}

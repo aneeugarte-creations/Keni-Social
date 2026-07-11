@@ -258,10 +258,10 @@ function DialogoAccionFlujo({
               </div>
             )}
             <DialogFooter>
-              <Button variant="outline" onClick={onCerrar} disabled={ocupado}>
+              <Button variant="ghost" onClick={onCerrar} disabled={ocupado}>
                 Cancelar
               </Button>
-              <Button onClick={() => accion.ejecutar(nota)} disabled={ocupado}>
+              <Button variant="default" onClick={() => accion.ejecutar(nota)} disabled={ocupado}>
                 {ocupado ? <Spinner className="h-4 w-4" /> : null}
                 {accion.etiquetaConfirmar}
               </Button>

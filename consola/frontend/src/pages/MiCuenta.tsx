@@ -805,7 +805,7 @@ function DialogoTokenNuevo({ token, onCerrar }: { token: string | null; onCerrar
         </ol>
 
         <DialogFooter>
-          <Button type="button" onClick={() => void copiarYCerrar()}>
+          <Button type="button" variant="default" onClick={() => void copiarYCerrar()}>
             <Copy className="h-4 w-4" />
             Copiar comando y cerrar
           </Button>

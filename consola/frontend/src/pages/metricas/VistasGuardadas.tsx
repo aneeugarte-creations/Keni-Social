@@ -149,15 +149,17 @@ export function VistasGuardadas({
                       {vista.marca_nombre || "Todas las marcas"}
                     </span>
                   </button>
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="icon"
                     aria-label={`Borrar vista ${vista.nombre}`}
                     disabled={eliminar.isPending}
                     onClick={() => eliminar.mutate(vista.id)}
-                    className="shrink-0 rounded-sm p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-destructive disabled:pointer-events-none disabled:opacity-50"
+                    className="shrink-0 rounded-sm text-destructive hover:text-destructive"
                   >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                    <Trash2 />
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -215,7 +217,7 @@ export function VistasGuardadas({
               >
                 Cancelar
               </Button>
-              <Button type="submit" disabled={!nombre.trim() || crear.isPending}>
+              <Button type="submit" variant="default" disabled={!nombre.trim() || crear.isPending}>
                 {crear.isPending && <Spinner className="h-4 w-4" />}
                 Guardar
               </Button>

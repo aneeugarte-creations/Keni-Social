@@ -143,7 +143,7 @@ function DialogoConectar({ conectado, onConectado }: { conectado: boolean; onCon
               Obtén un código de un solo uso para autorizar el acceso en GitHub.
             </p>
             <DialogFooter>
-              <Button onClick={() => iniciar.mutate()} disabled={iniciar.isPending}>
+              <Button variant="default" onClick={() => iniciar.mutate()} disabled={iniciar.isPending}>
                 {iniciar.isPending ? (
                   <Spinner className="mr-2 h-4 w-4" />
                 ) : (
@@ -184,7 +184,7 @@ function DialogoConectar({ conectado, onConectado }: { conectado: boolean; onCon
                 3. Cuando lo hayas autorizado en GitHub, espera a que el servidor lo confirme:
               </p>
               <DialogFooter>
-                <Button onClick={() => confirmar.mutate()} disabled={confirmar.isPending}>
+                <Button variant="default" onClick={() => confirmar.mutate()} disabled={confirmar.isPending}>
                   {confirmar.isPending ? (
                     <Spinner className="mr-2 h-4 w-4" />
                   ) : (
@@ -219,7 +219,7 @@ function BotonLogout({ onHecho }: { onHecho: () => void }) {
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="text-destructive">
+        <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
           <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
           Desconectar
         </Button>
@@ -281,7 +281,6 @@ export function SeccionGitHub() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
               onClick={refrescar}
               disabled={query.isFetching}
               title="Actualizar estado ahora"

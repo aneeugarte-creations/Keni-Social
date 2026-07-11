@@ -320,14 +320,14 @@ export function DialogoCrearTarea({
             )}
             <DialogFooter>
               <Button
-                variant="outline"
+                variant="ghost"
                 onClick={() => (propuesta && !generando ? descartar.mutate() : setPropuestaId(null))}
                 disabled={aceptar.isPending || descartar.isPending}
               >
                 Volver
               </Button>
               {propuestos.length > 0 && !generando && (
-                <Button variant="secondary" onClick={() => aceptar.mutate()} disabled={aceptar.isPending}>
+                <Button variant="default" onClick={() => aceptar.mutate()} disabled={aceptar.isPending}>
                   <Check className="mr-1 h-4 w-4" />
                   {aceptar.isPending ? "Añadiendo…" : "Aceptar y añadir"}
                 </Button>
@@ -539,11 +539,11 @@ export function DialogoCrearTarea({
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={cerrar} disabled={crear.isPending}>
+              <Button variant="ghost" onClick={cerrar} disabled={crear.isPending}>
                 Cancelar
               </Button>
               <Button
-                variant="secondary"
+                variant="default"
                 onClick={onCrear}
                 disabled={crear.isPending}
               >

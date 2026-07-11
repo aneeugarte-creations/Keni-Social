@@ -622,7 +622,7 @@ export function EditorPlacaInline({
             type="button"
             size="sm"
             variant="outline"
-            className="h-7 shrink-0 px-2.5 text-xs"
+            className="shrink-0"
             onClick={() => void onAutorizar()}
             disabled={autorizarStock.isPending}
           >
@@ -688,7 +688,7 @@ export function EditorPlacaInline({
             type="button"
             size="sm"
             variant="ghost"
-            className="h-7 px-2 text-xs text-muted-foreground"
+            className="px-2 text-muted-foreground"
             onClick={() => void onAutorizar()}
             disabled={autorizarStock.isPending}
           >

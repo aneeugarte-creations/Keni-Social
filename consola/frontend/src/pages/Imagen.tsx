@@ -1147,8 +1147,8 @@ export default function Imagen() {
             </datalist>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogo(null)}>Cancelar</Button>
-            <Button onClick={confirmarNombre} disabled={!dialogo?.nombre.trim()}>Guardar</Button>
+            <Button variant="ghost" onClick={() => setDialogo(null)}>Cancelar</Button>
+            <Button variant="default" onClick={confirmarNombre} disabled={!dialogo?.nombre.trim()}>Guardar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -57,7 +57,7 @@ export function BarraReencuadre({
         type="button"
         variant="ghost"
         size="sm"
-        className="h-7 px-2 text-xs"
+        className="px-2"
         disabled={encActivo.foco[0] === 0.5 && encActivo.foco[1] === 0.5 && encActivo.zoom === 1}
         onClick={onCentrar}
       >

@@ -456,6 +456,7 @@ function DialogImportarParrilla({
                 Cancelar
               </Button>
               <Button
+                variant="default"
                 onClick={() => subir.mutate()}
                 disabled={!archivo || subir.isPending}
                 data-testid="rota-importar-subir"
@@ -468,7 +469,7 @@ function DialogImportarParrilla({
           ) : estado === "pendiente" ? (
             <>
               <Button
-                variant="outline"
+                variant="ghost"
                 className="text-destructive hover:text-destructive"
                 onClick={() => descartar.mutate()}
                 disabled={descartar.isPending || aplicar.isPending}
@@ -481,6 +482,7 @@ function DialogImportarParrilla({
                 Descartar
               </Button>
               <Button
+                variant="default"
                 onClick={() => aplicar.mutate()}
                 disabled={aplicar.isPending || descartar.isPending || operaciones.length === 0}
                 data-testid="rota-importar-aceptar"

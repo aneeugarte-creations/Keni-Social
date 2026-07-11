@@ -99,10 +99,10 @@ export function DialogoClonar({
         </Campo>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onCerrar} disabled={clonar.isPending}>
+          <Button variant="ghost" onClick={onCerrar} disabled={clonar.isPending}>
             Cancelar
           </Button>
-          <Button onClick={onClonar} disabled={clonar.isPending}>
+          <Button variant="default" onClick={onClonar} disabled={clonar.isPending}>
             {clonar.isPending ? (
               <Spinner className="h-4 w-4" />
             ) : (

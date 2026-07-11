@@ -156,10 +156,10 @@ function DialogoCrear({
             />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onCerrar} disabled={crear.isPending}>
+            <Button type="button" variant="ghost" onClick={onCerrar} disabled={crear.isPending}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={!puedeCrear}>
+            <Button type="submit" variant="default" disabled={!puedeCrear}>
               {crear.isPending && <Spinner className="h-4 w-4" />}
               Crear
             </Button>

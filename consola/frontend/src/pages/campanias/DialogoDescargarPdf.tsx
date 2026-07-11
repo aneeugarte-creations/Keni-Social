@@ -267,7 +267,7 @@ export function DialogoDescargarPdf({
             Cancelar
           </Button>
           <Button
-            variant="outline"
+            variant="default"
             onClick={() => descargar.mutate()}
             disabled={descargar.isPending || !datos}
           >

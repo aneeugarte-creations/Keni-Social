@@ -44,7 +44,7 @@ export function PanelPip({ doc, videoKey, videoUrl, onCambioVideo, onQuitar, dis
             size="sm"
             onClick={onQuitar}
             disabled={disabled}
-            className="h-7 text-destructive hover:text-destructive"
+            className="text-destructive hover:text-destructive"
           >
             <Trash2 className="mr-1 h-3.5 w-3.5" />
             Quitar PiP

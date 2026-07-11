@@ -406,7 +406,7 @@ function DialogoCrearWebhook({
         </div>
 
         <DialogFooter>
-          <Button onClick={onCrear} disabled={crear.isPending}>
+          <Button variant="default" onClick={onCrear} disabled={crear.isPending}>
             Crear webhook
           </Button>
         </DialogFooter>

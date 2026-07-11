@@ -418,7 +418,6 @@ function Tarjeta({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7"
                 disabled={ocupada}
                 onClick={sinPropagar(() => onAccion("construir"))}
                 aria-label="Construir"
@@ -432,7 +431,7 @@ function Tarjeta({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 text-destructive hover:text-destructive"
+                className="text-destructive hover:text-destructive"
                 disabled={ocupada}
                 onClick={sinPropagar(() => onAccion("descartar"))}
                 aria-label="Descartar"
@@ -528,10 +527,10 @@ function NuevaIdea({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onCerrar}>
+          <Button variant="ghost" onClick={onCerrar}>
             Cancelar
           </Button>
-          <Button onClick={() => crear.mutate()} disabled={!puedeEnviar}>
+          <Button variant="default" onClick={() => crear.mutate()} disabled={!puedeEnviar}>
             {crear.isPending ? (
               <Spinner className="h-4 w-4" />
             ) : (

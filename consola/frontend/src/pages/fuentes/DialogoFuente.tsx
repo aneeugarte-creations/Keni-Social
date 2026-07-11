@@ -288,10 +288,10 @@ function FormularioFuente({
         </div>
       </div>
       <div className="flex justify-end gap-2">
-        <Button variant="outline" size="sm" onClick={onListo} disabled={guardar.isPending}>
+        <Button variant="ghost" size="sm" onClick={onListo} disabled={guardar.isPending}>
           Cancelar
         </Button>
-        <Button size="sm" onClick={onGuardar} disabled={guardar.isPending}>
+        <Button variant="default" size="sm" onClick={onGuardar} disabled={guardar.isPending}>
           {guardar.isPending ? (
             <Spinner className="h-4 w-4" />
           ) : (

@@ -140,7 +140,7 @@ function AnadirRapido({ marca }: { marca: string }) {
         type="submit"
         variant="outline"
         size="sm"
-        className="h-7 shrink-0"
+        className="shrink-0"
         aria-label="Añadir a Por cubrir"
         disabled={!titulo.trim() || crear.isPending}
       >
@@ -433,7 +433,7 @@ function AccionesItem({
           type="button"
           variant="outline"
           size="sm"
-          className="h-7 shrink-0 gap-1.5"
+          className="shrink-0 gap-1.5"
           onClick={() => setAsignarAbierto(true)}
         >
           <UserPlus className="h-3.5 w-3.5" /> Asignar
@@ -444,7 +444,7 @@ function AccionesItem({
           type="button"
           variant="outline"
           size="icon"
-          className="h-7 w-7 shrink-0"
+          className="shrink-0"
           aria-label="Más acciones"
           title="Más acciones"
         >
@@ -867,7 +867,7 @@ export function PanoramaAgenda({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 text-xs text-muted-foreground"
+              className="text-muted-foreground"
               onClick={() => setFiltro(null)}
             >
               Ver todo

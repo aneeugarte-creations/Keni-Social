@@ -350,7 +350,7 @@ export function DialogoCrearPost({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-7 gap-1.5 text-xs text-muted-foreground"
+                className="gap-1.5 text-muted-foreground"
                 onClick={() => archivoRef.current?.click()}
                 disabled={crear.isPending}
               >
@@ -409,7 +409,7 @@ export function DialogoCrearPost({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 shrink-0 text-muted-foreground"
+                  className="shrink-0 text-muted-foreground"
                   onClick={quitarImagen}
                   disabled={crear.isPending}
                   aria-label="Quitar imagen"
@@ -436,10 +436,10 @@ export function DialogoCrearPost({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onCerrar} disabled={crear.isPending}>
+          <Button variant="ghost" onClick={onCerrar} disabled={crear.isPending}>
             Cancelar
           </Button>
-          <Button variant="outline" onClick={onCrear} disabled={crear.isPending}>
+          <Button variant="default" onClick={onCrear} disabled={crear.isPending}>
             {/* La estrellita marca que la acción la redacta la IA (mismo signo que MarcaIA /
                 el resto de acciones de IA de la casa); al lanzar, cede al spinner. */}
             {crear.isPending ? (

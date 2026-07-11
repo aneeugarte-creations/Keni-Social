@@ -98,7 +98,7 @@ export function TituloPagina({
           size="icon"
           // El cromo de la barra mide 32px (h-8): encogemos el botón a 28px para que entre sin
           // estirar la fila; `-ml-1` lo pega al borde izquierdo del hueco.
-          className="-ml-1 h-7 w-7 shrink-0"
+          className="-ml-1 shrink-0"
           aria-label="Volver"
           onClick={onAtras}
         >

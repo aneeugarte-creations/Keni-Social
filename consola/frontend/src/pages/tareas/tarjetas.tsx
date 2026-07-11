@@ -286,7 +286,7 @@ function RolLibre({ tarea }: { tarea: Publicacion }) {
       <Button
         variant="outline"
         size="sm"
-        className="ml-auto h-7"
+        className="ml-auto"
         onClick={() => coger.mutate()}
         disabled={coger.isPending}
         title="La cubro yo"
@@ -798,8 +798,10 @@ export function TarjetaTarea({
         {/* Quitar a quien cubre (yo mismo o, si soy manager, a otra persona): suelta SU rol;
             el partido sigue y el rol vuelve a «Por cubrir». Reemplaza el viejo chip «Cubren:». */}
         {enCobertura && (esMia || esManager) && (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             aria-label={esMia ? "Soltar (dejar de cubrir)" : `Quitar a ${tarea.responsable_nombre}`}
             title={esMia ? "Soltar (dejar de cubrir)" : `Quitar a ${tarea.responsable_nombre}`}
             disabled={soltar.isPending}
@@ -807,10 +809,10 @@ export function TarjetaTarea({
               e.stopPropagation();
               soltar.mutate();
             }}
-            className="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+            className="ml-auto shrink-0 rounded-full text-destructive hover:text-destructive"
           >
-            <X className="h-3.5 w-3.5" />
-          </button>
+            <X />
+          </Button>
         )}
         {!enCobertura && tarea.fecha_objetivo && (
           <span
@@ -1051,16 +1053,18 @@ export function TarjetaCoberturaMia({ cobertura }: { cobertura: Cobertura }) {
           <div key={t.id} className="flex items-center gap-2 text-sm">
             <SemaforoCobertura fecha={t.fecha_objetivo} hora={t.hora_objetivo} />
             <span className="text-muted-foreground">{etiquetaRol(t.formato)}</span>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
               aria-label="Soltar (dejar de cubrir)"
               title="Soltar (dejar de cubrir)"
               disabled={soltar.isPending}
               onClick={() => soltar.mutate(t.id)}
-              className="ml-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+              className="ml-auto shrink-0 rounded-full text-destructive hover:text-destructive"
             >
-              <X className="h-4 w-4" />
-            </button>
+              <X />
+            </Button>
           </div>
         ))}
       </div>
