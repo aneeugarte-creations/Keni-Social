@@ -702,7 +702,7 @@ function VistaMes({
     // MÓVIL: 7 columnas no caben en 360-430px; la cuadrícula conserva un ancho mínimo legible
     // y scrollea en HORIZONTAL dentro de su contenedor (el `main` global clampa el eje X).
     <div
-      className="overflow-x-auto rounded-xl border border-border"
+      className="overflow-x-auto rounded-xl border bg-card"
       style={{ height: "calc(100dvh - 20rem)", minHeight: "22rem" }}
     >
     <div
@@ -943,7 +943,7 @@ function VistaSemana({
     // en días ligeros un `min-h` calc(viewport − chrome) estira la rejilla; en días cargados la
     // rejilla CRECE y scrollea la PÁGINA (`<main>`), no la columna. `min-w` conserva el scroll
     // HORIZONTAL en móvil (7 columnas no caben en 360-430px).
-    <div className="overflow-x-auto rounded-xl border border-border">
+    <div className="overflow-x-auto rounded-xl border bg-card">
     <div className="grid min-h-[calc(100dvh-15rem)] min-w-[640px] grid-cols-7 gap-px bg-border/60">
       {dias.map((dia, i) => {
         const clave = claveDia(dia);

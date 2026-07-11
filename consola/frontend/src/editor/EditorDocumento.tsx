@@ -698,7 +698,7 @@ export function EditorDocumento({
                 añadir la primera capa. Deja pasar los clics al lienzo salvo en la propia tarjeta. */}
             {lienzoVacio && (
               <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-4">
-                <div className="pointer-events-auto flex max-w-sm flex-col items-center gap-4 rounded-xl border border-border bg-background/95 p-6 text-center shadow-md">
+                <div className="pointer-events-auto flex max-w-sm flex-col items-center gap-4 rounded-xl border bg-card p-6 text-center">
                   <div>
                     <p className="text-sm font-semibold text-foreground">Empieza tu diseño</p>
                     <p className="mt-1 text-xs text-muted-foreground">

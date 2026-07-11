@@ -454,7 +454,7 @@ function GrupoMacro({
         </CardContent>
       </Card>
       {abierto && (
-        <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-2">
+        <div className="space-y-2 rounded-xl border bg-card p-2">
           {historias.map((h) => (
             <TarjetaHistoria key={h.id} historia={h} />
           ))}

@@ -294,7 +294,7 @@ export function BuscadorStock({
                   type="button"
                   disabled={adjuntando}
                   onClick={() => elegir(c)}
-                  className="group block w-full overflow-hidden rounded-lg border border-border bg-muted/20 text-left transition-shadow hover:shadow-sm hover:ring-1 hover:ring-foreground/20"
+                  className="group block w-full overflow-hidden rounded-xl border bg-card text-left transition-shadow hover:shadow-sm hover:ring-1 hover:ring-foreground/20"
                   title={
                     esAgencias
                       ? "Adjuntar foto licenciada (publicable con crédito)"

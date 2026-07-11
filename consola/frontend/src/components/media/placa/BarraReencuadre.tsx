@@ -30,7 +30,7 @@ export function BarraReencuadre({
   onCentrar,
 }: BarraReencuadreProps) {
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
       {esCollage && (
         <span className="font-medium text-foreground">
           Hueco {slotActivo + 1} de {nHuecos}

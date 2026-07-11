@@ -67,7 +67,7 @@ export function LienzoPlaca({
     <>
       {/* Lienzo en vivo: resolución real, escalado por CSS. Arrastrable para reencuadrar el hueco
           tocado; el titular es clicable y reescribible in place. */}
-      <div className="flex justify-center rounded-md border border-border bg-muted/20 p-2">
+      <div className="flex justify-center rounded-xl border bg-muted/20 p-2">
         {!fuentesListas ? (
           <div className="flex h-56 items-center justify-center">
             <Spinner className="h-5 w-5 text-muted-foreground" />

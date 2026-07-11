@@ -95,10 +95,10 @@ function Fila({
 }) {
   return (
     <li
-      className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm ${
+      className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 text-sm ${
         destacar
           ? "border-yellow-300 bg-yellow-50/60 dark:border-yellow-800 dark:bg-yellow-950/20"
-          : "border-border bg-card"
+          : "bg-card"
       }`}
     >
       <span className="flex items-center gap-2">

@@ -135,7 +135,7 @@ function FilaGoogleAnalytics({
   const usarDesplegable = conectado && !propiedadesError && propiedades.length > 0;
 
   return (
-    <div className="space-y-3 rounded-lg border border-border p-3">
+    <div className="space-y-3 rounded-xl border bg-card p-3">
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm font-medium">{marca.etiqueta}</span>
         {marca.conectado ? (
@@ -354,7 +354,7 @@ function SeccionGoogleAnalyticsAdmin() {
       </div>
 
       {/* App OAuth: client_id (no secreto) + client_secret (write-only). */}
-      <div className="space-y-3 rounded-lg border border-border p-3">
+      <div className="space-y-3 rounded-xl border bg-card p-3">
         <div className="flex items-center justify-between gap-3">
           <span className="text-sm font-medium">App de Google</span>
           {appConfigurada ? (

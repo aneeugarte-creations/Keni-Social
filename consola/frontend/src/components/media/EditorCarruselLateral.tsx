@@ -418,7 +418,7 @@ export const EditorCarruselLateral = React.forwardRef<
 
         {esVideo ? (
           // Slide de VIDEO: previa con controles (no lleva placa). Se gestiona con quitar/mover.
-          <div className="overflow-hidden rounded-md border bg-black">
+          <div className="overflow-hidden rounded-xl border bg-black">
             <video
               key={slideExtra?.objeto}
               src={urlMedia(slideExtra?.objeto ?? "")}

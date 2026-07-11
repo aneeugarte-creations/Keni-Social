@@ -364,7 +364,7 @@ function ItemCard({ item, fecha }: PropsItemCard) {
         onPrimaria={item.usado ? undefined : () => setEditando(true)}
         acciones={acciones}
         etiquetaAcciones={`Acciones de "${item.titulo || "(sin título)"}"`}
-        className={`rounded-md border p-3 pr-10 text-sm ${item.usado ? "bg-muted/40" : esCaducado ? "bg-amber-50/60 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800" : "bg-card"}`}
+        className={`rounded-xl border p-3 pr-10 text-sm ${item.usado ? "bg-muted/40" : esCaducado ? "bg-amber-50/60 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800" : "bg-card"}`}
       >
         <div data-testid="insumo-item">
         <div className="flex items-start justify-between gap-2">

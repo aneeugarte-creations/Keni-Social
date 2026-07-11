@@ -468,24 +468,24 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
   return (
     // CLICK IZQUIERDO sobre la tarjeta abre el editor (modelo "item-first"); `onClickTarjeta`
     // ignora los clics nacidos en controles internos (botones sociales/borrar, enlaces, la
-    // imagen —role="button" con su propio handler—, inputs del hilo). Hover/foco tiñen el fondo
-    // de gris (bg-accent) como pista de que la tarjeta es accionable.
+    // imagen —role="button" con su propio handler—, inputs del hilo). El hover eleva
+    // ligeramente la tarjeta como pista de que es accionable.
     <article
       aria-label={pieza.titulo}
       aria-busy={soloVisual || undefined}
       onClick={generandoCopy ? undefined : onClickTarjeta}
       className={cn(
-        // Dirección "Focus": la tarjeta FLOTA (sin borde que compita con la foto) con sombra
-        // suave y esquina generosa; el contenido se recorta a la caja (`overflow-hidden`).
-        "overflow-hidden rounded-2xl bg-card text-left text-card-foreground shadow-[0_16px_44px_-20px_rgba(0,0,0,0.22),0_5px_14px_-10px_rgba(0,0,0,0.12)] transition-all duration-300",
+        // Tarjeta canónica de la plataforma: borde 1px (token), fondo card, sin sombra; el
+        // contenido se recorta a la caja (`overflow-hidden`).
+        "overflow-hidden rounded-xl border bg-card text-left text-card-foreground transition-all duration-300",
         soloVisual
           ? // Solo visual: sin pista de clic y sin interacción en ningún hijo.
             "select-none [&_*]:pointer-events-none"
           : portalPendiente
             ? // Portal a demanda: la tarjeta no abre nada; SOLO el botón «Generar» es interactivo.
               "select-none"
-            : // Al pasar el ratón / enfocar, la tarjeta se eleva: pista de que es accionable.
-              "cursor-pointer hover:-translate-y-0.5 hover:shadow-[0_28px_60px_-22px_rgba(0,0,0,0.26)] focus-within:shadow-[0_28px_60px_-22px_rgba(0,0,0,0.26)]",
+            : // Al pasar el ratón, la tarjeta se eleva ligeramente: pista de que es accionable.
+              "cursor-pointer hover:-translate-y-0.5",
       )}
     >
       {/* Cabecera EN UNA SOLA LÍNEA (orden del rediseño aprobado): distintivo de FORMATO + RED

@@ -220,7 +220,7 @@ function SeccionFuentesStockAdmin() {
           No hay proveedores de pago disponibles.
         </p>
       ) : (
-        <div className="space-y-4 rounded-lg border border-border p-3">
+        <div className="space-y-4 rounded-xl border bg-card p-3">
           {conClave.map((proveedor) => (
             <FilaClaveStock key={proveedor.proveedor} proveedor={proveedor} />
           ))}

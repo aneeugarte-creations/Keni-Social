@@ -469,7 +469,7 @@ export function ReparteMes({
   const eyebrow = "text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70";
 
   return (
-    <div className="flex shrink-0 flex-col gap-3 rounded-xl border border-border bg-card p-4">
+    <div className="flex shrink-0 flex-col gap-3 rounded-xl border bg-card p-4">
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold">Asignar turnos</h2>
         <Button
@@ -552,15 +552,15 @@ export function ReparteMes({
           </p>
         </div>
         {diasSel.size === 0 ? (
-          <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+          <p className="rounded-xl border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
             Marca días en el calendario para repartir.
           </p>
         ) : personasElegidas.length === 0 ? (
-          <p className="rounded-lg border border-border px-3 py-4 text-center text-xs text-muted-foreground">
+          <p className="rounded-xl border px-3 py-4 text-center text-xs text-muted-foreground">
             Elige personas para ver la matriz.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-border p-2">
+          <div className="overflow-x-auto rounded-xl border p-2">
             <table className="border-separate border-spacing-[3px] tabular-nums">
               <thead>
                 <tr>

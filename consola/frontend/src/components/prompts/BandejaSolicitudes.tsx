@@ -176,7 +176,7 @@ export function BandejaSolicitudes({ className }: BandejaSolicitudesProps) {
   const solicitudes = solicitudesQuery.data?.solicitudes ?? [];
 
   return (
-    <section className={cn("overflow-hidden rounded-md border border-border", className)}>
+    <section className={cn("overflow-hidden rounded-xl border bg-card", className)}>
       <header className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-2 text-sm font-medium">
         <Inbox className="h-4 w-4 text-muted-foreground" />
         Solicitudes de publicación

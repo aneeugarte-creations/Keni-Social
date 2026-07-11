@@ -170,10 +170,8 @@ function TarjetaPilar({
     <article
       data-testid={`pilar-${pilar.clase}`}
       className={cn(
-        "flex flex-col gap-3 rounded-lg border bg-card p-4 shadow-sm transition-colors",
-        pilar.vacio
-          ? "border-dashed border-border bg-muted/20"
-          : "border-border hover:bg-accent",
+        "flex flex-col gap-3 rounded-xl border bg-card p-4 transition-colors",
+        pilar.vacio ? "border-dashed bg-muted/20" : "hover:bg-accent",
       )}
     >
       <header className="flex items-start gap-3">
@@ -248,7 +246,7 @@ function FranjaEnsamblaje({
   return (
     <section
       aria-label="Cómo se ensambla para la IA"
-      className="rounded-lg border border-border bg-muted/20 p-4"
+      className="rounded-xl border bg-card p-4"
     >
       <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         <Layers className="h-3.5 w-3.5" aria-hidden /> Cómo se ensambla para la IA
@@ -296,7 +294,7 @@ function TarjetaExtra({
     <button
       type="button"
       onClick={() => extra.docId && onAbrir(extra.docId)}
-      className="flex w-full items-center gap-2.5 rounded-md border border-border bg-card px-3 py-2 text-left shadow-sm transition-colors hover:bg-accent focus-visible:bg-accent"
+      className="flex w-full items-center gap-2.5 rounded-xl border bg-card px-3 py-2 text-left transition-colors hover:bg-accent focus-visible:bg-accent"
       title={`${extra.tituloDoc || extra.titulo} — abrir documento`}
     >
       <Icono className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -430,7 +428,7 @@ export function EstrategiaMarca({
   return (
     <div className={cn("space-y-5", className)}>
       {/* ───────── 1 · Cabecera de salud ───────── */}
-      <header className="flex flex-wrap items-center gap-4 rounded-lg border border-border bg-card p-4 shadow-sm">
+      <header className="flex flex-wrap items-center gap-4 rounded-xl border bg-card p-4">
         <AnilloCompletitud
           cubiertos={datos.cubiertos}
           total={datos.total}

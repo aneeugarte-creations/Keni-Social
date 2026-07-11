@@ -138,7 +138,7 @@ export function PanelSubidas({ marca }: { marca: string }) {
             setArrastrando(false);
             subirArchivos(Array.from(e.dataTransfer.files ?? []));
           }}
-          className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed px-3 py-4 text-center text-xs transition-colors ${
+          className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed px-3 py-4 text-center text-xs transition-colors ${
             arrastrando
               ? "border-primary bg-primary/10 text-primary"
               : "border-border text-muted-foreground hover:border-primary/50"
@@ -156,8 +156,8 @@ export function PanelSubidas({ marca }: { marca: string }) {
             {enCurso.map((s) => (
               <div
                 key={s.clave}
-                className={`flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs ${
-                  s.error ? "border-destructive/50 bg-destructive/10" : "border-border"
+                className={`flex items-center gap-2 rounded-xl border px-2 py-1.5 text-xs ${
+                  s.error ? "border-destructive/50 bg-destructive/10" : "bg-card"
                 }`}
               >
                 {s.error ? (

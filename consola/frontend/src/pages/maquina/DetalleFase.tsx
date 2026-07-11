@@ -95,7 +95,7 @@ function LogsFase({
       return <EstadoVacioTexto texto="Sin runs recientes en esta etapa." />;
     }
     return (
-      <ul className="divide-y divide-border/60 rounded-md border border-border/60">
+      <ul className="divide-y divide-border/60 rounded-xl border bg-card">
         {runs.map((r) => (
           <li key={r.id} className="flex items-center justify-between gap-3 px-2 py-1.5 text-xs">
             <span className="min-w-0 truncate">
@@ -134,7 +134,7 @@ function LogsFase({
           <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             En curso ({enCurso.length})
           </p>
-          <ul className="divide-y divide-border/60 rounded-md border border-border/60">
+          <ul className="divide-y divide-border/60 rounded-xl border bg-card">
             {enCurso.map((j) => (
               <FilaCola key={j.job_id} job={j} />
             ))}
@@ -146,7 +146,7 @@ function LogsFase({
           <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             En cola ({esperando.length})
           </p>
-          <ul className="divide-y divide-border/60 rounded-md border border-border/60">
+          <ul className="divide-y divide-border/60 rounded-xl border bg-card">
             {esperando.map((j) => (
               <FilaCola key={j.job_id} job={j} />
             ))}

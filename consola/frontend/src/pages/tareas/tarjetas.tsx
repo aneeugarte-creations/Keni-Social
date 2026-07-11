@@ -278,7 +278,7 @@ function RolLibre({ tarea }: { tarea: Publicacion }) {
     },
   });
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-yellow-500/40 px-2.5 py-1.5">
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-yellow-500/40 px-2.5 py-1.5">
       <Badge variant="outline" className="border-yellow-500/50 text-yellow-700 dark:text-yellow-300">
         Por cubrir
       </Badge>
@@ -531,7 +531,7 @@ export function TarjetaEventoLibre({
       kebab={sinMenu ? "nunca" : "siempre"}
       realce
       acciones={accionesEvento}
-      className="rounded-lg border border-dashed border-border bg-card p-3 shadow-sm"
+      className="rounded-xl border border-dashed bg-card p-3"
     >
       <div className="flex flex-wrap items-center gap-2">
         <IconoEvento titulo={evento.titulo} className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -734,7 +734,7 @@ export function TarjetaTarea({
       realce
       onPrimaria={primaria}
       acciones={accionesTarea}
-      className="rounded-lg border border-border bg-card p-3 shadow-sm"
+      className="rounded-xl border bg-card p-3"
     >
       <div className="flex flex-wrap items-center gap-2">
         {/* Dentro de una cobertura el título del evento ya está en la cabecera de la fila
@@ -1035,7 +1035,7 @@ export function TarjetaCoberturaMia({ cobertura }: { cobertura: Cobertura }) {
     },
   });
   return (
-    <div className="rounded-lg border border-border bg-card p-3 shadow-sm">
+    <div className="rounded-xl border bg-card p-3">
       <div className="flex items-center gap-2">
         <IconoEvento titulo={cobertura.titulo} className="h-4 w-4 shrink-0 text-muted-foreground" />
         <span className="font-medium">{cobertura.titulo}</span>

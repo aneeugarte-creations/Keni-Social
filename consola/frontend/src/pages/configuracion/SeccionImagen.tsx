@@ -146,7 +146,7 @@ function SeccionImagenAdmin() {
         ) : (
           <>
             {/* Estado actual */}
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
+            <div className="flex items-center justify-between gap-3 rounded-xl border bg-card px-3 py-2.5">
               <span className="text-sm font-medium">Estado</span>
               {data.configurado ? (
                 <span className="flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-300">

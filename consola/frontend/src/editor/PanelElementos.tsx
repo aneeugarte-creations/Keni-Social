@@ -109,7 +109,7 @@ export function PanelElementos() {
               key={t.etiqueta}
               onClick={() => insertar(t.crear())}
               title={t.atajo ? `${t.etiqueta} (${t.atajo})` : t.etiqueta}
-              className="flex items-center gap-3 overflow-hidden rounded-md border border-border bg-card px-3 py-2.5 text-left transition-colors hover:border-primary hover:bg-accent/40"
+              className="flex items-center gap-3 overflow-hidden rounded-xl border bg-card px-3 py-2.5 text-left transition-colors hover:border-primary hover:bg-accent/40"
             >
               <span className="w-16 shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">{t.etiqueta}</span>
               <span className={`truncate text-foreground ${t.clase}`}>
@@ -123,7 +123,7 @@ export function PanelElementos() {
       <Seccion titulo="Bloques">
         <button
           onClick={insertarPleca}
-          className="w-full overflow-hidden rounded-md border border-border bg-card p-1.5 text-left transition-colors hover:border-primary hover:bg-accent/40"
+          className="w-full overflow-hidden rounded-xl border bg-card p-1.5 text-left transition-colors hover:border-primary hover:bg-accent/40"
         >
           {/* Mini-maqueta: foto (placeholder gris) con la pleca SOLO en la franja inferior
               (degradado + etiqueta + titular). La tarjeta es clara; lo oscuro es la pleca real. */}
@@ -145,7 +145,7 @@ export function PanelElementos() {
               key={f.etiqueta}
               onClick={() => insertar(f.crear())}
               title={f.atajo ? `${f.etiqueta} (${f.atajo})` : f.etiqueta}
-              className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-md border border-border text-[9px] text-muted-foreground hover:border-primary hover:bg-accent/50"
+              className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-xl border bg-card text-[9px] text-muted-foreground hover:border-primary hover:bg-accent/50"
             >
               {f.vista}
               {f.etiqueta}
@@ -158,7 +158,7 @@ export function PanelElementos() {
         <div className="grid grid-cols-2 gap-1.5">
           <button
             onClick={() => insertar(nuevaCapaImagen("", { w: 540, h: 540 }))}
-            className="flex flex-col items-center gap-1 rounded-md border border-border px-2 py-3 text-xs text-muted-foreground hover:border-primary hover:bg-accent/50"
+            className="flex flex-col items-center gap-1 rounded-xl border bg-card px-2 py-3 text-xs text-muted-foreground hover:border-primary hover:bg-accent/50"
           >
             <ImageIcon className="h-5 w-5" />
             Imagen
@@ -166,7 +166,7 @@ export function PanelElementos() {
           <button
             onClick={() => agregarDegradado()}
             title="Degradado pegado abajo"
-            className="flex flex-col items-center gap-1 rounded-md border border-border px-2 py-3 text-xs text-muted-foreground hover:border-primary hover:bg-accent/50"
+            className="flex flex-col items-center gap-1 rounded-xl border bg-card px-2 py-3 text-xs text-muted-foreground hover:border-primary hover:bg-accent/50"
           >
             <PanelBottom className="h-5 w-5" />
             Degradado ↓
@@ -174,7 +174,7 @@ export function PanelElementos() {
           <button
             onClick={() => agregarDegradado("arriba")}
             title="Degradado pegado arriba"
-            className="flex flex-col items-center gap-1 rounded-md border border-border px-2 py-3 text-xs text-muted-foreground hover:border-primary hover:bg-accent/50"
+            className="flex flex-col items-center gap-1 rounded-xl border bg-card px-2 py-3 text-xs text-muted-foreground hover:border-primary hover:bg-accent/50"
           >
             <PanelTop className="h-5 w-5" />
             Degradado ↑

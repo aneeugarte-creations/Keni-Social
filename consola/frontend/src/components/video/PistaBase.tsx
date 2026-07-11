@@ -49,7 +49,7 @@ export function PistaBase({ doc, videoKey, videoUrl, onCambioVideo, onReencuadre
       )}
 
       {clip && (
-        <div className="space-y-3 rounded-md border border-border p-3">
+        <div className="space-y-3 rounded-xl border bg-card p-3">
           <Label className="flex items-center gap-1.5 text-sm font-semibold">
             <Crosshair className="h-4 w-4 text-muted-foreground" />
             Reencuadre sobre {doc.formato.preset}

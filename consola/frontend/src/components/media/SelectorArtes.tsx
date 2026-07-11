@@ -177,7 +177,7 @@ export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: Selector
                     }}
                     acciones={acciones}
                   >
-                    <div className="block w-full overflow-hidden rounded-lg border border-border bg-muted/20 transition-shadow hover:shadow-sm hover:ring-1 hover:ring-foreground/20 focus-within:ring-1 focus-within:ring-foreground/20">
+                    <div className="block w-full overflow-hidden rounded-xl border bg-card transition-shadow hover:shadow-sm hover:ring-1 hover:ring-foreground/20 focus-within:ring-1 focus-within:ring-foreground/20">
                       <img
                         src={urlMedia(arte.objeto)}
                         alt={arte.titulo || "Arte de la galería"}

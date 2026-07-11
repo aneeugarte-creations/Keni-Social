@@ -163,7 +163,7 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
   };
 
   return (
-    <div className="space-y-3 rounded-lg border border-border p-3">
+    <div className="space-y-3 rounded-xl border bg-card p-3">
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm font-medium">{marca.etiqueta}</span>
         {marca.conectado ? (

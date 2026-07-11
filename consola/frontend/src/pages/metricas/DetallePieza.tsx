@@ -299,7 +299,7 @@ function Kpi({
   info?: string;
 }) {
   return (
-    <div className="rounded-md border border-border bg-muted/30 px-3 py-2">
+    <div className="rounded-xl border bg-card px-3 py-2">
       <p className="flex items-center gap-1 text-xs text-muted-foreground">
         {etiqueta}
         {info ? <AyudaInfo texto={info} etiqueta={`Qué es ${etiqueta}`} /> : null}

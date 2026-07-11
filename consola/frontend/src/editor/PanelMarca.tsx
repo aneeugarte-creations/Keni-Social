@@ -251,7 +251,7 @@ export function PanelMarca({ marca }: { marca: string }) {
                       key={f}
                       onClick={() => aplicarFamilia(f)}
                       title={`Aplicar «${f}» a la capa de texto seleccionada`}
-                      className="truncate rounded-md border border-border px-2 py-1.5 text-left text-sm hover:bg-accent"
+                      className="truncate rounded-xl border bg-card px-2 py-1.5 text-left text-sm hover:bg-accent"
                       style={{ fontFamily: f }}
                     >
                       {f}

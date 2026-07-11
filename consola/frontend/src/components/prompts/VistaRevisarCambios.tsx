@@ -120,7 +120,7 @@ export function VistaRevisarCambios({
         {/* ───────── Cuerpo: el diff, centrado a ancho de lectura ───────── */}
         <div className="min-h-0 flex-1 overflow-y-auto bg-muted/20">
           <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
-            <div className="rounded-lg border border-border bg-background p-5 shadow-sm sm:p-6">
+            <div className="rounded-xl border bg-card p-5 sm:p-6">
               {renderDiff ? (
                 renderDiff(soloCambios)
               ) : (

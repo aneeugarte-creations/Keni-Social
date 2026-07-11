@@ -372,7 +372,7 @@ function Baldosa({
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-3 rounded-lg border border-border bg-muted/20 px-3 py-3 text-left transition-colors hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="flex items-center gap-3 rounded-xl border bg-card px-3 py-3 text-left transition-colors hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <Folder className="h-8 w-8 shrink-0 text-muted-foreground" strokeWidth={0.75} />
       <div className="min-w-0 flex-1">

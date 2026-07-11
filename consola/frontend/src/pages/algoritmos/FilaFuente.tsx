@@ -43,7 +43,7 @@ export function FilaFuente({
       kebab="nunca"
       realce
       acciones={acciones}
-      className="rounded-md border border-border p-2.5 pr-10"
+      className="rounded-xl border bg-card p-2.5 pr-10"
     >
       <div className="flex items-center justify-between gap-3 min-w-0 flex-1">
         <div className="min-w-0 flex-1">

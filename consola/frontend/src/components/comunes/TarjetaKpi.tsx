@@ -6,7 +6,7 @@
  * evitando la duplicación de estilos y estructura.
  *
  * Modos:
- * - `variante="borde"` (por defecto): borde sutil, sin fondo; usada en Campañas.
+ * - `variante="borde"` (por defecto): caja con el estilo de tarjeta canónico; usada en Campañas.
  * - `variante="card"` : envuelta en Card de shadcn; usada en el dashboard de Métricas.
  */
 import * as React from "react";
@@ -31,7 +31,7 @@ interface TarjetaKpiProps {
   ayuda?: string;
   /**
    * Variante visual.
-   * - `"borde"` (por defecto): caja con borde, sin Card de shadcn.
+   * - `"borde"` (por defecto): caja con el estilo de tarjeta canónico, sin Card de shadcn.
    * - `"card"`: envuelta en Card de shadcn con padding interior.
    */
   variante?: "borde" | "card";
@@ -78,7 +78,7 @@ export function TarjetaKpi({
   }
 
   return (
-    <div className="rounded-lg border border-border p-4">
+    <div className="rounded-xl border bg-card p-4">
       <div className="flex items-center justify-between gap-2">
         {etiquetaFila}
         {insignia}

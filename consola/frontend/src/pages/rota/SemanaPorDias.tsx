@@ -68,7 +68,7 @@ export function SemanaPorDias({
   );
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto rounded-lg border-l border-t">
+    <div className="min-h-0 flex-1 overflow-auto rounded-xl border-l border-t">
       {/* Banda de días: gris, mayúsculas, centrada — la MISMA cabecera del calendario mensual
           (RejillaMensual), para que la semana se lea como una fila del mes. Sticky al hacer scroll. */}
       <div className="sticky top-0 z-10 grid grid-cols-7 bg-muted/40 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground dark:bg-muted/15">

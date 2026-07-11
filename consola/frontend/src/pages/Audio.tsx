@@ -284,7 +284,7 @@ export default function Audio() {
           <aside className={cn("flex shrink-0 flex-col", panelesAbiertos ? "w-[28rem]" : "w-auto")}>
             <div
               className={cn(
-                "flex h-full min-h-0 flex-col rounded-md border border-border bg-card",
+                "flex h-full min-h-0 flex-col rounded-xl border bg-card",
                 panelesAbiertos ? "p-2" : "p-1",
               )}
             >
@@ -995,7 +995,7 @@ function Lector({
       </div>
 
       {/* Lector del artefacto seleccionado. */}
-      <div className="flex min-h-0 flex-1 flex-col rounded-md border border-border bg-card p-4">
+      <div className="flex min-h-0 flex-1 flex-col rounded-xl border bg-card p-4">
         {!audio ? (
           <Vacio texto="Elige un audio de la lista." />
         ) : EN_PROCESO.includes(audio.estado) ? (
@@ -1293,7 +1293,7 @@ function FormularioIdeas({
               return (
                 <li
                   key={i}
-                  className="flex items-start gap-2 rounded-md border border-border/70 bg-card p-2.5"
+                  className="flex items-start gap-2 rounded-xl border bg-card p-2.5"
                 >
                   <span className="mt-0.5 shrink-0 text-xs font-semibold tabular-nums text-muted-foreground">
                     {num}.

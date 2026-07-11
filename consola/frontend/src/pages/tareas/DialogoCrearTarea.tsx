@@ -296,7 +296,7 @@ export function DialogoCrearTarea({
                     return (
                       <div
                         key={`${op.titulo}-${i}`}
-                        className="flex items-start gap-2 rounded-md border border-border px-3 py-2 text-sm"
+                        className="flex items-start gap-2 rounded-xl border bg-card px-3 py-2 text-sm"
                       >
                         {op.tipo === "crear_evento" ? (
                           <CalendarDays className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -398,7 +398,7 @@ export function DialogoCrearTarea({
                 if (texto) setPegado(texto.trim());
               }}
               className={cn(
-                "space-y-1.5 rounded-lg border border-dashed p-2.5 transition-colors",
+                "space-y-1.5 rounded-xl border border-dashed p-2.5 transition-colors",
                 arrastrando ? "border-foreground/40 bg-muted" : "border-border",
               )}
             >

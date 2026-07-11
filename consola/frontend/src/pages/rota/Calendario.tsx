@@ -562,7 +562,7 @@ export function Calendario({
   const masOpciones = (
     <section
       aria-label="Más opciones"
-      className="shrink-0 rounded-xl border border-border bg-card p-3"
+      className="shrink-0 rounded-xl border bg-card p-3"
     >
       <div className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/60">
         Más opciones

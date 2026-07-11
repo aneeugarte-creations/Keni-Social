@@ -469,7 +469,7 @@ export function PipelineUnificado({
     <div className="mt-4 space-y-4">
       {/* Master controls: admin only */}
       {esAdmin && ajusteMaquina && (
-        <section className="rounded-lg border border-border bg-card p-4">
+        <section className="rounded-xl border bg-card p-4">
           <p className="mb-3 text-sm font-semibold">Estado global</p>
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-4">

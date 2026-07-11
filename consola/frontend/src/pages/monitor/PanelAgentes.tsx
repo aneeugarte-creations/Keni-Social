@@ -31,7 +31,7 @@ export function PanelAgentes({
     <section data-testid="panel-agentes">
       <div className="flex flex-col gap-3">
         {grupos.map((g) => (
-          <div key={g.titulo} className="rounded-xl border border-border/70 bg-muted/30 p-3">
+          <div key={g.titulo} className="rounded-xl border bg-card p-3">
             <div className="mb-2 px-1">
               <h3 className="text-sm font-semibold">{g.titulo}</h3>
               <p className="text-xs text-muted-foreground">{g.descripcion}</p>
@@ -51,7 +51,7 @@ export function PanelAgentes({
                     onClick={abrir}
                     title={f.nombre}
                     className={cn(
-                      "flex h-20 w-32 flex-col items-center justify-center gap-1.5 rounded-lg border border-border/70 bg-card px-2 text-center text-sm font-medium leading-tight",
+                      "flex h-20 w-32 flex-col items-center justify-center gap-1.5 rounded-xl border bg-card px-2 text-center text-sm font-medium leading-tight",
                       abrir ? "hover:bg-accent" : "cursor-default",
                     )}
                   >

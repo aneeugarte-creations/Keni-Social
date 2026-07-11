@@ -66,7 +66,7 @@ export function PanelKeywords({ marca }: { marca: string }) {
             const valor = draft[l.id] ?? l.keywords ?? "";
             const cambiado = valor !== (l.keywords ?? "");
             return (
-              <div key={l.id} className="space-y-2 rounded-md border border-border p-3">
+              <div key={l.id} className="space-y-2 rounded-xl border bg-card p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <Label className="text-sm">{etiqueta}</Label>
                   {l.hashtags ? (

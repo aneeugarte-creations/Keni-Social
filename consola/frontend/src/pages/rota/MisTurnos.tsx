@@ -370,7 +370,7 @@ function RejillaMensual({
     // queda en su flujo natural (un mes no cabe en un teléfono → scroll, como debe).
     <div
       className={cn(
-        "overflow-hidden rounded-lg border-l border-t",
+        "overflow-hidden rounded-xl border-l border-t",
         llenarAltura && "lg:flex lg:h-full lg:min-h-0 lg:flex-col",
       )}
     >

@@ -524,7 +524,7 @@ export function DetalleDocumento({
           En subpágina (`ocultarCabecera`) la pinta el contenedor (DetalleFase) ENCIMA de las
           pestañas, permanente entre ellas, así que aquí no se duplica. */}
       {!ocultarCabecera ? (
-        <section className="rounded-md border border-border bg-card p-3">
+        <section className="rounded-xl border bg-card p-3">
           <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Acerca de
           </h4>
@@ -554,7 +554,7 @@ export function DetalleDocumento({
               (crece/scrollea) y el toggle anclado al pie, DENTRO del mismo borde/`bg-card`. */}
           <div
             className={cn(
-              "flex h-full min-h-0 flex-col rounded-md border border-border bg-card",
+              "flex h-full min-h-0 flex-col rounded-xl border bg-card",
               panelAbierto ? "p-3" : "p-1",
             )}
           >
@@ -602,7 +602,7 @@ export function DetalleDocumento({
 
         <div
           className={cn(
-            "min-w-0 flex-1 rounded-md border border-border bg-card p-3",
+            "min-w-0 flex-1 rounded-xl border bg-card p-3",
             !ocultarCabecera && "min-h-0 overflow-y-auto",
           )}
         >

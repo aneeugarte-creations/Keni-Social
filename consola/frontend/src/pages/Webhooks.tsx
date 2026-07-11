@@ -146,7 +146,7 @@ export default function Webhooks() {
             {query.data.eventos_recientes.map((ev) => (
               <div
                 key={ev.id}
-                className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
+                className="flex items-center justify-between rounded-xl border bg-card px-3 py-2 text-sm"
               >
                 <span>
                   <Badge variant="secondary">{ETIQUETA_EVENTO[ev.tipo] ?? ev.tipo}</Badge>{" "}
@@ -239,7 +239,7 @@ function TarjetaWebhook({ webhook }: { webhook: Webhook }) {
       etiquetaAcciones={`Acciones del webhook “${webhook.nombre || webhook.url}”`}
       kebab="nunca"
       realce
-      className="rounded-lg border border-border bg-card text-card-foreground shadow-sm"
+      className="rounded-xl border bg-card text-card-foreground"
     >
       <CardHeader className="pb-3 pr-10">
         <div className="min-w-0">

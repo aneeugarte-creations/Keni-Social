@@ -90,7 +90,7 @@ export function PanelFuentesStock({ marca }: { marca: string | null }) {
         </p>
       </div>
 
-      <ul className="divide-y divide-border rounded-lg border border-border">
+      <ul className="divide-y divide-border rounded-xl border bg-card">
         {fuentes.map((fuente) => {
           // Proveedor de pago sin clave global: no está disponible, el toggle queda inerte con su pista.
           const sinClave = fuente.requiere_clave && !fuente.disponible;

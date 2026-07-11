@@ -448,7 +448,7 @@ export function PanoramaPiezas({
       ) : (
         /* role=img: alternativa textual del chart (total, redes y clave de lectura). */
         <div
-          className="overflow-hidden rounded-xl border border-border bg-card p-6"
+          className="overflow-hidden rounded-xl border bg-card p-6"
           role="img"
           aria-label={`Panorama de ${plural(total, "pieza")} del periodo; cada punto es una pieza, altura = vistas, tamaño = engagement`}
         >

@@ -187,7 +187,7 @@ export default function PanelUsuarios() {
               texto="Ninguna persona coincide con el filtro."
             />
           ) : (
-            <div className="rounded-md border">
+            <div className="rounded-xl border bg-card">
               <Table>
                 <TableHeader>
                   <TableRow>

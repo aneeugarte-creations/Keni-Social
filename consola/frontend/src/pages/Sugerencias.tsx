@@ -123,7 +123,7 @@ function MisIdeas({
 }) {
   if (sugerencias.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed bg-muted/20 p-10 text-center">
+      <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed bg-muted/20 p-10 text-center">
         <Lightbulb className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
         <p className="text-sm text-muted-foreground">
           Aún no has propuesto ninguna idea. Comparte una mejora, un bug o una idea para el
@@ -147,7 +147,7 @@ function MisIdeas({
             key={s.id}
             type="button"
             onClick={() => onAbrir(s)}
-            className="space-y-2 rounded-md border border-border bg-card p-3 text-left text-card-foreground shadow-sm transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="space-y-2 rounded-xl border bg-card p-3 text-left text-card-foreground transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <p className="text-sm font-medium leading-snug">{s.titulo}</p>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -316,7 +316,7 @@ function Columna({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       className={cn(
-        "flex min-h-[16rem] flex-col gap-2 rounded-lg border border-dashed bg-muted/20 p-2 transition-colors",
+        "flex min-h-[16rem] flex-col gap-2 rounded-xl border border-dashed bg-muted/20 p-2 transition-colors",
         activa && "border-keni-300 bg-keni-50/40 ring-1 ring-keni-300",
       )}
     >
@@ -370,7 +370,7 @@ function Tarjeta({
           onAbrir();
         }
       }}
-      className="group cursor-grab space-y-2 rounded-md border border-border bg-card p-3 text-card-foreground shadow-sm transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+      className="group cursor-grab space-y-2 rounded-xl border bg-card p-3 text-card-foreground transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
     >
       <p className="text-sm font-medium leading-snug">{sugerencia.titulo}</p>
       <div className="flex flex-wrap items-center gap-1.5">

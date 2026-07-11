@@ -398,7 +398,7 @@ function ListaIdeas({
         />
       )}
       {historico.length > 0 && (
-        <details className="rounded-md border border-border/60">
+        <details className="rounded-xl border bg-card">
           <summary className="cursor-pointer select-none px-3 py-2 text-sm text-muted-foreground">
             Histórico ({historico.length})
           </summary>
@@ -557,7 +557,7 @@ function FilaIdea({
       realce
       acciones={acciones}
       className={cn(
-        "space-y-2 rounded-lg border border-border bg-card p-4 pr-10 text-card-foreground shadow-sm",
+        "space-y-2 rounded-xl border bg-card p-4 pr-10 text-card-foreground",
         descartada && "opacity-60",
       )}
     >

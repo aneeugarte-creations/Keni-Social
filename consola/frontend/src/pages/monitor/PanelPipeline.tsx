@@ -101,7 +101,7 @@ export function FilaFasePipeline({
       kebab="nunca"
       realce
       etiquetaAcciones={etiquetaAcciones}
-      className="flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-card px-3.5 py-2.5"
+      className="flex items-center justify-between gap-3 rounded-xl border bg-card px-3.5 py-2.5"
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 text-sm font-medium">

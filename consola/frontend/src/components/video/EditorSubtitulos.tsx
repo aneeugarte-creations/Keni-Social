@@ -173,7 +173,7 @@ function EditorSubtitulosComposicion({
 
   if (!composicionId) {
     return (
-      <p className="rounded-md border border-dashed border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+      <p className="rounded-xl border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">
         Sube un video base para crear la composición y transcribir subtítulos.
       </p>
     );

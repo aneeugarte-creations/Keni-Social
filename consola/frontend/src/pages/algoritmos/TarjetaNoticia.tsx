@@ -56,7 +56,7 @@ export function TarjetaNoticia({
       acciones={acciones}
       kebab="nunca"
       realce
-      className="rounded-lg border border-border/60 p-3"
+      className="rounded-xl border bg-card p-3"
     >
       <div className="flex flex-wrap items-center gap-1.5 pb-1">
         <Badge variant="outline">{noticia.plataforma_nombre || noticia.plataforma}</Badge>

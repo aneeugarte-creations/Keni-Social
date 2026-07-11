@@ -137,7 +137,7 @@ export function EditorVideo({
           >
             {compacto ? (
               // Sin reproductor: la superficie de vídeo es el lienzo central. Fila con estado.
-              <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+              <div className="flex items-center gap-2 rounded-xl border bg-card px-3 py-2 text-sm">
                 <Video className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate text-muted-foreground">
                   {subir.isPending ? "Subiendo…" : "Vídeo cargado"}
@@ -158,7 +158,7 @@ export function EditorVideo({
               <div className="mx-auto w-full max-w-sm">
                 <div
                   className={cn(
-                    "relative overflow-hidden rounded-md border border-border bg-black transition-colors hover:border-keni-300 focus-within:border-keni-300",
+                    "relative overflow-hidden rounded-xl border bg-black transition-colors hover:border-keni-300 focus-within:border-keni-300",
                     aspectoRed(red ?? ""),
                   )}
                 >
@@ -180,7 +180,7 @@ export function EditorVideo({
           )}
         </div>
       ) : (
-        <div className="space-y-2.5 rounded-md border border-dashed border-border bg-muted/20 p-3">
+        <div className="space-y-2.5 rounded-xl border border-dashed bg-muted/20 p-3">
           <Button
             type="button"
             variant="outline"

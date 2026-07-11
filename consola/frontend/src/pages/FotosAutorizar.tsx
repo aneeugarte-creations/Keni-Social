@@ -37,7 +37,7 @@ function cbLoopbackValido(cb: string | null): cb is string {
 function Marco({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-dvh w-full items-center justify-center bg-background p-6">
-      <div className="w-full max-w-sm rounded-xl border bg-card p-8 text-center shadow-sm">
+      <div className="w-full max-w-sm rounded-xl border bg-card p-8 text-center">
         {children}
       </div>
     </div>

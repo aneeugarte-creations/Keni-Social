@@ -51,7 +51,7 @@ function FilaItemPersona({ item, personaId }: { item: Item; personaId: string })
   if (item.kind === "cobertura") {
     const roles = item.cobertura.cubridores.filter((c) => c.responsable_id === personaId);
     return (
-      <div className="rounded-lg border border-border bg-card p-3 shadow-sm">
+      <div className="rounded-xl border bg-card p-3">
         <div className="flex items-center gap-2">
           <IconoEvento titulo={item.cobertura.titulo} className="h-4 w-4 shrink-0 text-muted-foreground" />
           <span className="font-medium">{item.cobertura.titulo}</span>
@@ -75,7 +75,7 @@ function FilaItemPersona({ item, personaId }: { item: Item; personaId: string })
   if (item.kind === "tarea") {
     const t = item.tarea;
     return (
-      <div className="rounded-lg border border-border bg-card p-3 shadow-sm">
+      <div className="rounded-xl border bg-card p-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{t.titulo}</span>
           {t.estado === "en_curso" && <ChipEstado estado="en_curso" />}

@@ -525,7 +525,7 @@ function FuenteFondo({
   avisoGenerar: string;
 }) {
   return (
-    <div className="space-y-2.5 rounded-md border border-dashed border-border bg-muted/20 p-3">
+    <div className="space-y-2.5 rounded-xl border border-dashed bg-muted/20 p-3">
       {!compacto && (
         <p className="text-xs text-muted-foreground">
           Elige la fuente:

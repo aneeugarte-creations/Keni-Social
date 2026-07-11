@@ -553,12 +553,12 @@ export function PanelEtapa({
     );
   }
   return (
-    <div className="rounded-lg border">
+    <div className="rounded-xl border bg-card">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left hover:bg-muted/40"
+        className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left hover:bg-muted/40"
       >
         <span className="flex items-center gap-2">
           <Punto estado={etapa.estado} />

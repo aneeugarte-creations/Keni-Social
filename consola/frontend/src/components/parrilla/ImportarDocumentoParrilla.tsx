@@ -220,7 +220,7 @@ function Dropzone({
       tabIndex={0}
       aria-label="Soltar o elegir un archivo"
       className={cn(
-        "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-8 text-center transition",
+        "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-8 text-center transition",
         arrastrando
           ? "border-primary bg-primary/5"
           : "border-border hover:border-primary/60 hover:bg-muted/40",

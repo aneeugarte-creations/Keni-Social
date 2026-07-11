@@ -111,7 +111,7 @@ describe("AgenteDetalle", () => {
     expect(await screen.findByText("Validó 3 notas, descartó 1")).toBeInTheDocument();
     expect(screen.getByText("timeout")).toBeInTheDocument();
     // Controles: abre el menú contextual de la tarjeta y verifica las acciones secundarias.
-    const hostControles = screen.getByText("Controles").closest("[class*='rounded-lg']")!;
+    const hostControles = screen.getByText("Controles").closest("[class*='rounded-xl']")!;
     fireEvent.contextMenu(hostControles);
     expect(screen.getByRole("menuitem", { name: /Editar prompt/ })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Barrer ahora" })).toBeInTheDocument();

@@ -32,7 +32,7 @@ export function TarjetaBiblioteca({
   ocupado,
 }: TarjetaBibliotecaProps) {
   return (
-    <figure className="flex flex-col overflow-hidden rounded-lg border border-border bg-muted/20">
+    <figure className="flex flex-col overflow-hidden rounded-xl border bg-card">
       <img
         src={item.thumb || item.url}
         alt={item.titulo || "Foto de la biblioteca"}

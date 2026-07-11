@@ -109,7 +109,7 @@ export function GestorComposiciones({ marca, onAbrir }: GestorComposicionesProps
 
   if (!marca) {
     return (
-      <p className="rounded-md border border-dashed border-border bg-muted/20 p-3 text-sm text-muted-foreground">
+      <p className="rounded-xl border border-dashed bg-muted/20 p-3 text-sm text-muted-foreground">
         Selecciona una marca para ver sus composiciones de video.
       </p>
     );
@@ -121,7 +121,7 @@ export function GestorComposiciones({ marca, onAbrir }: GestorComposicionesProps
 
   if (compsQ.isError) {
     return (
-      <p className="rounded-md border border-dashed border-border bg-muted/20 p-3 text-sm text-muted-foreground">
+      <p className="rounded-xl border border-dashed bg-muted/20 p-3 text-sm text-muted-foreground">
         No se pudieron cargar las composiciones.
       </p>
     );
@@ -131,7 +131,7 @@ export function GestorComposiciones({ marca, onAbrir }: GestorComposicionesProps
 
   if (comps.length === 0) {
     return (
-      <p className="rounded-md border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+      <p className="rounded-xl border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
         Aún no hay composiciones. Crea una nueva al subir un video.
       </p>
     );
@@ -164,7 +164,7 @@ export function GestorComposiciones({ marca, onAbrir }: GestorComposicionesProps
       </div>
 
       {visibles.length === 0 ? (
-        <p className="rounded-md border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+        <p className="rounded-xl border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
           No hay composiciones.
         </p>
       ) : (
@@ -290,7 +290,7 @@ function TarjetaComposicion({
       onPrimaria={onAbrir}
       acciones={acciones}
       etiquetaAcciones={`Acciones de ${tituloMostrado}`}
-      className="flex gap-3 rounded-md border border-border bg-card p-3"
+      className="flex gap-3 rounded-xl border bg-card p-3"
     >
       <FilmIcon className="h-5 w-5 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">

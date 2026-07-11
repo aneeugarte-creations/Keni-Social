@@ -225,7 +225,7 @@ function FilaPreset({
   return (
     <li
       className={cn(
-        "flex items-start gap-3 rounded-md border border-border p-3 transition-colors",
+        "flex items-start gap-3 rounded-xl border bg-card p-3 transition-colors",
         preset.activa && "opacity-60",
         seleccionado && !preset.activa && "border-primary/50 bg-primary/5",
       )}

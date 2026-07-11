@@ -142,7 +142,7 @@ function Controles({ latido }: { latido: LatidoDaemon }) {
       kebab="nunca"
       realce
       acciones={acciones}
-      className="rounded-lg border bg-card text-card-foreground shadow-sm"
+      className="rounded-xl border bg-card text-card-foreground"
     >
       <div className="p-4">
         <div className="pb-2 text-sm font-semibold text-muted-foreground">Controles</div>
@@ -236,7 +236,7 @@ function Analizar({ latido }: { latido: LatidoDaemon }) {
           : undefined
       }
       acciones={[]}
-      className="rounded-lg border bg-card text-card-foreground shadow-sm"
+      className="rounded-xl border bg-card text-card-foreground"
     >
       <div className="p-4">
         <div className="flex items-center gap-2 pb-2 text-sm font-semibold text-muted-foreground">

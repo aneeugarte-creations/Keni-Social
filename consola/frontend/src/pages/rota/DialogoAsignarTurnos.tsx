@@ -501,7 +501,7 @@ export function DialogoAsignarTurnos({
         <div
           role="img"
           aria-label={resumenMatriz}
-          className="rounded-lg border border-border bg-card p-2.5 tabular-nums"
+          className="rounded-xl border bg-card p-2.5 tabular-nums"
         >
           <div className="grid grid-cols-[3rem_repeat(7,minmax(0,1fr))] items-end gap-[3px]">
             <span />
@@ -594,7 +594,7 @@ export function DialogoAsignarTurnos({
   if (incrustado) {
     if (!abierto) return null;
     return (
-      <div className="flex shrink-0 flex-col gap-3 rounded-xl border border-border bg-card p-4">
+      <div className="flex shrink-0 flex-col gap-3 rounded-xl border bg-card p-4">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold">Asignar turnos</h2>
           <Button

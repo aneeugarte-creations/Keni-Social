@@ -90,7 +90,7 @@ function StreamGeneracion({ genId }: { genId: string }) {
   const razon = (gen.razonamiento ?? "").trim();
 
   return (
-    <div className="space-y-2 rounded-md border border-violet-500/20 bg-violet-500/5 p-3">
+    <div className="space-y-2 rounded-xl border border-violet-500/20 bg-violet-500/5 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-semibold">Generación en vivo</span>
         <ChipEstado
@@ -130,7 +130,7 @@ function BloqueMarkdown({ titulo, texto }: { titulo: string; texto: string }) {
       <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {titulo}
       </div>
-      <div className="rounded-md border bg-muted/20 p-4">
+      <div className="rounded-xl border bg-card p-4">
         <Markdown className="text-sm text-foreground/90">{texto}</Markdown>
       </div>
     </div>
@@ -302,7 +302,7 @@ function EdicionTexto({
   });
 
   return (
-    <div className="space-y-4 rounded-md border bg-muted/10 p-4">
+    <div className="space-y-4 rounded-xl border bg-card p-4">
       <div className="space-y-1.5">
         <Label htmlFor="edit-titulo">Título</Label>
         <Input

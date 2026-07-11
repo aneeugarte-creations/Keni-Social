@@ -436,7 +436,7 @@ export function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
             )}
             {!tiempoLibreActivo || tipoSolicitud === "cambio" ? (
               sinSesion ? (
-                <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
+                <div className="rounded-xl border border-dashed p-4 text-center text-xs text-muted-foreground">
                   Inicia sesión para continuar.
                 </div>
               ) : (
@@ -669,7 +669,7 @@ export function FormularioNuevoSwap({
   }
   if (turnosMios.length === 0) {
     return (
-      <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
+      <div className="rounded-xl border border-dashed p-4 text-center text-xs text-muted-foreground">
         No tienes turnos en este rango.
       </div>
     );
@@ -800,7 +800,7 @@ export function TarjetaSwap({
   });
 
   return (
-    <div className="rounded-lg border bg-card p-4 space-y-3">
+    <div className="rounded-xl border bg-card p-4 space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2 text-sm">

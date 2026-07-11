@@ -44,11 +44,11 @@ export function PanelContextoInyectado({
           <Skeleton className="h-9 w-full" />
         </div>
       ) : datos && !datos.inyecta ? (
-        <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-6 text-center text-xs text-muted-foreground">
+        <p className="rounded-xl border border-dashed bg-muted/30 px-3 py-6 text-center text-xs text-muted-foreground">
           Este prompt no inyecta contexto editorial.
         </p>
       ) : adjuntos.length === 0 ? (
-        <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-6 text-center text-xs text-muted-foreground">
+        <p className="rounded-xl border border-dashed bg-muted/30 px-3 py-6 text-center text-xs text-muted-foreground">
           No hay documentos editoriales para esta marca todavía.
         </p>
       ) : (
@@ -58,7 +58,7 @@ export function PanelContextoInyectado({
               <button
                 type="button"
                 onClick={() => onAbrirDoc(a.id)}
-                className="flex w-full items-center gap-2 rounded-md border border-border bg-card px-2.5 py-2 text-left text-sm transition-colors hover:border-input hover:bg-accent"
+                className="flex w-full items-center gap-2 rounded-xl border bg-card px-2.5 py-2 text-left text-sm transition-colors hover:border-input hover:bg-accent"
                 title={`Abrir ${a.titulo}`}
               >
                 <span className="min-w-0 flex-1 truncate">{a.titulo}</span>

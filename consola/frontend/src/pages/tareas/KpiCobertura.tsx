@@ -123,7 +123,7 @@ export function KpiCobertura({
     <div
       role="status"
       aria-label={etiqueta}
-      className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm"
+      className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border bg-card px-3 py-2 text-sm"
     >
       <span className="shrink-0 font-medium">Cobertura de hoy</span>
 

@@ -297,7 +297,7 @@ export function ResumenDia({
                     return (
                       <li
                         key={tn.id}
-                        className="flex flex-wrap items-baseline justify-between gap-x-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-sm"
+                        className="flex flex-wrap items-baseline justify-between gap-x-2 rounded-xl border bg-card px-2.5 py-1.5 text-sm"
                       >
                         <span className="font-medium">{tn.miembro_nombre}</span>
                         <span className="flex items-baseline gap-2 text-xs text-muted-foreground">
@@ -328,7 +328,7 @@ export function ResumenDia({
                   {incidencias.map((inc, idx) => (
                     <li
                       key={`${inc.tipo}-${inc.miembroNombre}-${idx}`}
-                      className="flex items-center gap-2 rounded-md border border-yellow-500/50 bg-yellow-50/50 px-2.5 py-1.5 text-sm text-yellow-800 dark:bg-yellow-950/20 dark:text-yellow-300"
+                      className="flex items-center gap-2 rounded-xl border border-yellow-500/50 bg-yellow-50/50 px-2.5 py-1.5 text-sm text-yellow-800 dark:bg-yellow-950/20 dark:text-yellow-300"
                     >
                       {inc.tipo === "ausencia" ? (
                         <CalendarOff className="h-3.5 w-3.5 shrink-0" />

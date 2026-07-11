@@ -49,7 +49,7 @@ function FilaEnlace({
     );
   };
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-border p-3">
+    <div className="flex items-center gap-3 rounded-xl border bg-card p-3">
       <Link2 className="h-4 w-4 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1 space-y-0.5">
         <p className="truncate font-mono text-xs text-foreground" title={url}>

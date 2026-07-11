@@ -98,10 +98,11 @@ function AnadirRapido({ marca }: { marca: string }) {
 
   return (
     // Barra-píldora fina (una sola línea, ~36px): el atajo cabe junto al reparto en la misma fila.
-    // Esquinas suaves de la plataforma (`rounded-lg`) y sin sombra: sutil, no una pastilla flotante.
+    // La tarjeta canónica de la plataforma (`rounded-xl border bg-card`, sin sombra): sutil, no
+    // una pastilla flotante.
     <form
       onSubmit={enviar}
-      className="flex h-9 min-w-0 flex-1 items-center gap-1 rounded-lg border border-border bg-card pl-3 pr-1"
+      className="flex h-9 min-w-0 flex-1 items-center gap-1 rounded-xl border bg-card pl-3 pr-1"
     >
       {/* `Input` ya fuerza text-base (16px) en móvil → sin auto-zoom de iOS al enfocar. */}
       <Input
@@ -535,12 +536,12 @@ export function FilaAgenda({
   return (
     <div
       className={cn(
-        "rounded-md border",
+        "rounded-xl border",
         urgente
           ? "border-yellow-500/60 bg-yellow-50/60 dark:bg-yellow-950/20"
           : sinDueno
             ? "border-dashed border-yellow-400/50 bg-yellow-50/40 dark:bg-yellow-950/10"
-            : "border-border bg-card",
+            : "bg-card",
       )}
     >
       <div className="flex items-center">
@@ -880,7 +881,7 @@ export function PanoramaAgenda({
       {urgentes.length > 0 && (
         <section
           aria-label="Urgente ahora"
-          className="space-y-1.5 rounded-lg border border-yellow-500/60 bg-yellow-50/70 p-2.5 shadow-sm dark:bg-yellow-950/25"
+          className="space-y-1.5 rounded-xl border border-yellow-500/60 bg-yellow-50/70 p-2.5 dark:bg-yellow-950/25"
         >
           <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-yellow-700 dark:text-yellow-300">
             <Zap className="h-3.5 w-3.5" />
@@ -903,7 +904,7 @@ export function PanoramaAgenda({
       )}
 
       {urgentes.length === 0 && diasMostrados.length === 0 && sinFechaItems.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border p-8 text-center">
+        <div className="rounded-xl border border-dashed p-8 text-center">
           <p className="text-sm text-muted-foreground">
             {filtro
               ? "Nada por aquí con este filtro."

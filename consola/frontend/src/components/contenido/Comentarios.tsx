@@ -166,7 +166,7 @@ export function Comentarios({ publicacionId }: { publicacionId: string }) {
 
   return (
     <div className="space-y-3">
-      <div className="space-y-2 rounded-md border p-2">
+      <div className="space-y-2 rounded-xl border bg-card p-2">
         <div className="relative">
           <Textarea
             ref={textareaRef}
@@ -244,7 +244,7 @@ export function Comentarios({ publicacionId }: { publicacionId: string }) {
                 kebab="nunca"
                 realce
                 className={cn(
-                  "rounded-md border p-2 pr-10 text-sm",
+                  "rounded-xl border bg-card p-2 pr-10 text-sm",
                   c.resuelto && "bg-muted/40 opacity-70",
                 )}
               >

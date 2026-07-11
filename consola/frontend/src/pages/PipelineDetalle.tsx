@@ -52,7 +52,7 @@ function FilaTimeline({ entrada }: { entrada: LineaTiempoEtapa }) {
   const varios = entrada.intentos > 1;
   const unica = entrada.generaciones.length === 1 ? entrada.generaciones[0] : undefined;
   return (
-    <div className="rounded-md border bg-background/40">
+    <div className="rounded-xl border bg-card">
       <div className="flex flex-wrap items-center gap-2 px-3 py-2">
         {varios ? (
           <button
@@ -215,7 +215,7 @@ export default function PipelineDetalle() {
           </div>
 
           {/* Tira de etapas (vista de flujo, estilo GitLab/Azure). */}
-          <div className="overflow-x-auto rounded-lg border bg-muted/20 p-3">
+          <div className="overflow-x-auto rounded-xl border bg-card p-3">
             <TiraEtapas etapas={run.etapas} />
           </div>
 

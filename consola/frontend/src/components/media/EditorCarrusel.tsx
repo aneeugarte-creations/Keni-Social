@@ -187,7 +187,7 @@ export function EditorCarrusel({
       </div>
 
       {slides.length === 0 ? (
-        <p className="rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground">
+        <p className="rounded-xl border border-dashed p-3 text-center text-xs text-muted-foreground">
           Sube imágenes y videos
         </p>
       ) : (
@@ -246,7 +246,7 @@ export function EditorCarrusel({
                 acciones={acciones}
                 etiquetaAcciones={`Acciones del slide ${i + base}`}
               >
-                <div className="flex items-center gap-2 rounded-md border bg-card p-1.5 pr-9 transition-colors hover:bg-accent focus-within:bg-accent" data-testid="slide-carrusel">
+                <div className="flex items-center gap-2 rounded-xl border bg-card p-1.5 pr-9 transition-colors hover:bg-accent focus-within:bg-accent" data-testid="slide-carrusel">
                   <span className="w-5 shrink-0 text-center text-xs text-muted-foreground">
                     {i + base}
                   </span>

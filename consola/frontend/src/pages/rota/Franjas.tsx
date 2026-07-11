@@ -88,7 +88,7 @@ function CuerpoFranjasSemana({
             onCrear={(cuerpo) => crear.mutate(cuerpo)}
           />
           {onAsignar && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed bg-muted/30 px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed bg-muted/30 px-3 py-2">
               <p className="text-xs text-muted-foreground">
                 ¿Quién trabaja cada franja? Asigna las personas a sus turnos.
               </p>
@@ -176,7 +176,7 @@ export function FilaFranjaSemana({
   return (
     <div
       className={cn(
-        "flex flex-wrap items-end gap-2 rounded border px-2 py-2",
+        "flex flex-wrap items-end gap-2 rounded-xl border bg-card px-2 py-2",
         franja.es_descanso && "bg-muted/40",
       )}
     >
@@ -273,7 +273,7 @@ export function FormCrearFranjaSemana({
   };
 
   return (
-    <div className="flex flex-wrap items-end gap-2 rounded border border-dashed px-2 py-2">
+    <div className="flex flex-wrap items-end gap-2 rounded-xl border border-dashed px-2 py-2">
       <div className="flex-1 min-w-32">
         <Label className="text-xs text-muted-foreground">Añadir franja</Label>
         <Input
@@ -412,7 +412,7 @@ function CuerpoPlantillaFranjas({ onCerrar }: { onCerrar: () => void }) {
           {filas.map((f) => (
             <div
               key={f._id}
-              className="flex flex-wrap items-end gap-2 rounded border px-2 py-2"
+              className="flex flex-wrap items-end gap-2 rounded-xl border bg-card px-2 py-2"
             >
               <div className="min-w-32 flex-1">
                 <Label className="text-xs text-muted-foreground">Nombre</Label>
@@ -599,7 +599,7 @@ export function DialogoAjustesTurnos({ onCerrar }: { onCerrar: () => void }) {
           />
         ) : (
           <div className="flex flex-col gap-2">
-            <div className="flex items-start justify-between gap-4 rounded-lg border bg-card p-3">
+            <div className="flex items-start justify-between gap-4 rounded-xl border bg-card p-3">
               <div>
                 <Label htmlFor="ajuste-horas-equipo" className="text-sm font-medium">
                   Mostrar horas en el calendario de «Equipo»
@@ -621,7 +621,7 @@ export function DialogoAjustesTurnos({ onCerrar }: { onCerrar: () => void }) {
                 aria-label="Mostrar horas en el calendario de Equipo"
               />
             </div>
-            <div className="flex items-start justify-between gap-4 rounded-lg border bg-card p-3">
+            <div className="flex items-start justify-between gap-4 rounded-xl border bg-card p-3">
               <div>
                 <Label htmlFor="ajuste-tiempo-libre" className="text-sm font-medium">
                   Tiempo libre (vacaciones, baja, descanso)

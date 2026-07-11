@@ -227,7 +227,7 @@ function TarjetaPieza({
         etiquetaAcciones={`Acciones de "${pieza.titulo}"`}
         kebab="nunca"
         realce
-        className="rounded-lg border border-border bg-card text-card-foreground shadow-sm"
+        className="rounded-xl border bg-card text-card-foreground"
       >
         <div className="flex min-w-0 flex-1 gap-3 py-4 pl-4 pr-10">
           {imagen && (

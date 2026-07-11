@@ -3,7 +3,7 @@
  * altura = vistas. Cuenta la COMPOSICIÓN y la tendencia: cómo crecen las vistas totales
  * intervalo a intervalo y qué red las empuja (lo que la tabla "Detalle por red", agregada de todo
  * el periodo, no muestra). El tamaño del intervalo se adapta al periodo real de los datos:
- * día (≤45 días), semana (≤180) o mes. Estética del Panorama (panel tematizado, neón).
+ * día (≤45 días), semana (≤180) o mes. Va en el panel de tarjeta canónico, como el Panorama.
  *
  * Reúsa la MISMA query que `PiezasConsolidada` (misma `queryKey`): caché compartida, sin
  * coste de API extra.
@@ -244,7 +244,7 @@ export function EvolucionRedes({
       ) : (
         /* role=img: alternativa textual del chart (resume intervalos, granularidad y redes). */
         <div
-          className="rounded-xl border border-border bg-card p-6"
+          className="rounded-xl border bg-card p-6"
           role="img"
           aria-label={`Vistas por red en ${filas.length} intervalos por ${
             gran === "dia" ? "día" : gran
