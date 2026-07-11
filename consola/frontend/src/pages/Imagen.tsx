@@ -27,6 +27,7 @@ import { useSearchParams } from "react-router-dom";
 import { TituloPagina } from "@/components/layout/encabezado";
 import { toast } from "sonner";
 
+import { Cargando } from "@/components/comunes/Cargando";
 import { confirmar } from "@/components/comunes/confirmar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -1048,7 +1049,7 @@ export default function Imagen() {
           // gestión completa, agrupación por marca en «Todas» y «Lienzo en blanco» al final.
           <div className="h-full">
             {plantillasQ.isLoading ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">Cargando plantillas…</p>
+              <Cargando />
             ) : (
               <PublicacionPlantillas
                 plantillas={plantillas}

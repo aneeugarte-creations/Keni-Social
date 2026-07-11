@@ -15,17 +15,7 @@ import { toast } from "sonner";
 
 import { Aviso } from "@/components/comunes/Aviso";
 import { BloqueError } from "@/components/comunes/BloqueError";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { confirmar } from "@/components/comunes/confirmar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -174,7 +164,7 @@ function DialogoCambiarCuenta({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const confirmar = useMutation({
+  const confirmarCodigo = useMutation({
     mutationFn: () => api.cuentaLoginCodigo(sesion as string, codigo),
     onSuccess: (r) => {
       if (r.ok) {
@@ -278,10 +268,10 @@ function DialogoCambiarCuenta({
             <DialogFooter>
               <Button
                 variant="default"
-                onClick={() => confirmar.mutate()}
-                disabled={confirmar.isPending || !codigo.trim()}
+                onClick={() => confirmarCodigo.mutate()}
+                disabled={confirmarCodigo.isPending || !codigo.trim()}
               >
-                {confirmar.isPending ? (
+                {confirmarCodigo.isPending ? (
                   <Spinner className="mr-2 h-4 w-4" />
                 ) : (
                   <BadgeCheck className="mr-2 h-4 w-4" aria-hidden="true" />
@@ -311,30 +301,33 @@ function BotonLogout({ cuenta, onHecho }: { cuenta: Cuenta; onHecho: () => void 
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  const onCerrarSesion = async () => {
+    if (
+      await confirmar({
+        titulo: "¿Cerrar la sesión de Claude del servidor?",
+        mensaje:
+          "La generación de contenido dejará de funcionar hasta que inicies sesión con una cuenta de nuevo. Úsalo solo si vas a cambiar de cuenta.",
+        textoConfirmar: "Cerrar sesión",
+      })
+    )
+      logout.mutate();
+  };
+
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
-          <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
-          Cerrar sesión
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>¿Cerrar la sesión de Claude del servidor?</AlertDialogTitle>
-          <AlertDialogDescription>
-            La generación de contenido dejará de funcionar hasta que inicies sesión con una
-            cuenta de nuevo. Úsalo solo si vas a cambiar de cuenta.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-          <AlertDialogAction onClick={() => logout.mutate()}>
-            Cerrar sesión
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <Button
+      variant="ghost"
+      size="sm"
+      className="text-destructive hover:text-destructive"
+      onClick={onCerrarSesion}
+      disabled={logout.isPending}
+    >
+      {logout.isPending ? (
+        <Spinner className="mr-2 h-4 w-4" />
+      ) : (
+        <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
+      )}
+      Cerrar sesión
+    </Button>
   );
 }
 

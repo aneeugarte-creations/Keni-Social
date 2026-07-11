@@ -129,7 +129,10 @@ export function VistasGuardadas({
           className="absolute right-0 z-50 mt-1 w-64 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
         >
           {listaQuery.isPending ? (
-            <p className="px-2 py-3 text-center text-sm text-muted-foreground">Cargando…</p>
+            <p className="flex items-center justify-center gap-1.5 px-2 py-3 text-sm text-muted-foreground">
+              <Spinner className="h-4 w-4" aria-hidden="true" />
+              Cargando…
+            </p>
           ) : vistas.length === 0 ? (
             <p className="px-2 py-3 text-center text-sm text-muted-foreground">
               Aún no hay vistas guardadas.

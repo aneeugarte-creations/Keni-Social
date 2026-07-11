@@ -1,7 +1,10 @@
 import { ChevronsUpDown, LayoutGrid, Lightbulb, LogOut, ServerCog, UserCog, Users, Webhook } from "lucide-react";
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 
+import { MenuFlotante, type EntradaMenuContextual } from "@/components/comunes/MenuContextual";
+import { origenBajoDisparador, type PosicionMenu } from "@/components/comunes/menuPos";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { cn } from "@/lib/utils";
 import type { RolUsuario } from "@/types";
@@ -59,39 +62,23 @@ export function CuentaUsuario({
   onAbiertoChange?: (abierto: boolean) => void;
 }) {
   const { usuario, cerrarSesion } = useSesion();
-  const [abierto, setAbierto] = React.useState(false);
+  const navigate = useNavigate();
+  // El menú abierto se representa por su posición (null = cerrado). `MenuFlotante` gestiona el
+  // cierre al pulsar fuera, con Escape y la navegación por teclado.
+  const [pos, setPos] = React.useState<PosicionMenu | null>(null);
   const [cerrando, setCerrando] = React.useState(false);
-  const contenedorRef = React.useRef<HTMLDivElement>(null);
+  const abierto = pos !== null;
 
   // Notifica el estado del menú hacia arriba (el dock no debe colapsar mientras está abierto).
   React.useEffect(() => {
     onAbiertoChange?.(abierto);
   }, [abierto, onAbiertoChange]);
 
-  // Cierra el menú al pulsar fuera o con Escape.
-  React.useEffect(() => {
-    if (!abierto) return;
-    function alPulsarFuera(e: MouseEvent) {
-      if (contenedorRef.current && !contenedorRef.current.contains(e.target as Node)) {
-        setAbierto(false);
-      }
-    }
-    function alTeclear(e: KeyboardEvent) {
-      if (e.key === "Escape") setAbierto(false);
-    }
-    document.addEventListener("mousedown", alPulsarFuera);
-    document.addEventListener("keydown", alTeclear);
-    return () => {
-      document.removeEventListener("mousedown", alPulsarFuera);
-      document.removeEventListener("keydown", alTeclear);
-    };
-  }, [abierto]);
-
   if (!usuario) return null;
 
   async function alCerrarSesion() {
     setCerrando(true);
-    setAbierto(false);
+    setPos(null);
     await cerrarSesion();
     // No reseteamos `cerrando`: la pantalla de login reemplaza este árbol.
   }
@@ -104,14 +91,35 @@ export function CuentaUsuario({
   // Nombre humano si lo tiene; si no, el login.
   const nombreMostrar = usuario.nombre?.trim() || usuario.usuario;
 
+  // Ajustes (navegación) + separador + cerrar sesión, como items del menú flotante compartido.
+  const items: EntradaMenuContextual[] = [
+    ...opcionesVisibles.map(({ ruta, etiqueta, icono }) => ({
+      etiqueta,
+      icono,
+      onClick: () => navigate(ruta),
+    })),
+    { separador: true },
+    {
+      etiqueta: "Cerrar sesión",
+      icono: LogOut,
+      onClick: () => void alCerrarSesion(),
+      deshabilitado: cerrando,
+    },
+  ];
+
+  const alternar = (e: React.MouseEvent) => {
+    if (abierto) {
+      setPos(null);
+      return;
+    }
+    setPos(origenBajoDisparador(e.currentTarget.getBoundingClientRect()));
+  };
+
   return (
-    <div
-      ref={contenedorRef}
-      className={cn("relative", soloIcono ? "w-auto" : "w-full", className)}
-    >
+    <div className={cn("relative", soloIcono ? "w-auto" : "w-full", className)}>
       <button
         type="button"
-        onClick={() => setAbierto((v) => !v)}
+        onClick={alternar}
         aria-haspopup="menu"
         aria-expanded={abierto}
         aria-label={soloIcono ? `${nombreMostrar} · ${etiquetaRol(usuario.rol)}` : undefined}
@@ -143,40 +151,16 @@ export function CuentaUsuario({
         )}
       </button>
 
-      {abierto && (
-        <div
-          role="menu"
-          aria-label="Cuenta"
-          className={cn(
-            "absolute top-full z-50 mt-1 overflow-hidden rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-md",
-            soloIcono ? "left-0 w-48" : "left-0 right-0",
-          )}
-        >
-          {opcionesVisibles.map(({ ruta, etiqueta, icono: Icono }) => (
-            <Link
-              key={ruta}
-              to={ruta}
-              role="menuitem"
-              onClick={() => setAbierto(false)}
-              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent"
-            >
-              <Icono className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-              {etiqueta}
-            </Link>
-          ))}
-          <div className="my-1 border-t border-border" aria-hidden="true" />
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => void alCerrarSesion()}
-            disabled={cerrando}
-            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent disabled:opacity-50"
-          >
-            <LogOut className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            Cerrar sesión
-          </button>
-        </div>
-      )}
+      {pos &&
+        createPortal(
+          <MenuFlotante
+            pos={pos}
+            items={items}
+            etiqueta="Cuenta"
+            onClose={() => setPos(null)}
+          />,
+          document.body,
+        )}
     </div>
   );
 }

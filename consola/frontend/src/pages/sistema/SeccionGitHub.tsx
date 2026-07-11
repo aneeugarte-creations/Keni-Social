@@ -13,17 +13,7 @@ import { toast } from "sonner";
 
 import { Aviso } from "@/components/comunes/Aviso";
 import { BloqueError } from "@/components/comunes/BloqueError";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { confirmar } from "@/components/comunes/confirmar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -88,7 +78,7 @@ function DialogoConectar({ conectado, onConectado }: { conectado: boolean; onCon
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const confirmar = useMutation({
+  const confirmarAcceso = useMutation({
     mutationFn: () => api.githubLoginConfirmar(sesion as string),
     onSuccess: (r) => {
       if (r.ok) {
@@ -184,13 +174,13 @@ function DialogoConectar({ conectado, onConectado }: { conectado: boolean; onCon
                 3. Cuando lo hayas autorizado en GitHub, espera a que el servidor lo confirme:
               </p>
               <DialogFooter>
-                <Button variant="default" onClick={() => confirmar.mutate()} disabled={confirmar.isPending}>
-                  {confirmar.isPending ? (
+                <Button variant="default" onClick={() => confirmarAcceso.mutate()} disabled={confirmarAcceso.isPending}>
+                  {confirmarAcceso.isPending ? (
                     <Spinner className="mr-2 h-4 w-4" />
                   ) : (
                     <BadgeCheck className="mr-2 h-4 w-4" aria-hidden="true" />
                   )}
-                  {confirmar.isPending ? "Esperando autorización…" : "Esperar autorización"}
+                  {confirmarAcceso.isPending ? "Esperando autorización…" : "Esperar autorización"}
                 </Button>
               </DialogFooter>
             </div>
@@ -216,28 +206,33 @@ function BotonLogout({ onHecho }: { onHecho: () => void }) {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  const onDesconectar = async () => {
+    if (
+      await confirmar({
+        titulo: "¿Desconectar GitHub del servidor?",
+        mensaje:
+          "El motor de auto-desarrollo no podrá empujar a GitHub hasta que vuelvas a conectar una cuenta.",
+        textoConfirmar: "Desconectar",
+      })
+    )
+      logout.mutate();
+  };
+
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
-          <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
-          Desconectar
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>¿Desconectar GitHub del servidor?</AlertDialogTitle>
-          <AlertDialogDescription>
-            El motor de auto-desarrollo no podrá empujar a GitHub hasta que vuelvas a conectar una
-            cuenta.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-          <AlertDialogAction onClick={() => logout.mutate()}>Desconectar</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <Button
+      variant="ghost"
+      size="sm"
+      className="text-destructive hover:text-destructive"
+      onClick={onDesconectar}
+      disabled={logout.isPending}
+    >
+      {logout.isPending ? (
+        <Spinner className="mr-2 h-4 w-4" />
+      ) : (
+        <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
+      )}
+      Desconectar
+    </Button>
   );
 }
 

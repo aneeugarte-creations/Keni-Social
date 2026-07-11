@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
-  ArrowLeft,
   CheckCircle2,
   Coins,
   ExternalLink,
@@ -16,11 +15,12 @@ import {
   X,
 } from "lucide-react";
 import * as React from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { ChipEstado } from "@/components/comunes/ChipEstado";
+import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -448,19 +448,10 @@ export default function DetalleSugerenciaPagina() {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const volver = (
-    <Button variant="ghost" size="sm" asChild>
-      <Link to="/sugerencias">
-        <ArrowLeft className="h-4 w-4" />
-        Volver
-      </Link>
-    </Button>
-  );
-
   if (query.isPending) {
     return (
       <div className="space-y-4">
-        {volver}
+        <TituloPagina titulo="Idea" onAtras={() => navigate("/sugerencias")} />
         <Skeleton className="h-8 w-2/3" />
         <Skeleton className="h-48 w-full" />
       </div>
@@ -470,7 +461,7 @@ export default function DetalleSugerenciaPagina() {
   if (query.isError) {
     return (
       <div className="space-y-4">
-        {volver}
+        <TituloPagina titulo="Idea" onAtras={() => navigate("/sugerencias")} />
         <BloqueError
           titulo="No se pudo cargar la sugerencia"
           mensaje={mensajeError(query.error)}
@@ -504,18 +495,17 @@ export default function DetalleSugerenciaPagina() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between gap-2">
-        {volver}
-        {!editando && (
+      <TituloPagina titulo={sugerencia.titulo} onAtras={() => navigate("/sugerencias")} />
+      {!editando && (
+        <AccionesPagina>
           <Button variant="outline" size="sm" onClick={() => setEditando(true)}>
             <Pencil className="h-4 w-4" />
             Editar idea
           </Button>
-        )}
-      </div>
+        </AccionesPagina>
+      )}
 
       <div className="space-y-2">
-        <h1 className="text-xl font-semibold leading-tight">{sugerencia.titulo}</h1>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline" className="font-normal">
             {etiqueta(CATEGORIA_LABEL, sugerencia.categoria)}

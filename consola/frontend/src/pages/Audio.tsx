@@ -550,7 +550,10 @@ function PanelAudios({
     <div className={cn("flex min-w-0 flex-col gap-2 overflow-hidden", className)}>
       <span className="px-1 text-label">Audios</span>
       {cargando ? (
-        <p className="px-1 text-xs text-muted-foreground">Cargando…</p>
+        <p className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
+          <Spinner className="h-3.5 w-3.5" aria-hidden="true" />
+          Cargando…
+        </p>
       ) : (
         <div className="flex flex-col gap-1 overflow-y-auto">
           {lista.map((t) => (
@@ -746,7 +749,10 @@ function PanelArtefactos({
       ) : null}
 
       {cargando && !artefactos.length && !planeados.length ? (
-        <p className="px-1 text-xs text-muted-foreground">Cargando…</p>
+        <p className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
+          <Spinner className="h-3.5 w-3.5" aria-hidden="true" />
+          Cargando…
+        </p>
       ) : (
         <div className="flex flex-col gap-1 overflow-y-auto">
           {artefactos.map((a) => {

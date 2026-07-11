@@ -9,6 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import { asignarMatriz } from "@/lib/rota-reparto";
 import { cn } from "@/lib/utils";
@@ -559,29 +567,32 @@ export function ReparteMes({
             Elige personas para ver la matriz.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-xl border p-2">
-            <table className="border-separate border-spacing-[3px] tabular-nums">
-              <thead>
-                <tr>
-                  <th />
+          <div className="rounded-xl border p-2">
+            <Table className="w-auto border-separate border-spacing-[3px] tabular-nums">
+              <TableHeader className="[&_tr]:border-0">
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="h-auto p-0" />
                   {dias.map((f) => (
-                    <th key={f} className="px-0 text-center align-bottom font-normal leading-none">
+                    <TableHead
+                      key={f}
+                      className="h-auto px-0 text-center align-bottom font-normal leading-none"
+                    >
                       <span className="block text-[10px] font-semibold uppercase text-muted-foreground/70">
                         {letraDeFecha(f)}
                       </span>
                       <span className="block text-[9px] text-muted-foreground/50">
                         {f.slice(8, 10)}
                       </span>
-                    </th>
+                    </TableHead>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {personasElegidas.map((m) => (
-                  <tr key={m.id}>
-                    <td className="max-w-[5rem] truncate pr-2 text-[11.5px] text-foreground/80">
+                  <TableRow key={m.id} className="border-0 hover:bg-transparent">
+                    <TableCell className="max-w-[5rem] truncate p-0 pr-2 text-[11.5px] text-foreground/80">
                       {m.nombre}
-                    </td>
+                    </TableCell>
                     {dias.map((f) => {
                       const st = estadoCelda(m.id, f);
                       const t = turnosEn(m.id, f)[0];
@@ -590,7 +601,7 @@ export function ReparteMes({
                         ? `${t.franja_nombre}${t.override ? " · refuerzo matchday" : ""}${t.nota_relevo ? " · nota de relevo" : ""}`
                         : "vacío";
                       return (
-                        <td key={f}>
+                        <TableCell key={f} className="p-0">
                           <button
                             type="button"
                             role="checkbox"
@@ -620,13 +631,13 @@ export function ReparteMes({
                               />
                             )}
                           </button>
-                        </td>
+                        </TableCell>
                       );
                     })}
-                  </tr>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
         {editando && (

@@ -12,9 +12,9 @@ import { Inbox as IconoInbox, MessageSquare, MessagesSquare } from "lucide-react
 import * as React from "react";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { Cargando } from "@/components/comunes/Cargando";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { marcaMetricasDesdeCanonica } from "@/components/comunes/selectores";
-import { Spinner } from "@/components/ui/spinner";
 import {
   Select,
   SelectContent,
@@ -36,17 +36,6 @@ const DIAS_OPCIONES: Array<{ valor: string; etiqueta: string }> = [
   { valor: "14", etiqueta: "Últimos 14 días" },
   { valor: "30", etiqueta: "Últimos 30 días" },
 ];
-
-/** Espera centrada y tolerante a segundos (los comentarios se trocean por día en el backend). */
-function Cargando({ nota }: { nota?: string }) {
-  return (
-    <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
-      <Spinner className="h-6 w-6" />
-      <p className="text-sm">Cargando…</p>
-      {nota && <p className="text-xs">{nota}</p>}
-    </div>
-  );
-}
 
 function VistaConversaciones({ marca }: { marca: string }) {
   const consulta = useQuery({

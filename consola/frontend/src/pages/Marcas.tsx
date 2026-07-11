@@ -10,6 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
@@ -52,9 +60,9 @@ function fmtDia(n: number | null | undefined): string {
 function CeldasNumero({ c }: { c: ConteoCuenta }) {
   return (
     <>
-      <td className="w-32 px-3 py-2 text-right tabular-nums">{fmtEntero(c.seguidores)}</td>
-      <td className="w-28 px-3 py-2 text-right tabular-nums">{fmtEntero(c.posts_totales)}</td>
-      <td className="w-24 px-3 py-2 text-right tabular-nums">{fmtDia(c.posts_dia)}</td>
+      <TableCell className="w-32 px-3 py-2 text-right tabular-nums">{fmtEntero(c.seguidores)}</TableCell>
+      <TableCell className="w-28 px-3 py-2 text-right tabular-nums">{fmtEntero(c.posts_totales)}</TableCell>
+      <TableCell className="w-24 px-3 py-2 text-right tabular-nums">{fmtDia(c.posts_dia)}</TableCell>
     </>
   );
 }
@@ -179,8 +187,8 @@ function BloqueMarca({
   return (
     <>
       {/* Sumatorio de la marca + canal de publicación. */}
-      <tr className="border-b border-border bg-muted/40 font-medium">
-        <td className="py-2 pl-3 pr-2">
+      <TableRow className="bg-muted/40 font-medium">
+        <TableCell className="py-2 pl-3 pr-2">
           {/* Clic en el nombre → abre el editor de identidad (solo superadmin). Si no es
               editable, el nombre va como texto plano. */}
           {onEditar ? (
@@ -196,24 +204,24 @@ function BloqueMarca({
           ) : (
             <span>{marca.etiqueta}</span>
           )}
-        </td>
+        </TableCell>
         <CeldasNumero c={marca.total} />
-        <td className="px-3 py-2 text-right">
+        <TableCell className="px-3 py-2 text-right">
           <SelectorCanal
             canal={marca.canal_publicacion}
             postproxyDisponible={conectadas > 0}
             deshabilitado={pendiente === `${marca.marca}:canal`}
             onCambiar={(c) => onCanal(marca.marca, c)}
           />
-        </td>
-      </tr>
+        </TableCell>
+      </TableRow>
       {/* Una línea por red: estado + números + acción. */}
       {marca.redes.map((red) => {
         const Icono = iconoPlataforma(red.plataforma);
         const clave = `${marca.marca}:${red.plataforma}`;
         return (
-          <tr key={red.plataforma} className="border-b border-border last:border-0">
-            <td className="py-1.5 pl-8 pr-2">
+          <TableRow key={red.plataforma}>
+            <TableCell className="py-1.5 pl-8 pr-2">
               <span className="flex min-w-0 items-center gap-2 text-muted-foreground">
                 <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", clasesPunto(red))} aria-hidden="true" />
                 <Icono className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -222,17 +230,17 @@ function BloqueMarca({
                   <span className="truncate text-xs text-muted-foreground/70">· {red.nombre_cuenta}</span>
                 )}
               </span>
-            </td>
+            </TableCell>
             <CeldasNumero c={red} />
-            <td className="px-3 py-1.5 text-right">
+            <TableCell className="px-3 py-1.5 text-right">
               <AccionRed
                 red={red}
                 ocupada={pendiente === clave}
                 onConectar={() => onConectar(marca.marca, red.plataforma)}
                 onDesconectar={() => onDesconectar(marca.marca, red)}
               />
-            </td>
-          </tr>
+            </TableCell>
+          </TableRow>
         );
       })}
     </>
@@ -365,40 +373,38 @@ export default function Marcas() {
               </Button>
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-xs text-muted-foreground">
-                  <th className="w-full py-2 pl-3 pr-2 text-left font-medium">Cuenta</th>
-                  <th className="w-32 px-3 py-2 text-right font-medium">Seguidores</th>
-                  <th className="w-28 px-3 py-2 text-right font-medium">Posts</th>
-                  <th className="w-24 px-3 py-2 text-right font-medium">Posts/día</th>
-                  <th className="px-3 py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {/* Total global ARRIBA, encima de las marcas. */}
-                <tr className="border-b-2 border-border font-semibold">
-                  <td className="py-2 pl-3 pr-2">Total</td>
-                  <CeldasNumero c={data.totales} />
-                  <td className="px-3 py-2" />
-                </tr>
-                {data.marcas.map((marca) => (
-                  <BloqueMarca
-                    key={marca.marca}
-                    marca={marca}
-                    pendiente={pendiente}
-                    onConectar={conectar}
-                    onDesconectar={desconectar}
-                    onCanal={cambiarCanal}
-                    onEditar={
-                      esSuperadmin ? (m) => setEditor({ abierto: true, marca: aEditable(m) }) : undefined
-                    }
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table>
+            <TableHeader>
+              <TableRow className="text-xs hover:bg-transparent">
+                <TableHead className="w-full py-2 pl-3 pr-2 text-left">Cuenta</TableHead>
+                <TableHead className="w-32 py-2 text-right">Seguidores</TableHead>
+                <TableHead className="w-28 py-2 text-right">Posts</TableHead>
+                <TableHead className="w-24 py-2 text-right">Posts/día</TableHead>
+                <TableHead className="py-2" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {/* Total global ARRIBA, encima de las marcas. */}
+              <TableRow className="border-b-2 font-semibold">
+                <TableCell className="py-2 pl-3 pr-2">Total</TableCell>
+                <CeldasNumero c={data.totales} />
+                <TableCell className="py-2" />
+              </TableRow>
+              {data.marcas.map((marca) => (
+                <BloqueMarca
+                  key={marca.marca}
+                  marca={marca}
+                  pendiente={pendiente}
+                  onConectar={conectar}
+                  onDesconectar={desconectar}
+                  onCanal={cambiarCanal}
+                  onEditar={
+                    esSuperadmin ? (m) => setEditor({ abierto: true, marca: aEditable(m) }) : undefined
+                  }
+                />
+              ))}
+            </TableBody>
+          </Table>
         </Card>
       )}
 

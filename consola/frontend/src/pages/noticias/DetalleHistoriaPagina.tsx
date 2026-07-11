@@ -13,7 +13,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
-  ArrowLeft,
   CheckCircle2,
   Clock,
   ExternalLink,
@@ -25,11 +24,12 @@ import {
   Undo2,
   Zap,
 } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { confirmar } from "@/components/comunes/confirmar";
+import { TituloPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -103,19 +103,10 @@ export default function DetalleHistoriaPagina() {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const volver = (
-    <Button variant="ghost" size="sm" asChild>
-      <Link to={RUTA_MESA}>
-        <ArrowLeft className="h-4 w-4" />
-        Volver
-      </Link>
-    </Button>
-  );
-
   if (query.isPending) {
     return (
       <div className="space-y-4">
-        {volver}
+        <TituloPagina titulo="Historia" onAtras={() => navigate(RUTA_MESA)} />
         <Skeleton className="h-8 w-2/3" />
         <Skeleton className="h-48 w-full" />
       </div>
@@ -125,7 +116,7 @@ export default function DetalleHistoriaPagina() {
   if (query.isError) {
     return (
       <div className="space-y-4">
-        {volver}
+        <TituloPagina titulo="Historia" onAtras={() => navigate(RUTA_MESA)} />
         <BloqueError
           titulo="No se pudo cargar la historia"
           mensaje={mensajeError(query.error)}
@@ -204,25 +195,15 @@ export default function DetalleHistoriaPagina() {
 
   return (
     <div className="max-w-[1180px] space-y-4">
-      {volver}
+      <TituloPagina
+        titulo={historia.titulo || "(sin título)"}
+        onAtras={() => navigate(RUTA_MESA)}
+      />
 
       <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_348px] lg:items-start lg:gap-16">
         {/* ── La noticia ──────────────────────────────────────────────────── */}
         <div className="min-w-0 max-w-[640px]">
           <div className="space-y-3">
-            <h1 className="text-2xl font-medium leading-snug tracking-tight">
-              {esUltimaHora && (
-                <Badge
-                  className="mr-1.5 gap-1 align-middle text-[10px] bg-red-600 hover:bg-red-600 text-white border-0"
-                  data-testid="badge-ultima-hora"
-                >
-                  <Zap className="h-3 w-3" />
-                  ÚLTIMA HORA
-                </Badge>
-              )}
-              {historia.titulo || "(sin título)"}
-            </h1>
-
             {(cuando || fuente) && (
               <p
                 className="flex items-center gap-1.5 text-sm text-muted-foreground"
@@ -240,6 +221,15 @@ export default function DetalleHistoriaPagina() {
             )}
 
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+              {esUltimaHora && (
+                <Badge
+                  className="gap-1 text-[10px] bg-red-600 hover:bg-red-600 text-white border-0"
+                  data-testid="badge-ultima-hora"
+                >
+                  <Zap className="h-3 w-3" />
+                  ÚLTIMA HORA
+                </Badge>
+              )}
               <ChipMarca historia={historia} />
               {badgeEstado}
               <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
