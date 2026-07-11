@@ -223,7 +223,7 @@ export default function DetalleHistoriaPagina() {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
               {esUltimaHora && (
                 <Badge
-                  className="gap-1 bg-red-600 hover:bg-red-600 text-white border-0"
+                  className="gap-1 bg-destructive hover:bg-destructive text-destructive-foreground border-0"
                   data-testid="badge-ultima-hora"
                 >
                   <Zap className="h-3 w-3" />
