@@ -468,14 +468,21 @@ def test_claimed_at_null_y_serializacion_iso(pg):
 
 def test_gasto_ia_dia_date_roundtrip_y_serie(pg):
     """`gasto_ia.dia` es `date`: agrupacion por dia y serie re-emiten el string YYYY-MM-DD."""
+    import datetime
+
     from keni_consola import repos
 
-    repos.registrar_gasto_ia("g1", dia="2026-06-13", tokens_in=100, tokens_out=50)
+    # El dia se calcula, no se escribe: `gasto_ia_por_dia` devuelve una ventana MOVIL de 30 dias,
+    # asi que una fecha fija sale de la ventana sola y tumba el test sin que nadie toque nada
+    # (paso el 2026-07-13, 30 dias despues del 2026-06-13 que habia escrito aqui). En UTC, que es
+    # como la consulta calcula su corte.
+    dia = datetime.datetime.now(datetime.UTC).date().isoformat()
+    repos.registrar_gasto_ia("g1", dia=dia, tokens_in=100, tokens_out=50)
     serie = repos.gasto_ia_por_dia(30)
-    fila = [d for d in serie if d["dia"] == "2026-06-13"]
+    fila = [d for d in serie if d["dia"] == dia]
     assert fila and fila[0]["tokens"] == 150
     assert isinstance(fila[0]["dia"], str)  # date -> string ISO, no objeto date
-    assert db.gasto_ia_del_dia("2026-06-13")["tokens"] == 150
+    assert db.gasto_ia_del_dia(dia)["tokens"] == 150
 
 
 def test_gasto_ia_economia_garantiza_las_4_pestanas_y_zero_fill(pg):

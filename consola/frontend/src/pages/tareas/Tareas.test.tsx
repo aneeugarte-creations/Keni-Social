@@ -286,6 +286,11 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
   });
 
   it("PANORAMA: un evento PASADO no suma al contador de la persona; uno FUTURO sí", async () => {
+    // Reloj fijo: la prueba compara un partido PASADO con uno FUTURO usando fechas escritas a
+    // mano. Con el reloj real eso caduca solo — el 21 jul de 2026 el "futuro" ya era pasado y el
+    // test se puso rojo sin que nadie tocara nada.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-15T18:00:00Z")); // 12:00 CDMX
     renderTareas([
       // Cobertura de un partido del 10 jun (ya pasó): no es carga pendiente → no cuenta.
       tarea({
