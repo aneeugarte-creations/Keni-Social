@@ -1315,166 +1315,6 @@ services:
         max-size: "50m"
         max-file: "5"
 
-  # INCIDENT-KEEPER: agente claude -p que ARREGLA lo que el autoheal no puede. Cuando un servicio
-  # FLAPEA (el guardian lo resucitó N veces y sigue cayendo: típicamente un commit reciente rompió
-  # el arranque/migración), el guardian escribe estado/incidente.json con la evidencia y este
-  # servicio lanza UN claude -p con el ROL (clon del "green keeper") que diagnostica y, si es de
-  # código, COMMITEA el fix a `main` (dispara test->deploy). Clon del carril worker-dev: reutiliza
-  # la imagen del worker (claude+git+gh) y la credencial de GitHub (/data/gh). La cuenta de Claude es
-  # PROPIA del guardián (volumen `guardian-claude-cfg`, INDEPENDIENTE de la del worker/daemons): se
-  # gestiona desde el panel guardian.kenitech.io (login/logout), así un límite de uso del keeper no toca a la
-  # máquina de contenido ni al revés. NO toca docker (la mitigación es del guardian) ni la cola/Postgres. Best-effort:
-  # NO gatea el deploy (un keeper caído no tumba prod). Límites duros y escalada-a-humano en el ROL.
-  incident-keeper:
-    # Tag DEDICADO `:keeper` (no `:${WORKER_VERSION}`): así un deploy de la APP —que reconstruye el
-    # worker y mueve `:latest`/`:${VERSION}`— deja este contenedor INTACTO (su tag no cambia) y NO lo
-    # recrea a media sesión (era la causa de la pared de «interrumpido»). Solo el carril del guardián
-    # (deploy-guardian.yml) re-etiqueta `:keeper` desde `:latest` y lo recrea. El código real viene
-    # del bind-mount `./incident-keeper:/keeper`, no de la imagen, así que el tag solo aporta las
-    # herramientas (claude/git/gh), estables entre versiones.
-    image: keni-social/worker:keeper
-    restart: unless-stopped
-    # Hereda el ENTRYPOINT del worker (hidrata la cuenta de Claude + git author) y corre el bucle.
-    command: ["sh", "/keeper/keeper.sh"]
-    labels:
-      - autoheal=true
-    environment:
-      XDG_CONFIG_HOME: /data           # gh lee su credencial de /data/gh
-      KENI_DATA_DIR: /data
-      IS_SANDBOX: "1"                  # habilita --dangerously-skip-permissions (headless)
-      KENI_DEV_REPO: /repo             # clon git donde crea el worktree del fix
-      KENI_KEEPER_ROL: /keeper/ROL.md
-      KENI_KEEPER_ESTADO: /estado
-      KENI_KEEPER_MODELO: ${KENI_KEEPER_MODELO:-sonnet}
-      KENI_KEEPER_INTERVALO: ${KENI_KEEPER_INTERVALO:-10}
-      # Vigilancia de CI (réplica de ci-verde): 1 = arregla pipelines de `main` en rojo. DORMIDA
-      # por defecto (0).
-      KENI_KEEPER_CI: ${KENI_KEEPER_CI:-0}
-      KENI_KEEPER_CI_WATCH: /keeper/ci_watch.py
-      KENI_KEEPER_REPO_ID: ${KENI_KEEPER_REPO_ID:-1}
-      # Fuente del estado del CI: la API REST de Woodpecker (desacoplado del backend; Woodpecker
-      # corre sobre Postgres). ci_watch.py consulta pipelines/steps/logs por HTTP. El PAT se lee de
-      # un FICHERO (volumen `keeper-secrets`, ro) que el guardian-ui escribe: asi se pone/ROTA el
-      # token desde el panel (avatar -> Sistema/Guardián), sin tocar el .env. ci_watch lo relee en
-      # cada ciclo, asi que rotar = sobrescribir el fichero. Sin token, las llamadas dan 401 y el
-      # keeper no ve nada (inocuo; ademas DORMIDO por KENI_KEEPER_CI=0).
-      KENI_WOODPECKER_API: ${KENI_WOODPECKER_API:-https://ci-social.kenitech.io}
-      KENI_WOODPECKER_API_TOKEN_FILE: /secrets/woodpecker_token
-      # Flag de deploy (no actuar durante un deploy) e identidad de los commits del keeper.
-      KENI_GUARDIAN_FLAG_DEPLOY: /estado/desplegando
-      KENI_GIT_AUTHOR_NAME: ${KENI_GIT_AUTHOR_NAME:-keni incident-keeper}
-      KENI_GIT_AUTHOR_EMAIL: ${KENI_GIT_AUTHOR_EMAIL:-}
-      ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
-      # Cuenta de Claude PROPIA del guardián (volumen `guardian-claude-cfg`), separada de la del
-      # worker/daemons (`/data/claude-cfg`). guardian-ui hace el login/logout sobre este mismo dir.
-      CLAUDE_CONFIG_DIR: /claude-cfg
-    volumes:
-      - keni-data:/data                # credencial gh (/data/gh)
-      - keeper-trace:/data/keeper      # rastro de sesiones (volumen propio; guardian-ui lo BORRA desde el panel)
-      - guardian-claude-cfg:/claude-cfg  # cuenta de Claude del guardián (rw; la fija guardian-ui)
-      - keni-repo:/repo                # clon git (worktrees del fix)
-      - ./incident-keeper:/keeper:ro   # ROL.md + keeper.sh + ci_watch.py (bind-mount; sin imagen propia)
-      - ./estado:/estado               # rw: lee el trigger del guardian y lo archiva al procesarlo
-      - keeper-secrets:/secrets:ro     # PAT de Woodpecker (lo escribe guardian-ui; ro aqui)
-    secrets:
-      - anthropic_api_key
-      - mcp_bearer
-    networks:
-      - internal                       # egress: Anthropic (claude) + GitHub (push a main)
-    # Latido: keeper.sh toca este fichero cada ciclo; si se cuelga >60s, autoheal lo reinicia.
-    healthcheck:
-      test: ["CMD-SHELL", "find /tmp/keni-incident-keeper.latido -mmin -1 | grep -q . || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
-    stop_grace_period: 30s
-    mem_limit: ${KEEPER_MEM_LIMIT:-6g}
-    cpus: ${KEEPER_CPUS:-2.0}
-    cpuset: "3-11"  # fuera de los nucleos del back (0-2)
-    security_opt:
-      - no-new-privileges:true
-    pids_limit: 1024
-    logging:
-      driver: json-file
-      options:
-        max-size: "50m"
-        max-file: "5"
-
-  # UI INDEPENDIENTE de observación del incident-keeper. Sirve en su subdominio guardian.kenitech.io
-  # las detecciones, el razonamiento en streaming, el coste y los commits del keeper. CLAVE: NO depende
-  # del back/db/front — sólo de Traefik (ingress) y del rastro que el keeper deja en `keeper-trace`
-  # (volumen DEDICADO, montado en /data/keeper; rw para poder BORRAR el historial desde el panel, sin
-  # ver el resto de keni-data). Así, cuando la app está caída y el keeper la arregla, esta UI SIGUE arriba.
-  # Reusa la imagen del worker (trae starlette+uvicorn + el CLI `claude`) con app.py bind-montado;
-  # sin build propio. Además GESTIONA la cuenta de Claude del guardián (login/logout sobre
-  # `guardian-claude-cfg`, el mismo dir que usa el keeper), tras el basicauth propio de Traefik.
-  guardian-ui:
-    # Tag DEDICADO `:keeper` (como incident-keeper): un deploy de la app no recrea este panel (sirve
-    # el índice por bind-mount; el tag solo aporta `claude` para login/uso). Solo el carril del
-    # guardián lo re-etiqueta y recrea.
-    image: keni-social/worker:keeper
-    restart: unless-stopped
-    command: ["python", "-m", "uvicorn", "--app-dir", "/guardian-ui", "app:app", "--host", "0.0.0.0", "--port", "8080"]
-    environment:
-      KENI_KEEPER_DATA: /data/keeper
-      KENI_WOODPECKER_TOKEN_FILE: /secrets/woodpecker_token   # donde guarda el PAT que pega el humano
-      # Cuenta de Claude del guardián: el panel hace `claude auth login/logout` sobre este dir, que
-      # el keeper lee. Independiente de la del worker/daemons (`/data/claude-cfg`).
-      CLAUDE_CONFIG_DIR: /claude-cfg
-    volumes:
-      - keeper-trace:/data/keeper       # rw: lee el rastro del keeper Y BORRA el historial desde el panel
-      - guardian-claude-cfg:/claude-cfg  # rw: el panel fija aquí la cuenta de Claude del guardián
-      - ./guardian-ui:/guardian-ui:ro   # app.py + index.html (bind-mount; sin imagen propia)
-      - keeper-secrets:/secrets         # rw: el panel escribe/ROTA el PAT de Woodpecker aqui
-    networks:
-      - edge                            # lo enruta Traefik; egress por NAT para `claude` (login/usage). NO data/internal (no usa db)
-    labels:
-      - autoheal=true
-      - traefik.enable=true
-      - traefik.docker.network=keni-social_edge
-      # Router PROPIO en el subdominio guardian.kenitech.io (KENI_GUARDIAN_HOST), con su CERT LE
-      # propio. Auth PROPIA por basicauth (htpasswd en KENI_GUARDIAN_HTPASSWD del .env), INDEPENDIENTE
-      # de la sesión del back (que puede estar caída). El DEFAULT (si KENI_GUARDIAN_HTPASSWD está
-      # vacío/ausente) es una entrada BLOQUEADA con un hash aleatorio que nadie conoce: cierra el panel
-      # (401 a todos) SIN dejar el users vacío. IMPORTANTE: un basicauth con users VACÍO hace PANIC a
-      # Traefik (auth.NewBasic) y wedgea TODA su construcción de routers (afecta a TODOS los servicios);
-      # por eso el default debe ser no-vacío. Pon tu htpasswd real con `htpasswd -nB <u>`.
-      - traefik.http.routers.guardian.rule=Host(`${KENI_GUARDIAN_HOST:-guardian.kenitech.io}`)
-      - traefik.http.routers.guardian.entrypoints=websecure
-      - traefik.http.routers.guardian.tls.certresolver=le
-      - traefik.http.routers.guardian.middlewares=keni-guardian-auth
-      - traefik.http.middlewares.keni-guardian-auth.basicauth.users=${KENI_GUARDIAN_HTPASSWD:-locked:$$apr1$$gimueJgn$$DwknY0jLhZtgeHphuGhgw.}
-      - traefik.http.services.guardian.loadbalancer.server.port=8080
-      # Compat: el path viejo social.kenitech.io/guardian -> 302 al subdominio (evita bookmarks rotos).
-      - traefik.http.routers.guardian-old.rule=Host(`${KENI_HOST}`) && PathPrefix(`/guardian`)
-      - traefik.http.routers.guardian-old.priority=20
-      - traefik.http.routers.guardian-old.entrypoints=websecure
-      - traefik.http.routers.guardian-old.tls.certresolver=le
-      - traefik.http.routers.guardian-old.service=guardian
-      - traefik.http.routers.guardian-old.middlewares=guardian-redir
-      - traefik.http.middlewares.guardian-redir.redirectregex.regex=^https://[^/]+/guardian.*
-      - traefik.http.middlewares.guardian-redir.redirectregex.replacement=https://${KENI_GUARDIAN_HOST:-guardian.kenitech.io}/
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/api/sesiones',timeout=4).status==200 else 1)\""]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-    # 512m/512 pids: uvicorn es ligero, pero el panel lanza el CLI `claude` (Node) para el
-    # login/logout y la lectura de uso; deja holgura para ese proceso transitorio.
-    mem_limit: 512m
-    cpus: 0.5
-    cpuset: "3-11"  # fuera de los nucleos del back (0-2)
-    security_opt:
-      - no-new-privileges:true
-    pids_limit: 512
-    logging:
-      driver: json-file
-      options:
-        max-size: "50m"
-        max-file: "5"
-
   # AUTOHEAL de contenedores EXITED — el hueco que willfarrell/autoheal NO cubre. Aquel solo
   # reinicia contenedores unhealthy-pero-VIVOS; y `restart: unless-stopped` NO revive un
   # contenedor parado a propósito (un deploy que hace `stop` y luego falla deja el servicio
@@ -1501,7 +1341,7 @@ services:
       # Cada cuánto sondea el estado (s). 5s = resucitación casi inmediata sin martillear la API.
       KENI_GUARDIAN_INTERVALO: "5"
       # Antiflapping: máx arranques por servicio en la ventana, y la ventana (s). Superado el
-      # tope, deja de intentar y lo registra (en fase 2 escalaría al incident-keeper).
+      # tope, deja de intentar y lo registra (y, si ESCALAR=1, deja el incidente en ./estado).
       KENI_GUARDIAN_MAX_ARRANQUES: "5"
       KENI_GUARDIAN_VENTANA: "600"
       # Flag de deploy: si existe y es FRESCO, el guardián NO actúa (churn esperado del deploy).
@@ -1509,9 +1349,10 @@ services:
       # TTL del flag (min): pasado esto se considera RANCIO (deploy muerto sin limpiar) y el
       # guardián lo borra y retoma el autoheal. Holgado: un deploy real son minutos.
       KENI_GUARDIAN_FLAG_TTL_MIN: "45"
-      # Escalada al incident-keeper: DORMIDA por defecto (0). El keeper se despliega y queda listo,
-      # pero el guardián NO le dispara (solo resucita EXITED). Para ACTIVAR el auto-fix de código,
-      # pon "1" aquí (o KENI_GUARDIAN_ESCALAR=1 en el .env) y recrea el guardián.
+      # Escalada a un agente que arregle el fondo: DORMIDA por defecto (0). Con "1", al detectar
+      # flapping deja la evidencia (servicio + logs) en `./estado/incidente.json`. Quien la recoge
+      # es el stack keni-guardian, que monta ese directorio; aquí solo se escribe el buzón, así
+      # que activarlo sin ese stack delante no rompe nada: el fichero se queda sin leer.
       KENI_GUARDIAN_ESCALAR: "0"
     volumes:
       # Flag de deploy. RW (no :ro): si un deploy muere sin que su trap limpie el flag, el guardián
@@ -1604,17 +1445,6 @@ volumes:
   # en /repo crean worktrees+ramas y promueven a main tras checkpoint humano. Se siembra una vez
   # (clone si está vacío); ver deploy.sh. uid 10001 (keni) debe poder escribirlo (chown en deploy.sh).
   keni-repo:
-  # PAT de Woodpecker para el keeper: lo escribe guardian-ui (rw), lo lee incident-keeper (ro).
-  # Volumen propio y aislado (no toca keni-data con las credenciales de claude/gh).
-  keeper-secrets:
-  # Rastro de sesiones del keeper (meta + jsonl + heartbeat) montado en /data/keeper. Volumen PROPIO
-  # (no un subdir de keni-data) para que guardian-ui pueda montarlo rw y BORRAR el historial desde el
-  # panel SIN ver el resto de keni-data (media, secretos, claude-cfg del worker). Lo escribe el keeper.
-  keeper-trace:
-  # Cuenta de Claude del GUARDIÁN (config/credenciales del CLI `claude`): la fija guardian-ui con
-  # `claude auth login` y la lee el incident-keeper. INDEPENDIENTE de `/data/claude-cfg` (worker/
-  # daemons): un límite de uso o un logout del guardián no afecta a la máquina de contenido.
-  guardian-claude-cfg:
   pgdata:
   garage-meta:
   garage-data:

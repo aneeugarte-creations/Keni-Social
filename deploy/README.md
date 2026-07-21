@@ -99,39 +99,17 @@ cuenta**: abre la URL, inicia sesión y pega el código. Las credenciales se esc
 > `claude auth logout` desde el panel deja al servidor SIN cuenta hasta el siguiente login (la
 > generación para): úsalo solo para cambiar de cuenta.
 
-### Cuenta del GUARDIÁN (separada)
+### El guardián del CI vive en otro repo
 
-El `incident-keeper` usa una cuenta de Claude **INDEPENDIENTE** de la de generación: vive en su
-propio volumen `guardian-claude-cfg` (`CLAUDE_CONFIG_DIR=/claude-cfg`), no en `/data/claude-cfg`.
-Así el carril de incidentes y la máquina de contenido no comparten cuota: un límite de uso (o un
-logout) de una no afecta a la otra. Es deliberado que el guardián use **nuestra** cuenta de Keni,
-no la del piloto.
+El agente que mantiene `main` en verde ya no es parte de este stack: es
+[keni-guardian](https://github.com/kenitech-io/keni-guardian), un servicio propio y
+multi-proyecto que vigila varios repos a la vez y se despliega aparte. Su cuenta de Claude, su
+token del CI y su panel (`guardian.kenitech.io`) se gestionan allí.
 
-Se gestiona desde el **panel `guardian.kenitech.io`** (subdominio propio, no desde Sistema): el botón **cuenta** muestra el
-estado de auth y el uso, y permite login (URL → pegar código) y logout, tras el basicauth propio
-del panel (`KENI_GUARDIAN_HTPASSWD`). Lo sirve `guardian-ui` (reusa la imagen del worker, que trae
-`claude`), escribiendo en el mismo `/claude-cfg` que el keeper lee. Tras un deploy nuevo el volumen
-arranca **vacío**: hasta el primer login el keeper no tiene cuenta y sus sesiones quedan en error.
-
-### Despliegue PROPIO del guardián (no espera al CI)
-
-El guardián es quien ARREGLA el CI rojo, así que encadenar su deploy al gate `tests-python` era un
-círculo: esperar al CI que él mismo arregla. Tiene su **carril independiente**
-(`.woodpecker/deploy-guardian.yml`), gateado solo por sus PROPIOS tests (`tests-guardian`: stdlib,
-sin Postgres, que la suite roja de la app nunca bloquea). Dispara en push a `main` que toque
-`deploy/guardian-ui/**` o `deploy/incident-keeper/**` (y manual).
-
-Es barato porque `guardian-ui` e `incident-keeper` montan su código por **bind-mount**
-(`./guardian-ui`, `./incident-keeper`) sobre la imagen del worker (ya construida; `:latest` siempre
-presente): desplegar = `rsync` de las fuentes al dir estable + `docker compose up -d --no-deps
---force-recreate guardian-ui incident-keeper`. No compila imágenes ni toca db/back/front, y
-serializa con el deploy general por el mismo `flock`. El `deploy.sh` general los recrea también
-cuando toca (red de seguridad); este carril solo añade la vía rápida. A mano:
-
-```sh
-cd /home/ubuntu/keni-social/deploy
-docker compose --env-file .env up -d --no-deps --force-recreate guardian-ui incident-keeper
-```
+Lo que SÍ sigue aquí es el `guardian` (autoheal de contenedores EXITED), porque conoce los
+contenedores de este stack. Cuando un servicio flapea y `KENI_GUARDIAN_ESCALAR=1`, deja la
+evidencia en `deploy/estado/incidente.json`; el stack del guardián monta ese directorio y recoge
+el incidente. Si ese stack no está delante, el fichero simplemente se queda sin leer.
 
 ---
 

@@ -158,34 +158,13 @@ sudo install -m 0644 deploy/host/apt/52-keni-auto-reboot.conf /etc/apt/apt.conf.
   (45min), lo borra y retoma el autoheal. El dir `estado` se crea 0777 para que el guardian (otro
   uid) pueda borrar ese flag rancio.
 
-- **incident-keeper: el green keeper en la nube (PROMOVIBLE):** servicio `claude -p` (imagen del
-  worker reutilizada, sin build propio) que mantiene `main` sano y promueve el fix a `main` con la
-  credencial gh de `/data/gh` y la cuenta de Claude de `/data/claude-cfg` (las mismas que worker-dev).
-  Rol en `deploy/incident-keeper/ROL.md`. DOS disparos, mismo motor (un solo keeper a la vez, lock):
-  - **CI ROJO (el principal, réplica de ci-verde):** `ci_watch.py` lee el datastore de Woodpecker
-    (sqlite montado read-only en `/woodpecker`) y, si el ÚLTIMO pipeline de `main` está en rojo REAL
-    (excluye cancelaciones exit 126), el keeper lo arregla y promueve hasta volver a verde. Tope de
-    intentos por ventana. Activar con `KENI_KEEPER_CI=1`.
-  - **INCIDENTE de prod:** cuando un servicio FLAPEA, el guardian recoge la evidencia (logs vía su
-    proxy) y escribe `estado/incidente.json`; el keeper lo lee y arregla. Activar con
-    `KENI_GUARDIAN_ESCALAR=1` (en el guardian).
-  Salvaguardas: el keeper NO toca docker ni datos/Postgres/secretos (límites duros en el ROL ->
-  escala dejando diagnóstico en su log); un fix malo lo atrapa el CI (deploy gateado por tests) y el
-  rollback `:previa`; no actúa durante un deploy (flag). DORMIDO por defecto: `KENI_KEEPER_CI=0` y
-  `KENI_GUARDIAN_ESCALAR=0` — el servicio se despliega LISTO pero no se dispara. Para activar, pon la
-  env correspondiente (en el `.env` o el servicio) y recrea. Registro:
-  `docker logs keni-social-incident-keeper-1`. keeper.sh/ROL.md/ci_watch.py van bind-montados desde
-  el dir estable: el ROL se relee en cada incidente; un cambio estructural aplica al próximo recreate.
-
-- **guardian-ui: UI INDEPENDIENTE del keeper (PROMOVIBLE):** en `https://social.kenitech.io/guardian`
-  se ven las detecciones, el razonamiento en streaming, el coste/tokens y los commits del keeper.
-  CLAVE: es un contenedor APARTE que NO depende del back/db/front — sólo de Traefik (ingress) y del
-  rastro que el keeper deja en `/data/keeper` (jsonl + meta + heartbeat), montado read-only. Así,
-  cuando la app está caída y el keeper la arregla, esta UI SIGUE arriba (compruébalo parando el back:
-  `/guardian` sigue sirviendo). Reusa la imagen del worker (starlette+uvicorn) con `app.py`+`index.html`
-  bind-montados; sin build propio. **Auth PROPIA** por basicauth de Traefik (no la sesión del back, que
-  puede estar caída): pon `KENI_GUARDIAN_HTPASSWD` en el `.env` (genera con `htpasswd -nB <usuario>`);
-  vacío => 401 a todos (cerrado por defecto). Registro: `docker logs keni-social-guardian-ui-1`.
+- **el green keeper vive fuera (otro stack):** el agente que mantiene `main` en verde ya no es de
+  este compose. Es [keni-guardian](https://github.com/kenitech-io/keni-guardian), un stack propio
+  y multi-proyecto en esta misma maquina, con su panel en `guardian.kenitech.io`. El `guardian` de
+  arriba (autoheal) sigue aqui porque conoce ESTOS contenedores; su escalada le deja la evidencia
+  en `deploy/estado/incidente.json`, que aquel stack monta y recoge. Los volumenes viejos
+  (`keeper-trace`, `keeper-secrets`, `guardian-claude-cfg`) se copiaron al stack nuevo y ya no los
+  usa nadie aqui: se pueden borrar con `docker volume rm` cuando confirmes que el nuevo va.
 
 - **mensaje honesto en un hueco (PROMOVIBLE):** `deploy.sh` crea `deploy/estado/desplegando` al
   empezar y lo borra al salir (trap, pase lo que pase). El nginx del `front` lo lee con
