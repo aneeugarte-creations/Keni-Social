@@ -357,6 +357,9 @@ function BloqueIA({ gen, plantilla }: { gen?: PipelineGeneracion; plantilla?: st
   if (!gen) return null;
   const enCurso = gen?.estado === "ejecutando";
   const salida = (gen?.salida ?? "").trim();
+  // Una etapa que falló suele morir SIN salida: el motivo del worker es lo único que explica el
+  // estado, así que ocupa el hueco del resultado en vez del texto de "todavía no ha corrido".
+  const fallo = gen?.estado === "error" ? (gen?.error ?? "").trim() : "";
   const prompt = (gen?.prompt || plantilla || "").trim();
   const esPlantilla = !gen?.prompt && !!plantilla;
   const m = gen?.metricas;
@@ -400,9 +403,11 @@ function BloqueIA({ gen, plantilla }: { gen?: PipelineGeneracion; plantilla?: st
             <div className="max-h-72 overflow-y-auto rounded bg-background/60 p-2">
               <Markdown className="text-xs text-foreground/90">{salida}</Markdown>
             </div>
+          ) : fallo ? (
+            <p className="rounded bg-destructive/10 p-2 text-xs text-destructive">{fallo}</p>
           ) : (
             <p className="text-xs italic text-muted-foreground">
-              {enCurso ? "En curso…" : "Aún no ejecutada"}
+              {enCurso ? "En curso…" : gen?.estado === "error" ? "Falló sin dejar motivo." : "Aún no ejecutada"}
             </p>
           )}
         </div>

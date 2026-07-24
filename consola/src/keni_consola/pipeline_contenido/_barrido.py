@@ -393,8 +393,8 @@ def ejecutar_redactar(*, autor: dict[str, str] | None = None) -> list[dict[str, 
     Topes: el carril 1 lo acota la ADMISIÓN (gate serial en curso); el carril 2 aplica un tope POR
     MARCA Y BARRIDO (`config.autogen_copy_max(marca)`, override por marca > default global) sobre el
     dedup por etiqueta + el backpressure de la cola. Si la cola se llena, corta la fase (el siguiente
-    tick reintenta). REINTENTOS ACOTADOS en el carril 1: al agotar `_MAX_INTENTOS_ETAPA`, el tema se
-    marca `problema` (sale del cupo en curso, fallo visible).
+    tick reintenta). REINTENTOS ACOTADOS en AMBOS carriles: al agotar `_MAX_INTENTOS_ETAPA`, el tema
+    se marca `problema` (sale del cupo en curso, fallo visible).
     Best-effort por tema. Devuelve las generaciones de copy lanzadas.
     """
     if autor is None:
@@ -483,7 +483,14 @@ def ejecutar_redactar(*, autor: dict[str, str] | None = None) -> list[dict[str, 
         tid = item.get("id", "") or ""
         # Reintentos acotados (mismo contador REDACTAR, keyed por tema): un copy del pool que falla
         # repetidamente deja de re-encolarse al agotar el tope; el éxito (etiqueta `autogen`) resetea.
+        # Salida TERMINAL VISIBLE (igual que el carril 1): el tema se marca `requiere_humano` con el
+        # motivo, así aparece en Problemas y una persona puede relanzarlo con «Generar». El propio
+        # marcado lo saca de `temas_autogen_sin_copy`, así que se escribe una sola vez.
         if _intentos.tope_alcanzado(tid, _intentos.ETAPA_REDACTAR):
+            marcar_fallo_etapa(
+                tid, "Copy",
+                f"La generación de copy falló {_MAX_INTENTOS_ETAPA} veces.",
+            )
             continue
         if _intentos.en_backoff(tid, _intentos.ETAPA_REDACTAR):
             continue

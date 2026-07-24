@@ -2181,6 +2181,59 @@ def test_ejecutar_cd_salta_pool_de_marca_apagada(entorno, monkeypatch):
     assert lanzadas == []
 
 
+def test_temas_autogen_sin_copy_salta_los_marcados_para_humano(entorno, monkeypatch):
+    """Un tema del pool marcado `requiere_humano` sale de la selección automática.
+
+    Es la salida TERMINAL de la etapa: el tema espera al botón «Generar» (que no consulta el
+    contador de intentos), no a otro barrido. El preview cuenta lo mismo que la selección.
+    """
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")  # «Generar copy» POR MARCA: sin la etapa ON se filtra todo
+    tema = repos.crear_publicacion(
+        clase="contenido", titulo="Noticia parada", marca="unotv", origen="rss",
+    )
+    repos.crear_pieza_fila(publicacion_id=tema["id"], red="x", falta_copy=True)
+    assert tema["id"] in {t["id"] for t in pc.temas_autogen_sin_copy()}
+    assert pc.preview_redactar_por_marca().get("unotv", 0) == 1
+
+    repos.actualizar_publicacion(
+        tema["id"], {"verificacion_fuente": pc.VERIFICACION_REQUIERE_HUMANO},
+    )
+    assert tema["id"] not in {t["id"] for t in pc.temas_autogen_sin_copy()}
+    assert pc.preview_redactar_por_marca().get("unotv", 0) == 0
+
+
+def test_ejecutar_cd_marca_el_tema_del_pool_al_agotar_intentos(entorno, monkeypatch):
+    """Al agotar los reintentos, el carril 2 da salida TERMINAL VISIBLE (igual que el carril 1).
+
+    El tema se marca `requiere_humano` con el motivo —así aparece en Problemas y una persona puede
+    relanzarlo— en vez de dejar de elegirse en silencio. El marcado lo saca de la selección, así
+    que el barrido no lo re-marca en cada tick.
+    """
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")  # etapa Redactar activa (sin el global no corre)
+    from keni_consola import autogen_redactar
+    from keni_consola.pipeline_contenido import _comun, _intentos
+
+    lanzadas: list[str] = []
+    monkeypatch.setattr(
+        autogen_redactar, "lanzar_para_topic",
+        lambda item: lanzadas.append(item["id"]) or {"id": "g"},
+    )
+    tema = repos.crear_publicacion(
+        clase="contenido", titulo="Noticia que falla", marca="unotv", origen="rss",
+    )
+    repos.crear_pieza_fila(publicacion_id=tema["id"], red="x", falta_copy=True)
+    for _ in range(_comun._MAX_INTENTOS_ETAPA):
+        _intentos.anotar(tema["id"], _intentos.ETAPA_REDACTAR)
+
+    pc.ejecutar_redactar(autor=None)
+
+    assert lanzadas == []  # con el tope agotado no se relanza
+    fresco = repos.obtener_publicacion(tema["id"])
+    assert fresco["verificacion_fuente"] == pc.VERIFICACION_REQUIERE_HUMANO
+    assert str(_comun._MAX_INTENTOS_ETAPA) in (fresco.get("verificar_hallazgos") or "")
+    assert tema["id"] not in {t["id"] for t in pc.temas_autogen_sin_copy()}
+
+
 # --------------------------------------------------------------------------- #
 # Etapa de ILUSTRAR del pipeline (toggle "Generar arte", KENI_PIPELINE_ILUSTRAR)    #
 # --------------------------------------------------------------------------- #

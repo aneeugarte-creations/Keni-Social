@@ -20,6 +20,8 @@ from ._comun import (
     ETAPA_REDACTAR,
     ORIGEN_PORTAL,
     TIPO_PIPELINE,
+    VERIFICACION_RECHAZADO,
+    VERIFICACION_REQUIERE_HUMANO,
     VERIFICACION_SALTADA,
     VERIFICACION_VERIFICADO,
     _copy_pendiente_leido,
@@ -43,6 +45,12 @@ __all__ = [
 # `no_verificado` para que la parrilla y Pipelines lo muestren.
 _REVISION_PIEZA_VERIFICADA = "listo"
 _REVISION_PIEZA_SIN_VERIFICAR = "no_verificado"
+
+# Verificaciones que SACAN un tema de la selección automática del pool. La etapa marca
+# `requiere_humano` al agotar sus reintentos (`marcar_fallo_etapa`): es su salida TERMINAL, así que
+# el tema espera a una persona (botón «Generar», que no consulta el contador) en vez de volver a la
+# cola de fondo. `rechazado` bloquea por el mismo criterio que en el carril del pipeline.
+_VERIFICACIONES_BLOQUEANTES = (VERIFICACION_REQUIERE_HUMANO, VERIFICACION_RECHAZADO)
 
 
 def lanzar_redactar_de_tema(
@@ -186,6 +194,7 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
     radar, rss, equipo) y que aún no tienen copy. La selección vive en esta función; en
     `autogen_redactar` solo el LANZADOR `lanzar_para_topic` + el dedup por etiqueta. Reglas:
       - clase 'contenido', origen en `ORIGENES_AUTOGEN`, estado != 'hecha',
+      - verificación NO bloqueante (`requiere_humano`/`rechazado` esperan a una persona),
       - con marca válida y título no vacío,
       - per-marca: salta las marcas apagadas a mano para «Generar copy» (`ENV_PIPELINE_REDACTAR`),
       - dedup: salta los ya encolados (etiqueta `autogen`, vía `autogen_redactar.ids_ya_generados`) y
@@ -216,6 +225,8 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
         if (item.get("origen") or "") not in ORIGENES_AUTOGEN:
             continue
         if (item.get("estado") or "") == "hecha":
+            continue
+        if (item.get("verificacion_fuente") or "") in _VERIFICACIONES_BLOQUEANTES:
             continue
         marca = item.get("marca") or ""
         if not marca or not marcas.es_marca(marca):
@@ -249,8 +260,9 @@ def preview_redactar_por_marca() -> dict[str, int]:
     """Cuenta, POR MARCA, cuántos temas autogenerables SIN copy entrarían a Redactar AHORA MISMO.
 
     Es el MISMO cómputo de selección que `temas_autogen_sin_copy` (orígenes autogen, clase
-    contenido, no `hecha`, marca válida, título no vacío, no ya encolado, con pieza donde
-    aterrizar y sin copy) PERO ignorando el gate `etapa_activa(ENV_PIPELINE_REDACTAR, marca)`:
+    contenido, no `hecha`, verificación no bloqueante, marca válida, título no vacío, no ya
+    encolado, con pieza donde aterrizar y sin copy) PERO ignorando el gate
+    `etapa_activa(ENV_PIPELINE_REDACTAR, marca)`:
     responde «cuántos habría SI la etapa estuviera encendida», agrupados por marca. PREVIEW puro:
     NO lanza ni encola nada. Best-effort: `{}` si el tablero no es legible.
     """
@@ -270,6 +282,8 @@ def preview_redactar_por_marca() -> dict[str, int]:
         if (item.get("origen") or "") not in ORIGENES_AUTOGEN:
             continue
         if (item.get("estado") or "") == "hecha":
+            continue
+        if (item.get("verificacion_fuente") or "") in _VERIFICACIONES_BLOQUEANTES:
             continue
         marca = item.get("marca") or ""
         if not marca or not marcas.es_marca(marca):

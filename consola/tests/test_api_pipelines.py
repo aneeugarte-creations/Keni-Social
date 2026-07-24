@@ -615,6 +615,32 @@ def test_detalle_expone_stream_de_la_etapa(cliente):
     assert cd["fase"] == generaciones.FASE_COMPLETADO
 
 
+def test_detalle_expone_el_motivo_del_fallo_de_la_etapa(cliente):
+    """Una etapa muerta en error trae su MOTIVO, no solo el estado.
+
+    Una generación que falla suele morir SIN salida (la CLI no llegó a escribir nada), así que el
+    motivo sellado por el worker es lo único que explica el estado: va tanto en el detalle por
+    etapa como en cada intento de la línea de tiempo, para leerlo sin abrir el stream.
+    """
+    tema = _tema_pipeline("Tema que falla")
+    gen = generaciones.crear({
+        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Copy · UnoTV",
+        "salida": "", "estado": generaciones.ESTADO_ERROR,
+        "error": "Se agotó el límite de la cuenta.",
+        "publicacion_id": tema["id"],
+        "fecha_inicio": "2026-06-30T10:00:00", "fecha_fin": "2026-06-30T10:00:30",
+    })
+    registrar_etapa(
+        ETAPA_REDACTAR, "unotv", "Generación de copy", publicacion_id=tema["id"], gen_id=gen["id"],
+    )
+
+    body = cliente.get(f"/api/pipelines/{tema['id']}").json()
+    assert body["generaciones_por_etapa"]["REDACTAR"]["error"] == "Se agotó el límite de la cuenta."
+    redactar = {e["etapa"]: e for e in body["linea_tiempo"]}["Redactar"]
+    assert redactar["estado_final"] == generaciones.ESTADO_ERROR
+    assert redactar["generaciones"][-1]["error"] == "Se agotó el límite de la cuenta."
+
+
 def test_detalle_sin_gen_id_no_trae_generacion(cliente):
     """Back-compat: un marcador SIN `gen_id` no añade nada a `generaciones_por_etapa`."""
     tema = _tema_pipeline("Tema sin stream")

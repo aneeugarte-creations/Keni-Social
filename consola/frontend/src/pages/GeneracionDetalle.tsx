@@ -205,6 +205,7 @@ export default function GeneracionDetalle() {
               fase: gen.fase,
               prompt: gen.prompt || "",
               salida: gen.salida || "",
+              error: gen.error || "",
               metricas: gen.metricas,
             }}
             defaultOpen

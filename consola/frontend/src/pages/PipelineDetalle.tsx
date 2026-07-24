@@ -46,11 +46,17 @@ function MetricasGen({ gen }: { gen: LineaTiempoGen }) {
 }
 
 /** Una fila de la línea de tiempo: una ETAPA con su estado y, si tuvo reintentos, el desglose
- *  intento a intento (cada uno enlaza a su stream). Con un único intento, enlace directo. */
+ *  intento a intento (cada uno enlaza a su stream, y enseña su motivo si falló). Con un único
+ *  intento, enlace directo. Una etapa terminada en error muestra el motivo del último intento en la
+ *  propia fila: es la respuesta a «por qué se paró aquí», y no debe exigir abrir el stream. */
 function FilaTimeline({ entrada }: { entrada: LineaTiempoEtapa }) {
   const [abierto, setAbierto] = useState(false);
   const varios = entrada.intentos > 1;
   const unica = entrada.generaciones.length === 1 ? entrada.generaciones[0] : undefined;
+  // Motivo del fallo TERMINAL de la etapa (el del último intento): se lee en la propia fila, sin
+  // tener que abrir el stream de cada intento para saber por qué se paró el post.
+  const ultima = entrada.generaciones[entrada.generaciones.length - 1];
+  const fallo = entrada.estado_final === "error" ? (ultima?.error ?? "").trim() : "";
   return (
     <div className="rounded-xl border bg-card">
       <div className="flex flex-wrap items-center gap-2 px-3 py-2">
@@ -84,21 +90,27 @@ function FilaTimeline({ entrada }: { entrada: LineaTiempoEtapa }) {
           )}
         </div>
       </div>
+      {fallo && <p className="border-t px-3 py-2 text-xs text-destructive">{fallo}</p>}
       {varios && abierto && (
         <ol className="divide-y border-t">
           {entrada.generaciones.map((g, i) => (
-            <li key={g.gen_id} className="flex flex-wrap items-center gap-2 px-3 py-1.5 pl-9">
-              <span className="text-[11px] tabular-nums text-muted-foreground">#{i + 1}</span>
-              <ChipEstado estado={g.estado} />
-              <span className="text-[11px] tabular-nums text-muted-foreground">
-                {formatearHora(g.fecha)}
-              </span>
-              <div className="ml-auto flex items-center gap-3">
-                <MetricasGen gen={g} />
-                <Link to={urlStream(g.gen_id)} className="text-[11px] text-primary hover:underline">
-                  Stream →
-                </Link>
+            <li key={g.gen_id} className="px-3 py-1.5 pl-9">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] tabular-nums text-muted-foreground">#{i + 1}</span>
+                <ChipEstado estado={g.estado} />
+                <span className="text-[11px] tabular-nums text-muted-foreground">
+                  {formatearHora(g.fecha)}
+                </span>
+                <div className="ml-auto flex items-center gap-3">
+                  <MetricasGen gen={g} />
+                  <Link to={urlStream(g.gen_id)} className="text-[11px] text-primary hover:underline">
+                    Stream →
+                  </Link>
+                </div>
               </div>
+              {g.error.trim() && (
+                <p className="mt-1 text-[11px] text-destructive">{g.error.trim()}</p>
+              )}
             </li>
           ))}
         </ol>

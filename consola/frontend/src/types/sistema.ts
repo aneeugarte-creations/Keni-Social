@@ -652,6 +652,8 @@ export interface PipelineGeneracion {
   prompt: string;
   /** Stream token a token: el razonamiento del agente + el resultado final. */
   salida: string;
+  /** Motivo del cierre en fallo tal cual lo selló el worker. "" si la generación no falló. */
+  error: string;
   metricas: MetricasRun | null;
 }
 
@@ -661,6 +663,8 @@ export interface LineaTiempoGen {
   gen_id: string;
   estado: string;
   fecha: string;
+  /** Motivo del fallo de ESE intento. "" si el intento no falló. */
+  error: string;
   coste_usd: number | null;
   tokens: number | null;
 }

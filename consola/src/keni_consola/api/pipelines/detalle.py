@@ -59,7 +59,8 @@ def _generacion_publica(gen_id: str) -> dict | None:
 
     Solo los campos que la vista necesita para pintar el proceso del agente: `salida` es el
     stream token a token (el "proceso de pensamiento"); `fase`/`estado` dicen en qué punto va
-    (Razonando/Escribiendo/Completado). None si el id no resuelve (best-effort, no rompe).
+    (Razonando/Escribiendo/Completado); `error` es el motivo del cierre en fallo. None si el id
+    no resuelve (best-effort, no rompe).
     """
     if not gen_id:
         return None
@@ -73,6 +74,9 @@ def _generacion_publica(gen_id: str) -> dict | None:
         # Prompt EXACTO que se le mandó a la IA (transparencia: qué se le pidió).
         "prompt": gen.get("prompt", "") or "",
         "salida": gen.get("salida", "") or "",
+        # Motivo del fallo tal cual lo selló el worker (límite de la cuenta, timeout, CLI caída…).
+        # Una generación en error suele morir SIN salida, así que es lo único que explica el estado.
+        "error": gen.get("error", "") or "",
         "metricas": gen.get("metricas"),
     }
 
@@ -185,6 +189,8 @@ def _gen_linea(gen: dict) -> dict:
         "gen_id": gen.get("id", "") or "",
         "estado": gen.get("estado", "") or "",
         "fecha": gen.get("fecha_fin") or gen.get("fecha_inicio") or "",
+        # Motivo del fallo del intento: la línea de tiempo lo enseña sin salir a la vista de stream.
+        "error": gen.get("error", "") or "",
         "coste_usd": m.get("coste_usd"),
         "tokens": m.get("tokens"),
     }
