@@ -29,6 +29,7 @@ TIPOS DE EVENTO (estables; el frontend y los webhooks se suscriben por nombre):
   - `contenido.vencido` un contenido pasa su `fecha_entrega` sin estar cerrado.
   - `pieza.bajo_rendimiento`    una pieza publicada cae por debajo del umbral de engagement.
   - `revision.estancada`        N piezas de una marca llevan >X h en la cola de revisión.
+  - `cuenta.credencial_expira`  la credencial de una cuenta de Claude caduca (o ya caducó).
 """
 
 from __future__ import annotations
@@ -56,6 +57,10 @@ TIPOS_EVENTO: tuple[str, ...] = (
     # Cola de revisión ESTANCADA: N piezas de una marca llevan >X h en `en_revision` sin
     # decisión. AGREGADO por marca (un aviso al día); lo emite el mismo barrido de alertas.
     "revision.estancada",
+    # CREDENCIAL de una cuenta de Claude a punto de caducar (o ya caducada). Sin credencial viva
+    # NADA se genera, y una sin `refreshToken` no se renueva sola: exige `claude auth login`.
+    # Lo emite el muestreo de cuentas (`cuenta_uso_daemon`), un aviso por estado y día.
+    "cuenta.credencial_expira",
 )
 
 # Formatos de payload del POST saliente. `generico` = el evento crudo (`{tipo, datos, ...}`).
@@ -97,6 +102,18 @@ def _resumen_humano(tipo: str, datos: dict[str, Any]) -> str:
         cuantas = f"{n} pieza(s)" if isinstance(n, int) else "Hay piezas que"
         umbral = f" más de {horas} h" if isinstance(horas, (int, float)) else " demasiado"
         return f"⏳ {cuantas} llevan{umbral} esperando revisión{cola}"
+    if tipo == "cuenta.credencial_expira":
+        quien = str(datos.get("etiqueta") or "").strip()
+        cual = f"cuenta {str(datos.get('cuenta') or '').upper()}".strip()
+        de_quien = f"{cual} ({quien})" if quien else cual
+        if datos.get("caducada"):
+            return (
+                f"🔑 La credencial de la {de_quien} CADUCÓ: no se genera nada con ella "
+                f"hasta volver a autenticarla"
+            )
+        horas = datos.get("horas_restantes")
+        plazo = f" en {horas:.0f} h" if isinstance(horas, (int, float)) else " pronto"
+        return f"🔑 La credencial de la {de_quien} caduca{plazo}: vuelve a autenticarla"
     return f"{tipo}: «{titulo}»{cola}"
 
 

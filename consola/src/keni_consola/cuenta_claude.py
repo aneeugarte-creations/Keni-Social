@@ -275,6 +275,66 @@ def parsear_estado(stdout: str) -> dict:
     }
 
 
+# Fichero donde `claude` persiste las credenciales OAuth dentro de su `CLAUDE_CONFIG_DIR`.
+_FICHERO_CREDENCIALES = ".credentials.json"
+
+
+def _dir_credenciales(cuenta: str | None) -> str:
+    """Directorio de credenciales de la cuenta: el forzado de la B o el heredado del contenedor."""
+    return _config_dir_de(cuenta) or (os.environ.get("CLAUDE_CONFIG_DIR") or "").strip()
+
+
+def parsear_caducidad(datos: object, ahora: datetime | None = None) -> dict:
+    """Estado de caducidad a partir del JSON de credenciales (PURA, sin tocar disco ni el token).
+
+    -> `{conocida, caducada, expira_en_iso, segundos_restantes, tiene_refresh}`. `conocida=False`
+    cuando el blob no trae `expiresAt` (formato inesperado o credenciales de otro tipo): sin
+    referencia temporal NO se afirma nada, para no avisar en falso.
+
+    NUNCA devuelve el token: solo su instante de caducidad y si hay `refreshToken`. Un blob SIN
+    refresh no se renueva solo, así que al caducar exige `claude auth login` a mano.
+    """
+    base = {"conocida": False, "caducada": False, "expira_en_iso": "",
+            "segundos_restantes": None, "tiene_refresh": False}
+    if not isinstance(datos, dict):
+        return base
+    oauth = datos.get("claudeAiOauth")
+    if not isinstance(oauth, dict):
+        return base
+    expira_ms = oauth.get("expiresAt")
+    if not isinstance(expira_ms, (int, float)):
+        return base
+    momento = datetime.fromtimestamp(float(expira_ms) / 1000.0, timezone.utc)
+    referencia = ahora or datetime.now(timezone.utc)
+    restantes = (momento - referencia).total_seconds()
+    return {
+        "conocida": True,
+        "caducada": restantes <= 0,
+        "expira_en_iso": momento.isoformat(),
+        "segundos_restantes": restantes,
+        "tiene_refresh": bool(oauth.get("refreshToken")),
+    }
+
+
+def caducidad(cuenta: str | None = None, ahora: datetime | None = None) -> dict:
+    """Caducidad de las credenciales de `cuenta` leyendo su `.credentials.json`. Best-effort.
+
+    Mismo contrato que `parsear_caducidad`; con el fichero ausente o ilegible devuelve
+    `conocida=False` (nunca lanza: es una señal de vigilancia, no un camino crítico).
+    """
+    import json
+
+    directorio = _dir_credenciales(cuenta)
+    if not directorio:
+        return parsear_caducidad(None, ahora)
+    try:
+        with open(os.path.join(directorio, _FICHERO_CREDENCIALES), encoding="utf-8") as fichero:
+            datos = json.load(fichero)
+    except (OSError, ValueError):
+        return parsear_caducidad(None, ahora)
+    return parsear_caducidad(datos, ahora)
+
+
 def parsear_uso(stdout: str, ahora: datetime | None = None) -> dict:
     """Parsea `claude -p /usage` -> {disponible, mensaje, medidores:[{etiqueta,pct,reset,reset_iso}], crudo}.
 

@@ -254,3 +254,57 @@ def test_uso_cuenta_b_cachea_aparte(monkeypatch, tmp_path):
     assert r["disponible"] is True
     assert (tmp_path / "usage-cache-b.json").exists()
     assert not (tmp_path / "usage-cache.json").exists()
+
+
+# --------------------------------------------------------------------------- #
+# Caducidad de la credencial (lo que decide si la cuenta puede generar)        #
+# --------------------------------------------------------------------------- #
+
+
+def _creds(expira: datetime, *, refresh: bool = True) -> dict:
+    """Blob de credenciales como el que persiste `claude` (solo los campos que se miran)."""
+    oauth = {"expiresAt": int(expira.timestamp() * 1000), "accessToken": "no-se-mira"}
+    if refresh:
+        oauth["refreshToken"] = "tampoco-se-mira"
+    return {"claudeAiOauth": oauth}
+
+
+def test_parsear_caducidad_credencial_viva():
+    viva = _creds(_AHORA.replace(hour=20))
+    r = cc.parsear_caducidad(viva, _AHORA)
+    assert r["conocida"] is True and r["caducada"] is False
+    assert r["tiene_refresh"] is True
+    assert r["segundos_restantes"] == 8 * 3600
+    # NUNCA se filtra el token: solo la caducidad y si hay refresh.
+    assert "accessToken" not in r and "refreshToken" not in r
+
+
+def test_parsear_caducidad_credencial_muerta_y_sin_refresh():
+    """El caso que paró la generación: token caducado y SIN refresh (no se renueva solo)."""
+    muerta = _creds(_AHORA.replace(hour=11), refresh=False)
+    r = cc.parsear_caducidad(muerta, _AHORA)
+    assert r["caducada"] is True
+    assert r["tiene_refresh"] is False
+    assert r["segundos_restantes"] == -3600
+
+
+def test_parsear_caducidad_sin_dato_no_afirma_nada():
+    # Sin `expiresAt` no hay referencia temporal: `conocida=False` para no avisar en falso.
+    for entrada in (None, {}, {"claudeAiOauth": {}}, {"claudeAiOauth": {"expiresAt": "ayer"}}):
+        assert cc.parsear_caducidad(entrada, _AHORA)["conocida"] is False
+
+
+def test_caducidad_lee_el_fichero_de_la_cuenta(monkeypatch, tmp_path):
+    import json
+
+    (tmp_path / ".credentials.json").write_text(
+        json.dumps(_creds(_AHORA.replace(hour=20))), encoding="utf-8"
+    )
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path))
+    assert cc.caducidad("a", _AHORA)["caducada"] is False
+
+
+def test_caducidad_sin_fichero_es_best_effort(monkeypatch, tmp_path):
+    # Fichero ausente/ilegible: no lanza y no afirma nada (es vigilancia, no camino critico).
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path))
+    assert cc.caducidad("a", _AHORA)["conocida"] is False

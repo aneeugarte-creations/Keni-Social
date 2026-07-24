@@ -135,6 +135,9 @@ ENV_GENERACION_PAUSADA = "KENI_GENERACION_PAUSADA"
 # Caducidad (horas) del medidor `/usage` para el gate diario por cuenta: sin lectura VALIDA mas
 # reciente que este plazo, el gate corta el FONDO de la cuenta (fail-closed). 0 = apagado.
 ENV_GATE_METER_STALE_H = "KENI_GATE_METER_STALE_H"
+# Antelacion (horas) con la que se avisa de que la credencial de una cuenta de Claude va a
+# caducar. Sin credencial viva no se genera nada. 0 = solo se avisa cuando YA ha caducado.
+ENV_CUENTA_AVISO_CADUCIDAD_H = "KENI_CUENTA_AVISO_CADUCIDAD_H"
 # Tope de INTENTOS de ejecucion de un job de la cola (anti crash-loop del re-reclamo).
 ENV_JOBS_MAX_INTENTOS = "KENI_JOBS_MAX_INTENTOS"
 # Retencion (dias) de las filas CRUDAS del ledger `gasto_ia`: lo mas viejo se compacta en el
@@ -687,6 +690,9 @@ PRESUPUESTO_MARGEN_MANUAL_DEF = 20
 # Horas sin lectura valida del medidor `/usage` tras las que el gate diario corta el fondo de
 # la cuenta (fail-closed). 6 h = varios barridos de muestreo fallidos seguidos, no un blip.
 GATE_METER_STALE_H_DEF = 6
+# Antelacion del aviso de credencial por caducar. 2 h da margen para re-autenticar a mano
+# (el flujo es interactivo) antes de que la generacion se pare.
+CUENTA_AVISO_CADUCIDAD_H_DEF = 2
 # Intentos maximos de ejecucion de un job (el normal + re-reclamos de suelto). 3 da dos
 # reintentos automaticos tras muertes del worker sin permitir un crash-loop infinito.
 JOBS_MAX_INTENTOS_DEF = 3
@@ -1116,6 +1122,7 @@ __all__ = [
     'ENV_PRESUPUESTO_TOKENS_PRODUCCION_OUT_DIA',
     'ENV_PRESUPUESTO_USD_DIA',
     'ENV_GENERACION_PAUSADA',
+    'ENV_CUENTA_AVISO_CADUCIDAD_H',
     'ENV_GATE_METER_STALE_H',
     'ENV_GASTO_IA_RETENCION_DIAS',
     'ENV_JOBS_MAX_INTENTOS',
@@ -1195,6 +1202,7 @@ __all__ = [
     'PROMPT_AVISO_CHARS_DEF',
     'MAX_JOBS_DEF',
     'PRESUPUESTO_MARGEN_MANUAL_DEF',
+    'CUENTA_AVISO_CADUCIDAD_H_DEF',
     'GATE_METER_STALE_H_DEF',
     'PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA_DEF',
     'PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA_DEF',

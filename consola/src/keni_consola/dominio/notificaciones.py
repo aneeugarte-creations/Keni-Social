@@ -17,7 +17,8 @@ aprobar, publicar). Cada entrada publica atrapa y loguea.
 
 TIPOS: `mencion` · `comentario` · `aprobacion` · `rechazo` · `pieza` · `asignacion`
 · `revision` (avisos AGREGADOS de la cola de revisión: piezas nuevas / piezas estancadas;
-van a los COORDINADORES de la marca, sin pieza concreta).
+van a los COORDINADORES de la marca, sin pieza concreta) · `sistema` (estado de la
+maquinaria, no del contenido: va a los ADMIN y no cuelga de ninguna marca).
 """
 
 from __future__ import annotations
@@ -38,6 +39,9 @@ TIPOS: tuple[str, ...] = (
     "pieza",
     "asignacion",
     "revision",
+    # Estado de la MAQUINARIA (credencial de una cuenta caducando, etc.): sin marca y a los
+    # admin, que son quienes pueden arreglarlo.
+    "sistema",
 )
 
 
@@ -328,3 +332,31 @@ def tras_revision_estancada(marca_id: str, n: int, horas: int) -> None:
         )
     except Exception:  # noqa: BLE001 -- notificar nunca rompe el barrido de alertas
         log.exception("Fallo notificando la revisión estancada de %r.", marca_id)
+
+
+def _admins() -> set[str]:
+    """Ids de los usuarios que GOBIERNAN la operación (rol admin o flag superadmin)."""
+    return {
+        str(u.get("id") or "")
+        for u in auth.listar_usuarios()
+        if u.get("rol") == "admin" or u.get("superadmin")
+    } - {""}
+
+
+def tras_credencial_por_caducar(cuenta: str, etiqueta: str, *, caducada: bool, horas: float) -> None:
+    """La credencial de una cuenta de Claude caduca (o ya caducó): avisa a los ADMIN.
+
+    No es de una marca (una cuenta sirve a varias), así que el destinatario es quien puede
+    arreglarlo: los admin, que son los que tienen el panel de cuenta. Aviso ya deduplicado por el
+    barrido que lo llama. Best-effort: un fallo aquí nunca frena el muestreo.
+    """
+    try:
+        quien = f"cuenta {cuenta.upper()}" + (f" ({etiqueta})" if etiqueta else "")
+        resumen = (
+            f"La credencial de la {quien} caducó: vuelve a autenticarla o no se generará nada"
+            if caducada
+            else f"La credencial de la {quien} caduca en {horas:.0f} h: vuelve a autenticarla"
+        )
+        _repartir(_admins(), marca_id="", tipo="sistema", resumen=resumen)
+    except Exception:  # noqa: BLE001 -- notificar nunca rompe el muestreo de cuentas
+        log.exception("Fallo notificando la caducidad de la cuenta %r.", cuenta)

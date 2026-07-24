@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from ._comun import (
     _VERDADEROS,
+    ENV_CUENTA_AVISO_CADUCIDAD_H,
     ENV_GASTO_IA_RETENCION_DIAS,
     ENV_GATE_METER_STALE_H,
     ENV_GENERACION_PAUSADA,
@@ -19,6 +20,7 @@ from ._comun import (
     ENV_WORKER_CARRILES,
     ENV_WORKER_EXTERNO,
     ENV_WORKER_SONDEO_SEGUNDOS,
+    CUENTA_AVISO_CADUCIDAD_H_DEF,
     GASTO_IA_RETENCION_DIAS_DEF,
     GATE_METER_STALE_H_DEF,
     JOBS_MAX_INTENTOS_DEF,
@@ -130,6 +132,17 @@ def gate_medidor_caducidad_h() -> int:
     (store de ajustes > env > defecto).
     """
     return _entero(ENV_GATE_METER_STALE_H, GATE_METER_STALE_H_DEF, minimo=0)
+
+
+def cuenta_aviso_caducidad_h() -> int:
+    """Antelacion (h) del aviso de credencial por caducar (`KENI_CUENTA_AVISO_CADUCIDAD_H`, def 2).
+
+    Con la credencial de una cuenta de Claude a menos de este plazo de caducar, el muestreo emite
+    `cuenta.credencial_expira` (webhook/Slack + aviso in-app a los admin) para que alguien la
+    re-autentique ANTES de que la generacion se pare: el login es interactivo, no se arregla solo.
+    `0` = sin aviso previo (solo se avisa cuando YA ha caducado). Editable en caliente.
+    """
+    return _entero(ENV_CUENTA_AVISO_CADUCIDAD_H, CUENTA_AVISO_CADUCIDAD_H_DEF, minimo=0)
 
 
 def presupuesto_margen_manual_pct() -> int:

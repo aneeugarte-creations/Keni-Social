@@ -34,7 +34,7 @@ from .. import repos
 # `dominio.eventos.TIPOS_EVENTO`). Se nombran aqui de forma explicita para no acoplar el
 # filtro al orden/contenido completo de `TIPOS_EVENTO`.
 TIPOS_ALERTA: frozenset[str] = frozenset(
-    {"pieza.bajo_rendimiento", "revision.estancada"}
+    {"pieza.bajo_rendimiento", "revision.estancada", "cuenta.credencial_expira"}
 )
 
 _LIMITE_DEF = 50

@@ -8,7 +8,9 @@ export type TipoEventoInterno =
   // Fase 3 auto-operativa: alertas proactivas del barrido `alertas_rendimiento`.
   | "pieza.bajo_rendimiento"
   // Cola de revisión estancada: N piezas de una marca llevan >X h esperando decisión.
-  | "revision.estancada";
+  | "revision.estancada"
+  // Credencial de una cuenta de Claude a punto de caducar (o ya caducada): sin ella no se genera.
+  | "cuenta.credencial_expira";
 
 /** Forma del payload del POST saliente: `generico` (evento crudo) | `slack` (`{text}`). */
 export type FormatoWebhook = "generico" | "slack";
@@ -98,7 +100,10 @@ export type TipoNotificacion =
   | "ausencia_descubierto"
   // Aviso AGREGADO de la cola de revisión (a los coordinadores de la marca): «N piezas
   // nuevas en la cola» (avance del pipeline) o «N piezas llevan >X h esperando revisión».
-  | "revision";
+  | "revision"
+  // Estado de la MAQUINARIA, no del contenido (p. ej. la credencial de una cuenta de Claude
+  // caducando): va a los admin y no cuelga de ninguna marca.
+  | "sistema";
 
 /** Una notificación del buzón de un usuario sobre una pieza. */
 export interface Notificacion {
@@ -139,7 +144,10 @@ export interface RespuestaMencionesCandidatos {
 }
 
 /** Tipo de alerta del barrido (subconjunto de eventos internos de la bitácora). */
-export type TipoAlerta = "pieza.bajo_rendimiento" | "revision.estancada";
+export type TipoAlerta =
+  | "pieza.bajo_rendimiento"
+  | "revision.estancada"
+  | "cuenta.credencial_expira";
 
 /**
  * Una alerta de rendimiento leída de la bitácora (`GET /api/alertas`): aviso proactivo

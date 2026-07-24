@@ -440,6 +440,7 @@ from .hosted import (  # noqa: F401
 )
 from .jobs import (  # noqa: F401
     GASTO_IA_RETENCION_DIAS_MIN,
+    cuenta_aviso_caducidad_h,
     gasto_ia_retencion_dias,
     gate_medidor_caducidad_h,
     generacion_pausada,

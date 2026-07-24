@@ -16,6 +16,7 @@ import {
   Bell,
   CalendarOff,
   ClipboardList,
+  KeyRound,
   Megaphone,
   MessageSquare,
   ThumbsUp,
@@ -50,6 +51,8 @@ const ICONO: Record<TipoNotificacion, React.ComponentType<{ className?: string }
   ausencia_descubierto: CalendarOff,
   // Avisos agregados de la cola de revisión (piezas nuevas / estancadas).
   revision: ClipboardList,
+  // Estado de la maquinaria (credencial de una cuenta caducando): sin marca, a los admin.
+  sistema: KeyRound,
 };
 
 /** Ruta del feed: destino base al pulsar una notificación. */

@@ -64,6 +64,7 @@ const ETIQUETA_EVENTO: Record<TipoEventoInterno, string> = {
   "contenido.vencido": "Publicacion vencido",
   "pieza.bajo_rendimiento": "Pieza con bajo rendimiento",
   "revision.estancada": "Cola de revisión estancada",
+  "cuenta.credencial_expira": "Credencial de cuenta por caducar",
 };
 
 const ETIQUETA_FORMATO: Record<FormatoWebhook, string> = {

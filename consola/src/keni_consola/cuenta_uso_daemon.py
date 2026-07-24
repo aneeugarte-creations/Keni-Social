@@ -1,4 +1,4 @@
-"""Muestreo de fondo del USO de la cuenta de Claude: persiste un snapshot cada N minutos.
+"""Muestreo de fondo del ESTADO de las cuentas de Claude: uso (snapshot) + caducidad (aviso).
 
 PROBLEMA QUE RESUELVE
 =====================
@@ -6,6 +6,12 @@ El medidor de la suscripción (`cuenta_claude.uso()` -> `claude -p /usage`) solo
 cuando un admin abría el panel Sistema→Cuenta. El indicador siempre-visible de la barra lateral
 y el gate diario por porcentaje necesitan el dato SIN intervención: este daemon lo muestrea en
 background y lo deja en la tabla `cuenta_uso` (último snapshot + base del consumo de hoy).
+
+En la misma pasada vigila la CADUCIDAD de la credencial de cada cuenta y avisa ANTES de que se
+pare la generación (`cuenta.credencial_expira` -> webhook/Slack + aviso in-app a los admin). El
+cupo y la credencial son los dos estados que deciden si una cuenta puede generar; el medidor solo
+cubría el primero, y una credencial muerta no la delata (`claude auth status` sigue diciendo
+`loggedIn`, y el medidor cacheado congela el último porcentaje bueno).
 
 DÓNDE CORRE: en el proceso `daemons` (la imagen con Node + `claude`); el `back` NO ejecuta
 `claude`. El endpoint admin (`api/sistema/uso`) solo LEE la tabla.
@@ -21,10 +27,58 @@ import logging
 import threading
 import time
 
-from . import config, cuenta_claude, daemon_util, repos
-from .dominio import jobspec
+from . import config, cuenta_claude, daemon_util, repos, ruteo_cuentas
+from .dominio import eventos, jobspec, notificaciones
+from .tiempo import hoy_utc
 
 _log = logging.getLogger("keni_consola.cuenta_uso_daemon")
+
+
+def _avisar_credencial(cuenta: str, hoy_iso: str) -> bool:
+    """Avisa si la credencial de `cuenta` ya caducó o le queda menos de la antelación configurada.
+
+    Sin credencial viva NO se genera nada con esa cuenta, y una sin `refreshToken` no se renueva
+    sola: el arreglo es un `claude auth login` a mano. Por eso el aviso es PROACTIVO
+    (`config.cuenta_aviso_caducidad_h`), para llegar antes de que la generación se pare.
+
+    Un aviso por ESTADO y día (`clave_idempotencia`): el paso de «por caducar» a «caducada» vuelve
+    a avisar, pero el barrido no repite el mismo aviso en cada muestreo. Devuelve True si emitió uno
+    NUEVO. Best-effort: sin lectura de la credencial (`conocida=False`) no afirma nada.
+    """
+    estado = cuenta_claude.caducidad(cuenta)
+    if not estado.get("conocida"):
+        return False
+    caducada = bool(estado.get("caducada"))
+    horas = float(estado.get("segundos_restantes") or 0.0) / 3600.0
+    antelacion = config.cuenta_aviso_caducidad_h()
+    if not caducada and (antelacion <= 0 or horas > antelacion):
+        return False
+    etiqueta = ruteo_cuentas.etiqueta_de_cuenta(cuenta)
+    nuevo = eventos.emitir(
+        "cuenta.credencial_expira",
+        {
+            "cuenta": cuenta,
+            "etiqueta": etiqueta,
+            "caducada": caducada,
+            "horas_restantes": round(horas, 1),
+            "expira_en_iso": estado.get("expira_en_iso") or "",
+            # Una credencial sin refresh NO se renueva sola: el aviso es la única vía de arreglo.
+            "tiene_refresh": bool(estado.get("tiene_refresh")),
+        },
+        clave_idempotencia=(
+            f"cuenta.credencial_expira:{cuenta}:{'caducada' if caducada else 'aviso'}:{hoy_iso}"
+        ),
+    )
+    if nuevo:
+        _log.warning(
+            "cuenta %s: credencial %s (expira %s); hace falta `claude auth login`.",
+            cuenta, "CADUCADA" if caducada else f"caduca en {horas:.1f} h",
+            estado.get("expira_en_iso") or "?",
+        )
+        notificaciones.tras_credencial_por_caducar(
+            cuenta, etiqueta, caducada=caducada, horas=horas,
+        )
+    return nuevo
 
 
 def _extraer_medidores(uso: dict) -> dict:
@@ -69,12 +123,20 @@ def ejecutar_barrido() -> dict:
     Best-effort POR CUENTA: si una cuenta no está logueada, su lectura no trae medidor y su fila
     queda `conectada=false` (no rompe ni frena la otra). Devuelve `{cuenta: fila}` para todas las
     cuentas, que alimenta el resumen del barrido (`_resumen_barrido`).
+
+    En la misma pasada vigila la CADUCIDAD de la credencial de cada cuenta (`_avisar_credencial`):
+    es el otro estado que decide si esa cuenta puede generar, y se lee del mismo sitio.
     """
     filas: dict[str, dict] = {}
+    hoy_iso = hoy_utc()
     for cuenta in jobspec.CUENTAS:
         datos = cuenta_claude.uso(cuenta)
         campos = _extraer_medidores(datos)
         filas[cuenta] = repos.guardar_uso_cuenta(cuenta=cuenta, **campos)
+        try:
+            _avisar_credencial(cuenta, hoy_iso)
+        except Exception:  # noqa: BLE001 -- la vigilancia nunca frena el muestreo de uso
+            _log.warning("cuenta %s: fallo el aviso de caducidad.", cuenta, exc_info=True)
     return filas
 
 

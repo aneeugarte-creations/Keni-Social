@@ -157,3 +157,69 @@ def test_resumen_barrido():
     filas = {"a": {"conectada": 1, "semana_pct": 67}, "b": {"conectada": 0}}
     assert dae._resumen_barrido(filas) == "a: semana 67% · b: sin medidor"
     assert dae._resumen_barrido({}) == "sin cuentas"
+
+
+# --------------------------------------------------------------------------- #
+# Aviso de CADUCIDAD de la credencial (el otro estado que decide si genera)    #
+# --------------------------------------------------------------------------- #
+
+
+def _caducidad(*, caducada: bool, horas: float, refresh: bool = True) -> dict:
+    return {
+        "conocida": True, "caducada": caducada, "expira_en_iso": "2026-07-24T17:16:22+00:00",
+        "segundos_restantes": horas * 3600.0, "tiene_refresh": refresh,
+    }
+
+
+def _capturar_emisiones(monkeypatch) -> list[tuple[str, dict, str]]:
+    """Sustituye el bus de eventos y el aviso in-app; devuelve la lista de emisiones."""
+    emitidos: list[tuple[str, dict, str]] = []
+
+    def falso_emitir(tipo, datos, *, clave_idempotencia="", **_resto):
+        emitidos.append((tipo, datos, clave_idempotencia))
+        return True
+
+    monkeypatch.setattr(dae.eventos, "emitir", falso_emitir)
+    monkeypatch.setattr(
+        dae.notificaciones, "tras_credencial_por_caducar",
+        lambda *a, **k: None,
+    )
+    return emitidos
+
+
+def test_avisa_cuando_la_credencial_ya_caduco(entorno, monkeypatch):
+    """Credencial muerta: avisa SIEMPRE, sea cual sea la antelación configurada."""
+    monkeypatch.setenv("KENI_CUENTA_AVISO_CADUCIDAD_H", "0")  # sin aviso previo
+    monkeypatch.setattr(dae.cuenta_claude, "caducidad", lambda c: _caducidad(caducada=True, horas=-2, refresh=False))
+    emitidos = _capturar_emisiones(monkeypatch)
+
+    assert dae._avisar_credencial("a", "2026-07-24") is True
+    tipo, datos, clave = emitidos[0]
+    assert tipo == "cuenta.credencial_expira"
+    assert datos["caducada"] is True and datos["tiene_refresh"] is False
+    assert clave == "cuenta.credencial_expira:a:caducada:2026-07-24"
+
+
+def test_avisa_antes_de_caducar_dentro_de_la_antelacion(entorno, monkeypatch):
+    monkeypatch.setenv("KENI_CUENTA_AVISO_CADUCIDAD_H", "2")
+    monkeypatch.setattr(dae.cuenta_claude, "caducidad", lambda c: _caducidad(caducada=False, horas=1.5))
+    emitidos = _capturar_emisiones(monkeypatch)
+
+    assert dae._avisar_credencial("a", "2026-07-24") is True
+    _tipo, datos, clave = emitidos[0]
+    assert datos["caducada"] is False and datos["horas_restantes"] == 1.5
+    # Clave distinta a la de «caducada»: el paso de aviso previo a muerta vuelve a avisar.
+    assert clave == "cuenta.credencial_expira:a:aviso:2026-07-24"
+
+
+def test_no_avisa_con_la_credencial_holgada_ni_sin_lectura(entorno, monkeypatch):
+    monkeypatch.setenv("KENI_CUENTA_AVISO_CADUCIDAD_H", "2")
+    emitidos = _capturar_emisiones(monkeypatch)
+
+    monkeypatch.setattr(dae.cuenta_claude, "caducidad", lambda c: _caducidad(caducada=False, horas=7))
+    assert dae._avisar_credencial("a", "2026-07-24") is False
+
+    # Sin lectura de la credencial no se afirma nada (no se avisa en falso).
+    monkeypatch.setattr(dae.cuenta_claude, "caducidad", lambda c: {"conocida": False})
+    assert dae._avisar_credencial("a", "2026-07-24") is False
+    assert emitidos == []

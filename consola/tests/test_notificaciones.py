@@ -19,6 +19,7 @@ def test_tipos_canonicos():
         "pieza",
         "asignacion",
         "revision",
+        "sistema",
     )
 
 
@@ -81,3 +82,20 @@ def test_revision_estancada_notifica_con_umbral(monkeypatch):
     assert creadas[0]["tipo"] == "revision"
     assert creadas[0]["marca_id"] == "claro-sports"
     assert "4 piezas llevan más de 24 h" in creadas[0]["resumen"]
+
+
+def test_credencial_por_caducar_avisa_a_los_admin(monkeypatch):
+    """El aviso de credencial va a los ADMIN y sin marca: es maquinaria, no contenido."""
+    creadas = _capturar_reparto(monkeypatch, set())
+    monkeypatch.setattr(n, "_admins", lambda: {"admin-1"})
+
+    n.tras_credencial_por_caducar("a", "Claro Sports", caducada=False, horas=1.6)
+    assert len(creadas) == 1
+    assert creadas[0]["tipo"] == "sistema"
+    assert creadas[0]["marca_id"] == ""
+    assert "caduca en 2 h" in creadas[0]["resumen"]
+    assert "cuenta A (Claro Sports)" in creadas[0]["resumen"]
+
+    creadas.clear()
+    n.tras_credencial_por_caducar("a", "", caducada=True, horas=-3)
+    assert "caducó" in creadas[0]["resumen"]
