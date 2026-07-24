@@ -10,6 +10,9 @@ Cubre las migraciones de datos del tracking de origen de las fotos del PORTAL:
   - REORG subidas (`_migrar_reorg_subidas_a_subidas`): lleva las subidas de `artes/` a `subidas/`.
   - REORG externas (`_migrar_reorg_externas_a_fotos`): vacía la legacy `originales/` hacia `fotos/`
     sin arrastrar stragglers del portal.
+  - REAPUNTE de DOCUMENTOS (`_migrar_reapuntar_media_documentos`): un reorg mueve el binario, así
+    que el documento de la plantilla del estudio debe seguir apuntando a su logo —tanto durante el
+    reorg como al reparar los documentos que quedaron con la key muerta—.
 
 OFFLINE: backend de media en DISCO (la fixture `entorno` borra las S3_*); DB en el Postgres de
 pruebas. Las migraciones de datos se invocan directamente con una conexión cruda.
@@ -23,6 +26,7 @@ from keni_consola import almacen_media, motor_db, repos
 from keni_consola._db_core.migraciones_columnas import (
     _migrar_backfill_origen_catalogo,
     _migrar_fuente_subidas,
+    _migrar_reapuntar_media_documentos,
     _migrar_reorg_externas_a_fotos,
     _migrar_reorg_originales_a_portal,
     _migrar_reorg_subidas_a_subidas,
@@ -289,3 +293,62 @@ def test_reorg_externas_no_arrastra_straggler_del_portal(entorno):
     _aplicar(_migrar_reorg_externas_a_fotos)
     # Se queda en `originales/` (lo moverá la 0057 a `portal/`), no acaba en `fotos/`.
     assert repos.obtener_media_catalogo(cm["id"])["objeto"] == "originales/p.jpg"
+
+
+# --------------------------------------------------------------------------- #
+# Documentos del estudio: el reorg reapunta su logo y la reparación lo rescata   #
+# --------------------------------------------------------------------------- #
+
+
+def _doc_con_logo(clave: str) -> str:
+    """Documento de capas mínimo con una capa imagen (el logo de marca) apuntando a `clave`."""
+    return json.dumps({
+        "version": 1,
+        "marca": "unotv",
+        "formato": {"w": 1080, "h": 1350},
+        "capas": [{"id": "logo", "tipo": "imagen", "objeto": clave, "x": 0, "y": 0, "w": 200, "h": 80}],
+    })
+
+
+def test_reorg_subidas_reapunta_el_logo_de_la_plantilla(entorno):
+    """Mover el binario reapunta el documento de la plantilla: la placa no pierde su logo."""
+    viejo, nuevo = "artes/logo.png", "subidas/logo.png"
+    almacen_media.guardar_objeto(viejo, _PNG, content_type="image/png")
+    repos.crear_media_catalogo(objeto=viejo, tipo="subida", titulo="Logo", fuente="subidas")
+    plantilla = repos.crear_plantilla_diseno(
+        marca="unotv", nombre="Placa de marca", documento=_doc_con_logo(viejo), miniatura=viejo,
+    )
+
+    _aplicar(_migrar_reorg_subidas_a_subidas)
+
+    post = repos.obtener_plantilla_diseno(plantilla["id"])
+    assert nuevo in post["documento"] and viejo not in post["documento"]
+    assert post["miniatura"] == nuevo
+
+
+def test_reapunte_rescata_el_logo_muerto_de_un_documento(entorno):
+    """Reparación: una key ya borrada se reapunta a su gemelo por nombre en otra carpeta."""
+    almacen_media.guardar_objeto("subidas/logo.png", _PNG, content_type="image/png")
+    plantilla = repos.crear_plantilla_diseno(
+        marca="unotv", nombre="Placa", documento=_doc_con_logo("artes/logo.png"),
+    )
+
+    _aplicar(_migrar_reapuntar_media_documentos)
+
+    assert "subidas/logo.png" in repos.obtener_plantilla_diseno(plantilla["id"])["documento"]
+
+
+def test_reapunte_no_toca_lo_vivo_ni_lo_irrecuperable(entorno):
+    """Solo se reapunta lo MUERTO con copia viva: ni la key viva ni la huérfana se tocan."""
+    almacen_media.guardar_objeto("artes/vivo.png", _PNG, content_type="image/png")
+    viva = repos.crear_plantilla_diseno(
+        marca="unotv", nombre="Viva", documento=_doc_con_logo("artes/vivo.png"),
+    )
+    huerfana = repos.crear_plantilla_diseno(
+        marca="unotv", nombre="Huérfana", documento=_doc_con_logo("artes/no-esta.png"),
+    )
+
+    _aplicar(_migrar_reapuntar_media_documentos)
+
+    assert "artes/vivo.png" in repos.obtener_plantilla_diseno(viva["id"])["documento"]
+    assert "artes/no-esta.png" in repos.obtener_plantilla_diseno(huerfana["id"])["documento"]

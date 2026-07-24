@@ -14,12 +14,15 @@ como texto en espanol (los recoge `lanzar_job_imagen`).
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 from pathlib import Path
 from typing import Any
 
 from ... import media, plantillas_marca
+
+_log = logging.getLogger("keni_consola.estudio_imagen")
 
 __all__ = [
     "REGLAS_IMAGEN",
@@ -233,12 +236,21 @@ def _nombre_local_plano(clave: str) -> str:
 
 
 def _materializar_logo(logo_id: str, carpeta: Path) -> str:
-    """Vuelca un objeto de media (logo/fondo) a un PNG temporal; '' si no hay o no existe."""
+    """Vuelca un objeto de media (logo/fondo) a un PNG temporal; '' si no hay o no existe.
+
+    Una key que ya no está en el almacén se avisa por log: el renderer descarta esa capa sin
+    error y la pieza saldría (y se publicaría) sin su logo, que de otro modo pasa inadvertido.
+    """
     logo_id = (logo_id or "").strip()
     if not logo_id:
         return ""
     datos = media.leer_media(logo_id)
     if datos is None:
+        _log.warning(
+            "Render: la capa referencia %r y ese objeto no está en el almacén; "
+            "se compone SIN esa capa.",
+            logo_id,
+        )
         return ""
     ruta = carpeta / f"asset-{_nombre_local_plano(logo_id)}.png"
     ruta.write_bytes(datos)

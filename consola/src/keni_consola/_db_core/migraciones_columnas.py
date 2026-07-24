@@ -9,6 +9,7 @@ de `_comun` + `motor_db`/`tiempo` + stdlib (el bloque de MODELO de turnos/franja
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from ..motor_db import IntegrityError
@@ -267,14 +268,47 @@ def _migrar_backfill_origen_catalogo(con: Any) -> None:
             )
 
 
+# Columnas que guardan keys de media DENTRO de un texto/JSON y que un reorg debe reapuntar
+# además del catálogo y las piezas: los DOCUMENTOS de capas (plantilla del estudio, historial
+# del editor, composición de video) referencian su logo/fondo por key. La key vieja es única
+# (uuid/sha256), así que el replace textual es seguro.
+_COLUMNAS_DOCUMENTO_MEDIA: tuple[tuple[str, str], ...] = (
+    ("plantillas_diseno", "documento"),
+    ("plantillas_diseno", "miniatura"),
+    ("plantillas_diseno", "foto_muestra"),
+    ("documento_versiones", "documento"),
+    ("documento_versiones", "render_objeto"),
+    ("video_composiciones", "documento"),
+)
+
+
+def _reapuntar_documentos(con: Any, viejo: str, nuevo: str) -> None:
+    """Reapunta `viejo`→`nuevo` en las columnas de documento/JSON que referencian media.
+
+    Sin esto, mover un objeto de carpeta deja el documento apuntando a una key borrada y el
+    render lo DESCARTA en silencio (una plantilla sin su logo). Tolerante: una tabla/columna
+    que no exista se salta.
+    """
+    for tabla, columna in _COLUMNAS_DOCUMENTO_MEDIA:
+        if not _tabla_existe(con, tabla):
+            continue
+        if columna not in _columnas_existentes(con, tabla):
+            continue
+        con.execute(
+            f"UPDATE {tabla} SET {columna} = replace({columna}, ?, ?) WHERE {columna} LIKE ?",
+            (viejo, nuevo, f"%{viejo}%"),
+        )
+
+
 def _mover_objetos_de_catalogo(con: Any, filas: Any, categoria: str) -> None:
     """Mueve FÍSICAMENTE en S3 cada objeto de `filas` (con `id` y `objeto`) a la carpeta `categoria`.
 
     Para cada fila: COPIA el binario a `<categoria>/<base>` (`promover_objeto`, idempotente),
     reapunta TODAS las referencias en la misma transacción —`catalogo_media.objeto` +
     `pieza.imagen`/`foto` + las keys dentro de los JSON `pieza.fotos` (collage) y `pieza.carrusel`
-    (slides)—, VERIFICA que la copia existe y solo entonces borra el objeto viejo. Si la copia no se
-    puede verificar, NO toca refs ni borra (deja log).
+    (slides) + los DOCUMENTOS de capas que la referencien (`_reapuntar_documentos`)—, VERIFICA que
+    la copia existe y solo entonces borra el objeto viejo. Si la copia no se puede verificar, NO
+    toca refs ni borra (deja log).
 
     Idempotente: un objeto ya en `categoria/` se salta; un corte tras reapuntar deja la fila en su
     nueva carpeta (no se re-procesa) y a lo sumo un binario huérfano en la vieja (sin refs, inofensivo).
@@ -315,6 +349,7 @@ def _mover_objetos_de_catalogo(con: Any, filas: Any, categoria: str) -> None:
                 "UPDATE pieza SET carrusel = replace(carrusel, ?, ?) WHERE carrusel LIKE ?",
                 (viejo, nuevo, f"%{viejo}%"),
             )
+        _reapuntar_documentos(con, viejo, nuevo)
         # Refs reapuntadas y copia verificada: ya es seguro borrar el binario viejo.
         almacen_media.borrar_objeto(viejo)
 
@@ -376,6 +411,72 @@ def _migrar_reorg_externas_a_fotos(con: Any) -> None:
         "WHERE objeto LIKE 'originales/%%' AND (fuente IS NULL OR fuente <> 'portal')"
     ).fetchall()
     _mover_objetos_de_catalogo(con, filas, "fotos")
+
+
+def _clave_media_viva(clave: str, memo: dict[str, str]) -> str:
+    """Clave VIVA equivalente a `clave` (el MISMO archivo en otra carpeta del almacén), o "".
+
+    Un reorg de carpetas mueve el binario (`<vieja>/<base>` → `<nueva>/<base>`, mismo nombre
+    plano). Si `clave` ya existe no hay nada que reapuntar; si no, se busca su gemelo por nombre
+    en el resto de categorías y se devuelve la primera que exista. `memo` cachea el veredicto por
+    clave: la misma key se repite entre documentos y cada consulta es un HEAD contra S3.
+    """
+    from .. import almacen_media
+
+    if clave in memo:
+        return memo[clave]
+    viva = ""
+    if clave and "/" in clave and not almacen_media.objeto_existe(clave):
+        base = clave.split("/", 1)[1]
+        for categoria in almacen_media.CATEGORIAS:
+            destino = f"{categoria}/{base}"
+            if destino != clave and almacen_media.objeto_existe(destino):
+                viva = destino
+                break
+    memo[clave] = viva
+    return viva
+
+
+def _migrar_reapuntar_media_documentos(con: Any) -> None:
+    """REPARACIÓN: reapunta las keys MUERTAS de los documentos de capas a su copia viva.
+
+    Los reorgs de carpetas (`0057`/`0058`/`0059`) reapuntaban el catálogo y las piezas, pero no
+    los DOCUMENTOS del estudio: una plantilla cuyo logo estaba en `artes/` se quedó apuntando a
+    una key borrada, y el render descarta la capa en silencio → las piezas de esa marca se
+    componían (y publicaban) SIN logo. Para cada documento, cada key que ya no existe en el
+    almacén se reapunta a su gemelo por nombre en otra carpeta (`_clave_media_viva`).
+
+    Conservadora: solo toca las keys MUERTAS que tienen copia viva; las vivas y las que no se
+    pueden rescatar se dejan igual. Idempotente (sin keys muertas rescatables no hace nada).
+    """
+    from .. import almacen_media
+
+    patron = re.compile(
+        r"(?<![A-Za-z0-9._/-])(?:"
+        + "|".join(re.escape(c) for c in almacen_media.CATEGORIAS)
+        + r")/[A-Za-z0-9._-]+"
+    )
+    memo: dict[str, str] = {}
+    for tabla, columna in _COLUMNAS_DOCUMENTO_MEDIA:
+        if not _tabla_existe(con, tabla) or columna not in _columnas_existentes(con, tabla):
+            continue
+        filas = con.execute(
+            f"SELECT id, {columna} AS valor FROM {tabla} WHERE coalesce({columna}, '') <> ''"
+        ).fetchall()
+        for fila in filas:
+            texto = fila["valor"] or ""
+            nuevo_texto = texto
+            # De la más larga a la más corta: una key que sea PREFIJO de otra no la corrompe.
+            for clave in sorted(set(patron.findall(texto)), key=len, reverse=True):
+                viva = _clave_media_viva(clave, memo)
+                if not viva:
+                    continue
+                nuevo_texto = nuevo_texto.replace(clave, viva)
+                _log.info("reapunte %s.%s: %s -> %s", tabla, columna, clave, viva)
+            if nuevo_texto != texto:
+                con.execute(
+                    f"UPDATE {tabla} SET {columna} = ? WHERE id = ?", (nuevo_texto, fila["id"])
+                )
 
 
 def _migrar_fuente_subidas(con: Any) -> None:

@@ -53,6 +53,7 @@ from .migraciones_columnas import (
     _migrar_reorg_originales_a_portal,
     _migrar_reorg_subidas_a_subidas,
     _migrar_reorg_externas_a_fotos,
+    _migrar_reapuntar_media_documentos,
     _migrar_clasificar_originales_portal,
     _migrar_fts_catalogo_media,
     _migrar_fuente_subidas,
@@ -627,6 +628,11 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # (`purgar_rss_vistos`) las pueda envejecer. La columna la trae el DDL; las filas nuevas la
     # escriben en `marcar_item`. One-shot e idempotente (solo filas con `visto_en = ''`).
     Migracion("0072-backfill-rss-vistos-fecha", _backfill_rss_vistos_visto_en),
+    # REPARACIÓN de los reorgs de carpetas (0057/0058/0059): reapunta las keys MUERTAS de los
+    # documentos de capas (plantilla del estudio, historial del editor, composición de video) a su
+    # copia viva en la nueva carpeta. Sin esto una plantilla se queda sin su logo (el render
+    # descarta la capa en silencio) y sus piezas se publican sin marca. Idempotente.
+    Migracion("0073-reapuntar-media-documentos", _migrar_reapuntar_media_documentos),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.
