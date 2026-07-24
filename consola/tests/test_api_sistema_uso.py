@@ -9,6 +9,8 @@ semanal, operación normal). El endpoint solo LEE la tabla: se siembra con `repo
 
 from __future__ import annotations
 
+import time
+
 from starlette.testclient import TestClient
 
 from keni_consola import app as app_modulo
@@ -23,7 +25,7 @@ CLAVE = "clave-de-prueba"
 _CAMPOS_CUENTA = {
     "cuenta", "etiqueta", "marcas", "conectada", "semana_pct", "sesion_5h_pct",
     "reset_semana_iso", "reset_semana_txt", "reset_sesion_iso", "actualizado_ts", "al_100",
-    "alerta_roja", "dia",
+    "medidor_caducado", "alerta_roja", "dia",
 }
 
 
@@ -127,12 +129,32 @@ def test_semana_al_100_alerta_roja(entorno):
 
 
 def test_operacion_normal_sin_alerta(entorno):
+    # Lectura FRESCA: una operación normal exige medidor reciente (el plazo lo fija el gate).
     repos.guardar_uso_cuenta(
         cuenta="a", conectada=True, semana_pct=42, sesion_5h_pct=10,
-        actualizado_ts=1750000000.0, dia_utc="2026-06-14",
+        actualizado_ts=time.time(), dia_utc="2026-06-14",
     )
     a = _cuentas(_cli_como("editor", marcas=["claro-sports"]).get("/api/sistema/uso").json())["a"]
     assert a["conectada"] is True and a["semana_pct"] == 42
     assert a["al_100"] is False and a["alerta_roja"] is False
+    assert a["medidor_caducado"] is False
     # resets vacíos se normalizan a null.
     assert a["reset_semana_iso"] is None and a["reset_semana_txt"] is None
+
+
+def test_medidor_sin_lectura_fresca_alerta_roja(entorno, monkeypatch):
+    """Un medidor VIEJO enciende la alerta aunque la fila diga `conectada` y el % sea bajo.
+
+    Es el caso de una cuenta cuyas credenciales murieron: `cuenta_claude.uso()` cae al último
+    medidor bueno, así que el snapshot se congela con `conectada=true` y unos porcentajes que ya
+    no describen nada. El indicador debe decir lo mismo que el gate, que ya pausa esa cuenta.
+    """
+    monkeypatch.setenv("KENI_GATE_METER_STALE_H", "6")
+    repos.guardar_uso_cuenta(
+        cuenta="a", conectada=True, semana_pct=0, sesion_5h_pct=0,
+        actualizado_ts=time.time() - 7 * 3600, dia_utc="2026-06-14",
+    )
+    a = _cuentas(_cli_como("editor", marcas=["claro-sports"]).get("/api/sistema/uso").json())["a"]
+    assert a["conectada"] is True and a["semana_pct"] == 0  # la fila sigue diciendo que todo va bien
+    assert a["medidor_caducado"] is True
+    assert a["alerta_roja"] is True

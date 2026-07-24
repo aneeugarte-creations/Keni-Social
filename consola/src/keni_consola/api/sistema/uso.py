@@ -8,7 +8,8 @@ lateral consulta un dato barato y persistido, sin ejecutar `claude` ni depender 
 Endpoint (bajo `/api/sistema`, CONTRATO con el frontend):
   - GET /api/sistema/uso -> {cuentas: [{cuenta, etiqueta, marcas, conectada, semana_pct,
       sesion_5h_pct, reset_semana_iso, reset_semana_txt, reset_sesion_iso,
-      actualizado_ts, al_100, alerta_roja, dia: {consumo_pct, umbral_pct, limite, pausado}}, ...]}
+      actualizado_ts, al_100, medidor_caducado, alerta_roja,
+      dia: {consumo_pct, umbral_pct, limite, pausado}}, ...]}
     `dia` es el cupo del dia (gate diario, limite semanal) -> barra «24h».
 
 Cualquier usuario AUTENTICADO lo consulta, pero solo recibe LAS CUENTAS DE SUS MARCAS (suelo de
@@ -18,9 +19,15 @@ autorización): admin/superadmin reciben ambas; un editor la(s) cuenta(s) de sus
 frontend DECIDA cuál mostrar según el selector de marca activo (solo la cuenta de la marca activa;
 ambas en "Todas").
 
-`alerta_roja` por cuenta (la señal que enciende el indicador en rojo) = cuenta DESCONECTADA o
-ventana semanal al 100%+. Sin snapshot todavía (cold start) se trata como desconectada:
-`alerta_roja=true`.
+`alerta_roja` por cuenta (la señal que enciende el indicador en rojo) = cuenta DESCONECTADA,
+ventana semanal al 100%+ o MEDIDOR CADUCADO. Sin snapshot todavía (cold start) se trata como
+desconectada: `alerta_roja=true`.
+
+MEDIDOR CADUCADO: `cuenta_claude.uso()` cae al ÚLTIMO medidor bueno cuando la lectura en vivo
+falla, así que una cuenta cuyas credenciales han muerto sigue devolviendo `conectada=true` con
+los porcentajes CONGELADOS de la última lectura válida. La señal honesta es la EDAD de esa
+lectura: se reusa `gate_diario.medidor_caducado` —la misma regla que ya pausa el fondo de la
+cuenta (fail-closed, `KENI_GATE_METER_STALE_H`)— para que el indicador diga lo mismo que el gate.
 """
 
 from __future__ import annotations
@@ -46,11 +53,15 @@ def _forma_dia(cuenta: str) -> dict:
     }
 
 
-def _forma_respuesta(fila: dict | None) -> dict:
+def _forma_respuesta(fila: dict | None, *, caducado: bool = False) -> dict:
     """Construye la forma del contrato a partir de la fila de `cuenta_uso` (PURA).
 
     Sin fila (nunca se muestreó esa cuenta) -> todo nulo, cuenta no conectada y `alerta_roja=true`.
     Los `*_pct` viajan como int|null; los resets vacíos ('') se normalizan a null.
+
+    `caducado` (calculado por el llamante, que sí conoce la cuenta) marca que la última lectura
+    VÁLIDA del medidor es demasiado vieja: los porcentajes que trae la fila son un eco de esa
+    lectura, no el estado de ahora, así que enciende la alerta igual que una cuenta desconectada.
     """
     if fila is None:
         return {
@@ -62,12 +73,13 @@ def _forma_respuesta(fila: dict | None) -> dict:
             "reset_sesion_iso": None,
             "actualizado_ts": None,
             "al_100": False,
+            "medidor_caducado": caducado,
             "alerta_roja": True,
         }
     conectada = bool(fila.get("conectada"))
     semana_pct = fila.get("semana_pct")
     al_100 = semana_pct is not None and semana_pct >= 100
-    alerta_roja = (not conectada) or al_100
+    alerta_roja = (not conectada) or al_100 or caducado
     return {
         "conectada": conectada,
         "semana_pct": semana_pct,
@@ -77,6 +89,7 @@ def _forma_respuesta(fila: dict | None) -> dict:
         "reset_sesion_iso": (fila.get("reset_sesion_iso") or None),
         "actualizado_ts": fila.get("actualizado_ts"),
         "al_100": al_100,
+        "medidor_caducado": caducado,
         "alerta_roja": alerta_roja,
     }
 
@@ -92,7 +105,7 @@ def _forma_cuenta(cuenta: str, fila: dict | None) -> dict:
         "etiqueta": ruteo_cuentas.etiqueta_de_cuenta(cuenta),
         "marcas": ruteo_cuentas.marcas_de_cuenta(cuenta),
         "dia": _forma_dia(cuenta),
-        **_forma_respuesta(fila),
+        **_forma_respuesta(fila, caducado=gate_diario.medidor_caducado(cuenta)),
     }
 
 

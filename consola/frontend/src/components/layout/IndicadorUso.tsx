@@ -31,8 +31,9 @@ import { cn } from "@/lib/utils";
  * no renderiza nada.
  *
  * Estados: neutro cuando aún no hay dato (`undefined`/cargando, nunca rojo) y ROJO por cuenta
- * cuando `alerta_roja` (sin cuenta o alguna ventana al 100 %). El 100 % se ve en la barra al tope en
- * rojo; el único texto de alerta es "Sin cuenta" (no hay barra que lo muestre).
+ * cuando `alerta_roja` (sin cuenta, medidor sin lectura fresca, o alguna ventana al 100 %). El
+ * 100 % se ve en la barra al tope en rojo; los textos de alerta son los que NINGUNA barra puede
+ * mostrar: "Sin cuenta" y "Sin lectura" (porcentajes congelados de la última lectura buena).
  */
 
 /** Redondea un porcentaje (0–100) a entero; `null` => `null`. */
@@ -59,11 +60,14 @@ function pctPrincipal(uso: UsoCuenta): number | null {
   return limiteMasUrgente(uso)?.pct ?? uso.semana_pct;
 }
 
-/** Mensaje breve del estado rojo, o `null` si no hay alerta. Solo "Sin cuenta": el 100 % ya se ve
- *  en la barra roja al tope, sin repetirlo en texto. */
+/** Mensaje breve del estado rojo, o `null` si no hay alerta. Solo los estados que NO se ven en la
+ *  barra: el 100 % ya se pinta al tope en rojo y no se repite en texto. "Sin lectura" avisa de que
+ *  los porcentajes son un eco de la última lectura buena (la cuenta lleva demasiado sin responder),
+ *  que es justo el caso en el que un número bajo y verde engañaría. */
 function mensajeRojo(uso: UsoCuenta): string | null {
   if (!uso.alerta_roja) return null;
   if (!uso.conectada) return "Sin cuenta";
+  if (uso.medidor_caducado) return "Sin lectura";
   return null;
 }
 

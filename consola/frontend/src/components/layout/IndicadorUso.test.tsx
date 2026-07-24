@@ -33,6 +33,7 @@ function cuenta(parcial: Partial<UsoCuenta>): UsoCuenta {
     reset_sesion_iso: null,
     actualizado_ts: 1_700_000_000,
     al_100: false,
+    medidor_caducado: false,
     alerta_roja: false,
     dia: { consumo_pct: 5, umbral_pct: 14.3, limite: "semanal", pausado: false },
     ...parcial,
@@ -159,6 +160,22 @@ describe("IndicadorUso", () => {
       "claro-sports",
     );
     const aviso = screen.getByText("Sin cuenta");
+    expect(aviso).toBeInTheDocument();
+    expect(aviso.className).toContain("text-destructive");
+  });
+
+  it("con el medidor sin lectura fresca avisa «Sin lectura», aunque la cuenta se diga conectada", () => {
+    // Credenciales muertas: el snapshot se congela con `conectada` y un % bajo que ya no describe
+    // nada. Sin este aviso, un 0% en verde diría que todo va bien mientras la cuenta no genera.
+    renderIndicador(
+      {
+        data: {
+          cuentas: [cuenta({ conectada: true, semana_pct: 0, medidor_caducado: true, alerta_roja: true })],
+        },
+      },
+      "claro-sports",
+    );
+    const aviso = screen.getByText("Sin lectura");
     expect(aviso).toBeInTheDocument();
     expect(aviso.className).toContain("text-destructive");
   });

@@ -57,6 +57,7 @@ export const USO_MUESTRA: UsoCuenta[] = [
     reset_sesion_iso: null,
     actualizado_ts: 1_751_360_000,
     al_100: true,
+    medidor_caducado: false,
     alerta_roja: true,
     dia: { consumo_pct: 64, umbral_pct: 100, limite: "semanal", pausado: false },
   },

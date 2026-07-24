@@ -6,8 +6,8 @@
  *
  * Forma de respuesta ACORDADA con el backend (`GET /api/sistema/uso`, cualquier autenticado):
  *   { cuentas: [{ cuenta, etiqueta, marcas, conectada, semana_pct, sesion_5h_pct,
- *       reset_semana_iso, reset_semana_txt, reset_sesion_iso, actualizado_ts, al_100, alerta_roja,
- *       dia }, ...] }
+ *       reset_semana_iso, reset_semana_txt, reset_sesion_iso, actualizado_ts, al_100,
+ *       medidor_caducado, alerta_roja, dia }, ...] }
  * El back devuelve SOLO las cuentas que el usuario puede ver (suelo de autorización por marcas);
  * el frontend elige cuál(es) MOSTRAR según el selector de marca activo. El back cachea (no ejecuta
  * `claude` por request), así que sondeamos con holgura.
@@ -53,6 +53,9 @@ export interface UsoCuenta {
   actualizado_ts: number | null;
   /** `true` si alguna ventana está al 100 %. */
   al_100: boolean;
+  /** `true` si la última lectura VÁLIDA del medidor es demasiado vieja: los porcentajes son el eco
+   *  de esa lectura, no el estado de ahora. Misma regla que pausa el fondo de la cuenta. */
+  medidor_caducado: boolean;
   /** `true` si hay que pintar la cuenta en ROJO (sin cuenta o al 100 %). */
   alerta_roja: boolean;
   /** Cupo del DÍA (gate diario) del límite que primero se agota -> barra «24h». */
