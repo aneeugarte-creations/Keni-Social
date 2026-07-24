@@ -14,6 +14,10 @@ Cubre los tres escenarios criticos del gate `KENI_PUBLICAR_REAL`:
 
 Todos los tests mockan la red con respx (nunca tocan la API real de Metricool) y
 mockan la carga de config de Metricool (no necesitan un TOML real).
+
+La media referenciada se da por VIVA (fixture `_media_en_el_almacen`): el publicador no
+postea una pieza cuya imagen/slide haya desaparecido del almacén, y las keys de aquí son
+ficticias. Los dos tests de media ausente revierten la fixture a propósito.
 """
 
 from __future__ import annotations
@@ -25,10 +29,11 @@ from typing import Any
 from unittest.mock import patch
 
 import httpx
+import pytest
 import respx
 from httpx import Response
 
-from keni_consola import repos
+from keni_consola import almacen_media, repos
 from keni_consola.programador import (
     ID_POST_INCIERTO,
     _borrador_de_publicacion,
@@ -59,6 +64,17 @@ _RESP_OK = {
         "providers": [{"network": "instagram", "status": "PENDING"}],
     }
 }
+
+
+@pytest.fixture(autouse=True)
+def _media_en_el_almacen(monkeypatch):
+    """Por defecto la media referenciada EXISTE: aquí se mira el borrador, no el almacén.
+
+    El publicador NO postea una pieza cuya media haya desaparecido (`_media_ausente`); las
+    keys de estos tests son ficticias, así que se da el almacén por poblado. Los tests de la
+    media AUSENTE lo revierten explícitamente.
+    """
+    monkeypatch.setattr(almacen_media, "objeto_existe", lambda nombre: True)
 
 
 def _pub_programada(
@@ -266,6 +282,32 @@ def test_borrador_carrusel_portada_mas_slides(monkeypatch):
     assert [m.tipo for m in borrador.media] == [
         TipoMedia.imagen, TipoMedia.imagen, TipoMedia.video, TipoMedia.imagen,
     ]
+
+
+def test_borrador_no_publica_si_la_imagen_ya_no_esta_en_el_almacen(monkeypatch):
+    """Imagen referenciada pero BORRADA del almacén: no se publica (Metricool vería un 404)."""
+    monkeypatch.setenv("KENI_CONSOLA_URL_PUBLICA", "https://social.kenitech.io")
+    monkeypatch.setattr(almacen_media, "objeto_existe", lambda nombre: False)
+    pub = {
+        "id": "m1", "red": "facebook", "contenido": "Texto",
+        "imagen": "artes/borrada.png", "fecha_programada": "2026-06-10T18:00",
+    }
+    # Ni siquiera sale como post de solo texto: la pieza se queda programada para el humano.
+    assert _borrador_de_publicacion(pub) is None
+
+
+def test_borrador_no_publica_carrusel_con_un_slide_borrado(monkeypatch):
+    """Un solo slide muerto tumba el post entero: mejor no publicar que publicar a medias."""
+    monkeypatch.setenv("KENI_CONSOLA_URL_PUBLICA", "https://social.kenitech.io")
+    vivos = {"portada.png", "slide2.jpg"}
+    monkeypatch.setattr(almacen_media, "objeto_existe", lambda nombre: nombre in vivos)
+    pub = {
+        "id": "c9", "red": "instagram", "contenido": "nota",
+        "formato": "carrusel", "imagen": "portada.png",
+        "carrusel": '[{"tipo":"imagen","objeto":"slide2.jpg"},{"tipo":"imagen","objeto":"muerto.jpg"}]',
+        "fecha_programada": "2026-06-10T18:00",
+    }
+    assert _borrador_de_publicacion(pub) is None
 
 
 def test_borrador_carrusel_reconcilia_slide_stale(monkeypatch):

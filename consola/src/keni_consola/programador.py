@@ -282,6 +282,21 @@ def _url_media_publica(nombre_imagen: str) -> str | None:
     return f"{base}/api/media/{nombre_imagen}"
 
 
+def _media_ausente(nombres: list[str]) -> str:
+    """Primera key de `nombres` que ya NO está en el almacén; "" si están todas vivas.
+
+    Metricool ingiere la media por URL: una key borrada le daría un 404 y la pieza saldría
+    mutilada (sin su imagen o sin medio slide). Preferimos NO publicarla y dejarla programada
+    con un aviso, para que un humano decida, antes que postear algo a medias.
+    """
+    from . import almacen_media
+
+    for nombre in nombres:
+        if nombre and not almacen_media.objeto_existe(nombre):
+            return nombre
+    return ""
+
+
 def slides_de_carrusel(crudo: object) -> list[dict[str, str]]:
     """Parsea el campo `carrusel` (JSON) a una lista reparada de slides (PURA, testeable).
 
@@ -354,6 +369,8 @@ def _borrador_de_publicacion(pub: dict[str, Any]) -> object | None:
       - La red no es soportada por Metricool (no esta en Plataforma).
       - La red exige media (instagram/tiktok/youtube) y no hay imagen con URL publica.
       - El contenido (texto) esta vacio Y no hay media: nada que publicar.
+      - Alguna media referenciada (imagen, video o slide) ya NO esta en el almacen: la pieza
+        se queda programada en vez de salir mutilada (`_media_ausente`).
     Todos los casos se loguean a nivel WARNING para que sean trazables.
     """
     try:
@@ -388,6 +405,13 @@ def _borrador_de_publicacion(pub: dict[str, Any]) -> object | None:
             _log.warning(
                 "Pieza %r (video): no hay asset de video; se omite la publicación (pendiente).",
                 pub.get("id"),
+            )
+            return None
+        if _media_ausente([nombre_video]):
+            _log.warning(
+                "Pieza %r (video): el asset %r ya no está en el almacén; se omite la "
+                "publicación (queda programada).",
+                pub.get("id"), nombre_video,
             )
             return None
         url_video = _url_media_publica(nombre_video)
@@ -443,6 +467,13 @@ def _borrador_de_publicacion(pub: dict[str, Any]) -> object | None:
             repos.actualizar_pieza(pub["id"], {"imagen": nombre_imagen})
         except Exception:  # noqa: BLE001 -- referenciar es best-effort; no debe abortar el posteo
             _log.warning("Pieza %r: no se pudo fijar la imagen publicada.", pub.get("id"))
+    if _media_ausente([nombre_imagen]):
+        _log.warning(
+            "Pieza %r: la imagen %r ya no está en el almacén; se omite la publicación "
+            "(queda programada).",
+            pub.get("id"), nombre_imagen,
+        )
+        return None
     media: list[MediaRef] = []
 
     url_img = _url_media_publica(nombre_imagen)
@@ -480,6 +511,16 @@ def _borrador_de_publicacion(pub: dict[str, Any]) -> object | None:
                 repos.actualizar_pieza(pub["id"], {"carrusel": carrusel_reconciliado})
             except Exception:  # noqa: BLE001 -- referenciar es best-effort; no aborta el posteo
                 _log.warning("Pieza %r: no se pudo fijar el carrusel reconciliado.", pub.get("id"))
+        ausente = _media_ausente(
+            [s["objeto"] for s in slides_de_carrusel(pub.get("carrusel"))]
+        )
+        if ausente:
+            _log.warning(
+                "Pieza %r (carrusel): el slide %r ya no está en el almacén; se omite la "
+                "publicación (queda programada).",
+                pub.get("id"), ausente,
+            )
+            return None
         media.extend(_slides_carrusel(pub, MediaRef, TipoMedia))
 
     # Parsear la fecha programada como datetime (ya paso la validacion de vencimiento,

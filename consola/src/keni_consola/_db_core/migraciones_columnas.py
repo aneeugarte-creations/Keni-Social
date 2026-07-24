@@ -428,7 +428,7 @@ def _clave_media_viva(clave: str, memo: dict[str, str]) -> str:
     viva = ""
     if clave and "/" in clave and not almacen_media.objeto_existe(clave):
         base = clave.split("/", 1)[1]
-        for categoria in almacen_media.CATEGORIAS:
+        for categoria in sorted(almacen_media.CATEGORIAS):
             destino = f"{categoria}/{base}"
             if destino != clave and almacen_media.objeto_existe(destino):
                 viva = destino
@@ -453,7 +453,7 @@ def _migrar_reapuntar_media_documentos(con: Any) -> None:
 
     patron = re.compile(
         r"(?<![A-Za-z0-9._/-])(?:"
-        + "|".join(re.escape(c) for c in almacen_media.CATEGORIAS)
+        + "|".join(re.escape(c) for c in sorted(almacen_media.CATEGORIAS))
         + r")/[A-Za-z0-9._-]+"
     )
     memo: dict[str, str] = {}
