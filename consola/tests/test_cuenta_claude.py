@@ -308,3 +308,41 @@ def test_caducidad_sin_fichero_es_best_effort(monkeypatch, tmp_path):
     # Fichero ausente/ilegible: no lanza y no afirma nada (es vigilancia, no camino critico).
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path))
     assert cc.caducidad("a", _AHORA)["conocida"] is False
+
+
+def test_estado_adjunta_la_caducidad_de_la_credencial(monkeypatch, tmp_path):
+    """`estado()` no se queda en `loggedIn`: dice tambien si esa sesion todavia sirve.
+
+    El CLI responde `loggedIn: true` mientras haya credenciales guardadas, aunque el token este
+    muerto y cada `claude -p` falle con un 401. El panel necesita las dos cosas.
+    """
+    import json
+    import subprocess
+
+    (tmp_path / ".credentials.json").write_text(
+        json.dumps(_creds(_AHORA.replace(hour=11), refresh=False)), encoding="utf-8"
+    )
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        cc, "_correr",
+        lambda argv, *, timeout, cuenta=None: subprocess.CompletedProcess(
+            argv, 0, '{"loggedIn": true, "authMethod": "claude.ai"}', ""
+        ),
+    )
+    r = cc.estado("a")
+    assert r["logueado"] is True  # el CLI insiste en que hay sesion...
+    assert r["caducidad"]["caducada"] is True  # ...pero no sirve
+    assert r["caducidad"]["tiene_refresh"] is False
+
+
+def test_estado_sin_cli_sigue_trayendo_caducidad(monkeypatch, tmp_path):
+    # Aun sin `claude` en la maquina, la credencial se lee del fichero: el panel no se queda mudo.
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path))
+
+    def _sin_cli(argv, *, timeout, cuenta=None):
+        raise FileNotFoundError(argv[0])
+
+    monkeypatch.setattr(cc, "_correr", _sin_cli)
+    r = cc.estado("a")
+    assert r["logueado"] is None and r["error"] == "claude no disponible"
+    assert r["caducidad"]["conocida"] is False

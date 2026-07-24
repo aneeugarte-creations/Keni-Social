@@ -1069,10 +1069,28 @@ export interface RespuestaBorrarLoteS3 {
 // CAMBIAR de cuenta (logout + login interactivo: URL → pegar código). El back proxea al
 // control del proceso `daemons` (quien tiene `claude`); ver `api/sistema/cuenta.py`.
 
-/** Estado de autenticación (`claude auth status --json`). */
+/** Caducidad REAL de la credencial, leída del fichero de credenciales (nunca trae el token).
+ *  `logueado` dice si hay sesión CONFIGURADA; esto dice si todavía SIRVE. */
+export interface CuentaCaducidad {
+  /** `false` si no se pudo leer la caducidad: entonces no se afirma nada. */
+  conocida: boolean;
+  /** `true` si el token ya caducó: `claude -p` falla con 401 hasta re-autenticar. */
+  caducada: boolean;
+  /** Instante ISO en que caduca (o caducó). "" si no se conoce. */
+  expira_en_iso: string;
+  /** Segundos que quedan (negativo si ya pasó). null si no se conoce. */
+  segundos_restantes: number | null;
+  /** `false` = no se renovará sola; hace falta un `claude auth login` a mano. */
+  tiene_refresh: boolean;
+}
+
+/** Estado de autenticación (`claude auth status --json` + caducidad real de la credencial). */
 export interface CuentaAuth {
-  /** ¿Hay sesión iniciada? null = desconocido (el CLI no respondió como se esperaba). */
+  /** ¿Hay sesión CONFIGURADA? null = desconocido (el CLI no respondió como se esperaba).
+   *  OJO: sigue en `true` con el token caducado — mira `caducidad` para saber si sirve. */
   logueado: boolean | null;
+  /** Caducidad real de la credencial. Ausente en respuestas antiguas. */
+  caducidad?: CuentaCaducidad;
   /** Método de auth: "claude.ai" (login de suscripción) | "api_key" | … */
   metodo: string | null;
   /** Proveedor: "firstParty" (suscripción) | "console" (API) | … */

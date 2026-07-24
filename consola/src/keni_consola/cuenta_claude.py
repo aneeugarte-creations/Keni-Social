@@ -414,16 +414,27 @@ def _correr(argv: list[str], *, timeout: int, cuenta: str | None) -> subprocess.
 
 
 def estado(cuenta: str | None = None) -> dict:
-    """Estado de autenticacion (`claude auth status --json`) parseado, de la cuenta `a`|`b`."""
+    """Estado de autenticacion de la cuenta `a`|`b`: `claude auth status` + CADUCIDAD real.
+
+    `claude auth status --json` responde `loggedIn: true` mientras haya credenciales GUARDADAS,
+    diga lo que diga el servidor sobre ellas: una cuenta con el token caducado sigue saliendo
+    logueada aunque cada `claude -p` muera con un 401. Por eso el estado adjunta `caducidad`
+    (de `caducidad()`, leida del propio fichero de credenciales): `logueado` dice si hay sesion
+    configurada y `caducidad.caducada` si esa sesion todavia sirve.
+    """
+    caduca = caducidad(cuenta)
     try:
         cp = _correr([_CLAUDE, "auth", "status", "--json"], timeout=_TIMEOUT_ESTADO, cuenta=cuenta)
     except FileNotFoundError:
-        return {"logueado": None, "metodo": None, "proveedor": None, "crudo": "", "error": "claude no disponible"}
+        return {"logueado": None, "metodo": None, "proveedor": None, "crudo": "",
+                "error": "claude no disponible", "caducidad": caduca}
     except subprocess.TimeoutExpired:
-        return {"logueado": None, "metodo": None, "proveedor": None, "crudo": "", "error": "timeout"}
+        return {"logueado": None, "metodo": None, "proveedor": None, "crudo": "",
+                "error": "timeout", "caducidad": caduca}
     parsed = parsear_estado(cp.stdout)
     if cp.returncode != 0 and parsed["logueado"] is None:
         parsed["error"] = (_limpiar(cp.stderr).strip() or "estado no disponible")
+    parsed["caducidad"] = caduca
     return parsed
 
 

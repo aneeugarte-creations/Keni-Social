@@ -67,15 +67,33 @@ function metodoLegible(metodo: string | null): string {
   }
 }
 
-/** Badge del estado de sesión. */
+/** Badge del estado de sesión: hay cuenta configurada Y su credencial sigue sirviendo.
+ *  Una sesión CADUCADA manda sobre `logueado` (que sigue en `true`): con el token muerto no se
+ *  genera nada, así que pintarla en verde sería la peor mentira del panel. */
 function BadgeAuth({ auth }: { auth: CuentaAuth | undefined }) {
   if (!auth || auth.logueado == null) {
     return <Badge variant="secondary">Desconocido</Badge>;
+  }
+  if (auth.caducidad?.caducada) {
+    return <Badge variant="error">Sesión caducada</Badge>;
   }
   if (auth.logueado) {
     return <Badge variant="ok">Cuenta conectada</Badge>;
   }
   return <Badge variant="outline">Sin cuenta</Badge>;
+}
+
+/** Aviso en línea de la sesión caducada, con lo único que la arregla: volver a entrar. */
+function AvisoCaducada({ auth }: { auth: CuentaAuth | undefined }) {
+  if (!auth?.caducidad?.caducada) return null;
+  return (
+    <p className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">
+      La sesión de esta cuenta caducó: <strong>no se genera nada con ella</strong> hasta volver a
+      autenticarla. {auth.caducidad.tiene_refresh
+        ? "Reintenta la lectura o vuelve a entrar con «Cambiar cuenta»."
+        : "No se renovará sola: entra con «Cambiar cuenta» para restablecerla."}
+    </p>
+  );
 }
 
 /** Barra + texto de un medidor de uso (sesión 5h / semana / …). */
@@ -530,6 +548,7 @@ function TarjetaCuenta({
               </div>
             </dl>
 
+            <AvisoCaducada auth={data.auth} />
             <BloqueUso uso={data.uso} />
             <LineaBurnRate uso={usoBurn} />
 
