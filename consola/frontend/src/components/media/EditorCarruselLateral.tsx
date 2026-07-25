@@ -97,6 +97,7 @@ export const EditorCarruselLateral = React.forwardRef<
   const [galeria, setGaleria] = React.useState(false);
   const [horneando, setHorneando] = React.useState<number | null>(null);
   const [descargando, setDescargando] = React.useState(false);
+  const [intercambiando, setIntercambiando] = React.useState(false);
 
   // El índice activo nunca debe salirse de rango (al quitar el último slide).
   React.useEffect(() => {
@@ -238,8 +239,76 @@ export const EditorCarruselLateral = React.forwardRef<
     onSlides(slidesRef.current.filter((_, k) => k !== i));
     setActivo((a) => Math.max(0, a - 1));
   };
+  // Intercambia la PORTADA con el primer slide extra. La portada NO vive en `slides[]` (es el
+  // estado de la pieza), así que moverla no es permutar el array: hay que convertir una receta en
+  // la otra. La vieja portada se HORNEA antes de tocar nada —`serializarCarrusel` descarta los
+  // slides sin `objeto`, y un guardado a medio camino la perdería— y el intercambio se aborta
+  // entero si el horneado falla. `seguirA` es el índice donde queda el slide que el humano movió.
+  const intercambiarPortada = async (seguirA: 0 | 1) => {
+    const s = slidesRef.current[0];
+    if (!s) return;
+    if (s.tipo === "video") {
+      toast.error("Un video no puede ser la portada: la portada es una placa compuesta.");
+      return;
+    }
+    if (!slidePlacaEditable(s)) {
+      toast.error("Este slide no tiene foto ni titular con los que componer la portada.");
+      return;
+    }
+    // Un slide guarda UNA foto; la portada admite collage. Con más de una, el viaje de vuelta
+    // perdería fotos: se bloquea en vez de recortar en silencio.
+    const fotosPortada = portadaFotos.filter((f) => f.objeto.trim());
+    if (fotosPortada.length > 1) {
+      toast.error(
+        "La portada es un collage de varias fotos y un slide solo guarda una. Déjala con una sola foto antes de moverla.",
+      );
+      return;
+    }
+    const portada = fotosPortada[0];
+    const nuevoExtra: SlideCarrusel = {
+      tipo: "imagen",
+      objeto: "",
+      foto: portada?.objeto ?? "",
+      titular: portadaCopyIn,
+      plantillaId: portadaPlantillaId,
+      fotoEncuadre: serializarEncuadre(portada?.foco ? { foco: portada.foco, zoom: portada.zoom || 1 } : null),
+      sinPlaca: portadaPlacaOculta,
+    };
+    if (!slidePlacaEditable(nuevoExtra)) {
+      toast.error("La portada no tiene foto ni titular: no hay nada que mover detrás.");
+      return;
+    }
+    setIntercambiando(true);
+    try {
+      const objeto = await componerObjeto(nuevoExtra);
+      if (!objeto) return; // `componerObjeto` ya avisó; no tocamos el estado
+      // El horneado pendiente del slide que asciende ya no aplica: su receta pasa a la portada.
+      const pendiente = temporizadores.current.get(0);
+      if (pendiente) window.clearTimeout(pendiente);
+      temporizadores.current.delete(0);
+      const enc = parsearEncuadre(s.fotoEncuadre);
+      onPortadaFotos([{ objeto: s.foto ?? "", foco: enc?.foco ?? null, zoom: enc?.zoom ?? 0 }]);
+      onPortadaCopyIn(s.titular ?? "");
+      onPortadaPlantillaId(s.plantillaId ?? "");
+      onPortadaPlacaOculta(!!s.sinPlaca);
+      onSlides([{ ...nuevoExtra, objeto }, ...slidesRef.current.slice(1)]);
+      setActivo(seguirA);
+    } finally {
+      setIntercambiando(false);
+    }
+  };
+
   const moverActivo = (delta: -1 | 1) => {
-    if (activo === 0) return; // la portada va fija en el frente
+    // Frontera con la portada: mover el slide 2 a la izquierda (o la portada a la derecha) es
+    // un intercambio de recetas, no una permutación.
+    if (activo === 0) {
+      if (delta === 1) void intercambiarPortada(1);
+      return;
+    }
+    if (activo === 1 && delta === -1) {
+      void intercambiarPortada(0);
+      return;
+    }
     const i = activo - 1;
     const j = i + delta;
     if (j < 0 || j >= slidesRef.current.length) return;
@@ -323,7 +392,8 @@ export const EditorCarruselLateral = React.forwardRef<
           <span className="text-xs font-normal text-muted-foreground">de {total}</span>
         </span>
         <div className="flex items-center gap-1">
-          {!esPortada && (
+          {/* Reordenar incluye la PORTADA: mover el slide 2 a la izquierda lo asciende al frente. */}
+          {total > 1 && (
             <>
               <Button
                 type="button"
@@ -331,7 +401,7 @@ export const EditorCarruselLateral = React.forwardRef<
                 variant="ghost"
                 className="px-2"
                 onClick={() => moverActivo(-1)}
-                disabled={disabled || activo <= 1}
+                disabled={disabled || intercambiando || activo === 0}
                 aria-label="Mover slide a la izquierda"
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -342,23 +412,25 @@ export const EditorCarruselLateral = React.forwardRef<
                 variant="ghost"
                 className="px-2"
                 onClick={() => moverActivo(1)}
-                disabled={disabled || activo >= total - 1}
+                disabled={disabled || intercambiando || activo >= total - 1}
                 aria-label="Mover slide a la derecha"
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="gap-1 px-2 text-destructive hover:text-destructive"
-                onClick={quitarActivo}
-                disabled={disabled}
-                aria-label="Quitar slide"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
             </>
+          )}
+          {!esPortada && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="gap-1 px-2 text-destructive hover:text-destructive"
+              onClick={quitarActivo}
+              disabled={disabled}
+              aria-label="Quitar slide"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
           )}
           <Button
             type="button"

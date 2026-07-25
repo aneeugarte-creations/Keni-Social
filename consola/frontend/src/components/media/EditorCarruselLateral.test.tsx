@@ -7,11 +7,15 @@
  */
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EditorCarruselLateral } from "./EditorCarruselLateral";
 import { api } from "@/lib/api";
 import type { SlideCarrusel } from "@/lib/carrusel";
+
+// Los avisos de un intercambio con la portada BLOQUEADO (video / collage) se asertan.
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 // Stub de EditorPlacaInline: muestra el copyIn recibido y un botón que lo cambia (simula editar
 // el titular del slide activo), más un botón para abrir la galería.
@@ -201,5 +205,90 @@ describe("EditorCarruselLateral", () => {
         { tipo: "imagen", objeto: "artes/nuevo.png", titular: "Editado", foto: "f.jpg" },
       ]),
     );
+  });
+
+  // --- Frontera con la PORTADA: mover el slide 2 al frente intercambia RECETAS --- //
+
+  it("mover el slide 2 a la izquierda lo asciende a portada y baja la portada al puesto 2", async () => {
+    const componer = vi.spyOn(api, "componerSlide").mockResolvedValue({
+      id: "artes/portada-abajo.png",
+      url: "/api/media/artes/portada-abajo.png",
+    });
+    const { onSlides } = renderLateral([
+      { tipo: "imagen", objeto: "s2.png", titular: "Clave 2", foto: "f2.jpg" },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Slide siguiente" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mover slide a la izquierda" }));
+
+    // La portada que baja se HORNEA antes de tocar el estado: un slide sin `objeto` lo
+    // descarta `serializarCarrusel`, así que un guardado a medias la perdería.
+    await waitFor(() =>
+      expect(componer).toHaveBeenCalledWith("pub-1", {
+        foto: "portada.jpg",
+        titular: "Titular portada",
+        plantilla_id: "",
+        foto_encuadre: "",
+        sin_plantilla: false,
+      }),
+    );
+    // El slide asciende: su receta pasa a ser la de la portada.
+    await waitFor(() => expect(BASE.onPortadaCopyIn).toHaveBeenCalledWith("Clave 2"));
+    expect(BASE.onPortadaFotos).toHaveBeenCalledWith([{ objeto: "f2.jpg", foco: null, zoom: 0 }]);
+    // La vieja portada queda de slide 2, con su media ya horneado.
+    expect(onSlides).toHaveBeenCalledWith([
+      {
+        tipo: "imagen",
+        objeto: "artes/portada-abajo.png",
+        foto: "portada.jpg",
+        titular: "Titular portada",
+        plantillaId: "",
+        fotoEncuadre: "",
+        sinPlaca: false,
+      },
+    ]);
+  });
+
+  it("desde la portada, mover a la derecha la baja al puesto 2 y sigue al slide movido", async () => {
+    vi.spyOn(api, "componerSlide").mockResolvedValue({
+      id: "artes/x.png",
+      url: "/api/media/artes/x.png",
+    });
+    renderLateral([{ tipo: "imagen", objeto: "s2.png", titular: "Clave 2", foto: "f2.jpg" }]);
+    // En la portada no hay nada a la izquierda; a la derecha sí.
+    expect(screen.getByRole("button", { name: "Mover slide a la izquierda" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Mover slide a la derecha" }));
+    await waitFor(() => expect(screen.getByText("Slide 2")).toBeInTheDocument());
+  });
+
+  it("un video no puede ascender a portada: avisa y no toca nada", () => {
+    const componer = vi.spyOn(api, "componerSlide");
+    const { onSlides } = renderLateral([{ tipo: "video", objeto: "v.mp4" }]);
+    fireEvent.click(screen.getByRole("button", { name: "Slide siguiente" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mover slide a la izquierda" }));
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("video"));
+    expect(componer).not.toHaveBeenCalled();
+    expect(onSlides).not.toHaveBeenCalled();
+    expect(BASE.onPortadaFotos).not.toHaveBeenCalled();
+  });
+
+  it("con la portada en collage de varias fotos el intercambio se bloquea (un slide guarda una)", () => {
+    const componer = vi.spyOn(api, "componerSlide");
+    const onSlides = vi.fn();
+    render(
+      <EditorCarruselLateral
+        {...BASE}
+        portadaFotos={[
+          { objeto: "a.jpg", foco: null, zoom: 0 },
+          { objeto: "b.jpg", foco: null, zoom: 0 },
+        ]}
+        slides={[{ tipo: "imagen", objeto: "s2.png", titular: "Clave 2", foto: "f2.jpg" }]}
+        onSlides={onSlides}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Slide siguiente" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mover slide a la izquierda" }));
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("collage"));
+    expect(componer).not.toHaveBeenCalled();
+    expect(onSlides).not.toHaveBeenCalled();
   });
 });
