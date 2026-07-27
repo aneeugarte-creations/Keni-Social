@@ -118,11 +118,17 @@ export const apiAudio = {
     /**
      * Sube un audio/vídeo (multipart `archivo` + `marca`, opc. `idioma`/`nombre`/`tratamientos[]`),
      * crea la fila y encola el ASR. Devuelve la transcripción + el `gen_id` a sondear.
+     *
+     * `timeoutMs` como `/media/video`: el back acepta hasta `KENI_VIDEO_MAX_MB` (def 300 MB) y una
+     * grabación del navegador ronda 1 MB/minuto, así que con el techo por defecto (30 s) el
+     * navegador ABORTA la subida a medio multipart y el back responde 400 al leer un cuerpo que
+     * ya no llega: cualquier audio que tarde más de 30 s en subir era imposible de transcribir.
      */
     crear: (form: FormData) =>
       peticion<{ transcripcion: TranscripcionAudio; gen_id: string }>("/audio/transcripciones", {
         metodo: "POST",
         form,
+        timeoutMs: 300_000,
       }),
     /** Edita el audio base (nombre/marca(ámbito)/idioma/estado/segmentos/texto). `marca:""` = personal. */
     guardar: (

@@ -86,6 +86,15 @@ services:
       # Sin idle-timeout: imprescindible para streaming SSE (generacion token a
       # token de la Consola) y para el PTY/WebSocket del code-launcher.
       - --entrypoints.websecure.transport.respondingTimeouts.idleTimeout=0
+      # readTimeout = "duracion maxima para leer la peticion ENTERA, incluido el cuerpo".
+      # En Traefik v3 su DEFECTO es 60s, y eso capaba TODA subida grande en el ingress: el
+      # back acepta hasta KENI_VIDEO_MAX_MB (def 300 MB) y el cliente espera hasta 300s
+      # (audio y video), pero Traefik cortaba a los 60s pasara lo que pasara. Lo subimos por
+      # ENCIMA del techo del cliente para que quien se rinda primero sea el navegador (error
+      # de la app, claro) y no el ingress (conexion cortada en seco). No afecta a SSE: el
+      # readTimeout mide la LECTURA de la peticion, no la escritura de la respuesta
+      # (writeTimeout/idleTimeout, ambos ya a 0).
+      - --entrypoints.websecure.transport.respondingTimeouts.readTimeout=600
       # - --api.dashboard=true   # opcional: protege con middleware antes de exponer
       # - --log.level=DEBUG
     # network_mode: host — Traefik es dueño directo de :80/:443 y alcanza a front/back
