@@ -94,9 +94,10 @@ from .pasos.caducidad import paso_caducidad  # noqa: F401
 from .pasos.etiquetas import paso_etiquetas  # noqa: F401
 from .pasos.fusionar_semantica import paso_fusionar_semantica  # noqa: F401
 from .pasos.rescore import paso_rescore  # noqa: F401
-from .pasos.traducir import paso_traducir  # noqa: F401
+from .pasos.traducir import encolar_traduccion_cluster, paso_traducir  # noqa: F401
 
 __all__ = [
+    "encolar_traduccion_cluster",
     "ejecutar_barrido",
     "iniciar_ingesta",
     "ia_fondo_bloqueada",

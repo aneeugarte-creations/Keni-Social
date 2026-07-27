@@ -160,6 +160,25 @@ export async function resolverMotivoCaida(error: unknown): Promise<MotivoCaida> 
 }
 
 /**
+ * ¿Este error es una CAÍDA de conexión (la consola no responde) y no una respuesta de negocio?
+ *
+ * Sin respuesta HTTP (`status === 0`) siempre lo es. Un 5xx solo lo es cuando NO trae cuerpo de
+ * aplicación: los 502/503/504 del proxy (back desplegando/caído) llegan sin JSON o con el
+ * `motivo` que pone el front, mientras que un 503 del back con `{error: "..."}` es la API
+ * hablando —tratarlo como avería levantaría el aviso de «consola no disponible» por un error
+ * de negocio perfectamente explicable.
+ */
+export function esCaidaDeConexion(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return false;
+  if (error.status === 0) return true;
+  if (error.status < 502) return false;
+  const cuerpo = error.cuerpo;
+  if (!cuerpo) return true;
+  if (cuerpo.motivo === "deploy" || cuerpo.motivo === "incidente") return true;
+  return typeof cuerpo.error !== "string" && typeof cuerpo.mensaje !== "string";
+}
+
+/**
  * Mensaje legible (en español) para CUALQUIER error capturado en la UI. Fuente única que
  * reemplaza las ~30 copias locales que vivían en páginas y componentes:
  *   - `ApiError` con `status === 0` → fallo de red/servidor caído (sin respuesta HTTP);

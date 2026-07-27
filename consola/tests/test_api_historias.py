@@ -633,15 +633,43 @@ def test_usar_extranjera_traduce_en_el_acto(cliente, monkeypatch):
     assert refrescado["titulo_es"] == _TITULO_ES
 
 
-def test_usar_extranjera_falla_traduccion_503(cliente, monkeypatch):
-    # Si Haiku falla, NO se baja inglés al feed: 503 y la historia sigue sin usar (se reintenta).
+def test_usar_extranjera_sin_traduccion_encola_y_pide_reintentar(cliente, monkeypatch):
+    # Sin traducción en el acto (el back no corre `claude`), NO se baja inglés al feed: la
+    # traducción se encola al worker y la respuesta es un 409 «todavía no» —nunca un 5xx, que
+    # el front leería como consola caída—. La historia sigue sin usar.
     monkeypatch.setattr("keni_consola.dominio.traducir.traducir_items", _fake_traducir_falla)
+    encoladas: list[str] = []
+    monkeypatch.setattr(
+        "keni_consola.produccion.recolectar_daemon.encolar_traduccion_cluster",
+        lambda cluster: bool(encoladas.append(str(cluster["id"]))) or True,
+    )
     _inicializar_cluster(
         "c1", titulo="Taiwan hopes US arms sale package can be approved soon",
         idioma="en", traducido=0,
     )
     r = cliente.post("/api/noticias/historias/c1/usar", json={"generar": False})
-    assert r.status_code == 503, r.text
+    assert r.status_code == 409, r.text
+    assert r.json()["traduccion_en_curso"] is True
+    assert "traduciendo" in r.json()["error"].lower()
+    assert encoladas == ["c1"]
+    assert repos.obtener_noticia_cluster("c1")["estado"] != "usado"
+
+
+def test_usar_extranjera_sin_traduccion_ni_encolado_no_promete_reintento(cliente, monkeypatch):
+    # Si tampoco se pudo encolar (presupuesto/pausa), el mensaje no promete una traducción en
+    # curso que no existe. Sigue siendo 409 y la historia sigue sin usar.
+    monkeypatch.setattr("keni_consola.dominio.traducir.traducir_items", _fake_traducir_falla)
+    monkeypatch.setattr(
+        "keni_consola.produccion.recolectar_daemon.encolar_traduccion_cluster",
+        lambda _cluster: False,
+    )
+    _inicializar_cluster(
+        "c1", titulo="Taiwan hopes US arms sale package can be approved soon",
+        idioma="en", traducido=0,
+    )
+    r = cliente.post("/api/noticias/historias/c1/usar", json={"generar": False})
+    assert r.status_code == 409, r.text
+    assert r.json()["traduccion_en_curso"] is False
     assert repos.obtener_noticia_cluster("c1")["estado"] != "usado"
 
 

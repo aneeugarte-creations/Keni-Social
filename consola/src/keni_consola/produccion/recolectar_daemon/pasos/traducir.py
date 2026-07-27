@@ -148,6 +148,39 @@ def paso_traducir() -> dict[str, Any]:
     }
 
 
+def encolar_traduccion_cluster(cluster: dict[str, Any]) -> bool:
+    """ENCOLA la traducción de UNA historia que una persona pidió llevar al tablero.
+
+    El back no ejecuta `claude` (ADR 0002: solo encola), así que una historia extranjera que
+    todavía no pasó por el barrido no se puede traducir en el acto: se encola aquí y el worker
+    la traduce. Devuelve True si al volver hay traducción EN CURSO —encolada ahora o ya
+    encolada por el barrido—, False si el encolado no ocurrió (presupuesto/pausa).
+
+    Marca el cluster `traduccion_encolada` antes de encolar para no duplicar el job del barrido,
+    y limpia la marca si el encolado no llegó a ocurrir. Ignora el toggle de etapa de la marca:
+    lo pidió una persona sobre una historia concreta, no el barrido automático.
+    """
+    cid = str(cluster.get("id") or "")
+    if not cid:
+        return False
+    try:
+        marcados = repos.marcar_clusters_traduccion_encolada([cid])
+    except Exception:  # noqa: BLE001 -- sin marca no encolamos: el barrido lo cogerá
+        _log.exception("usar_historia: fallo al marcar la traducción de %r.", cid)
+        return False
+    # Sin marca nueva ya hay un job en curso (o la historia acaba de traducirse): reintentar
+    # en unos segundos es exactamente lo que toca, así que cuenta como traducción en curso.
+    if not marcados:
+        return True
+    if _encolar_traduccion(str(cluster.get("marca") or ""), [cluster]):
+        return True
+    try:
+        repos.limpiar_traduccion_encolada([cid])
+    except Exception:  # noqa: BLE001 -- el limpiador de atascados lo cubre por TTL
+        _log.exception("usar_historia: fallo al re-abrir la traducción de %r.", cid)
+    return False
+
+
 def _encolar_traduccion(marca: str, clusters: list[dict[str, Any]]) -> bool:
     """Crea el registro de generación y ENCOLA el job de traducción de UNA marca. True si encoló.
 

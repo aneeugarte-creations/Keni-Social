@@ -935,9 +935,25 @@ async def usar_historia(request: Request) -> Response:
     if not (cluster.get("titulo_es") or "").strip() and extranjera:
         traducido = await run_in_threadpool(_pc_ingesta.traducir_cluster_ahora, cluster)
         if traducido is None:
+            # Sin traducción en el acto (el back no corre `claude`, o el gate de economía la
+            # cortó) la historia NO baja en inglés: se encola al worker y el 409 pide reintentar.
+            # 409 y no 5xx a propósito: es un "todavía no", no una avería de la consola —un 502-504
+            # dispara en el front el aviso de consola caída.
+            from ...produccion import recolectar_daemon
+
+            en_curso = await run_in_threadpool(
+                recolectar_daemon.encolar_traduccion_cluster, cluster
+            )
             return JSONResponse(
-                {"error": "No se pudo traducir la historia ahora mismo. Inténtalo en unos segundos."},
-                status_code=503,
+                {
+                    "error": (
+                        "Estamos traduciendo la historia al español. Reinténtalo en unos segundos."
+                        if en_curso
+                        else "No se pudo traducir la historia ahora mismo. Inténtalo en unos minutos."
+                    ),
+                    "traduccion_en_curso": en_curso,
+                },
+                status_code=409,
             )
         cluster = traducido
 

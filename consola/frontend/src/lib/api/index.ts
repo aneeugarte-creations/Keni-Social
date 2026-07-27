@@ -115,6 +115,7 @@ export {
   srcsetMedia,
   urlS3Objeto,
   ApiError,
+  esCaidaDeConexion,
   resolverMotivoCaida,
   deployActivo,
 } from "./_core";

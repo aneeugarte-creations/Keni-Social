@@ -493,6 +493,45 @@ def test_paso_traducir_reabre_lote_si_la_admision_rechaza(monkeypatch):
     assert limpiadas == [["c1"]]  # re-abierto para reintento
 
 
+def test_encolar_traduccion_cluster_encola_solo_esa_historia(monkeypatch):
+    """La acción manual («Empujar al feed» de una historia extranjera aún sin traducir) encola UN
+    job con SOLO esa historia, ruteado al carril de su marca, y la marca para no duplicar el job
+    del barrido."""
+    encoladas, marcadas, _limp = _parchear_encolado(monkeypatch)
+    cluster = {"id": "c1", "titulo": "Foreign one", "resumen": "Body", "idioma": "en", "marca": "unotv"}
+
+    assert recolectar_daemon.encolar_traduccion_cluster(cluster) is True
+    assert marcadas == [["c1"]]
+    assert len(encoladas) == 1
+    assert encoladas[0]["marca"] == "unotv"
+    assert _jobspec.carril(encoladas[0]["spec"]) == _ruteo.carril_de_marca("unotv")
+    assert [o["id"] for o in encoladas[0]["spec"]["procesar"]["originales"]] == ["c1"]
+
+
+def test_encolar_traduccion_cluster_no_duplica_el_job_del_barrido(monkeypatch):
+    """Si la historia ya tiene traducción en curso (nada que marcar), no se encola un segundo job:
+    igualmente hay traducción en curso, así que devuelve True (reintentar en unos segundos)."""
+    encoladas, _marcadas, _limp = _parchear_encolado(monkeypatch, marcados=lambda _ids: 0)
+    cluster = {"id": "c1", "titulo": "Foreign", "resumen": "Body", "idioma": "en", "marca": "unotv"}
+
+    assert recolectar_daemon.encolar_traduccion_cluster(cluster) is True
+    assert encoladas == []
+
+
+def test_encolar_traduccion_cluster_reabre_si_la_admision_rechaza(monkeypatch):
+    """Si la admisión rechaza (presupuesto/pausa), NO se promete traducción: devuelve False y
+    re-abre la historia para que el barrido la reintente."""
+
+    def _rechaza():
+        raise _generaciones.ColaLlenaError("presupuesto agotado")
+
+    _encoladas, _marcadas, limpiadas = _parchear_encolado(monkeypatch, encolar=_rechaza)
+    cluster = {"id": "c1", "titulo": "Foreign", "resumen": "Body", "idioma": "en", "marca": "unotv"}
+
+    assert recolectar_daemon.encolar_traduccion_cluster(cluster) is False
+    assert limpiadas == [["c1"]]
+
+
 def test_paso_traducir_reabre_atascados_antes_de_seleccionar(monkeypatch):
     """El paso RE-ABRE primero los clusters cuyo job de traducción quedó atascado (TTL)."""
     reabiertos = {"umbral": None}
