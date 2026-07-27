@@ -116,6 +116,16 @@ describe("PanelUsuarios", () => {
     expect(screen.getByText("Editor")).toBeInTheDocument();
   });
 
+  it("pinta el avatar de cada persona con el color de su familia de cargo", async () => {
+    stubFetch();
+    renderPanel();
+
+    expect(await screen.findByText("Ana López")).toBeInTheDocument();
+    // El admin es director (Dirección) y Ana community manager (Contenido y comunidad).
+    expect(screen.getByTitle("Dirección")).toBeInTheDocument();
+    expect(screen.getByTitle("Contenido y comunidad")).toBeInTheDocument();
+  });
+
   it("el buscador filtra las filas por nombre", async () => {
     stubFetch();
     renderPanel();

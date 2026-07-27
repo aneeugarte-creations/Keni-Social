@@ -4,6 +4,7 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import { AvatarCargo } from "@/components/comunes/AvatarCargo";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
@@ -213,18 +214,21 @@ export default function PanelUsuarios() {
                         onClick={() => navigate(`/usuarios/${u.id}`)}
                       >
                         <TableCell>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5 text-sm font-medium leading-tight">
-                              <span className="truncate">{nombreVisible(u)}</span>
-                              {u.id === actual?.id && (
-                                <span className="text-xs font-normal text-muted-foreground">
-                                  (tú)
-                                </span>
-                              )}
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <AvatarCargo cargo={(u.cargo ?? "") as CargoUsuario} />
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 text-sm font-medium leading-tight">
+                                <span className="truncate">{nombreVisible(u)}</span>
+                                {u.id === actual?.id && (
+                                  <span className="text-xs font-normal text-muted-foreground">
+                                    (tú)
+                                  </span>
+                                )}
+                              </div>
+                              <span className="block truncate text-xs text-muted-foreground">
+                                @{u.usuario}
+                              </span>
                             </div>
-                            <span className="block truncate text-xs text-muted-foreground">
-                              @{u.usuario}
-                            </span>
                           </div>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
