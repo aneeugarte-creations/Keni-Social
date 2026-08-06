@@ -179,6 +179,13 @@ docker compose pull && docker compose up -d   # actualizar (sube WOODPECKER_VERS
 docker compose down                            # parar (no borra volumenes)
 ```
 
+La version operativa esta fijada en `.env` y la version de arranque para un host nuevo en
+`.env.example`; ambas deben avanzar juntas. Antes de actualizar, guarda un `pg_dump` comprimido de
+`woodpecker-postgres` con modo `0600` y conserva la imagen anterior. Actualiza primero el server,
+comprueba `/health`, y recrea cada agente solo cuando no tenga workflows activos. El rollback vuelve
+a fijar `WOODPECKER_VERSION` a la version anterior y recrea server/agentes; restaura el dump solo si
+el server anterior no puede leer el esquema actualizado.
+
 Secretos de pipeline (registry, tokens) se anaden en la UI de Woodpecker por repo
 (Settings -> Secrets), nunca en git.
 
@@ -208,7 +215,7 @@ monta el `docker.sock`, el step construye las imagenes desde el checkout del pip
 
 1. **Activa "Volumenes" en la seccion "Confiado"** del repo (Repo Settings -> General ->
    *Confiado* -> *Volumenes*: "Pipeline containers are allowed to mount volumes"). En
-   Woodpecker v3.13 el antiguo flag "Trusted" es **granular**; con "Volumenes" basta para
+   Woodpecker v3.17 el antiguo flag "Trusted" es **granular**; con "Volumenes" basta para
    que el step monte el `docker.sock` + el `.env` (deja "Network" y "Seguridad" en off).
    Para disparar por la pestana *Deployments*, activa ademas **"Permitir despliegues"**.
    (Alternativa global, menos segura: fija `WOODPECKER_BACKEND_DOCKER_VOLUMES` en el agente
