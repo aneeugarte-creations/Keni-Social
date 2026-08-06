@@ -131,6 +131,7 @@ cp .env.example .env
 #   WOODPECKER_ADMIN        = logins de GitHub admin (coma-separados)
 #   WOODPECKER_GITHUB_CLIENT/_SECRET = de la OAuth App
 #   WOODPECKER_AGENT_SECRET = openssl rand -hex 32
+#   WOODPECKER_GRPC_SECRET  = openssl rand -hex 32   (persistente entre reinicios)
 #   WOODPECKER_DB_PASSWORD  = openssl rand -hex 24   (Postgres; ver override)
 
 # El volumen de datos lo escribe el server como uid 1000 (imagen v3):
