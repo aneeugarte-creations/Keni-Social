@@ -100,6 +100,7 @@ services:
       WOODPECKER_SERVER: "woodpecker-server:9000"
       DOCKER_HOST: "tcp://docker-socket-proxy:2375"
       WOODPECKER_AGENT_SECRET: "${WOODPECKER_AGENT_SECRET}"
+      WOODPECKER_AGENT_CONFIG_FILE: "/var/lib/woodpecker/agent.conf"
       WOODPECKER_MAX_WORKFLOWS: "${WOODPECKER_MAX_WORKFLOWS:-3}"
       # Red donde el agente engancha los contenedores de cada step del pipeline.
       WOODPECKER_BACKEND_DOCKER_NETWORK: "keni-ci_woodpecker"

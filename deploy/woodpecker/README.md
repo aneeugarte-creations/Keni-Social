@@ -15,6 +15,8 @@ Pipelines en `.woodpecker/` (espejo de `.github/workflows/ci.yml`).
   `keni-social_edge` (para que el Traefik host-mode lo enrute). Sin puertos
   publicados; Traefik le da `https://ci-social.kenitech.io` con el resolver `le`.
 - `woodpecker-agent` — ejecuta los pipelines (monta `/var/run/docker.sock`).
+- Su identidad se persiste en el volumen del agente mediante
+  `WOODPECKER_AGENT_CONFIG_FILE=/var/lib/woodpecker/agent.conf`; un reinicio no registra otro agente.
 - Forge: GitHub OAuth (org `kenitech-io`).
 
 ## Aislamiento de recursos — el CI comparte host con PRODUCCION ⚠
