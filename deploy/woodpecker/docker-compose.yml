@@ -117,8 +117,8 @@ services:
       #     tocar al user-facing. En el peor caso (3 workflows a tope) comparten los 9 cores 3-11.
       #   LIMIT_MEM=4294967296 (4 GiB en BYTES) => tope duro de RAM por step.
       # Son TOPES de CFS (throttle), no reservas: si el CI esta ocioso, prod usa toda la caja.
-      WOODPECKER_BACKEND_DOCKER_LIMIT_CPU_QUOTA: "400000"
-      WOODPECKER_BACKEND_DOCKER_LIMIT_MEM: "4294967296"
+      WOODPECKER_BACKEND_DOCKER_LIMIT_CPU_QUOTA: "900000"
+      WOODPECKER_BACKEND_DOCKER_LIMIT_MEM: "8589934592"
       # Fija los contenedores de STEP a los nucleos 3-11 (fuera de 0-2, dedicados al `back`
       # user-facing en el stack principal): el CI no compite por CPU con el arranque del back.
       WOODPECKER_BACKEND_DOCKER_LIMIT_CPU_SET: "3-11"

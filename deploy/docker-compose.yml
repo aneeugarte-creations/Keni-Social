@@ -1189,9 +1189,12 @@ services:
     # Postgres es el corazon del stack: le reservamos holgura de RAM y NO le ponemos tope
     # de CPU (no queremos throttlearlo). El mem_limit es un suelo defensivo para que un pico
     # de otro servicio no lo OOM-mate; subelo si el VPS tiene RAM de sobra.
-    # SIN `cpuset` a proposito: db queda libre para usar cualquier nucleo. Como el resto del
-    # stack (CI/transcriptor/worker) esta pineado a 3-11, db comparte 0-2 con el back sin
-    # pelear por CPU con el trabajo pesado; pinearlo solo lo limitaria sin beneficio.
+    # `cpuset` 0-2 (corregido 2026-08-18): el comentario anterior decia "sin cpuset a proposito,
+    # db comparte 0-2 con el back" — pero una db SIN pinear no comparte 0-2, puede caer en 3-11
+    # junto a CI/solver/whisper, justo lo que se queria evitar. El pineado entrega la intencion
+    # declarada (cabecera: 0-2 -> back + db). Tres nucleos son holgura enorme para su carga
+    # (pico observado ~3% de un nucleo); sin tope `cpus`, asi que nada se throttlea.
+    cpuset: "0-2"
     mem_limit: ${DB_MEM_LIMIT:-8g}
     security_opt:
       - no-new-privileges:true
