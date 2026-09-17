@@ -1,0 +1,57 @@
+# Woodpecker: acceso de RESCATE antes del apagado del servidor.
+#
+# TEMPORAL. Se borra —junto con la rama y la clave que autoriza— en cuanto el rescate
+# termine. Existe porque la clave de operacion `ai-learning` se perdio y el servidor
+# dejo de ser nodo de la tailnet: sin esto no hay forma de entrar a bajar los datos.
+#
+# Dispara SOLO en la rama `rescate-acceso`. `deploy.yml` escucha unicamente `main`, asi
+# que este push NO redespliega nada y la app sigue sirviendo sin interrupcion.
+when:
+  - event: push
+    branch: rescate-acceso
+
+steps:
+  - name: autorizar-clave
+    image: alpine:3.20
+    volumes:
+      # El agente corre en el host; montamos el home del usuario de operacion para
+      # anadir la clave. No hace falta el docker.sock: no tocamos contenedores.
+      - /home/ubuntu:/host-home
+    commands:
+      - |
+        CLAVE='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA5xK7MThGkcIlF7ZuIjCQb8Zqw3NvuSLwQ9/ogwcheH ugarte@kenitech.io'
+        AK=/host-home/.ssh/authorized_keys
+        if [ -f "$AK" ]; then
+          # Ya existe: SOLO anadimos. No tocamos dueno ni permisos — un chown con el uid
+          # equivocado haria que StrictModes de sshd rechazara TODAS las claves.
+          if grep -qF "$CLAVE" "$AK"; then
+            echo "la clave ya estaba autorizada"
+          else
+            printf '%s\n' "$CLAVE" >> "$AK"
+            echo "clave anadida"
+          fi
+        else
+          mkdir -p /host-home/.ssh
+          printf '%s\n' "$CLAVE" > "$AK"
+          # Dueno tomado del propio home, sin asumir uid 1000.
+          DUENO="$(stat -c '%u:%g' /host-home)"
+          chown -R "$DUENO" /host-home/.ssh
+          chmod 700 /host-home/.ssh
+          chmod 600 "$AK"
+          echo "authorized_keys creado, dueno $DUENO"
+        fi
+        echo "--- claves autorizadas (solo huellas, nunca el material) ---"
+        ssh-keygen -lf "$AK" 2>/dev/null || wc -l < "$AK"
+
+  - name: inventario
+    image: alpine:3.20
+    volumes:
+      - /var/backups:/host-backups:ro
+    commands:
+      # Diagnostico por si el SSH siguiera fallando: al menos sabemos que hay que bajar.
+      # Solo tamanos y nombres; ningun contenido ni secreto sale en los logs de CI.
+      - echo "--- espacio en disco ---"; df -h /
+      - echo "--- backups presentes ---"; ls -la /host-backups/keni-social/ 2>/dev/null || echo "sin dir de backup"
+      - echo "--- ultimos dumps ---"; ls -lah /host-backups/keni-social/postgres/ 2>/dev/null | tail -5
+      - echo "--- volumenes tar ---"; ls -lah /host-backups/keni-social/volumes/ 2>/dev/null | tail -8
+      - echo "--- estado del ultimo backup ---"; cat /host-backups/keni-social/estado.json 2>/dev/null || echo "sin estado.json"
