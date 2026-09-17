@@ -4,21 +4,22 @@
  *
  * Cada punto es una pieza, en su FECHA REAL de publicación:
  *   - X  = fecha de publicación (eje temporal; etiquetas por semana y por mes).
- *   - Y  = visualizaciones en escala LOGARÍTMICA (altura = alcance).
+ *   - Y  = vistas en escala LOGARÍTMICA.
  *   - Tamaño = engagement %.
- *   - Color  = red social.
+ *   - Color y FORMA = red social (la forma distingue redes sin depender solo del color).
  *
  * Un ÚNICO <Scatter> con el color por punto (así ninguna red tapa a otra) y un jitter
  * pequeño y determinista que separa piezas del mismo día sin falsear su posición. Antes se
- * "aplastaban" al lunes y se agrupaban por banda de alcance, lo que apilaba redes distintas
+ * "aplastaban" al lunes y se agrupaban por banda de vistas, lo que apilaba redes distintas
  * en el centro de la semana y hacía parecer que cada semana era de una sola red. Brillo
  * propio con un glow acotado (se desactiva con muchísimos puntos, por rendimiento).
  *
  * El panel y los colores se adaptan al TEMA (claro = fondo blanco; oscuro = casi negro con
  * glow), vía las variables del sistema de diseño.
  *
- * Reúsa la MISMA query que `PiezasConsolidada` (misma `queryKey`): caché compartida, sin
- * coste de API extra.
+ * Tiene query y PERIODO PROPIOS (selector 7 d / 30 d / 90 d / 1 año, independiente del rango
+ * global del dashboard) y paga sus propias llamadas a la API; solo `EvolucionRedes` comparte
+ * caché (misma `queryKey`) con `PiezasConsolidada`.
  */
 import { useQuery } from "@tanstack/react-query";
 import { Telescope } from "lucide-react";
@@ -36,6 +37,7 @@ import {
 import { marcaParam } from "@/components/comunes/selectores";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
+import { hoyCDMX } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import { nombreRed, numeroCompacto, numeroCompleto, porcentaje, redCanonica } from "@/lib/formato";
 import type { PiezaListado } from "@/types";
@@ -48,7 +50,7 @@ import { SeccionColapsable } from "./SeccionColapsable";
 /** Radio base (px) de las burbujas según engagement. */
 const R_MIN = 3;
 const R_MAX = 10;
-/** Jitter (± px) para separar piezas del mismo día/alcance sin falsear su posición. */
+/** Jitter (± px) para separar piezas del mismo día/altura sin falsear su posición. */
 const JITTER_X = 7;
 const JITTER_Y = 5;
 /** A partir de cuántos puntos se desactiva el glow (drop-shadow es caro por punto). */
@@ -65,7 +67,7 @@ const PERIODOS: Array<{ dias: number; label: string }> = [
 /** Punto del scatter ya preparado para recharts. */
 interface PuntoDato {
   x: number; // timestamp (ms) — FECHA REAL de publicación
-  y: number; // log10(visualizaciones) — eje vertical (alcance)
+  y: number; // log10(visualizaciones) — eje vertical (vistas)
   r: number; // radio en px (deriva de engagement)
   jx: number; // jitter horizontal (px) — separa piezas del mismo día
   jy: number; // jitter vertical (px)
@@ -118,21 +120,55 @@ function hash01(s: string): number {
   return (h >>> 0) / 4294967296;
 }
 
-/** Forma de cada punto: un círculo con su color (de `payload.fill`) y brillo propio acotado. */
+/**
+ * Forma SVG de cada red, centrada en (x, y) con "radio" r — además del color, la FORMA
+ * distingue la red (accesible sin depender solo del color): facebook = círculo,
+ * instagram = cuadrado, tiktok = triángulo, youtube = rombo, X = cruz. La usan los
+ * puntos del scatter y la leyenda (mismo lenguaje visual en ambos sitios).
+ */
+function formaRed(
+  red: string,
+  x: number,
+  y: number,
+  r: number,
+  props: React.SVGAttributes<SVGElement>,
+): React.ReactElement {
+  switch (red) {
+    case "instagram": // cuadrado
+      return <rect x={x - r} y={y - r} width={2 * r} height={2 * r} {...props} />;
+    case "tiktok": // triángulo
+      return <polygon points={`${x},${y - r} ${x + r},${y + r} ${x - r},${y + r}`} {...props} />;
+    case "youtube": // rombo (cuadrado rotado 45°: vértices a distancia r del centro)
+      return <polygon points={`${x},${y - r} ${x + r},${y} ${x},${y + r} ${x - r},${y}`} {...props} />;
+    case "x": {
+      // cruz (signo +): brazos de medio-grosor t
+      const t = r * 0.4;
+      return (
+        <path
+          d={`M ${x - t} ${y - r} H ${x + t} V ${y - t} H ${x + r} V ${y + t} H ${x + t} V ${y + r} H ${x - t} V ${y + t} H ${x - r} V ${y - t} H ${x - t} Z`}
+          {...props}
+        />
+      );
+    }
+    default: // facebook (y cualquier otra red): círculo
+      return <circle cx={x} cy={y} r={r} {...props} />;
+  }
+}
+
+/** Punto del scatter: la forma de su red, con su color (`payload.fill`), trazo de
+ *  contraste (legible sobre fondo claro) y brillo propio acotado. */
 function Punto(props: { cx?: number; cy?: number; payload?: PuntoDato; glow?: boolean }) {
   const { cx, cy, payload, glow = true } = props;
   if (cx == null || cy == null || !payload) return null;
-  const { r, fill } = payload;
-  return (
-    <circle
-      cx={cx + payload.jx}
-      cy={cy + payload.jy}
-      r={r}
-      fill={fill}
-      fillOpacity={0.85}
-      style={glow ? { filter: `drop-shadow(0 0 ${Math.min(2, r * 0.45)}px ${fill})` } : undefined}
-    />
-  );
+  const { r, fill, red, jx, jy } = payload;
+  return formaRed(red, cx + jx, cy + jy, r, {
+    fill,
+    fillOpacity: 0.85,
+    stroke: "hsl(var(--foreground))",
+    strokeOpacity: 0.25,
+    strokeWidth: 1,
+    style: glow ? { filter: `drop-shadow(0 0 ${Math.min(2, r * 0.45)}px ${fill})` } : undefined,
+  });
 }
 
 /** Tooltip (tematizado) con el detalle de la pieza bajo el cursor. */
@@ -179,16 +215,20 @@ export function PanoramaPiezas({
   // El Panorama tiene su PROPIO selector de periodo (no usa el rango global de arriba): pide
   // los últimos `dias` días (máx. 366 por el límite del backend). Por eso usa su propia queryKey.
   const [dias, setDias] = React.useState(364);
+  // Día de HOY en zona CDMX (no la del navegador): ancla del rango. Como entra en las deps
+  // del memo (y por tanto en la queryKey vía el token), el rango rota solo si la pestaña
+  // queda abierta de un día para otro.
+  const hoyIso = hoyCDMX();
   const rangoPeriodo = React.useMemo(() => {
     const iso = (d: Date) =>
       `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
         d.getDate(),
       ).padStart(2, "0")}`;
-    const hoy = new Date();
-    const desde = new Date(hoy);
+    // Anclado a mediodía para que la resta de días no derive con los cambios de hora.
+    const desde = new Date(`${hoyIso}T12:00:00`);
     desde.setDate(desde.getDate() - dias);
-    return tokenRango(iso(desde), iso(hoy));
-  }, [dias]);
+    return tokenRango(iso(desde), hoyIso);
+  }, [dias, hoyIso]);
 
   const { data, isPending, isError } = useQuery({
     queryKey: ["metricas", "piezas-listado-periodo", rangoPeriodo, marca_ ?? "todas"],
@@ -336,7 +376,7 @@ export function PanoramaPiezas({
           onClick={() => setDias(p.dias)}
           aria-pressed={dias === p.dias}
           className={cn(
-            "rounded px-2 py-1 text-xs transition-colors",
+            "rounded px-2.5 py-1.5 text-xs transition-colors",
             dias === p.dias
               ? "bg-accent font-medium text-foreground"
               : "text-muted-foreground hover:text-foreground",
@@ -356,30 +396,46 @@ export function PanoramaPiezas({
         </p>
       ) : total === 0 ? (
         <p className="py-10 text-center text-sm text-muted-foreground">
-          Sin piezas con fecha en este periodo.
+          Aún no hay piezas publicadas en este periodo.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border bg-card p-4 dark:border-white/5 dark:bg-[#0b0b12]">
-          {/* Leyenda: redes presentes con su color. */}
+        <div className="overflow-hidden rounded-xl border border-border bg-card p-6">
+          {/* Leyenda: redes presentes con su color Y su forma (la misma del scatter) +
+              rótulo de honestidad de la escala (eje log) y de la codificación por tamaño. */}
           <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
             {redesPresentes.map((red) => (
               <span
                 key={red}
                 className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
               >
-                <span
-                  className="h-2.5 w-2.5 rounded-full"
-                  style={{ backgroundColor: colorDe(red) }}
-                />
+                <svg className="h-3 w-3" viewBox="0 0 12 12" aria-hidden="true">
+                  {formaRed(red, 6, 6, 4, {
+                    fill: colorDe(red),
+                    stroke: "hsl(var(--foreground))",
+                    strokeOpacity: 0.25,
+                    strokeWidth: 1,
+                  })}
+                </svg>
                 {nombreRed(red)}
               </span>
             ))}
+            <span className="ml-auto inline-flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-1" aria-hidden="true">
+                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+                <span className="h-3 w-3 rounded-full bg-muted-foreground" />
+              </span>
+              <span className="text-xs text-muted-foreground">
+                Eje vertical: vistas en escala logarítmica · tamaño del punto = engagement
+              </span>
+            </span>
           </div>
 
-          <ResponsiveContainer width="100%" height={400}>
+          <ResponsiveContainer width="100%" height={384}>
             <ScatterChart margin={{ top: 12, right: 22, bottom: 4, left: 8 }}>
               <CartesianGrid stroke="hsl(var(--border))" strokeOpacity={0.5} strokeDasharray="3 3" />
-              {/* Eje de SEMANAS (día del lunes), pegado al gráfico. */}
+              {/* Eje de DÍAS (día del mes), pegado al gráfico. En rangos largos (> 90 d) se
+                  oculta (height 0, sin ticks): sería una fila de números 1-31 sin valor. El
+                  eje debe existir igualmente porque el Scatter lo referencia por xAxisId. */}
               <XAxis
                 xAxisId="sem"
                 type="number"
@@ -388,10 +444,10 @@ export function PanoramaPiezas({
                 ticks={ticksSemana}
                 interval={0}
                 tickFormatter={fmtDiaSemana}
-                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
+                tick={dias > 90 ? false : { fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
                 tickLine={false}
-                axisLine={{ stroke: "hsl(var(--border))" }}
-                height={16}
+                axisLine={dias > 90 ? false : { stroke: "hsl(var(--border))" }}
+                height={dias > 90 ? 0 : 16}
               />
               {/* Eje de MESES, debajo, como contexto del periodo. */}
               <XAxis
@@ -442,7 +498,7 @@ export function PanoramaPiezas({
     <SeccionColapsable
       titulo="Panorama de piezas"
       icono={Telescope}
-      descripcion="Cada punto es una pieza publicada. Elige el periodo con el selector."
+      descripcion="Cada punto es una pieza: altura = vistas (escala logarítmica), tamaño = engagement, color = red. Este panorama usa su propio periodo (selector de la derecha), independiente del periodo global de arriba."
       acciones={selectorPeriodo}
     >
       {contenido}
