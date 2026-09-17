@@ -37,6 +37,9 @@ const CLAVE_SIDEBAR_COLAPSADO = "keni:sidebar-colapsado";
  */
 export function AppShell() {
   const location = useLocation();
+  // El editor de Imagen va a PANTALLA COMPLETA (estilo Canva): se salta el padding y la cabecera
+  // de sección del shell para que el lienzo llene el alto disponible (sin scroll de página).
+  const esEditor = location.pathname === "/contenido/imagen";
   const [menuAbierto, setMenuAbierto] = React.useState(false);
 
   // Detecta un deploy nuevo y recarga en la siguiente navegación (sin pedirlo a mano).
@@ -153,27 +156,40 @@ export function AppShell() {
           </div>
         </header>
 
-        <main className={cn("flex-1 overflow-y-auto")}>
-          {/* Contenido a ancho completo (estilo Vercel/edit-consola), no centrado. */}
-          <div className="w-full px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-            {/* Cabecera de sección UNIFICADA (misma altura/ancho/posición en todas las
-                páginas): pestañas del hub, o el título de la página plana, más las acciones
-                a la derecha. Las páginas portalizan título/acciones a sus huecos vía el
-                proveedor de contexto (envuelve también al `<Outlet/>`). Vive FUERA del
-                boundary: un fallo de página no debe tumbar la barra de navegación. */}
+        <main className={cn(esEditor ? "min-h-0 flex-1 overflow-hidden" : "flex-1 overflow-y-auto")}>
+          {esEditor ? (
+            // PANTALLA COMPLETA: sin padding ni cabecera de sección; el editor gestiona su propio
+            // layout y LLENA el alto (su raíz usa `h-full`). Conservamos el ProveedorEncabezado para
+            // que `TituloPagina` no rompa, aunque su slot no se pinte aquí.
             <ProveedorEncabezado value={ctxEncabezado}>
-              <EncabezadoSeccion
-                refInicio={setSlotInicio}
-                refAcciones={setSlotAcciones}
-                tituloPresente={tituloCount > 0}
-              />
               <FronteraError key={location.pathname}>
                 <React.Suspense fallback={<CargandoPagina />}>
                   <Outlet />
                 </React.Suspense>
               </FronteraError>
             </ProveedorEncabezado>
-          </div>
+          ) : (
+            /* Contenido a ancho completo (estilo Vercel/edit-consola), no centrado. */
+            <div className="w-full px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+              {/* Cabecera de sección UNIFICADA (misma altura/ancho/posición en todas las
+                  páginas): pestañas del hub, o el título de la página plana, más las acciones
+                  a la derecha. Las páginas portalizan título/acciones a sus huecos vía el
+                  proveedor de contexto (envuelve también al `<Outlet/>`). Vive FUERA del
+                  boundary: un fallo de página no debe tumbar la barra de navegación. */}
+              <ProveedorEncabezado value={ctxEncabezado}>
+                <EncabezadoSeccion
+                  refInicio={setSlotInicio}
+                  refAcciones={setSlotAcciones}
+                  tituloPresente={tituloCount > 0}
+                />
+                <FronteraError key={location.pathname}>
+                  <React.Suspense fallback={<CargandoPagina />}>
+                    <Outlet />
+                  </React.Suspense>
+                </FronteraError>
+              </ProveedorEncabezado>
+            </div>
+          )}
         </main>
       </div>
     </div>

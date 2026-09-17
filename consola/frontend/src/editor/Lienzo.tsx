@@ -302,15 +302,7 @@ export function Lienzo({
 
   return (
     <div className="flex h-full w-full items-stretch gap-2">
-    <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-    {/* Franja superior fija: aloja la barra de acciones ARRIBA de la imagen (fuera del lienzo),
-        en un sitio estable que NO sigue a la selección —igual que el raíl de zoom va a la derecha—.
-        La altura va reservada siempre para que el lienzo no se recoloque al aparecer/desaparecer. */}
-    <div className="flex h-9 shrink-0 items-center justify-center px-1">
-      {acciones.length > 0 && !arrastrando && !editando && !modoImagen && (
-        <BarraAcciones acciones={acciones} />
-      )}
-    </div>
+    <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
     <div ref={medirRef} className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
     <div className="relative" style={{ width: baseFit * w, height: baseFit * h }}>
       <div
@@ -444,6 +436,16 @@ export function Lienzo({
 
     </div>
     </div>
+
+      {/* Barra de acciones de la selección: OVERLAY arriba-centro. Es ABSOLUTA (no ocupa layout),
+          así el lienzo se mantiene centrado verticalmente. Aparece solo cuando hay selección. */}
+      {acciones.length > 0 && !arrastrando && !editando && !modoImagen && (
+        <div className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center px-2">
+          <div className="pointer-events-auto">
+            <BarraAcciones acciones={acciones} />
+          </div>
+        </div>
+      )}
     </div>
 
     {/* Controles de ENCUADRE + zoom: raíl vertical AL LADO del lienzo (fuera de la foto, no tapa

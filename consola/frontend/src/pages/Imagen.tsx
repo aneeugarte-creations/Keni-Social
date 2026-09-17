@@ -473,7 +473,7 @@ export default function Imagen() {
   const guardando = guardar.isPending || guardarComo.isPending;
 
   return (
-    <div className="flex h-[calc(100dvh-7.5rem)] flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       {/* Título de sección (portaliza a la barra de cabecera unificada del shell). */}
       <TituloPagina titulo="Imagen" icono={Image} />
       {/* Barra superior del editor: acciones (guardar / guardar como / pieza) + estado + export.
