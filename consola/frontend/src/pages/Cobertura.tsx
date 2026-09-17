@@ -417,8 +417,16 @@ export default function Cobertura() {
     <>
       <AvisoSalud />
 
-      {/* Pestañas de flujo: Candidatas (la mesa) · En marcha · Descartadas */}
-      <div className="mb-4 flex gap-1 border-b" role="tablist" aria-label="Vista del pool">
+      {/* Barra de ÁREAS del pool, PEGAJOSA arriba (Candidatas · En marcha · Descartadas): el
+          trabajo real (la mesa/listas que renderiza la pestaña activa) es lo protagonista y las
+          áreas quedan SIEMPRE a mano sin deslizar pasando el riel/chrome. Solo el área activa se
+          monta debajo, así que no hay scroll largo para alcanzar otra. Mantiene el idiom de tabs
+          ya presente (role=tablist + subrayado border-b-2 border-primary) y sus data-testids. */}
+      <div
+        className="sticky top-0 z-10 mb-4 flex gap-1 border-b bg-background"
+        role="tablist"
+        aria-label="Vista del pool"
+      >
         {VISTAS.map((v) => (
           <button
             key={v.id}

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Inbox, Rss, BookOpen, Activity, TrendingUp } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -7,7 +8,7 @@ import { api } from "@/lib/api";
 import { CatalogoPresets } from "./fuentes/CatalogoPresets";
 import { GestionFuentes } from "./fuentes/GestionFuentes";
 // Salud del motor de ingesta de feeds: estado de los canales externos (feeds activos/
-// con error, huecos, reactivar). Vive bajo "Externas".
+// con error, huecos, reactivar). Es un ÁREA propia.
 import { RendimientoFuentes } from "./fuentes/RendimientoFuentes";
 import { SaludFeeds } from "./fuentes/SaludFeeds";
 // Buzones del equipo (listas tipo portal/WhatsApp/corresponsales y Excel): la fuente
@@ -18,28 +19,43 @@ import CajonesDia from "./CajonesDia";
 // con IA: la nota va tal cual y el media adjunto ES el carrusel).
 import CajonPresidencia from "./fuentes/CajonPresidencia";
 
-/** Una clase de fuente (pestaña): Externas o Internas. */
-type PestanaTipo = {
+/** Un ÁREA de Fuentes (pestaña de primer nivel): etiqueta + icono. */
+type Area = {
   valor: string;
   etiqueta: string;
+  icono: typeof Rss;
 };
 
-// Solo hay DOS clases de fuente, y la barra lo refleja:
-//   • Externas — lo que llega de fuera: feeds RSS (+ catálogo) y el estado del motor.
-//   • Internas — lo que pone el equipo: buzones del día (Cajones). (Las aportaciones manuales
-//     "Idea" e "Interno AMX" se mudaron a Contenidos, al banco de ideas evergreen.)
-const PESTANAS_TIPO: PestanaTipo[] = [
-  { valor: "externas", etiqueta: "Externas" },
-  { valor: "internas", etiqueta: "Internas" },
-  // Rendimiento: evaluación editorial de las fuentes (quién abre, quién corrobora, % uso).
-  { valor: "rendimiento", etiqueta: "Rendimiento" },
+// ANTES Fuentes tenía 3 pestañas (Externas/Internas/Rendimiento) que APILABAN secciones
+// grandes y obligaban a deslizar para llegar a la que querías. Ahora cada sección grande es
+// un ÁREA alcanzable de un clic; solo el área activa se renderiza → sin scroll largo:
+//   • Feeds RSS — alta/edición de los feeds (con su salud inline).
+//   • Catálogo  — feeds curados listos para activar de un clic.
+//   • Salud     — monitor del motor de ingesta (activos/error/stale/huecos, reactivar).
+//   • Buzones   — lo que pone el equipo: Presidencia + Cajones del día.
+//   • Rendimiento — evaluación editorial por fuente (quién abre, % de uso).
+const AREAS: Area[] = [
+  { valor: "feeds", etiqueta: "Feeds RSS", icono: Rss },
+  { valor: "catalogo", etiqueta: "Catálogo", icono: BookOpen },
+  { valor: "salud", etiqueta: "Salud", icono: Activity },
+  { valor: "buzones", etiqueta: "Buzones", icono: Inbox },
+  { valor: "rendimiento", etiqueta: "Rendimiento", icono: TrendingUp },
 ];
 
+// Deep-link de compatibilidad: las rutas viejas del hub (cajones/eventos) y los enlaces
+// anteriores llegan con `?tab=externas|internas|rendimiento`. Mapeamos esos valores a las
+// nuevas áreas para que NINGÚN enlace viejo caiga en blanco. ("externas" abría la primera
+// sección externa = los feeds RSS; "internas" = los buzones del equipo).
+const ALIAS_TAB: Record<string, string> = {
+  externas: "feeds",
+  internas: "buzones",
+  rendimiento: "rendimiento",
+};
+
 /**
- * Página de Fuentes: ajustes de los canales de los que se alimentan Noticias y Contenidos.
- * Dos clases, dos pestañas:
- *   • Externas — feeds RSS (alta/edición con salud inline), catálogo y estado del motor.
- *   • Internas — buzones del equipo (Cajones) y aportes a mano (idea/interno).
+ * Página de Fuentes: ajustes de los canales de los que se alimentan Noticias y Contenidos,
+ * ORGANIZADA POR ÁREAS. Una barra de áreas pegajosa arriba (siempre a mano); solo el área
+ * activa se renderiza, así que no hay que deslizar para alcanzar la sección que buscas.
  */
 export default function Fuentes() {
   // Las marcas y redes viven en el catálogo de opciones de publicaciones.
@@ -49,45 +65,56 @@ export default function Fuentes() {
   });
   const marcas = opcionesQuery.data?.marcas ?? [];
 
-  // Deep-link de pestaña: las rutas viejas del hub (cajones/agentes/eventos)
-  // redirigen aquí con `?tab=` para abrir directamente su canal.
+  // Área inicial: acepta tanto el valor nuevo (?tab=feeds…) como los alias viejos
+  // (?tab=externas|internas). Cualquier otra cosa cae en "feeds".
   const [searchParams] = useSearchParams();
-  const tabParam = searchParams.get("tab");
-  const tabInicial = PESTANAS_TIPO.some((p) => p.valor === tabParam)
-    ? (tabParam as string)
-    : "externas";
+  const tabParam = searchParams.get("tab") ?? "";
+  const areaInicial = AREAS.some((a) => a.valor === tabParam)
+    ? tabParam
+    : (ALIAS_TAB[tabParam] ?? "feeds");
 
   return (
-    <>
-      <Tabs defaultValue={tabInicial} className="space-y-4">
-        <TabsList>
-          {PESTANAS_TIPO.map((p) => (
-            <TabsTrigger key={p.valor} value={p.valor}>
-              {p.etiqueta}
+    <Tabs defaultValue={areaInicial} className="space-y-4">
+      {/* Barra de áreas PEGAJOSA arriba: siempre a mano. En pantallas estrechas hace scroll
+          horizontal (overflow-x-auto) en vez de salirse o apretar los triggers. */}
+      <TabsList className="sticky top-0 z-10 flex h-auto w-full justify-start gap-1 overflow-x-auto bg-background p-1">
+        {AREAS.map((a) => {
+          const Icono = a.icono;
+          return (
+            <TabsTrigger key={a.valor} value={a.valor} className="shrink-0 gap-1.5">
+              <Icono className="h-4 w-4" />
+              {a.etiqueta}
             </TabsTrigger>
-          ))}
-        </TabsList>
-        {/* EXTERNAS: lo que llega de fuera. Feeds RSS (alta/edición con su salud
-            inline) + catálogo para añadir de un clic + estado del motor de ingesta.
-            (Agencias y Google Trends son señales externas; ver nota en el header.) */}
-        <TabsContent value="externas" className="space-y-8">
-          <GestionFuentes marcas={marcas} />
-          <CatalogoPresets marcas={marcas} />
-          <SaludFeeds />
-        </TabsContent>
-        {/* INTERNAS: lo que pone el equipo. Buzones del día (listas tipo portal/WhatsApp/
-            corresponsales y Excel), filtrados por la marca activa. Las aportaciones a mano
-            ("Idea" e "Interno AMX") se mudaron a Contenidos, fusionadas con el generador de ideas. */}
-        <TabsContent value="internas" className="space-y-8">
-          <CajonPresidencia />
-          <CajonesDia />
-        </TabsContent>
-        {/* RENDIMIENTO: qué fuentes aportan de verdad (abren historias, se usan). Alimenta
-            la decisión de relevancia de cada fuente (pestaña Externas). */}
-        <TabsContent value="rendimiento" className="space-y-8">
-          <RendimientoFuentes />
-        </TabsContent>
-      </Tabs>
-    </>
+          );
+        })}
+      </TabsList>
+
+      {/* FEEDS RSS: alta/edición de los feeds (con su salud inline). */}
+      <TabsContent value="feeds">
+        <GestionFuentes marcas={marcas} />
+      </TabsContent>
+
+      {/* CATÁLOGO: feeds curados listos para activar de un clic. */}
+      <TabsContent value="catalogo">
+        <CatalogoPresets marcas={marcas} />
+      </TabsContent>
+
+      {/* SALUD: monitor del motor de ingesta (activos/error/stale, huecos, reactivar). */}
+      <TabsContent value="salud">
+        <SaludFeeds />
+      </TabsContent>
+
+      {/* BUZONES: lo que pone el equipo. La nota de Presidencia (carrusel automático) y los
+          Cajones del día (Portal/Corresponsales/Reporteros/Eventos), filtrados por marca. */}
+      <TabsContent value="buzones" className="space-y-8">
+        <CajonPresidencia />
+        <CajonesDia />
+      </TabsContent>
+
+      {/* RENDIMIENTO: qué fuentes aportan de verdad (abren historias, se usan). */}
+      <TabsContent value="rendimiento">
+        <RendimientoFuentes />
+      </TabsContent>
+    </Tabs>
   );
 }

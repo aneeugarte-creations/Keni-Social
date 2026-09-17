@@ -13,7 +13,7 @@
  * viven en el panel «Ajustes del motor» del menú «⋮» de la página.
  */
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import * as React from "react";
 
 import { Tooltip } from "@/components/ui/tooltip";
@@ -116,25 +116,34 @@ export function RielInvestigacion() {
   const etiquetaEstado = (estado: EstadoEtapa) =>
     estado === "on" ? "activa" : estado === "off" ? "apagada" : "estado no disponible";
 
+  // Tira SLIM de UNA fila (compacta): la etiqueta del proceso vive INLINE al inicio de la fila
+  // —no como bloque/encabezado aparte— para no robarle altura al pool de Cobertura que va debajo.
+  // El pie de «Ajustes» (admin) se condensa en el tooltip de la etiqueta, no en un párrafo extra.
   return (
     <section aria-label="Proceso de Investigación" data-testid="riel-investigacion">
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        Proceso de Investigación
-      </h3>
       <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center">
-        {ETAPAS.map((etapa, i) => {
+        <Tooltip
+          label={
+            esAdmin
+              ? "Enciende o apaga cada etapa en «Ajustes del motor» (menú «⋮» arriba)."
+              : "Las cinco etapas por las que pasa una noticia antes de llegar al pool."
+          }
+          side="top"
+        >
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Proceso
+          </span>
+        </Tooltip>
+        {ETAPAS.map((etapa) => {
           const estado = estadoDe(etapa.claves);
           return (
             <React.Fragment key={etapa.nombre}>
-              {i > 0 ? (
-                <span className="flex justify-center text-muted-foreground/40 sm:justify-start" aria-hidden>
-                  <ChevronDown className="h-4 w-4 sm:hidden" />
-                  <ChevronRight className="hidden h-4 w-4 sm:block" />
-                </span>
-              ) : null}
+              <span className="hidden text-muted-foreground/40 sm:block" aria-hidden>
+                <ChevronRight className="h-3.5 w-3.5" />
+              </span>
               <Tooltip label={`${etapa.ayuda} (${etiquetaEstado(estado)})`} side="top">
                 <div
-                  className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm shadow-sm"
+                  className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-xs shadow-sm"
                   data-testid={`etapa-${etapa.nombre.toLowerCase()}`}
                   data-estado={estado}
                 >
@@ -146,11 +155,6 @@ export function RielInvestigacion() {
           );
         })}
       </div>
-      {esAdmin && (
-        <p className="mt-1.5 text-xs text-muted-foreground">
-          Enciende o apaga cada etapa en «Ajustes del motor» (menú «⋮» arriba).
-        </p>
-      )}
     </section>
   );
 }

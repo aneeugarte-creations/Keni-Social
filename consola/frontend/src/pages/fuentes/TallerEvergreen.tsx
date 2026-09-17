@@ -44,6 +44,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useGeneracion } from "@/hooks/use-generacion";
@@ -81,6 +82,13 @@ const ORIGEN_LABEL: Record<string, string> = {
   interna: "Interno AMX",
 };
 
+/** Áreas (pestañas) de Contenidos: cada una alcanzable de un clic, sin scroll largo. */
+const AREAS = [
+  { valor: "banco", etiqueta: "Banco", icono: Leaf },
+  { valor: "proponer", etiqueta: "Proponer", icono: Lightbulb },
+  { valor: "aportar", etiqueta: "Aportar", icono: Plus },
+] as const;
+
 export function TallerEvergreen({
   marcas,
   redes,
@@ -89,6 +97,13 @@ export function TallerEvergreen({
   redes: RedPublicacion[];
 }) {
   const [estadoFiltro, setEstadoFiltro] = React.useState(ESTADO_TODOS);
+
+  // Marca seleccionada: la comparten "Proponer" y "Aportar" (ambas alimentan el MISMO
+  // banco). Se eleva aquí para que persista al cambiar de área.
+  const { marcaActiva } = useMarcaActiva();
+  const [marca, setMarca] = React.useState(
+    marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : "",
+  );
 
   const query = useQuery({
     queryKey: [...CLAVE_IDEAS, estadoFiltro],
@@ -103,80 +118,135 @@ export function TallerEvergreen({
   const estados = query.data?.estados ?? ["propuesta", "aprobada", "descartada"];
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
-      <ProponerIdeas marcas={marcas} />
+    <Tabs defaultValue="banco" className="space-y-4">
+      {/* Barra de áreas PEGAJOSA arriba: cambiar de área es un clic y nunca exige scroll. */}
+      <TabsList className="sticky top-0 z-10 flex w-full flex-wrap justify-start gap-1 bg-background">
+        {AREAS.map((a) => {
+          const Icono = a.icono;
+          return (
+            <TabsTrigger key={a.valor} value={a.valor} className="gap-1.5">
+              <Icono className="h-4 w-4" />
+              {a.etiqueta}
+              {a.valor === "banco" && (
+                <Badge variant="secondary" className="ml-1">
+                  {ideas.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+          );
+        })}
+      </TabsList>
 
-      <Card className="h-fit">
-        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Leaf className="h-4 w-4" />
-            Banco de ideas evergreen
-            <Badge variant="secondary" className="ml-1">
-              {ideas.length}
-            </Badge>
-          </CardTitle>
-          <Select value={estadoFiltro} onValueChange={setEstadoFiltro}>
-            <SelectTrigger className="w-44" aria-label="Filtrar por estado">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ESTADO_TODOS}>Todos los estados</SelectItem>
-              {estados.map((e) => (
-                <SelectItem key={e} value={e}>
-                  {ESTADO_LABEL[e] ?? e}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {query.isPending ? (
-            <div className="space-y-2">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-24 w-full rounded-md" />
-              ))}
-            </div>
-          ) : query.isError ? (
-            <BloqueError
-              titulo="No se pudieron cargar las ideas"
-              mensaje={mensajeError(query.error)}
-              onReintentar={() => void query.refetch()}
-              cargando={query.isFetching}
-            />
-          ) : ideas.length === 0 ? (
-            <EstadoVacioTexto
-              texto="No hay ideas para este filtro. Propón algunas con la IA o crea la primera a mano."
-              className="py-4"
-            />
-          ) : (
-            <ListaIdeas
-              ideas={ideas}
-              marcas={marcas}
-              redes={redes}
-              separarHistorico={estadoFiltro === ESTADO_TODOS}
-            />
-          )}
-        </CardContent>
-      </Card>
+      {/* BANCO: la lista de ideas con su filtro por estado. */}
+      <TabsContent value="banco">
+        <Card className="h-fit">
+          <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Leaf className="h-4 w-4" />
+              Banco de ideas evergreen
+              <Badge variant="secondary" className="ml-1">
+                {ideas.length}
+              </Badge>
+            </CardTitle>
+            <Select value={estadoFiltro} onValueChange={setEstadoFiltro}>
+              <SelectTrigger className="w-44" aria-label="Filtrar por estado">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ESTADO_TODOS}>Todos los estados</SelectItem>
+                {estados.map((e) => (
+                  <SelectItem key={e} value={e}>
+                    {ESTADO_LABEL[e] ?? e}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {query.isPending ? (
+              <div className="space-y-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-24 w-full rounded-md" />
+                ))}
+              </div>
+            ) : query.isError ? (
+              <BloqueError
+                titulo="No se pudieron cargar las ideas"
+                mensaje={mensajeError(query.error)}
+                onReintentar={() => void query.refetch()}
+                cargando={query.isFetching}
+              />
+            ) : ideas.length === 0 ? (
+              <EstadoVacioTexto
+                texto="No hay ideas para este filtro. Propón algunas con la IA o crea la primera a mano."
+                className="py-4"
+              />
+            ) : (
+              <ListaIdeas
+                ideas={ideas}
+                marcas={marcas}
+                redes={redes}
+                separarHistorico={estadoFiltro === ESTADO_TODOS}
+              />
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      {/* PROPONER: la IA propone ideas para la marca. */}
+      <TabsContent value="proponer">
+        <PanelProponerIA marcas={marcas} marca={marca} setMarca={setMarca} />
+      </TabsContent>
+
+      {/* APORTAR: alta manual al MISMO banco (idea del equipo o interno AMX). */}
+      <TabsContent value="aportar">
+        <PanelAportarManual marcas={marcas} marca={marca} setMarca={setMarca} />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+/** Selector de marca reutilizado por "Proponer" y "Aportar" (ambas alimentan el banco). */
+function SelectorMarca({
+  marcas,
+  marca,
+  setMarca,
+}: {
+  marcas: MarcaDisponible[];
+  marca: string;
+  setMarca: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor="evergreen-marca">Marca</Label>
+      <Select value={marca} onValueChange={setMarca}>
+        <SelectTrigger id="evergreen-marca">
+          <SelectValue placeholder="Elige una marca" />
+        </SelectTrigger>
+        <SelectContent>
+          {marcas.map((m) => (
+            <SelectItem key={m.id} value={m.id}>
+              {m.nombre}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }
 
-/** Panel izquierdo: proponer ideas con IA (o crear una a mano). */
-function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
+/** Área "Proponer": la IA propone ideas de contenido evergreen para la marca. */
+function PanelProponerIA({
+  marcas,
+  marca,
+  setMarca,
+}: {
+  marcas: MarcaDisponible[];
+  marca: string;
+  setMarca: (v: string) => void;
+}) {
   const queryClient = useQueryClient();
-  const { marcaActiva } = useMarcaActiva();
-  const [marca, setMarca] = React.useState(
-    marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : "",
-  );
   const [contexto, setContexto] = React.useState("");
-
-  // Aportación manual al MISMO banco (antes vivían en Fuentes-Internas como "Idea" e
-  // "Interno AMX"): un tipo, un título y una nota/contenido. Entra como idea en estado
-  // "propuesta" (se aprueba y se genera igual que una idea de la IA).
-  const [tipoManual, setTipoManual] = React.useState<"idea" | "interna">("idea");
-  const [tituloManual, setTituloManual] = React.useState("");
-  const [descManual, setDescManual] = React.useState("");
 
   const { generacion, ejecutando, iniciar, cancelar, cancelando } = useGeneracion(
     "evergreen-proponer",
@@ -186,25 +256,6 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
     mutationFn: () =>
       api.proponerEvergreen({ marca, contexto: contexto.trim() || undefined }),
     onSuccess: (data) => iniciar(data.generacion),
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  const crearManual = useMutation({
-    mutationFn: () =>
-      api.crearIdeaEvergreen({
-        marca,
-        titulo: tituloManual.trim(),
-        descripcion: descManual.trim() || undefined,
-        origen: tipoManual,
-      }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_IDEAS });
-      setTituloManual("");
-      setDescManual("");
-      toast.success(
-        tipoManual === "interna" ? "Contenido interno añadido al banco." : "Idea añadida al banco.",
-      );
-    },
     onError: (e) => toast.error(mensajeError(e)),
   });
 
@@ -226,151 +277,176 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
   const puedeProponer = marca !== "" && !proponiendo;
 
   return (
-    <div className="space-y-6">
-      <Card className="h-fit">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <MarcaIA />
-            Proponer ideas
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            La IA propone ideas de contenido evergreen (evergreen) para la marca. Añade un
-            contexto opcional para enfocarla (temporada, programa, ángulo…).
+    <Card className="h-fit lg:max-w-2xl">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <MarcaIA />
+          Proponer ideas
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          La IA propone ideas de contenido evergreen (evergreen) para la marca. Añade un
+          contexto opcional para enfocarla (temporada, programa, ángulo…).
+        </p>
+
+        <SelectorMarca marcas={marcas} marca={marca} setMarca={setMarca} />
+
+        <div className="space-y-1.5">
+          <Label htmlFor="evergreen-contexto">
+            Contexto <span className="font-normal text-muted-foreground">(opcional)</span>
+          </Label>
+          <Textarea
+            id="evergreen-contexto"
+            value={contexto}
+            onChange={(e) => setContexto(e.target.value)}
+            placeholder="Ej. enfoque en efemérides deportivas y datos curiosos para llenar huecos de parrilla…"
+            rows={4}
+          />
+        </div>
+
+        <Button onClick={() => proponer.mutate()} disabled={!puedeProponer} className="w-full">
+          {proponiendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <MarcaIA />}
+          {proponiendo ? "Proponiendo…" : "Proponer con IA"}
+        </Button>
+
+        {generacion && (ejecutando || generacion.estado === "error") && (
+          <ProgresoGeneracion
+            generacion={generacion}
+            onCancelar={cancelar}
+            cancelando={cancelando}
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Área "Aportar": alta manual al MISMO banco (antes en Fuentes-Internas como "Idea" e
+ *  "Interno AMX"). Entra como idea en estado "propuesta" (se aprueba y genera igual que
+ *  una idea de la IA). */
+function PanelAportarManual({
+  marcas,
+  marca,
+  setMarca,
+}: {
+  marcas: MarcaDisponible[];
+  marca: string;
+  setMarca: (v: string) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [tipoManual, setTipoManual] = React.useState<"idea" | "interna">("idea");
+  const [tituloManual, setTituloManual] = React.useState("");
+  const [descManual, setDescManual] = React.useState("");
+
+  const crearManual = useMutation({
+    mutationFn: () =>
+      api.crearIdeaEvergreen({
+        marca,
+        titulo: tituloManual.trim(),
+        descripcion: descManual.trim() || undefined,
+        origen: tipoManual,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_IDEAS });
+      setTituloManual("");
+      setDescManual("");
+      toast.success(
+        tipoManual === "interna" ? "Contenido interno añadido al banco." : "Idea añadida al banco.",
+      );
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  return (
+    <Card className="h-fit lg:max-w-2xl">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Aportar a mano</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <SelectorMarca marcas={marcas} marca={marca} setMarca={setMarca} />
+
+        {/* Tipo de aportación: una idea suelta del equipo, o contenido interno de AMX
+            (briefs, material de programa). Ambos entran al MISMO banco. */}
+        <div className="flex flex-wrap gap-1">
+          {(
+            [
+              { valor: "idea", etiqueta: "Idea", icono: Lightbulb },
+              { valor: "interna", etiqueta: "Interno AMX", icono: Building2 },
+            ] as const
+          ).map((o) => {
+            const Icono = o.icono;
+            return (
+              <Button
+                key={o.valor}
+                type="button"
+                size="sm"
+                variant={tipoManual === o.valor ? "default" : "outline"}
+                onClick={() => setTipoManual(o.valor)}
+              >
+                <Icono className="h-4 w-4" />
+                {o.etiqueta}
+              </Button>
+            );
+          })}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="evergreen-titulo-manual">Título</Label>
+          <Input
+            id="evergreen-titulo-manual"
+            value={tituloManual}
+            onChange={(e) => setTituloManual(e.target.value)}
+            placeholder={
+              tipoManual === "interna"
+                ? "Ej. Brief del especial de fin de año"
+                : "Ej. 5 récords históricos de la liga"
+            }
+            maxLength={140}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="evergreen-desc-manual">
+            {tipoManual === "interna" ? "Contenido interno" : "Nota"}{" "}
+            <span className="font-normal text-muted-foreground">
+              {tipoManual === "interna" ? "" : "(opcional)"}
+            </span>
+          </Label>
+          <Textarea
+            id="evergreen-desc-manual"
+            value={descManual}
+            onChange={(e) => setDescManual(e.target.value)}
+            placeholder={
+              tipoManual === "interna"
+                ? "Pega aquí el contenido interno (brief, material de programa, transcripción)…"
+                : "Detalle o ángulo de la idea…"
+            }
+            rows={3}
+          />
+        </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          onClick={() => crearManual.mutate()}
+          disabled={marca === "" || tituloManual.trim().length === 0 || crearManual.isPending}
+        >
+          {crearManual.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Plus className="h-4 w-4" />
+          )}
+          Añadir al banco
+        </Button>
+        {marca === "" && (
+          <p className="text-xs text-muted-foreground">
+            Elige una marca para aportar o proponer ideas.
           </p>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="evergreen-marca">Marca</Label>
-            <Select value={marca} onValueChange={setMarca}>
-              <SelectTrigger id="evergreen-marca">
-                <SelectValue placeholder="Elige una marca" />
-              </SelectTrigger>
-              <SelectContent>
-                {marcas.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="evergreen-contexto">
-              Contexto <span className="font-normal text-muted-foreground">(opcional)</span>
-            </Label>
-            <Textarea
-              id="evergreen-contexto"
-              value={contexto}
-              onChange={(e) => setContexto(e.target.value)}
-              placeholder="Ej. enfoque en efemérides deportivas y datos curiosos para llenar huecos de parrilla…"
-              rows={4}
-            />
-          </div>
-
-          <Button onClick={() => proponer.mutate()} disabled={!puedeProponer} className="w-full">
-            {proponiendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <MarcaIA />}
-            {proponiendo ? "Proponiendo…" : "Proponer con IA"}
-          </Button>
-
-          {generacion && (ejecutando || generacion.estado === "error") && (
-            <ProgresoGeneracion
-              generacion={generacion}
-              onCancelar={cancelar}
-              cancelando={cancelando}
-            />
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="h-fit">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Aportar a mano</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {/* Tipo de aportación: una idea suelta del equipo, o contenido interno de AMX
-              (briefs, material de programa). Ambos entran al MISMO banco. */}
-          <div className="flex flex-wrap gap-1">
-            {(
-              [
-                { valor: "idea", etiqueta: "Idea", icono: Lightbulb },
-                { valor: "interna", etiqueta: "Interno AMX", icono: Building2 },
-              ] as const
-            ).map((o) => {
-              const Icono = o.icono;
-              return (
-                <Button
-                  key={o.valor}
-                  type="button"
-                  size="sm"
-                  variant={tipoManual === o.valor ? "default" : "outline"}
-                  onClick={() => setTipoManual(o.valor)}
-                >
-                  <Icono className="h-4 w-4" />
-                  {o.etiqueta}
-                </Button>
-              );
-            })}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="evergreen-titulo-manual">Título</Label>
-            <Input
-              id="evergreen-titulo-manual"
-              value={tituloManual}
-              onChange={(e) => setTituloManual(e.target.value)}
-              placeholder={
-                tipoManual === "interna"
-                  ? "Ej. Brief del especial de fin de año"
-                  : "Ej. 5 récords históricos de la liga"
-              }
-              maxLength={140}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="evergreen-desc-manual">
-              {tipoManual === "interna" ? "Contenido interno" : "Nota"}{" "}
-              <span className="font-normal text-muted-foreground">
-                {tipoManual === "interna" ? "" : "(opcional)"}
-              </span>
-            </Label>
-            <Textarea
-              id="evergreen-desc-manual"
-              value={descManual}
-              onChange={(e) => setDescManual(e.target.value)}
-              placeholder={
-                tipoManual === "interna"
-                  ? "Pega aquí el contenido interno (brief, material de programa, transcripción)…"
-                  : "Detalle o ángulo de la idea…"
-              }
-              rows={3}
-            />
-          </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={() => crearManual.mutate()}
-            disabled={marca === "" || tituloManual.trim().length === 0 || crearManual.isPending}
-          >
-            {crearManual.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
-            Añadir al banco
-          </Button>
-          {marca === "" && (
-            <p className="text-xs text-muted-foreground">
-              Elige una marca arriba para aportar o proponer ideas.
-            </p>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
