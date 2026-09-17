@@ -348,18 +348,24 @@ def actualizar_perfil(
     return True
 
 
-def _fila_credenciales(con: Any, usuario: str) -> Any:
-    """Fila COMPLETA (incluye salt/hash) por nombre de usuario; None si no existe.
+def _filas_credenciales(con: Any, usuario: str) -> list[Any]:
+    """Filas COMPLETAS (incluyen salt/hash) cuyo nombre de cuenta coincide IGNORANDO
+    mayusculas/minusculas; lista vacia si no hay ninguna.
 
-    De uso interno (login): nunca sale de este modulo.
+    El login es insensible a la caja del nombre ("Ane" == "ane"): se compara con `LOWER()`
+    a ambos lados. Devuelve una LISTA porque el UNIQUE de `usuario` SI es sensible a la caja
+    (pueden coexistir "ane" y "Ane" como cuentas distintas); el orden pone PRIMERO la
+    coincidencia EXACTA de caja para que `autenticar` desempate de forma determinista. De uso
+    interno (login): nunca sale de este modulo.
     """
-    return con.execute(
+    filas = con.execute(
         "SELECT id, usuario, rol, salt, hash, debe_cambiar_password, "
         "intentos_fallidos, bloqueo_hasta, creado, ultimo_acceso, cargo, cobertura, "
         "puede_coordinar, nombre, manager_id, mfa_activo "
-        "FROM usuarios WHERE usuario = ?",
+        "FROM usuarios WHERE LOWER(usuario) = LOWER(?)",
         (usuario,),
-    ).fetchone()
+    ).fetchall()
+    return sorted(filas, key=lambda f: f["usuario"] != usuario)
 
 
 def _ahora_iso() -> str:
@@ -469,27 +475,63 @@ def borrar_usuario(usuario_id: str) -> bool:
 def autenticar(usuario: str, password: str) -> dict[str, Any] | None:
     """Verifica credenciales y devuelve el usuario (forma publica) o None.
 
-    Devuelve None SIN distinguir entre usuario inexistente, contrasena incorrecta o
-    cuenta bloqueada: la API responde un mensaje GENERICO (no enumeracion). Cuenta los
-    fallos por usuario y bloquea temporalmente tras `MAX_INTENTOS_FALLIDOS`.
+    El nombre de cuenta es INSENSIBLE a mayusculas/minusculas ("Ane" entra igual que "ane");
+    la CONTRASEÑA sigue siendo sensible. Devuelve None SIN distinguir entre usuario
+    inexistente, contrasena incorrecta o cuenta bloqueada: la API responde un mensaje
+    GENERICO (no enumeracion). Cuenta los fallos por usuario y bloquea temporalmente tras
+    `MAX_INTENTOS_FALLIDOS`.
+
+    Si por la caja conviven varias cuentas con el mismo nombre (el UNIQUE de `usuario` es
+    sensible a mayusculas), se entra en la PRIMERA cuya contrasena verifique (coincidencia
+    EXACTA de caja primero): asi cada quien entra con su propia contrasena.
     """
     con = db.conectar()
     try:
-        fila = _fila_credenciales(con, usuario)
-        if fila is None:
-            # Usuario inexistente: igualamos el coste con un hash "en falso" para no
-            # filtrar por tiempo si el usuario existe o no (best-effort).
+        # Candidatos: homonimos por caja que NO esten bloqueados ahora mismo. El orden viene
+        # de `_filas_credenciales` (coincidencia exacta de caja primero).
+        candidatos = []
+        for fila in _filas_credenciales(con, usuario):
+            bloqueo = _comun.parsear_iso(fila["bloqueo_hasta"])
+            if bloqueo is not None and _comun.ahora() < bloqueo:
+                continue  # cuenta bloqueada: no es candidata a este intento
+            candidatos.append(fila)
+
+        if not candidatos:
+            # Ni un candidato verificable (no existe el nombre, o todos bloqueados): igualamos
+            # el coste con un hash "en falso" para no filtrar por tiempo si el usuario existe.
             hash_en_falso(password)
             return None
 
-        bloqueo = _comun.parsear_iso(fila["bloqueo_hasta"])
-        if bloqueo is not None and _comun.ahora() < bloqueo:
-            # Igualamos el coste con un hash "en falso" antes de salir: sin esto la cuenta
-            # bloqueada responde mas rapido (sin scrypt) y delata que existe y esta bloqueada.
-            hash_en_falso(password)
-            return None  # bloqueado: no revelamos el motivo
+        for fila in candidatos:
+            if verificar_password(password, fila["salt"], fila["hash"]):
+                # Exito: reseteamos contador/bloqueo y marcamos ultimo acceso.
+                ahora_iso = _comun.iso(_comun.ahora())
+                con.execute(
+                    "UPDATE usuarios SET intentos_fallidos = 0, bloqueo_hasta = '', "
+                    "ultimo_acceso = ? WHERE id = ?",
+                    (ahora_iso, fila["id"]),
+                )
+                con.commit()
+                marcas = _marcas_de_usuario(fila["id"], con=con)
+                return {
+                    "id": fila["id"],
+                    "usuario": fila["usuario"],
+                    "rol": fila["rol"],
+                    "debe_cambiar_password": bool(fila["debe_cambiar_password"]),
+                    "creado": fila["creado"],
+                    "ultimo_acceso": ahora_iso,
+                    "cargo": fila["cargo"],
+                    "cobertura": bool(fila["cobertura"]),
+                    "puede_coordinar": bool(fila["puede_coordinar"]),
+                    "nombre": fila["nombre"],
+                    "manager_id": fila["manager_id"],
+                    # Para que el login decida si ELEVA al segundo factor (passkey) tras la pass.
+                    "mfa_activo": bool(fila["mfa_activo"]),
+                    "marcas": marcas,
+                }
 
-        if not verificar_password(password, fila["salt"], fila["hash"]):
+        # Ningun candidato verifico: anotamos el fallo (anti fuerza bruta) en cada uno.
+        for fila in candidatos:
             fallidos = int(fila["intentos_fallidos"]) + 1
             nuevo_bloqueo = ""
             if fallidos >= MAX_INTENTOS_FALLIDOS:
@@ -499,34 +541,8 @@ def autenticar(usuario: str, password: str) -> dict[str, Any] | None:
                 "UPDATE usuarios SET intentos_fallidos = ?, bloqueo_hasta = ? WHERE id = ?",
                 (fallidos, nuevo_bloqueo, fila["id"]),
             )
-            con.commit()
-            return None
-
-        # Exito: reseteamos contador/bloqueo y marcamos ultimo acceso.
-        ahora_iso = _comun.iso(_comun.ahora())
-        con.execute(
-            "UPDATE usuarios SET intentos_fallidos = 0, bloqueo_hasta = '', ultimo_acceso = ? "
-            "WHERE id = ?",
-            (ahora_iso, fila["id"]),
-        )
         con.commit()
-        marcas = _marcas_de_usuario(fila["id"], con=con)
-        return {
-            "id": fila["id"],
-            "usuario": fila["usuario"],
-            "rol": fila["rol"],
-            "debe_cambiar_password": bool(fila["debe_cambiar_password"]),
-            "creado": fila["creado"],
-            "ultimo_acceso": ahora_iso,
-            "cargo": fila["cargo"],
-            "cobertura": bool(fila["cobertura"]),
-            "puede_coordinar": bool(fila["puede_coordinar"]),
-            "nombre": fila["nombre"],
-            "manager_id": fila["manager_id"],
-            # Para que el login decida si ELEVA al segundo factor (passkey) tras la contrasena.
-            "mfa_activo": bool(fila["mfa_activo"]),
-            "marcas": marcas,
-        }
+        return None
     finally:
         con.close()
 

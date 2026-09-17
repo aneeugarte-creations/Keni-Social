@@ -344,6 +344,55 @@ def test_login_es_publico_pero_exige_origin_propio(entorno):
 
 
 # --------------------------------------------------------------------------- #
+# 2b) Login: el nombre de cuenta es insensible a mayusculas/minusculas         #
+# --------------------------------------------------------------------------- #
+
+
+def test_login_usuario_insensible_a_mayusculas(entorno):
+    """El nombre de cuenta entra escrito en CUALQUIER caja si la contrasena es correcta."""
+    _crear("ane", CLAVE, "editor")
+    for variante in ("ane", "Ane", "ANE", "aNe"):
+        c = _cli()
+        r = _login(c, variante, CLAVE)
+        assert r.status_code == 200, variante
+        # Siempre se entra a la MISMA cuenta (el `usuario` guardado, no la variante tecleada).
+        assert r.json()["usuario"]["usuario"] == "ane"
+
+
+def test_login_password_sigue_sensible_a_mayusculas(entorno):
+    """Solo el NOMBRE es insensible a la caja; la contrasena sigue siendo sensible."""
+    _crear("ane", CLAVE, "editor")
+    c = _cli()
+    # Nombre en otra caja PERO contrasena con la caja cambiada -> 401.
+    assert _login(c, "Ane", CLAVE.upper()).status_code == 401
+
+
+def test_autenticar_dominio_insensible_a_caja(entorno):
+    """A nivel de dominio: `autenticar` resuelve el nombre ignorando mayusculas."""
+    _crear("ane", CLAVE, "editor")
+    assert auth.autenticar("ANE", CLAVE) is not None
+    assert auth.autenticar("AnE", CLAVE)["usuario"] == "ane"
+    # La contrasena no se normaliza: cambiarle la caja NO autentica.
+    assert auth.autenticar("ANE", CLAVE.upper()) is None
+
+
+def test_login_homonimos_por_caja_entra_por_contrasena(entorno):
+    """Si conviven dos cuentas que solo difieren en la caja, cada quien entra con SU pass.
+
+    El UNIQUE de `usuario` es sensible a mayusculas, asi que "ane" y "Ane" pueden coexistir.
+    El login insensible elige la cuenta cuya contrasena verifica (independiente del orden).
+    """
+    minus = _crear("ane", CLAVE, "editor")
+    mayus = _crear("Ane", CLAVE_NUEVA, "editor")
+    assert minus is not None and mayus is not None and minus["id"] != mayus["id"]
+    # Tecleando "ANE" (ninguna caja exacta coincide), la pass decide a que cuenta se entra.
+    entra_min = auth.autenticar("ANE", CLAVE)
+    entra_may = auth.autenticar("ANE", CLAVE_NUEVA)
+    assert entra_min is not None and entra_min["id"] == minus["id"]
+    assert entra_may is not None and entra_may["id"] == mayus["id"]
+
+
+# --------------------------------------------------------------------------- #
 # 3) /api/auth/me                                                             #
 # --------------------------------------------------------------------------- #
 
