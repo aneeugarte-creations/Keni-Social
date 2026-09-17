@@ -1,0 +1,29 @@
+/* Diapositiva 16:9 (1280×720): lienzo blanco que flota sobre el fondo de la previa.
+   En impresión cada diapositiva es una página y desaparece el cromo de la previa. */
+.slide {
+  flex: none;
+  width: 1280px;
+  height: 720px;
+  background: #ffffff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow:
+    0 1px 3px rgb(0 0 0 / 0.08),
+    0 12px 40px rgb(0 0 0 / 0.06);
+  font-family: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #ffffff;
+  }
+  .slide {
+    box-shadow: none;
+    border-radius: 0;
+    page-break-after: always;
+    break-after: page;
+  }
+}
