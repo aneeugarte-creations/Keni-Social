@@ -63,12 +63,12 @@ export default {
         // Paleta Tremor mapeada a tokens (modo claro).
         tremor: {
           brand: {
-            // ACENTO charts (variante: MONOCROMO).
-            faint: "#f5f5f5",
-            muted: "#d4d4d4",
-            subtle: "#a3a3a3",
-            DEFAULT: "#404040",
-            emphasis: "#171717",
+            // ACENTO charts (variante: TEAL).
+            faint: "#f0fdfa",
+            muted: "#99f6e4",
+            subtle: "#5eead4",
+            DEFAULT: "#0d9488",
+            emphasis: "#0f766e",
             inverted: "#ffffff",
           },
           background: {
@@ -90,12 +90,12 @@ export default {
         // Paleta Tremor (modo oscuro).
         "dark-tremor": {
           brand: {
-            // ACENTO charts (variante: MONOCROMO) — modo oscuro.
-            faint: "#1a1a1a",
-            muted: "#404040",
-            subtle: "#737373",
-            DEFAULT: "#d4d4d4",
-            emphasis: "#fafafa",
+            // ACENTO charts (variante: TEAL) — modo oscuro.
+            faint: "#042f2e",
+            muted: "#115e59",
+            subtle: "#0f766e",
+            DEFAULT: "#2dd4bf",
+            emphasis: "#5eead4",
             inverted: "#0b0f17",
           },
           background: {
