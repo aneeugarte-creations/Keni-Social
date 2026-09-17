@@ -545,3 +545,18 @@ def test_revocar_enlace_inexistente_es_404(cliente):
 
 def test_enlace_publico_de_campania_inexistente_es_404(cliente):
     assert _crear_enlace(cliente, "nada").status_code == 404
+
+
+def test_crear_enlace_es_idempotente_por_periodo_y_modo(cliente):
+    """Crear dos veces con el mismo periodo+modo REUSA el enlace (no acumula tokens); un modo
+    distinto SÍ crea otro. Así descargar el PDF de una campaña no prolifera enlaces."""
+    cam = _crear(cliente, hashtags=["#Chihuahua"]).json()["campania"]
+    a = _crear_enlace(cliente, cam["id"], ocultar_ads=True).json()["enlace"]
+    b = _crear_enlace(cliente, cam["id"], ocultar_ads=True).json()["enlace"]
+    assert a["id"] == b["id"] and a["token"] == b["token"]
+    # Otro modo (con Ads) es un enlace distinto.
+    c = _crear_enlace(cliente, cam["id"], ocultar_ads=False).json()["enlace"]
+    assert c["id"] != a["id"]
+    # Solo hay dos enlaces (uno por modo), no tres.
+    enlaces = cliente.get(f"/api/campanias/{cam['id']}/enlaces").json()["enlaces"]
+    assert len(enlaces) == 2

@@ -575,17 +575,30 @@ def crear_enlace_publico(
 
     El periodo se CONGELA a fechas absolutas y se guarda el modo (`ocultar_ads`): el enlace
     muestra exactamente lo que se decidió compartir. Caduca en `DIAS_CADUCIDAD_ENLACE` días.
+
+    Es IDEMPOTENTE por (campaña, periodo congelado, modo): si ya hay un enlace VIGENTE con la
+    misma combinación, se reutiliza en vez de crear otro. Así descargar el PDF de una campaña
+    no acumula tokens y el enlace impreso es estable.
     """
     if obtener_campania(campania_id) is None:
         return None
+    rango_congelado = _rango_congelado(rango)
+    quiere_ads = bool(ocultar_ads)
+    for e in repos.listar_enlaces_de_campania(campania_id):
+        if (
+            _esta_vigente(e)
+            and e["rango"] == rango_congelado
+            and bool(e["ocultar_ads"]) == quiere_ads
+        ):
+            return _enlace_publico(e)
     expira = (
         datetime.now(UTC).replace(tzinfo=None) + timedelta(days=DIAS_CADUCIDAD_ENLACE)
     ).isoformat(timespec="seconds")
     e = repos.crear_enlace_publico(
         campania_id=campania_id,
         token=secrets.token_urlsafe(32),
-        rango=_rango_congelado(rango),
-        ocultar_ads=bool(ocultar_ads),
+        rango=rango_congelado,
+        ocultar_ads=quiere_ads,
         expira=expira,
     )
     return _enlace_publico(e)

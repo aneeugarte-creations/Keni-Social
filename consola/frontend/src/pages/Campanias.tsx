@@ -8,7 +8,7 @@
  * campaña pertenece a una marca.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckSquare, Download, Link2, Megaphone, Pencil, Plus, Square, Trash2 } from "lucide-react";
+import { CheckSquare, Download, FileText, Link2, Megaphone, Pencil, Plus, Square, Trash2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -32,6 +32,7 @@ import type { Campania } from "@/types";
 import { CLAVE_CAMPANIAS } from "./campanias/claves";
 import { DialogoCampania } from "./campanias/DialogoCampania";
 import { DialogoEnlacesPublicos } from "./campanias/DialogoEnlacesPublicos";
+import { DialogoInformePdf } from "./campanias/DialogoInformePdf";
 import { PanelCampania } from "./campanias/PanelCampania";
 import { SelectorTiempo } from "./metricas/Controles";
 
@@ -83,6 +84,7 @@ export default function Campanias() {
   const [dialogoAbierto, setDialogoAbierto] = React.useState(false);
   const [editando, setEditando] = React.useState<Campania | null>(null);
   const [enlacesAbierto, setEnlacesAbierto] = React.useState(false);
+  const [pdfAbierto, setPdfAbierto] = React.useState(false);
 
   // Las campañas son MULTIMARCA: no se acotan al switch de marca de la barra; se listan
   // todas. La elección de marcas vive en el diálogo (sobre las marcas de la persona).
@@ -190,6 +192,9 @@ export default function Campanias() {
                   {/* Descargas de la analítica del periodo activo. Respeta el modo cliente
                       (`ocultarAds`): si está activo, el archivo sale sin rastro de pauta. */}
                   <div role="separator" className="my-1 h-px bg-border" />
+                  <ItemMenu icono={FileText} onClick={() => setPdfAbierto(true)}>
+                    Descargar PDF…
+                  </ItemMenu>
                   {FORMATOS_DESCARGA.map(({ formato, etiqueta }) => (
                     <ItemMenu
                       key={`descarga-${formato}`}
@@ -261,6 +266,14 @@ export default function Campanias() {
         rango={rango}
         ocultarAds={ocultarAds}
         onCerrar={() => setEnlacesAbierto(false)}
+      />
+
+      <DialogoInformePdf
+        abierto={pdfAbierto}
+        campania={campaniaActual}
+        rango={rango}
+        ocultarAds={ocultarAds}
+        onCerrar={() => setPdfAbierto(false)}
       />
     </>
   );
